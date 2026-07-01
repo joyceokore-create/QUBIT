@@ -37,9 +37,12 @@ pnpm prisma:seed       # seeds the KCB and Riverbank tenants
 pnpm dev
 ```
 
-Sign in at `/login` with any seeded user (see `prisma/seed.ts`) — organization **KCB Group**
-or **Riverbank Group**, e.g. `amina.ndungu@example.invalid`, password `Passw0rd!23`. That
-demo password is local-dev/seed-only, shared by every seeded user; it is not a real secret.
+Sign in at `/login` with just an email + password (see `prisma/seed.ts` for seeded users) —
+no organization picker; the tenant is resolved from the email's domain
+(`kcb.example.invalid` → KCB Group, `riverbank.solutions` / `riverbank.example.invalid` →
+Riverbank Group). Try `amina.ndungu@kcb.example.invalid` or `joyce.okore@riverbank.solutions`,
+password `Passw0rd!23`. That demo password is local-dev/seed-only, shared by every seeded
+user; it is not a real secret.
 
 ## Common commands
 
@@ -58,9 +61,12 @@ pnpm lint && pnpm typecheck  # quality gates (must pass before a milestone is "d
 Milestone 2 (auth, RBAC & audit) is complete, on top of Milestone 1 (database, Prisma &
 RLS):
 
-- Auth.js v5 with a Credentials provider (organization + email + password + optional TOTP
-  code), JWT sessions (24h), bcrypt password hashing with an 8-char minimum and no reuse of
-  the last 3 passwords, and per-key login rate limiting/lockout.
+- Auth.js v5 with a Credentials provider — just email + password + optional TOTP code, no
+  organization picker. The tenant is resolved from the email's domain
+  (`Tenant.domains`, `src/lib/tenant-domain.ts`); the login form calls
+  `/api/auth/resolve-org` as the user types to confirm "Signing in to KCB Group" before
+  submit. JWT sessions (24h), bcrypt password hashing with an 8-char minimum and no reuse
+  of the last 3 passwords, and per-key login rate limiting/lockout.
 - TOTP MFA enrolment (`/settings/mfa`) with the secret encrypted at rest.
 - `middleware.ts` gates every route except `/login`; `getTenantContext()` and `can()` give
   route handlers and server components a session-derived tenant + permission check.

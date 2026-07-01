@@ -61,6 +61,7 @@ model Tenant {
   name        String                     // "KCB Group"
   brandColor  String                     // "#1B7A3E"
   brandLight  String                     // "#E8F5EE"
+  domains     String[] @default([])      // email domains that resolve to this tenant at login
   orgUnits    OrgUnit[]
   users       User[]
   portfolios  Portfolio[]

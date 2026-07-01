@@ -86,6 +86,7 @@ interface TenantSeed {
   name: string;
   brandColor: string;
   brandLight: string;
+  domains: string[];
   orgUnits: OrgUnitSeed[];
   users: UserSeed[];
   portfolios: PortfolioSeed[];
@@ -102,6 +103,7 @@ const KCB_SEED: TenantSeed = {
   name: "KCB Group",
   brandColor: "#1B7A3E",
   brandLight: "#E8F5EE",
+  domains: ["kcb.example.invalid"],
   orgUnits: [
     { code: "KE", name: "KCB Kenya", flag: "🇰🇪" },
     { code: "UG", name: "KCB Uganda", flag: "🇺🇬" },
@@ -110,11 +112,11 @@ const KCB_SEED: TenantSeed = {
     { code: "SS", name: "KCB South Sudan", flag: "🇸🇸" },
   ],
   users: [
-    { email: "amina.ndungu@example.invalid", name: "Amina Ndungu", role: "PortfolioManager" },
-    { email: "brian.otieno@example.invalid", name: "Brian Otieno", role: "ProjectManager" },
-    { email: "carol.mwangi@example.invalid", name: "Carol Mwangi", role: "ProjectManager" },
-    { email: "daniel.kiptoo@example.invalid", name: "Daniel Kiptoo", role: "SystemAdmin" },
-    { email: "evelyn.wanjiru@example.invalid", name: "Evelyn Wanjiru", role: "Viewer" },
+    { email: "amina.ndungu@kcb.example.invalid", name: "Amina Ndungu", role: "PortfolioManager" },
+    { email: "brian.otieno@kcb.example.invalid", name: "Brian Otieno", role: "ProjectManager" },
+    { email: "carol.mwangi@kcb.example.invalid", name: "Carol Mwangi", role: "ProjectManager" },
+    { email: "daniel.kiptoo@kcb.example.invalid", name: "Daniel Kiptoo", role: "SystemAdmin" },
+    { email: "evelyn.wanjiru@kcb.example.invalid", name: "Evelyn Wanjiru", role: "Viewer" },
   ],
   portfolios: [
     {
@@ -642,7 +644,7 @@ const KCB_SEED: TenantSeed = {
       probability: 4,
       impact: 5,
       mitigation: "Escalate vendor resourcing; stand up a dedicated UAT squad in TZ/RW.",
-      ownerEmail: "brian.otieno@example.invalid",
+      ownerEmail: "brian.otieno@kcb.example.invalid",
       status: "Open",
     },
     {
@@ -652,7 +654,7 @@ const KCB_SEED: TenantSeed = {
       probability: 3,
       impact: 4,
       mitigation: "Backfill contractor roles; re-baseline the Phase 3 resourcing plan.",
-      ownerEmail: "brian.otieno@example.invalid",
+      ownerEmail: "brian.otieno@kcb.example.invalid",
       status: "Monitoring",
     },
     {
@@ -662,7 +664,7 @@ const KCB_SEED: TenantSeed = {
       probability: 4,
       impact: 4,
       mitigation: "Renegotiate South Sudan vendor rates; flag to Finance for contingency draw-down.",
-      ownerEmail: "carol.mwangi@example.invalid",
+      ownerEmail: "carol.mwangi@kcb.example.invalid",
       status: "Open",
     },
   ],
@@ -671,7 +673,7 @@ const KCB_SEED: TenantSeed = {
       title: "AML platform UAT slip materialised into a missed regulatory deadline",
       projectCode: "P006",
       severity: "Critical",
-      ownerEmail: "brian.otieno@example.invalid",
+      ownerEmail: "brian.otieno@kcb.example.invalid",
       status: "Open",
       originRiskTitle: "AML platform UAT deadline missed across Tanzania and Rwanda",
     },
@@ -679,14 +681,14 @@ const KCB_SEED: TenantSeed = {
       title: "Oracle Fusion procurement sign-off delayed in Uganda",
       projectCode: "P008",
       severity: "Medium",
-      ownerEmail: "daniel.kiptoo@example.invalid",
+      ownerEmail: "daniel.kiptoo@kcb.example.invalid",
       status: "Open",
     },
     {
       title: "Mobile Banking 2.0 vendor delivery delay across all subsidiaries",
       projectCode: "P004",
       severity: "High",
-      ownerEmail: "carol.mwangi@example.invalid",
+      ownerEmail: "carol.mwangi@kcb.example.invalid",
       status: "Open",
     },
   ],
@@ -699,15 +701,19 @@ const RIVERBANK_SEED: TenantSeed = {
   name: "Riverbank Group",
   brandColor: "#ED1C24",
   brandLight: "#FDECEC",
+  // riverbank.solutions is Riverbank Solutions Limited's real domain — this tenant is
+  // used for the firm's own QUBIT access, alongside the synthetic demo domain below.
+  domains: ["riverbank.solutions", "riverbank.example.invalid"],
   orgUnits: [
     { code: "HQ", name: "Riverbank Head Office" },
     { code: "WR", name: "Riverbank West Region" },
     { code: "CR", name: "Riverbank Coast Region" },
   ],
   users: [
-    { email: "farah.karanja@example.invalid", name: "Farah Karanja", role: "PortfolioManager" },
-    { email: "george.mutuku@example.invalid", name: "George Mutuku", role: "ProjectManager" },
-    { email: "hannah.chebet@example.invalid", name: "Hannah Chebet", role: "SystemAdmin" },
+    { email: "joyce.okore@riverbank.solutions", name: "Joyce Okore", role: "SystemAdmin" },
+    { email: "farah.karanja@riverbank.example.invalid", name: "Farah Karanja", role: "PortfolioManager" },
+    { email: "george.mutuku@riverbank.example.invalid", name: "George Mutuku", role: "ProjectManager" },
+    { email: "hannah.chebet@riverbank.example.invalid", name: "Hannah Chebet", role: "SystemAdmin" },
   ],
   portfolios: [
     {
@@ -839,7 +845,7 @@ const RIVERBANK_SEED: TenantSeed = {
       probability: 3,
       impact: 4,
       mitigation: "Add a rollback plan and an extra cutover rehearsal.",
-      ownerEmail: "george.mutuku@example.invalid",
+      ownerEmail: "george.mutuku@riverbank.example.invalid",
       status: "Open",
     },
   ],
@@ -848,7 +854,7 @@ const RIVERBANK_SEED: TenantSeed = {
       title: "Partner API Gateway scope creep from late partner requirements",
       projectCode: "RBP002",
       severity: "Medium",
-      ownerEmail: "farah.karanja@example.invalid",
+      ownerEmail: "farah.karanja@riverbank.example.invalid",
       status: "Open",
     },
   ],
@@ -884,6 +890,7 @@ async function seedTenant(seed: TenantSeed) {
       name: seed.name,
       brandColor: seed.brandColor,
       brandLight: seed.brandLight,
+      domains: seed.domains,
     },
   });
 

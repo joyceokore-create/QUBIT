@@ -2,7 +2,15 @@
 
 ## Authentication (Auth.js / NextAuth v5)
 
-- Credentials provider for Phase A (email + password, bcrypt/argon2 hash).
+- Credentials provider for Phase A (email + password, bcrypt/argon2 hash). No organization
+  selector: `User.email` is only unique per-tenant, and RLS forces the tenant to be known
+  before any `user` row can be read, so which tenant a login belongs to has to come from
+  somewhere. QUBIT resolves it from the email's domain — `Tenant.domains` lists the
+  domain(s) registered to each tenant, and `src/lib/tenant-domain.ts` looks up the domain
+  from the submitted email before the user lookup runs. The login form calls
+  `/api/auth/resolve-org` as the user types to show which organization it resolved to
+  before they submit. This wasn't specified here originally; it's the resolution to that
+  gap.
 - Azure AD / OIDC SSO provider added in Phase D.
 - Session strategy: database sessions via `@auth/prisma-adapter`, or JWT with short expiry
   (mirror QUBIT's 24-hour token expiry). Re-auth on expiry.

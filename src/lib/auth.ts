@@ -2,14 +2,13 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { z } from "zod";
 import { authConfig } from "@/lib/auth.config";
-import { prisma } from "@/lib/db";
 import { withTenant } from "@/lib/tenant";
+import { resolveTenantByEmailDomain } from "@/lib/tenant-domain";
 import { verifyPassword } from "@/lib/password";
 import { decryptMfaSecret, verifyTotp } from "@/lib/mfa";
 import { checkRateLimit, recordFailure, resetRateLimit } from "@/lib/rate-limit";
 
 const CredentialsSchema = z.object({
-  tenantSlug: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(1),
   totpCode: z.string().optional(),
@@ -20,7 +19,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Credentials({
       credentials: {
-        tenantSlug: {},
         email: {},
         password: {},
         totpCode: {},
@@ -28,16 +26,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(raw) {
         const parsed = CredentialsSchema.safeParse(raw);
         if (!parsed.success) return null;
-        const { tenantSlug, email, password, totpCode } = parsed.data;
+        const { email, password, totpCode } = parsed.data;
         const normalizedEmail = email.toLowerCase();
-        const rateLimitKey = `${tenantSlug}:${normalizedEmail}`;
+        const rateLimitKey = `login:${normalizedEmail}`;
 
         const rl = checkRateLimit(rateLimitKey);
         if (!rl.allowed) {
           throw new Error("Too many login attempts. Please try again later.");
         }
 
-        const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
+        // No organization selector — the email's domain tells us the tenant.
+        const tenant = await resolveTenantByEmailDomain(normalizedEmail);
         if (!tenant) {
           recordFailure(rateLimitKey);
           return null;

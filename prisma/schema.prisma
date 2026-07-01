@@ -16,6 +16,11 @@ model Tenant {
   name       String
   brandColor String   @map("brand_color")
   brandLight String   @map("brand_light")
+  // Email domains that resolve to this tenant at login (src/lib/tenant-domain.ts). Prisma
+  // can't express uniqueness across array values, so "a domain belongs to only one
+  // tenant" is enforced in application code (resolveTenantByEmailDomain takes the first
+  // match; keep domain lists disjoint when configuring tenants).
+  domains    String[] @default([])
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
