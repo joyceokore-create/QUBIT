@@ -1,4 +1,15 @@
-import { AlertTriangle, Briefcase, LayoutGrid, Server, Shield, Target, Users } from "lucide-react";
+import {
+  AlertTriangle,
+  Briefcase,
+  ClipboardList,
+  KeyRound,
+  LayoutGrid,
+  Server,
+  Shield,
+  Target,
+  Users,
+  UsersRound,
+} from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { getSidebarNavData } from "@/server/nav";
@@ -22,6 +33,7 @@ export async function Sidebar() {
   const showPortfolios = can(ctx, "portfolio:read");
   const showProjects = can(ctx, "project:read");
   const showRisks = can(ctx, "risk:read");
+  const showAdmin = can(ctx, "iam:manage");
   const nav = showPortfolios || showProjects || showRisks ? await getSidebarNavData(ctx) : null;
 
   return (
@@ -63,6 +75,20 @@ export async function Sidebar() {
               {orgUnit.name}
             </NavItem>
           ))}
+        </NavGroup>
+      )}
+
+      {showAdmin && (
+        <NavGroup label="Administration">
+          <NavItem href="/admin/users" icon={UsersRound}>
+            Users
+          </NavItem>
+          <NavItem href="/admin/roles" icon={KeyRound}>
+            Roles
+          </NavItem>
+          <NavItem href="/admin/audit" icon={ClipboardList}>
+            Audit Log
+          </NavItem>
         </NavGroup>
       )}
 

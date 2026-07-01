@@ -1,7 +1,14 @@
 import type { Prisma } from "@prisma/client";
 import type { TenantContext } from "@/lib/tenant";
 
-export type AuditAction = "create" | "update" | "delete" | "tenant_switch" | "mfa_enroll";
+export type AuditAction =
+  | "create"
+  | "update"
+  | "delete"
+  | "tenant_switch"
+  | "mfa_enroll"
+  | "role_grant"
+  | "role_revoke";
 
 export interface AuditEntry {
   action: AuditAction;

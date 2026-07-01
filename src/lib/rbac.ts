@@ -10,8 +10,11 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
   Contributor: ["task:*", "risk:create", "issue:create", "timesheet:submit"],
   Viewer: ["*:read"],
   DepartmentHead: ["approvals:decide"],
-  // Cross-tenant admin only — deliberately excludes every business-data permission.
-  PlatformSuperAdmin: ["tenant:switch"],
+  // Cross-tenant admin — read-only oversight everywhere, no business-data authoring
+  // (no create/update/delete on projects, risks, budgets, etc.) and no iam:manage outside
+  // its own tenant. Broadened from tenant:switch-only since a role with zero visibility
+  // into the product can't meaningfully oversee anything.
+  PlatformSuperAdmin: ["*:read", "tenant:switch"],
 };
 
 /** The fixed, browsable permission catalogue (FR-IAM-04). Extend as new modules land. */

@@ -87,7 +87,8 @@ model User {
   name          String
   passwordHash  String?
   mfaSecret     String?                  // encrypted at rest
-  status        String   @default("ACTIVE")
+  status        String   @default("ACTIVE")  // "ACTIVE" | "SUSPENDED" | "DELETED"
+  deletedAt     DateTime?                 // set by soft-delete (FR-IAM-01); see Admin & IAM v1
   roles         RoleAssignment[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

@@ -29,7 +29,7 @@ interface OrgUnitSeed {
 interface UserSeed {
   email: string;
   name: string;
-  role: string;
+  roles: string[];
 }
 interface PortfolioSeed {
   key: string;
@@ -112,11 +112,11 @@ const KCB_SEED: TenantSeed = {
     { code: "SS", name: "KCB South Sudan", flag: "🇸🇸" },
   ],
   users: [
-    { email: "amina.ndungu@kcb.example.invalid", name: "Amina Ndungu", role: "PortfolioManager" },
-    { email: "brian.otieno@kcb.example.invalid", name: "Brian Otieno", role: "ProjectManager" },
-    { email: "carol.mwangi@kcb.example.invalid", name: "Carol Mwangi", role: "ProjectManager" },
-    { email: "daniel.kiptoo@kcb.example.invalid", name: "Daniel Kiptoo", role: "SystemAdmin" },
-    { email: "evelyn.wanjiru@kcb.example.invalid", name: "Evelyn Wanjiru", role: "Viewer" },
+    { email: "amina.ndungu@kcb.example.invalid", name: "Amina Ndungu", roles: ["PortfolioManager"] },
+    { email: "brian.otieno@kcb.example.invalid", name: "Brian Otieno", roles: ["ProjectManager"] },
+    { email: "carol.mwangi@kcb.example.invalid", name: "Carol Mwangi", roles: ["ProjectManager"] },
+    { email: "daniel.kiptoo@kcb.example.invalid", name: "Daniel Kiptoo", roles: ["SystemAdmin"] },
+    { email: "evelyn.wanjiru@kcb.example.invalid", name: "Evelyn Wanjiru", roles: ["Viewer"] },
   ],
   portfolios: [
     {
@@ -710,10 +710,14 @@ const RIVERBANK_SEED: TenantSeed = {
     { code: "CR", name: "Riverbank Coast Region" },
   ],
   users: [
-    { email: "joyce.okore@riverbank.solutions", name: "Joyce Okore", role: "SystemAdmin" },
-    { email: "farah.karanja@riverbank.example.invalid", name: "Farah Karanja", role: "PortfolioManager" },
-    { email: "george.mutuku@riverbank.example.invalid", name: "George Mutuku", role: "ProjectManager" },
-    { email: "hannah.chebet@riverbank.example.invalid", name: "Hannah Chebet", role: "SystemAdmin" },
+    {
+      email: "joyce.okore@riverbank.solutions",
+      name: "Joyce Okore",
+      roles: ["SystemAdmin", "PlatformSuperAdmin"],
+    },
+    { email: "farah.karanja@riverbank.example.invalid", name: "Farah Karanja", roles: ["PortfolioManager"] },
+    { email: "george.mutuku@riverbank.example.invalid", name: "George Mutuku", roles: ["ProjectManager"] },
+    { email: "hannah.chebet@riverbank.example.invalid", name: "Hannah Chebet", roles: ["SystemAdmin"] },
   ],
   portfolios: [
     {
@@ -916,9 +920,11 @@ async function seedTenant(seed: TenantSeed) {
         },
       });
       userIdByEmail.set(u.email, created.id);
-      await tx.roleAssignment.create({
-        data: { tenantId: tenant.id, userId: created.id, role: u.role },
-      });
+      for (const role of u.roles) {
+        await tx.roleAssignment.create({
+          data: { tenantId: tenant.id, userId: created.id, role },
+        });
+      }
     }
 
     const portfolioIdByKey = new Map<string, string>();

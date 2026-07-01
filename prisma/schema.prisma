@@ -64,7 +64,8 @@ model User {
   passwordHash            String?  @map("password_hash")
   previousPasswordHashes  String[] @default([]) @map("previous_password_hashes")
   mfaSecret               String?  @map("mfa_secret") // encrypted at rest, see src/lib/mfa.ts
-  status                  String   @default("ACTIVE")
+  status                  String   @default("ACTIVE") // "ACTIVE" | "SUSPENDED" | "DELETED"
+  deletedAt               DateTime? @map("deleted_at")
   createdAt               DateTime @default(now()) @map("created_at")
   updatedAt               DateTime @updatedAt @map("updated_at")
 

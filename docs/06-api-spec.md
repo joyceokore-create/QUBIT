@@ -58,6 +58,30 @@ the client body — it comes from the session only.
 | PATCH | `/api/issues/:id` | `issue:update` | Update issue |
 | GET | `/api/raid/gap-report` | `risk:read` | Occurred issues vs original owned risks (PIR gap) |
 
+### Administration (IAM v1)
+
+Not covered elsewhere in this doc — added alongside the Admin & IAM v1 build. Users are
+listed directly by server components (`src/server/users.ts`'s `listUsers()`); the endpoints
+below cover mutations, following the same permission → Zod → `withTenant` → `audit` pattern.
+
+| Method | Path | Permission | Purpose |
+|--------|------|-----------|---------|
+| POST | `/api/admin/users` | `iam:manage` | Create a user with an initial role set (audited: `create` + one `role_grant` per role) |
+| PATCH | `/api/admin/users/:id/roles` | `iam:manage` | Replace a user's roles; diffs and audits `role_grant`/`role_revoke` per change |
+| POST | `/api/admin/users/:id/suspend` | `iam:manage` | Set status to `SUSPENDED` (audited `update`) |
+| POST | `/api/admin/users/:id/reactivate` | `iam:manage` | Set status back to `ACTIVE` |
+| DELETE | `/api/admin/users/:id` | `iam:manage` | Soft-delete: scrubs PII, revokes all roles, blocks login (audited `delete`) |
+
+None of these let a caller act on their own account (suspend/delete/self-demote from
+`SystemAdmin`) — a deliberate guard against accidental lockout, enforced in
+`src/server/users.ts`, not just the UI.
+
+**Deferred** (not built in v1): Departments (FR-IAM-03), CSV bulk user upload (FR-IAM-02),
+custom role creation — roles stay hard-coded (`src/lib/rbac.ts`) — and the actual
+`PlatformSuperAdmin` tenant-switch mechanism (`POST /api/tenant/switch` from the Session/
+tenant table above is still unimplemented; the role currently only grants read-only
+oversight, not an actual switch).
+
 ## Example: create risk
 
 Request `POST /api/risks`

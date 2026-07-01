@@ -45,7 +45,14 @@ Roles bundle permission keys. Permissions are fixed strings checked in `rbac.ts`
 | Contributor | `task:*` (assigned), `risk:create`, `issue:create`, `timesheet:submit` |
 | Viewer | `*:read` only |
 | DepartmentHead | dynamic approval role (resource allocation approvals) |
-| PlatformSuperAdmin | `tenant:switch`, cross-tenant admin ONLY; no business-data authoring |
+| PlatformSuperAdmin | `*:read` + `tenant:switch` — cross-tenant admin, read-only oversight, no business-data authoring |
+
+> **Update (Admin & IAM v1):** `PlatformSuperAdmin` was broadened from `tenant:switch`-only
+> to `*:read` + `tenant:switch`. A role with zero read access can't meaningfully oversee
+> anything, and "no business-data authoring" (this doc's own words) already implies reads
+> are fine — only create/update/delete are excluded. The actual tenant-switch mechanism
+> (session update, switch UI) is still unimplemented; this role currently only grants
+> read-only visibility into its own tenant.
 
 ### Permission check
 

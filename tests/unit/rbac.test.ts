@@ -41,11 +41,14 @@ describe("rbac.can()", () => {
     expect(can(ctx, "project:create")).toBe(false);
   });
 
-  it("scopes PlatformSuperAdmin to tenant switching only — no business-data authoring", () => {
+  it("gives PlatformSuperAdmin read-only oversight plus tenant switching — no authoring", () => {
     const ctx = ctxWithRoles(["PlatformSuperAdmin"]);
     expect(can(ctx, "tenant:switch")).toBe(true);
-    expect(can(ctx, "project:read")).toBe(false);
-    expect(can(ctx, "risk:read")).toBe(false);
+    expect(can(ctx, "project:read")).toBe(true);
+    expect(can(ctx, "risk:read")).toBe(true);
+    expect(can(ctx, "project:create")).toBe(false);
+    expect(can(ctx, "risk:update")).toBe(false);
+    expect(can(ctx, "iam:manage")).toBe(false);
   });
 
   it("unions permissions across multiple assigned roles", () => {

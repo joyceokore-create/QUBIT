@@ -58,8 +58,8 @@ pnpm lint && pnpm typecheck  # quality gates (must pass before a milestone is "d
 
 ## Project status
 
-Milestone 3 (app shell & per-tenant theming) is complete, on top of Milestones 1–2
-(database/RLS, auth/RBAC/audit):
+Milestones 1–3 (database/RLS, auth/RBAC/audit, app shell/theming) are complete, plus an
+unplanned **Admin & IAM v1** pass built on top of them:
 
 - Auth.js v5 with a Credentials provider — just email + password + optional TOTP code, no
   organization picker. The tenant is resolved from the email's domain
@@ -73,14 +73,22 @@ Milestone 3 (app shell & per-tenant theming) is complete, on top of Milestones 1
   route handlers and server components a session-derived tenant + permission check.
 - Every mutation helper (`audit()`) writes an `audit_log` row atomically with its mutation.
 - App shell: sticky Topbar (logo, nav tabs, TenantChip, account menu) and a permission-gated
-  Sidebar (Group Overview, Portfolios, Standalone, Subsidiaries, Risks & Issues badge) —
-  every group hides itself if the signed-in role lacks the permission for it. Per-tenant
-  brand tokens (`--brand`/`--brand-light`) are injected in the `(app)` layout: KCB renders
-  green, Riverbank renders red, RAG status colours stay semantic either way.
+  Sidebar — every group hides itself if the signed-in role lacks the permission for it.
+  Per-tenant brand tokens (`--brand`/`--brand-light`): KCB renders green, Riverbank
+  renders red, RAG status colours stay semantic either way.
+- **Administration** (`/admin/users`, `/admin/roles`, `/admin/audit`, gated on
+  `iam:manage`): create users with roles, edit roles (diffed and audited as
+  `role_grant`/`role_revoke`), suspend/reactivate, and soft-delete (PII-scrubbing, per
+  FR-IAM-01). A browsable permission catalogue and an IAM audit log viewer round it out.
+  `PlatformSuperAdmin` was broadened to read-only (`*:read` + `tenant:switch`) since a role
+  with no visibility can't oversee anything — the actual tenant-switch mechanism itself is
+  still a follow-up. Departments, CSV bulk upload, and custom role creation are explicitly
+  deferred (see `docs/06-api-spec.md`'s Administration section).
 - Nav destinations not yet built (portfolio/subsidiary detail, standalone, RAID) render a
   `ComingSoon` placeholder naming the milestone that lands them, instead of a dead link.
-- `tests/rls/` and `tests/unit/` cover cross-tenant isolation, audit-row correctness, and
-  role-by-role permission checks.
+- `tests/rls/` and `tests/unit/` cover cross-tenant isolation, audit-row correctness,
+  role-by-role permission checks, and the full admin user lifecycle (create → role
+  diff → suspend → soft-delete), including self-lockout guards.
 
 See [`docs/10-build-plan.md`](./docs/10-build-plan.md) for what's next (Milestone 4: Group
 Overview dashboard).
