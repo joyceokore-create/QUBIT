@@ -35,3 +35,5 @@ next-env.d.ts
 
 # prisma
 prisma/*.db
+
+/node_modules/.prisma/client

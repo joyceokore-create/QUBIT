@@ -19,11 +19,20 @@ Playwright.
 ```bash
 pnpm install
 
-# start Postgres 17 locally (see docs/03-dependencies.md)
+# start Postgres 17 locally — via Docker (see docs/03-dependencies.md) ...
 docker run --name qubit-pg -e POSTGRES_USER=qubit -e POSTGRES_PASSWORD=qubit \
   -e POSTGRES_DB=qubit -p 5432:5432 -d postgres:17
 
+# ... or against an existing local Postgres 17 (e.g. Postgres.app), create the app role/db:
+#   CREATE ROLE qubit LOGIN PASSWORD 'qubit';
+#   CREATE DATABASE qubit OWNER qubit;
+# `prisma migrate dev` also needs the role to be able to create its shadow DB locally:
+#   ALTER ROLE qubit CREATEDB;   -- local dev only; not needed for `prisma migrate deploy`
+
 cp .env.example .env   # fill in DATABASE_URL / AUTH_SECRET
+
+pnpm prisma:migrate    # applies prisma/schema.prisma + prisma/rls.sql
+pnpm prisma:seed       # seeds the KCB and Riverbank tenants
 
 pnpm dev
 ```
@@ -35,12 +44,15 @@ pnpm dev                     # run dev server
 pnpm build                   # production build
 pnpm prisma:migrate          # apply schema changes
 pnpm prisma:seed             # seed synthetic tenants/data
-pnpm test                    # unit tests (Vitest)
+pnpm test                    # unit + RLS isolation tests (Vitest) — needs a migrated, seeded DB
 pnpm test:e2e                # Playwright e2e
 pnpm lint && pnpm typecheck  # quality gates (must pass before a milestone is "done")
 ```
 
 ## Project status
 
-Milestone 0 (scaffold & tooling) is complete. See
-[`docs/10-build-plan.md`](./docs/10-build-plan.md) for what's next.
+Milestone 1 (database, Prisma & RLS) is complete: Phase A schema, Postgres RLS policies
+(enabled + forced on every tenant-owned table), `withTenant()`, and synthetic seed data for
+both tenants. `tests/rls/` proves cross-tenant isolation at the database level. See
+[`docs/10-build-plan.md`](./docs/10-build-plan.md) for what's next (Milestone 2: auth, RBAC
+& audit).
