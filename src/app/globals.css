@@ -26,6 +26,7 @@
   --color-status-blue: var(--blue);
   --color-status-blue-bg: var(--blue-bg);
   --color-status-green: var(--green-status);
+  --color-status-green-bg: var(--green-status-bg);
   --radius-r: var(--r);
   --radius-r-sm: var(--r-sm);
 
@@ -89,6 +90,9 @@
   --blue: #1d4ed8;
   --blue-bg: #dbeafe;
   --green-status: #1b7a3e;
+  /* Status→colour mapping's On Track pill bg (docs/08-design-system.md) — the doc's fixed
+     token list omitted this counterpart to amber-bg/red-bg/blue-bg; added for consistency. */
+  --green-status-bg: #dcfce7;
   --r: 10px;
   --r-sm: 6px;
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.07), 0 1px 2px rgba(0, 0, 0, 0.05);

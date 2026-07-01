@@ -21,6 +21,10 @@ function mapStatus(label: string): string {
   return STATUS_MAP[label] ?? label;
 }
 
+function daysAgoToDate(daysAgo?: number): Date | undefined {
+  return daysAgo === undefined ? undefined : new Date(Date.now() - daysAgo * 86_400_000);
+}
+
 interface OrgUnitSeed {
   code: string;
   name: string;
@@ -50,6 +54,9 @@ interface SubStatusSeed {
   status: string;
   ms: string[];
   msSt: string[];
+  // Sparse, index-aligned with ms/msSt — most milestones have no date. Only a handful are
+  // backfilled for a realistic "Upcoming Milestones" feed (Milestone 4).
+  msDue?: (string | null)[];
 }
 interface ProjectSeed {
   code: string;
@@ -72,6 +79,9 @@ interface RiskSeed {
   mitigation: string;
   ownerEmail: string;
   status: string;
+  // Backdates createdAt so the escalations feed shows a realistic "N days ago" instead of
+  // everything reading "just now" right after a fresh seed (Milestone 4).
+  daysAgo?: number;
 }
 interface IssueSeed {
   title: string;
@@ -80,6 +90,7 @@ interface IssueSeed {
   ownerEmail: string;
   status: string;
   originRiskTitle?: string;
+  daysAgo?: number;
 }
 interface TenantSeed {
   slug: string;
@@ -267,6 +278,7 @@ const KCB_SEED: TenantSeed = {
           status: "On Track",
           ms: ["Scoping", "Design", "Build", "UAT", "Go-Live"],
           msSt: ["done", "done", "done", "done", "active"],
+          msDue: [null, null, null, null, "2026-07-20"],
         },
         UG: {
           pct: 78,
@@ -329,6 +341,7 @@ const KCB_SEED: TenantSeed = {
           status: "Overdue",
           ms: ["Business Case", "Procurement", "Build", "UAT", "Sign-off"],
           msSt: ["done", "done", "active", "late", "pending"],
+          msDue: [null, null, null, "2026-06-28", null],
         },
         UG: {
           pct: 28,
@@ -397,6 +410,7 @@ const KCB_SEED: TenantSeed = {
           status: "On Track",
           ms: ["Discovery", "Design", "Integration", "UAT", "Cutover"],
           msSt: ["done", "done", "active", "pending", "pending"],
+          msDue: [null, null, "2026-07-15", null, null],
         },
         UG: {
           pct: 40,
@@ -503,6 +517,7 @@ const KCB_SEED: TenantSeed = {
           status: "On Track",
           ms: ["Scoping", "Build", "Pilot", "Launch"],
           msSt: ["done", "done", "active", "pending"],
+          msDue: [null, null, "2026-07-05", null],
         },
         UG: {
           pct: 55,
@@ -646,6 +661,7 @@ const KCB_SEED: TenantSeed = {
       mitigation: "Escalate vendor resourcing; stand up a dedicated UAT squad in TZ/RW.",
       ownerEmail: "brian.otieno@kcb.example.invalid",
       status: "Open",
+      daysAgo: 3,
     },
     {
       title: "Core banking resourcing gap in Kenya ahead of Phase 3",
@@ -656,6 +672,7 @@ const KCB_SEED: TenantSeed = {
       mitigation: "Backfill contractor roles; re-baseline the Phase 3 resourcing plan.",
       ownerEmail: "brian.otieno@kcb.example.invalid",
       status: "Monitoring",
+      daysAgo: 7,
     },
     {
       title: "FIKRA budget overrun risk in South Sudan",
@@ -666,6 +683,7 @@ const KCB_SEED: TenantSeed = {
       mitigation: "Renegotiate South Sudan vendor rates; flag to Finance for contingency draw-down.",
       ownerEmail: "carol.mwangi@kcb.example.invalid",
       status: "Open",
+      daysAgo: 1,
     },
   ],
   issues: [
@@ -676,6 +694,7 @@ const KCB_SEED: TenantSeed = {
       ownerEmail: "brian.otieno@kcb.example.invalid",
       status: "Open",
       originRiskTitle: "AML platform UAT deadline missed across Tanzania and Rwanda",
+      daysAgo: 2,
     },
     {
       title: "Oracle Fusion procurement sign-off delayed in Uganda",
@@ -683,6 +702,7 @@ const KCB_SEED: TenantSeed = {
       severity: "Medium",
       ownerEmail: "daniel.kiptoo@kcb.example.invalid",
       status: "Open",
+      daysAgo: 5,
     },
     {
       title: "Mobile Banking 2.0 vendor delivery delay across all subsidiaries",
@@ -690,6 +710,7 @@ const KCB_SEED: TenantSeed = {
       severity: "High",
       ownerEmail: "carol.mwangi@kcb.example.invalid",
       status: "Open",
+      daysAgo: 2,
     },
   ],
 };
@@ -851,6 +872,7 @@ const RIVERBANK_SEED: TenantSeed = {
       mitigation: "Add a rollback plan and an extra cutover rehearsal.",
       ownerEmail: "george.mutuku@riverbank.example.invalid",
       status: "Open",
+      daysAgo: 4,
     },
   ],
   issues: [
@@ -860,6 +882,7 @@ const RIVERBANK_SEED: TenantSeed = {
       severity: "Medium",
       ownerEmail: "farah.karanja@riverbank.example.invalid",
       status: "Open",
+      daysAgo: 2,
     },
   ],
 };
@@ -986,6 +1009,7 @@ async function seedTenant(seed: TenantSeed) {
           },
         });
         for (let i = 0; i < sub.ms.length; i++) {
+          const dueDate = sub.msDue?.[i];
           await tx.milestone.create({
             data: {
               tenantId: tenant.id,
@@ -993,6 +1017,7 @@ async function seedTenant(seed: TenantSeed) {
               name: sub.ms[i],
               sequence: i,
               state: sub.msSt[i],
+              dueDate: dueDate ? new Date(dueDate) : null,
             },
           });
         }
@@ -1012,6 +1037,7 @@ async function seedTenant(seed: TenantSeed) {
           mitigation: r.mitigation,
           ownerId: userIdByEmail.get(r.ownerEmail),
           status: r.status,
+          createdAt: daysAgoToDate(r.daysAgo),
         },
       });
       riskIdByTitle.set(r.title, created.id);
@@ -1027,6 +1053,7 @@ async function seedTenant(seed: TenantSeed) {
           severity: i.severity,
           ownerId: userIdByEmail.get(i.ownerEmail),
           status: i.status,
+          createdAt: daysAgoToDate(i.daysAgo),
         },
       });
     }

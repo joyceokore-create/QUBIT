@@ -24,6 +24,9 @@ as inline CSS variables on a wrapper element; everything else references the var
 --red:#DC2626;   --red-bg:#FEE2E2;      /* Overdue */
 --blue:#1D4ED8;  --blue-bg:#DBEAFE;     /* Planning / info */
 --green-status:#1B7A3E;                 /* On Track (semantic, not brand) */
+--green-status-bg:#DCFCE7;              /* On Track pill bg — added at Milestone 4, this
+                                            list originally omitted the On Track counterpart
+                                            to amber-bg/red-bg/blue-bg below */
 --r:10px; --r-sm:6px;
 --shadow:0 2px 8px rgba(0,0,0,.07),0 1px 2px rgba(0,0,0,.05);
 --shadow-lg:0 8px 32px rgba(0,0,0,.13),0 2px 6px rgba(0,0,0,.07);

@@ -18,6 +18,7 @@ export async function Sidebar() {
     roles: session.user.roles,
   };
 
+  const showDashboard = can(ctx, "dashboard:read");
   const showPortfolios = can(ctx, "portfolio:read");
   const showProjects = can(ctx, "project:read");
   const showRisks = can(ctx, "risk:read");
@@ -26,11 +27,13 @@ export async function Sidebar() {
 
   return (
     <aside className="flex w-[216px] shrink-0 flex-col overflow-y-auto border-r border-ink-4 bg-white px-[10px] py-4">
-      <NavGroup label="Navigation">
-        <NavItem href="/dashboard" icon="layout-grid">
-          Group Overview
-        </NavItem>
-      </NavGroup>
+      {showDashboard && (
+        <NavGroup label="Navigation">
+          <NavItem href="/dashboard" icon="layout-grid">
+            Group Overview
+          </NavItem>
+        </NavGroup>
+      )}
 
       {showPortfolios && nav && nav.portfolios.length > 0 && (
         <NavGroup label="Portfolios">

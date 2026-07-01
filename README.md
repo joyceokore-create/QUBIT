@@ -58,8 +58,23 @@ pnpm lint && pnpm typecheck  # quality gates (must pass before a milestone is "d
 
 ## Project status
 
-Milestones 1–3 (database/RLS, auth/RBAC/audit, app shell/theming) are complete, plus an
-unplanned **Admin & IAM v1** pass built on top of them:
+Milestones 1–4 (database/RLS, auth/RBAC/audit, app shell/theming, Group Overview
+dashboard) are complete, plus an unplanned **Admin & IAM v1** pass:
+
+- **Group Overview dashboard** (`/dashboard`): KPI strip, portfolio × subsidiary health
+  map (click a cell to drill into that portfolio filtered to a subsidiary, click a
+  portfolio name to drill straight in), portfolio and standalone card grids, and live
+  escalations/upcoming-milestones feeds — all computed from real seeded data via
+  `src/server/dashboard.ts`, matching `docs/09-ui-spec.md`'s derived-value rules exactly
+  (project progress = avg of subsidiary progress, heatmap status = worst of
+  {Overdue, At Risk, On Track}, Planning falls through to On Track). Verified both
+  tenants render correct, isolated numbers. Standalone card click-through (slide panel)
+  is deferred to the portfolio/project drill-down milestone.
+- Two schema gaps surfaced and fixed while building this: `Milestone` had no due date
+  (needed for "Upcoming Milestones"), and the design system doc specified an On Track
+  pill background that was never added as a token. A handful of real seeded milestones
+  were backfilled with dates, and seeded risks/issues got backdated `createdAt`s, so the
+  feeds show a realistic spread instead of everything reading "just now" after a fresh seed.
 
 - Auth.js v5 with a Credentials provider — just email + password + optional TOTP code, no
   organization picker. The tenant is resolved from the email's domain
@@ -90,5 +105,12 @@ unplanned **Admin & IAM v1** pass built on top of them:
   role-by-role permission checks, and the full admin user lifecycle (create → role
   diff → suspend → soft-delete), including self-lockout guards.
 
-See [`docs/10-build-plan.md`](./docs/10-build-plan.md) for what's next (Milestone 4: Group
-Overview dashboard).
+See [`docs/10-build-plan.md`](./docs/10-build-plan.md) for what's next (Milestone 5:
+portfolio, programme & project drill-down).
+
+**Known gap to revisit:** `dashboard:read` (needed for `/dashboard`, everyone's post-login
+landing page) is only granted to `PortfolioManager`, `SystemAdmin`, `Viewer`, and
+`PlatformSuperAdmin` per the Milestone 2 role table. `ProjectManager`, `Contributor`,
+`FinanceManager`, and `DepartmentHead` land on a Forbidden page immediately after signing
+in. Worth deciding whether to broaden `dashboard:read` or give those roles a different
+landing page once one exists.
