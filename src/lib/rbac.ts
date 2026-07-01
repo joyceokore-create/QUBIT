@@ -5,9 +5,13 @@ import type { TenantContext } from "@/lib/tenant";
 export const ROLE_PERMISSIONS: Record<string, string[]> = {
   SystemAdmin: ["*:*", "iam:manage"],
   PortfolioManager: ["dashboard:read", "portfolio:*", "project:read", "risk:read", "reports:read"],
-  ProjectManager: ["project:*", "risk:*", "issue:*", "task:*"],
-  FinanceManager: ["finance:*"],
-  Contributor: ["task:*", "risk:create", "issue:create", "timesheet:submit"],
+  // dashboard:read added to these three (Milestone 4) — /dashboard is every user's
+  // post-login landing page, and without it they hit a Forbidden wall immediately after
+  // signing in. DepartmentHead is left as-is: a dynamic, approval-only role, not a
+  // day-to-day user who needs a dashboard landing page.
+  ProjectManager: ["dashboard:read", "project:*", "risk:*", "issue:*", "task:*"],
+  FinanceManager: ["dashboard:read", "finance:*"],
+  Contributor: ["dashboard:read", "task:*", "risk:create", "issue:create", "timesheet:submit"],
   Viewer: ["*:read"],
   DepartmentHead: ["approvals:decide"],
   // Cross-tenant admin — read-only oversight everywhere, no business-data authoring

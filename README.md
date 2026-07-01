@@ -108,9 +108,6 @@ dashboard) are complete, plus an unplanned **Admin & IAM v1** pass:
 See [`docs/10-build-plan.md`](./docs/10-build-plan.md) for what's next (Milestone 5:
 portfolio, programme & project drill-down).
 
-**Known gap to revisit:** `dashboard:read` (needed for `/dashboard`, everyone's post-login
-landing page) is only granted to `PortfolioManager`, `SystemAdmin`, `Viewer`, and
-`PlatformSuperAdmin` per the Milestone 2 role table. `ProjectManager`, `Contributor`,
-`FinanceManager`, and `DepartmentHead` land on a Forbidden page immediately after signing
-in. Worth deciding whether to broaden `dashboard:read` or give those roles a different
-landing page once one exists.
+`dashboard:read` (needed for `/dashboard`, everyone's post-login landing page) is now
+granted to every role except `DepartmentHead`, a dynamic approval-only role — see
+`docs/07-auth-rbac.md`'s Milestone 4 update note.

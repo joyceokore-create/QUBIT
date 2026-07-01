@@ -40,12 +40,18 @@ Roles bundle permission keys. Permissions are fixed strings checked in `rbac.ts`
 |------|----------------------------------|
 | SystemAdmin | all within tenant; `iam:manage`; can bypass approvals (audited) |
 | PortfolioManager | `dashboard:read`, `portfolio:*`, `project:read`, `risk:read`, reports:read |
-| ProjectManager | `project:*`, `risk:*`, `issue:*`, `task:*` (own projects) |
-| FinanceManager | finance:* (Phase C) |
-| Contributor | `task:*` (assigned), `risk:create`, `issue:create`, `timesheet:submit` |
+| ProjectManager | `dashboard:read`, `project:*`, `risk:*`, `issue:*`, `task:*` (own projects) |
+| FinanceManager | `dashboard:read`, finance:* (Phase C) |
+| Contributor | `dashboard:read`, `task:*` (assigned), `risk:create`, `issue:create`, `timesheet:submit` |
 | Viewer | `*:read` only |
-| DepartmentHead | dynamic approval role (resource allocation approvals) |
+| DepartmentHead | dynamic approval role (resource allocation approvals) — no `dashboard:read`; not a day-to-day dashboard user |
 | PlatformSuperAdmin | `*:read` + `tenant:switch` — cross-tenant admin, read-only oversight, no business-data authoring |
+
+> **Update (Milestone 4):** `dashboard:read` added to `ProjectManager`, `FinanceManager`,
+> and `Contributor`. `/dashboard` is every user's post-login landing page (`middleware.ts`
+> redirects there after sign-in); without it, these three roles hit a Forbidden page
+> immediately after logging in. `DepartmentHead` was deliberately left out — it's a
+> dynamic, approval-only role, not a day-to-day user needing a dashboard.
 
 > **Update (Admin & IAM v1):** `PlatformSuperAdmin` was broadened from `tenant:switch`-only
 > to `*:read` + `tenant:switch`. A role with zero read access can't meaningfully oversee

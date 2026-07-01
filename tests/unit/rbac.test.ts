@@ -22,8 +22,9 @@ describe("rbac.can()", () => {
     expect(can(ctx, "risk:update")).toBe(false);
   });
 
-  it("grants ProjectManager full project/risk/issue/task access but not finance or IAM", () => {
+  it("grants ProjectManager dashboard access plus full project/risk/issue/task, but not finance or IAM", () => {
     const ctx = ctxWithRoles(["ProjectManager"]);
+    expect(can(ctx, "dashboard:read")).toBe(true);
     expect(can(ctx, "project:create")).toBe(true);
     expect(can(ctx, "risk:update")).toBe(true);
     expect(can(ctx, "issue:read")).toBe(true);
@@ -31,14 +32,21 @@ describe("rbac.can()", () => {
     expect(can(ctx, "iam:manage")).toBe(false);
   });
 
-  it("limits Contributor to task work plus creating (not updating) risks/issues", () => {
+  it("limits Contributor to dashboard + task work plus creating (not updating) risks/issues", () => {
     const ctx = ctxWithRoles(["Contributor"]);
+    expect(can(ctx, "dashboard:read")).toBe(true);
     expect(can(ctx, "task:update")).toBe(true);
     expect(can(ctx, "risk:create")).toBe(true);
     expect(can(ctx, "issue:create")).toBe(true);
     expect(can(ctx, "timesheet:submit")).toBe(true);
     expect(can(ctx, "risk:update")).toBe(false);
     expect(can(ctx, "project:create")).toBe(false);
+  });
+
+  it("keeps DepartmentHead scoped to approvals only — no dashboard landing page", () => {
+    const ctx = ctxWithRoles(["DepartmentHead"]);
+    expect(can(ctx, "approvals:decide")).toBe(true);
+    expect(can(ctx, "dashboard:read")).toBe(false);
   });
 
   it("gives PlatformSuperAdmin read-only oversight plus tenant switching — no authoring", () => {
