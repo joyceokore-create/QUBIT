@@ -1,6 +1,8 @@
 import type { CSSProperties } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { Topbar } from "@/components/layout/topbar";
+import { Sidebar } from "@/components/layout/sidebar";
 
 type BrandStyle = CSSProperties & { "--brand"?: string; "--brand-light"?: string };
 
@@ -17,7 +19,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div style={brandStyle} className="min-h-screen bg-background">
-      {children}
+      <Topbar />
+      <div className="flex h-[calc(100vh-54px)]">
+        <Sidebar />
+        <main className="flex flex-1 flex-col overflow-y-auto">{children}</main>
+      </div>
     </div>
   );
 }

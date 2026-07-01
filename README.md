@@ -58,8 +58,8 @@ pnpm lint && pnpm typecheck  # quality gates (must pass before a milestone is "d
 
 ## Project status
 
-Milestone 2 (auth, RBAC & audit) is complete, on top of Milestone 1 (database, Prisma &
-RLS):
+Milestone 3 (app shell & per-tenant theming) is complete, on top of Milestones 1–2
+(database/RLS, auth/RBAC/audit):
 
 - Auth.js v5 with a Credentials provider — just email + password + optional TOTP code, no
   organization picker. The tenant is resolved from the email's domain
@@ -67,12 +67,20 @@ RLS):
   `/api/auth/resolve-org` as the user types to confirm "Signing in to KCB Group" before
   submit. JWT sessions (24h), bcrypt password hashing with an 8-char minimum and no reuse
   of the last 3 passwords, and per-key login rate limiting/lockout.
-- TOTP MFA enrolment (`/settings/mfa`) with the secret encrypted at rest.
+- TOTP MFA enrolment (`/settings/mfa`, also reachable from the account menu) with the
+  secret encrypted at rest.
 - `middleware.ts` gates every route except `/login`; `getTenantContext()` and `can()` give
   route handlers and server components a session-derived tenant + permission check.
 - Every mutation helper (`audit()`) writes an `audit_log` row atomically with its mutation.
+- App shell: sticky Topbar (logo, nav tabs, TenantChip, account menu) and a permission-gated
+  Sidebar (Group Overview, Portfolios, Standalone, Subsidiaries, Risks & Issues badge) —
+  every group hides itself if the signed-in role lacks the permission for it. Per-tenant
+  brand tokens (`--brand`/`--brand-light`) are injected in the `(app)` layout: KCB renders
+  green, Riverbank renders red, RAG status colours stay semantic either way.
+- Nav destinations not yet built (portfolio/subsidiary detail, standalone, RAID) render a
+  `ComingSoon` placeholder naming the milestone that lands them, instead of a dead link.
 - `tests/rls/` and `tests/unit/` cover cross-tenant isolation, audit-row correctness, and
   role-by-role permission checks.
 
-See [`docs/10-build-plan.md`](./docs/10-build-plan.md) for what's next (Milestone 3: app
-shell & per-tenant theming).
+See [`docs/10-build-plan.md`](./docs/10-build-plan.md) for what's next (Milestone 4: Group
+Overview dashboard).
