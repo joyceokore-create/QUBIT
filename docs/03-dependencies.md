@@ -18,6 +18,10 @@ pnpm add next-auth@beta @auth/prisma-adapter
 pnpm add recharts lucide-react clsx tailwind-merge class-variance-authority
 pnpm add date-fns
 pnpm add otplib qrcode           # TOTP MFA (Phase A/D)
+pnpm add bcryptjs                # password hashing (Milestone 2) — this doc mandated
+                                  # bcrypt hashing (docs/11-security-compliance.md,
+                                  # NFR-04) but omitted the package; bcryptjs is pure JS
+                                  # (no native build step, Node/edge-friendly).
 ```
 
 | Package | Version (major) | Why |

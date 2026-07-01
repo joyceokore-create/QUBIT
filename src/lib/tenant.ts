@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 export interface TenantContext {
   tenantId: string;
   userId: string;
+  roles: string[];
 }
 
 /**
@@ -13,7 +14,7 @@ export interface TenantContext {
  * See docs/04-multitenancy.md.
  */
 export async function withTenant<T>(
-  ctx: TenantContext,
+  ctx: Pick<TenantContext, "tenantId" | "userId">,
   fn: (tx: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> {
   return prisma.$transaction(async (tx) => {
@@ -23,6 +24,22 @@ export async function withTenant<T>(
   });
 }
 
-// getTenantContext() reads the Auth.js session and derives { tenantId, userId } for the
-// current request. It lands in Milestone 2 alongside src/lib/auth.ts, once a session
-// actually exists to read from — see docs/10-build-plan.md.
+/**
+ * Reads the Auth.js session (server-side) and returns the tenant context for the current
+ * request. Route handlers and server actions call this first — never trust a
+ * client-supplied tenantId/role. Throws if there is no session. See docs/04-multitenancy.md.
+ */
+export async function getTenantContext(): Promise<TenantContext> {
+  // Imported lazily to avoid a module-init cycle: src/lib/auth.ts's Credentials
+  // authorize() calls withTenant() from this file to look up the user during login.
+  const { auth } = await import("@/lib/auth");
+  const session = await auth();
+  if (!session?.user?.tenantId || !session.user.id) {
+    throw new Error("No active session.");
+  }
+  return {
+    tenantId: session.user.tenantId,
+    userId: session.user.id,
+    roles: session.user.roles ?? [],
+  };
+}

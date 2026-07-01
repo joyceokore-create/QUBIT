@@ -5,6 +5,11 @@
 
 import { prisma } from "../src/lib/db";
 import { withTenant } from "../src/lib/tenant";
+import { hashPassword } from "../src/lib/password";
+
+// LOCAL DEV / DEMO ONLY — every seeded user shares this password so any of them can be
+// used to test role-based views. Never reused for real accounts or non-local environments.
+const DEMO_PASSWORD = "Passw0rd!23";
 
 const STATUS_MAP: Record<string, string> = {
   "On Track": "OnTrack",
@@ -891,10 +896,17 @@ async function seedTenant(seed: TenantSeed) {
       orgUnitIdByCode.set(ou.code, created.id);
     }
 
+    const demoPasswordHash = await hashPassword(DEMO_PASSWORD);
     const userIdByEmail = new Map<string, string>();
     for (const u of seed.users) {
       const created = await tx.user.create({
-        data: { tenantId: tenant.id, email: u.email, name: u.name, status: "ACTIVE" },
+        data: {
+          tenantId: tenant.id,
+          email: u.email,
+          name: u.name,
+          status: "ACTIVE",
+          passwordHash: demoPasswordHash,
+        },
       });
       userIdByEmail.set(u.email, created.id);
       await tx.roleAssignment.create({

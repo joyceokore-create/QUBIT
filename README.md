@@ -29,13 +29,17 @@ docker run --name qubit-pg -e POSTGRES_USER=qubit -e POSTGRES_PASSWORD=qubit \
 # `prisma migrate dev` also needs the role to be able to create its shadow DB locally:
 #   ALTER ROLE qubit CREATEDB;   -- local dev only; not needed for `prisma migrate deploy`
 
-cp .env.example .env   # fill in DATABASE_URL / AUTH_SECRET
+cp .env.example .env   # fill in DATABASE_URL / AUTH_SECRET / MFA_ENCRYPTION_KEY
 
 pnpm prisma:migrate    # applies prisma/schema.prisma + prisma/rls.sql
 pnpm prisma:seed       # seeds the KCB and Riverbank tenants
 
 pnpm dev
 ```
+
+Sign in at `/login` with any seeded user (see `prisma/seed.ts`) — organization **KCB Group**
+or **Riverbank Group**, e.g. `amina.ndungu@example.invalid`, password `Passw0rd!23`. That
+demo password is local-dev/seed-only, shared by every seeded user; it is not a real secret.
 
 ## Common commands
 
@@ -51,8 +55,18 @@ pnpm lint && pnpm typecheck  # quality gates (must pass before a milestone is "d
 
 ## Project status
 
-Milestone 1 (database, Prisma & RLS) is complete: Phase A schema, Postgres RLS policies
-(enabled + forced on every tenant-owned table), `withTenant()`, and synthetic seed data for
-both tenants. `tests/rls/` proves cross-tenant isolation at the database level. See
-[`docs/10-build-plan.md`](./docs/10-build-plan.md) for what's next (Milestone 2: auth, RBAC
-& audit).
+Milestone 2 (auth, RBAC & audit) is complete, on top of Milestone 1 (database, Prisma &
+RLS):
+
+- Auth.js v5 with a Credentials provider (organization + email + password + optional TOTP
+  code), JWT sessions (24h), bcrypt password hashing with an 8-char minimum and no reuse of
+  the last 3 passwords, and per-key login rate limiting/lockout.
+- TOTP MFA enrolment (`/settings/mfa`) with the secret encrypted at rest.
+- `middleware.ts` gates every route except `/login`; `getTenantContext()` and `can()` give
+  route handlers and server components a session-derived tenant + permission check.
+- Every mutation helper (`audit()`) writes an `audit_log` row atomically with its mutation.
+- `tests/rls/` and `tests/unit/` cover cross-tenant isolation, audit-row correctness, and
+  role-by-role permission checks.
+
+See [`docs/10-build-plan.md`](./docs/10-build-plan.md) for what's next (Milestone 3: app
+shell & per-tenant theming).

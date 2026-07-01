@@ -54,13 +54,14 @@ model User {
   id           String   @id @default(uuid())
   tenantId     String   @map("tenant_id")
   tenant       Tenant   @relation(fields: [tenantId], references: [id])
-  email        String
-  name         String
-  passwordHash String?  @map("password_hash")
-  mfaSecret    String?  @map("mfa_secret")
-  status       String   @default("ACTIVE")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  email                   String
+  name                    String
+  passwordHash            String?  @map("password_hash")
+  previousPasswordHashes  String[] @default([]) @map("previous_password_hashes")
+  mfaSecret               String?  @map("mfa_secret") // encrypted at rest, see src/lib/mfa.ts
+  status                  String   @default("ACTIVE")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
 
   roles RoleAssignment[]
 
