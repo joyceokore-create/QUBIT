@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QUBIT — KCB Group Executive Dashboard</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Syne:wght@600;700;800&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --green:#1B7A3E;--green-light:#E8F5EE;--green-mid:#2EA055;
+  --bg:#F5F5F3;--white:#FFFFFF;--ink:#0D0D0D;
+  --ink2:#4A4A4A;--ink3:#8A8A8A;--ink4:#C8C8C8;
+  --amber:#D97706;--amber-bg:#FEF3C7;
+  --red:#DC2626;--red-bg:#FEE2E2;
+  --blue:#1D4ED8;--blue-bg:#DBEAFE;
+  --r:10px;--r-sm:6px;
+  --shadow:0 2px 8px rgba(0,0,0,0.07),0 1px 2px rgba(0,0,0,0.05);
+  --shadow-lg:0 8px 32px rgba(0,0,0,0.13),0 2px 6px rgba(0,0,0,0.07);
+}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);font-size:13px;line-height:1.5;min-height:100vh;overflow-x:hidden}
+
+/* TOPBAR */
+.topbar{height:54px;background:var(--white);border-bottom:1px solid var(--ink4);display:flex;align-items:center;padding:0 24px;gap:20px;position:sticky;top:0;z-index:200}
+.logo{font-family:'Syne',sans-serif;font-weight:800;font-size:16px;letter-spacing:-0.5px;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.logo-mark{width:26px;height:26px;background:var(--green);border-radius:6px;display:flex;align-items:center;justify-content:center}
+.logo-mark svg{width:14px;height:14px;fill:white}
+.topbar-sep{width:1px;height:22px;background:var(--ink4);flex-shrink:0}
+.topbar-nav{display:flex;gap:2px}
+.tnav{padding:5px 11px;border-radius:var(--r-sm);font-size:12px;font-weight:500;color:var(--ink3);cursor:pointer;border:none;background:transparent;transition:all .12s}
+.tnav:hover{color:var(--ink);background:var(--bg)}
+.tnav.active{color:var(--green);background:var(--green-light);font-weight:600}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.tenant-chip{display:flex;align-items:center;gap:7px;padding:5px 12px;border-radius:20px;background:var(--bg);border:1px solid var(--ink4);font-size:11px;font-weight:600;color:var(--ink2);cursor:pointer}
+.tenant-dot{width:7px;height:7px;background:var(--green);border-radius:50%}
+.avatar{width:30px;height:30px;border-radius:50%;background:var(--green);color:white;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+
+/* SHELL */
+.shell{display:flex;height:calc(100vh - 54px);overflow:hidden}
+
+/* SIDEBAR */
+.sidebar{width:216px;flex-shrink:0;background:var(--white);border-right:1px solid var(--ink4);padding:16px 10px;display:flex;flex-direction:column;overflow-y:auto}
+.snav-group{margin-bottom:18px}
+.snav-label{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink4);padding:3px 8px;margin-bottom:3px}
+.snav{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:var(--r-sm);font-size:12px;font-weight:500;color:var(--ink2);cursor:pointer;border:none;background:transparent;width:100%;text-align:left;transition:all .12s}
+.snav:hover{background:var(--bg);color:var(--ink)}
+.snav.active{background:var(--green-light);color:var(--green);font-weight:600}
+.snav-ic{width:15px;height:15px;flex-shrink:0;opacity:.55}
+.snav.active .snav-ic{opacity:1}
+.snav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px}
+.snav-ct{margin-left:auto;font-size:10px;color:var(--ink3)}
+.sidebar-foot{margin-top:auto;padding-top:14px;border-top:1px solid var(--bg)}
+
+/* MAIN */
+.main{flex:1;overflow-y:auto;overflow-x:hidden}
+.view{display:none;padding:26px;flex-direction:column;gap:22px;min-height:100%}
+.view.active{display:flex}
+
+/* BREADCRUMB */
+.breadcrumb{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink3)}
+.bc-item{cursor:pointer;color:var(--green);font-weight:500}
+.bc-item:hover{text-decoration:underline}
+.bc-sep{color:var(--ink4)}
+.bc-current{color:var(--ink2);font-weight:600;cursor:default}
+
+/* PAGE HEADER */
+.ph{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.ph-eyebrow{font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:3px}
+.ph-title{font-family:'Syne',sans-serif;font-size:21px;font-weight:700;letter-spacing:-0.5px;color:var(--ink)}
+.ph-sub{font-size:12px;color:var(--ink3);margin-top:3px}
+.ph-acts{display:flex;gap:8px;align-items:center;flex-shrink:0}
+.btn{padding:7px 14px;border-radius:var(--r-sm);font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all .13s;display:inline-flex;align-items:center;gap:5px}
+.btn-ghost{background:var(--white);color:var(--ink2);border:1px solid var(--ink4)}
+.btn-ghost:hover{border-color:var(--ink3);color:var(--ink)}
+.btn-green{background:var(--green);color:#fff}
+.btn-green:hover{background:var(--green-mid)}
+
+/* KPI STRIP */
+.kpi-strip{display:grid;gap:12px}
+.kpis-6{grid-template-columns:repeat(6,1fr)}
+.kpis-5{grid-template-columns:repeat(5,1fr)}
+.kpis-4{grid-template-columns:repeat(4,1fr)}
+.kpi-card{background:var(--white);border:1px solid var(--ink4);border-radius:var(--r);padding:15px 17px;cursor:default}
+.kpi-lbl{font-size:9px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--ink3);margin-bottom:7px}
+.kpi-val{font-size:26px;font-weight:700;letter-spacing:-1.2px;line-height:1}
+.kpi-val.g{color:var(--green)}.kpi-val.a{color:var(--amber)}.kpi-val.r{color:var(--red)}
+.kpi-foot{font-size:10px;color:var(--ink3);margin-top:5px}
+.kpi-bar{height:3px;background:var(--bg);border-radius:2px;margin-top:9px;overflow:hidden}
+.kpi-fill{height:100%;border-radius:2px}
+
+/* HEATMAP */
+.heatmap-wrap{background:var(--white);border:1px solid var(--ink4);border-radius:var(--r);overflow:hidden}
+.hm-table{width:100%;border-collapse:collapse}
+.hm-th{padding:9px 13px;font-size:10px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--ink3);background:var(--bg);border-bottom:1px solid var(--ink4);text-align:left}
+.hm-th:first-child{width:210px}
+.hm-td-label{padding:14px 14px;font-size:12px;font-weight:600;color:var(--ink);border-right:1px solid var(--ink4);vertical-align:middle;cursor:pointer}
+.hm-td-label:hover .hm-port-name{color:var(--green);text-decoration:underline}
+.hm-port-sub{font-size:10px;font-weight:400;color:var(--ink3);margin-top:1px}
+.hm-row td{border-bottom:1px solid var(--bg)}
+.hm-row:last-child td{border-bottom:none}
+.hm-cell{padding:7px 9px;cursor:pointer;transition:background .1s;border-right:1px solid var(--bg)}
+.hm-cell:last-child{border-right:none}
+.hm-cell:hover{background:rgba(27,122,62,.06)}
+.hm-inner{border-radius:7px;padding:8px 10px}
+.cell-g .hm-inner{background:#DCFCE7;border:1px solid #86EFAC}
+.cell-a .hm-inner{background:var(--amber-bg);border:1px solid #FCD34D}
+.cell-r .hm-inner{background:var(--red-bg);border:1px solid #FCA5A5}
+.cell-n .hm-inner{background:var(--bg);border:1px dashed var(--ink4)}
+.hm-pct{font-size:15px;font-weight:700;letter-spacing:-0.4px;line-height:1}
+.cell-g .hm-pct{color:var(--green)}.cell-a .hm-pct{color:var(--amber)}.cell-r .hm-pct{color:var(--red)}.cell-n .hm-pct{color:var(--ink4);font-size:11px}
+.hm-cnt{font-size:9px;color:var(--ink3);margin-top:2px}
+.hm-st{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:3px}
+.cell-g .hm-st{color:var(--green)}.cell-a .hm-st{color:var(--amber)}.cell-r .hm-st{color:var(--red)}
+
+/* SECTION HEADER */
+.sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}
+.sec-title{font-size:13px;font-weight:600;color:var(--ink)}
+.sec-meta{font-size:11px;color:var(--ink3)}
+.sec-link{font-size:11px;color:var(--green);cursor:pointer;font-weight:500}
+
+/* PORTFOLIO CARDS GRID */
+.port-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.port-card{background:var(--white);border:1px solid var(--ink4);border-radius:var(--r);padding:18px 20px;cursor:pointer;transition:all .15s;position:relative;overflow:hidden}
+.port-card::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%;background:var(--green);opacity:0;transition:opacity .15s}
+.port-card:hover{box-shadow:var(--shadow);border-color:#a0c9b0}
+.port-card:hover::before{opacity:1}
+.pc-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px}
+.pc-name{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--ink);letter-spacing:-0.2px}
+.pc-type{font-size:10px;color:var(--ink3);margin-top:2px}
+.pc-arrow{color:var(--ink4);font-size:16px;transition:transform .15s}
+.port-card:hover .pc-arrow{color:var(--green);transform:translateX(2px)}
+.pc-stats{display:flex;gap:16px;margin-bottom:12px}
+.pc-stat{display:flex;flex-direction:column;gap:2px}
+.pc-stat-val{font-size:20px;font-weight:700;letter-spacing:-0.8px;line-height:1}
+.pc-stat-lbl{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--ink3)}
+.pc-prog-bar{height:4px;background:var(--bg);border-radius:2px;overflow:hidden;margin-bottom:8px}
+.pc-prog-fill{height:100%;border-radius:2px;background:var(--green)}
+.pc-subs{display:flex;gap:4px;flex-wrap:wrap}
+.sub-pip{padding:2px 7px;border-radius:3px;font-size:9px;font-weight:600;background:var(--bg);color:var(--ink2);border:1px solid var(--ink4)}
+.pc-rag{display:flex;gap:6px;align-items:center}
+.rag-dot{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:500}
+.rd-g{color:var(--green)}.rd-a{color:var(--amber)}.rd-r{color:var(--red)}
+
+/* STANDALONE SECTION */
+.standalone-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.sa-card{background:var(--white);border:1px solid var(--ink4);border-radius:var(--r);padding:15px 16px;cursor:pointer;transition:all .15s;position:relative}
+.sa-card:hover{box-shadow:var(--shadow);border-color:#a0c9b0}
+.sa-type-badge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px}
+.badge-prog{background:var(--blue-bg);color:var(--blue)}
+.badge-proj{background:var(--green-light);color:var(--green)}
+.badge-indep{background:#F3E8FF;color:#7C3AED}
+.sa-name{font-weight:600;font-size:13px;color:var(--ink);margin-bottom:4px}
+.sa-meta{font-size:10px;color:var(--ink3);margin-bottom:10px}
+.sa-prog{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.sa-pbar{flex:1;height:5px;background:var(--bg);border-radius:3px;overflow:hidden}
+.sa-pfill{height:100%;border-radius:3px}
+.sa-ppct{font-size:11px;font-weight:700;min-width:30px}
+.sa-subs{display:flex;gap:3px;flex-wrap:wrap}
+.sa-status{position:absolute;top:14px;right:14px}
+
+/* PORTFOLIO DETAIL VIEW */
+.port-detail-header{background:var(--white);border:1px solid var(--ink4);border-radius:var(--r);padding:20px 22px}
+.pdh-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px}
+.pdh-name{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;letter-spacing:-0.3px}
+.pdh-desc{font-size:12px;color:var(--ink3);margin-top:3px;max-width:560px}
+.pdh-stats{display:flex;gap:24px}
+.pdh-stat{display:flex;flex-direction:column;gap:2px}
+.pdh-stat-val{font-size:22px;font-weight:700;letter-spacing:-0.8px}
+.pdh-stat-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--ink3)}
+
+/* PROGRAMME CARDS in portfolio */
+.prog-card{background:var(--white);border:1px solid var(--ink4);border-radius:var(--r);overflow:hidden;cursor:pointer;transition:all .14s}
+.prog-card:hover{box-shadow:var(--shadow);border-color:#a0c9b0}
+.prog-card-header{padding:14px 16px;border-bottom:1px solid var(--bg);display:flex;align-items:center;justify-content:space-between}
+.prog-card-title{font-weight:600;font-size:13px;color:var(--ink)}
+.prog-card-id{font-size:10px;color:var(--ink3);margin-top:1px}
+.prog-card-body{padding:12px 16px}
+.prog-proj-list{display:flex;flex-direction:column;gap:6px}
+.prog-proj-row{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:var(--bg);border-radius:var(--r-sm);cursor:pointer;transition:background .1s}
+.prog-proj-row:hover{background:var(--green-light)}
+.pprow-name{font-size:12px;font-weight:500;color:var(--ink)}
+.pprow-right{display:flex;align-items:center;gap:10px}
+
+/* PROJECT LIST TABLE */
+.proj-table{background:var(--white);border:1px solid var(--ink4);border-radius:var(--r);overflow:hidden}
+.pt-filters{padding:11px 14px;border-bottom:1px solid var(--bg);display:flex;gap:6px;align-items:center}
+.pt-chip{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:500;cursor:pointer;border:1px solid var(--ink4);background:transparent;color:var(--ink3);transition:all .11s}
+.pt-chip:hover{border-color:var(--green);color:var(--green)}
+.pt-chip.active{background:var(--green-light);border-color:var(--green);color:var(--green);font-weight:600}
+.pt-search{margin-left:auto;padding:5px 10px;border-radius:var(--r-sm);border:1px solid var(--ink4);font-size:11px;outline:none;background:var(--bg);width:150px}
+.pt-search:focus{border-color:var(--green)}
+.pt-head{display:grid;gap:8px;padding:8px 14px;font-size:10px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--ink3);background:var(--bg);border-bottom:1px solid var(--ink4)}
+.pt-head-6{grid-template-columns:1fr 140px 100px 120px 100px 80px}
+.pt-row{display:grid;gap:8px;padding:11px 14px;border-bottom:1px solid var(--bg);cursor:pointer;transition:background .1s;align-items:center}
+.pt-row-6{grid-template-columns:1fr 140px 100px 120px 100px 80px}
+.pt-row:last-child{border-bottom:none}
+.pt-row:hover{background:var(--green-light)}
+.pt-name{font-weight:600;font-size:12px;color:var(--ink)}
+.pt-id{font-size:10px;color:var(--ink3);margin-top:1px}
+.subs-row{display:flex;gap:3px;flex-wrap:wrap}
+.sub-tag{padding:2px 6px;border-radius:3px;font-size:9px;font-weight:600;background:var(--bg);color:var(--ink2);border:1px solid var(--ink4)}
+.sub-tag.hl{background:var(--green-light);color:var(--green);border-color:#86EFAC}
+.prog-bar-sm{display:flex;flex-direction:column;gap:2px}
+.pbsm-track{height:4px;background:var(--bg);border-radius:2px;overflow:hidden;width:76px}
+.pbsm-fill{height:100%;border-radius:2px}
+.pbsm-pct{font-size:10px;font-weight:600}
+.sp{padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;display:inline-block}
+.sp-g{background:var(--green-light);color:var(--green)}
+.sp-a{background:var(--amber-bg);color:var(--amber)}
+.sp-r{background:var(--red-bg);color:var(--red)}
+.sp-b{background:var(--blue-bg);color:var(--blue)}
+.due{font-size:11px;color:var(--ink3)}
+.due.od{color:var(--red);font-weight:600}
+.priority-tag{font-size:10px;font-weight:600}
+.pr-critical{color:var(--red)}.pr-high{color:var(--amber)}.pr-medium{color:var(--blue)}.pr-low{color:var(--green)}
+
+/* SLIDE PANEL */
+.panel{position:fixed;top:54px;right:0;bottom:0;width:660px;background:var(--white);border-left:1px solid var(--ink4);z-index:300;transform:translateX(100%);transition:transform .27s cubic-bezier(.4,0,.2,1);overflow-y:auto;box-shadow:var(--shadow-lg)}
+.panel.open{transform:translateX(0)}
+.panel-hdr{padding:22px 26px 18px;border-bottom:1px solid var(--bg);position:sticky;top:0;background:var(--white);z-index:10}
+.panel-close{position:absolute;top:18px;right:20px;width:30px;height:30px;border-radius:50%;background:var(--bg);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--ink2)}
+.panel-close:hover{background:var(--ink4)}
+.panel-eyebrow{font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:3px}
+.panel-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;letter-spacing:-0.3px;color:var(--ink)}
+.panel-sub{font-size:11px;color:var(--ink3);margin-top:2px}
+.panel-body{padding:22px 26px;display:flex;flex-direction:column;gap:22px}
+.panel-stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.panel-stat{background:var(--bg);border-radius:var(--r-sm);padding:12px 14px}
+.ps-lbl{font-size:9px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--ink3);margin-bottom:4px}
+.ps-val{font-size:21px;font-weight:700;letter-spacing:-0.8px;color:var(--ink)}
+.ps-val.g{color:var(--green)}.ps-val.a{color:var(--amber)}.ps-val.r{color:var(--red)}
+
+/* SUB COMPARISON */
+.sub-compare-list{display:flex;flex-direction:column;gap:9px}
+.sc-row{background:var(--bg);border-radius:var(--r-sm);padding:13px 15px}
+.sc-row-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
+.sc-name{font-weight:600;font-size:12px}
+.sc-right{display:flex;align-items:center;gap:9px}
+.sc-pct{font-size:15px;font-weight:700;letter-spacing:-0.4px}
+.sc-bar{height:7px;background:var(--ink4);border-radius:4px;overflow:hidden;margin-bottom:7px}
+.sc-fill{height:100%;border-radius:4px;transition:width .35s ease}
+.ms-row{display:flex;gap:4px;flex-wrap:wrap}
+.ms-chip{padding:2px 7px;border-radius:3px;font-size:9px;font-weight:600;border:1px solid}
+.ms-done{background:#DCFCE7;border-color:#86EFAC;color:var(--green)}
+.ms-active{background:var(--amber-bg);border-color:#FCD34D;color:var(--amber)}
+.ms-late{background:var(--red-bg);border-color:#FCA5A5;color:var(--red)}
+.ms-pend{background:var(--white);border-color:var(--ink4);color:var(--ink3)}
+
+/* MATRIX TABLE */
+.matrix-scroll{overflow-x:auto}
+.matrix-tbl{border-collapse:collapse;min-width:420px;width:100%}
+.matrix-tbl th{font-size:9px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--ink3);padding:6px 9px;background:var(--bg);text-align:center;white-space:nowrap}
+.matrix-tbl th:first-child{text-align:left;width:120px}
+.matrix-tbl td{padding:4px 5px;border-bottom:1px solid var(--bg)}
+.matrix-tbl td:first-child{font-size:11px;font-weight:500;color:var(--ink2);padding-left:9px;white-space:nowrap}
+.mblk{border-radius:3px;padding:3px 5px;font-size:9px;font-weight:600;text-align:center;white-space:nowrap}
+.mblk-done{background:#DCFCE7;color:var(--green)}
+.mblk-active{background:var(--amber-bg);color:var(--amber)}
+.mblk-late{background:var(--red-bg);color:var(--red)}
+.mblk-pend{background:var(--bg);color:var(--ink3)}
+.mblk-na{color:var(--ink4);font-size:11px;text-align:center;display:block}
+
+/* RISK CARDS */
+.risk-card-wrap{background:var(--white);border:1px solid var(--ink4);border-radius:var(--r);padding:16px}
+.risk-row{display:flex;gap:9px;padding:9px 0;border-bottom:1px solid var(--bg);align-items:flex-start}
+.risk-row:last-child{border-bottom:none;padding-bottom:0}
+.risk-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px}
+.risk-text{font-size:12px;color:var(--ink);line-height:1.4}
+.risk-meta{font-size:10px;color:var(--ink3);margin-top:2px}
+
+/* OVERLAY */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.22);z-index:250;opacity:0;pointer-events:none;transition:opacity .22s}
+.overlay.vis{opacity:1;pointer-events:all}
+
+/* BOTTOM 2-COL */
+.two-col{display:grid;grid-template-columns:1fr 370px;gap:18px}
+
+/* scrollbar */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-thumb{background:var(--ink4);border-radius:3px}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-mark">
+      <svg viewBox="0 0 14 14"><rect x="1" y="1" width="5" height="5" rx="1"/><rect x="8" y="1" width="5" height="5" rx="1"/><rect x="1" y="8" width="5" height="5" rx="1"/><rect x="8" y="8" width="5" height="5" rx="1"/></svg>
+    </div>
+    QUBIT
+  </div>
+  <div class="topbar-sep"></div>
+  <div class="topbar-nav">
+    <button class="tnav">Dashboard</button>
+    <button class="tnav active">Executive View</button>
+    <button class="tnav">My Tasks</button>
+    <button class="tnav">Reports</button>
+  </div>
+  <div class="topbar-right">
+    <div class="tenant-chip"><div class="tenant-dot"></div>KCB Group — All Subsidiaries <span style="color:var(--ink3);margin-left:2px">▾</span></div>
+    <div class="avatar">GD</div>
+  </div>
+</div>
+
+<div class="shell">
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="snav-group">
+    <div class="snav-label">Navigation</div>
+    <button class="snav active" id="snav-group" onclick="goGroup()">
+      <svg class="snav-ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+      Group Overview
+    </button>
+  </div>
+  <div class="snav-group">
+    <div class="snav-label">Portfolios</div>
+    <button class="snav" id="snav-p1" onclick="goPortfolio('p1')">
+      <svg class="snav-ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="12" height="9" rx="1"/><path d="M5 5V4a3 3 0 016 0v1"/></svg>
+      Digital Transformation
+      <span class="snav-ct">5</span>
+    </button>
+    <button class="snav" id="snav-p2" onclick="goPortfolio('p2')">
+      <svg class="snav-ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2l5 3v4a5 5 0 01-5 5 5 5 0 01-5-5V5z"/></svg>
+      Risk &amp; Compliance
+      <span class="snav-ct">3</span>
+    </button>
+    <button class="snav" id="snav-p3" onclick="goPortfolio('p3')">
+      <svg class="snav-ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="10" width="4" height="4" rx="1"/><rect x="6" y="6" width="4" height="8" rx="1"/><rect x="10" y="2" width="4" height="12" rx="1"/></svg>
+      Infrastructure
+      <span class="snav-ct">4</span>
+    </button>
+    <button class="snav" id="snav-p4" onclick="goPortfolio('p4')">
+      <svg class="snav-ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="6" r="3"/><path d="M2 14c0-3 2.7-5 6-5s6 2 6 5"/></svg>
+      Customer Experience
+      <span class="snav-ct">3</span>
+    </button>
+  </div>
+  <div class="snav-group">
+    <div class="snav-label">Standalone</div>
+    <button class="snav" id="snav-standalone" onclick="goStandalone()">
+      <svg class="snav-ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
+      Independent Items
+      <span class="snav-ct">4</span>
+    </button>
+  </div>
+  <div class="snav-group">
+    <div class="snav-label">Subsidiaries</div>
+    <button class="snav" onclick="sidebarSub('KCB Kenya')">🇰🇪 KCB Kenya</button>
+    <button class="snav" onclick="sidebarSub('KCB Uganda')">🇺🇬 KCB Uganda</button>
+    <button class="snav" onclick="sidebarSub('KCB Tanzania')">🇹🇿 KCB Tanzania</button>
+    <button class="snav" onclick="sidebarSub('KCB Rwanda')">🇷🇼 KCB Rwanda</button>
+    <button class="snav" onclick="sidebarSub('KCB South Sudan')">🇸🇸 KCB South Sudan</button>
+  </div>
+  <div class="snav-group sidebar-foot">
+    <button class="snav"><svg class="snav-ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M8 3l5 5-5 5"/></svg>Risks &amp; Issues <span class="snav-badge">5</span></button>
+  </div>
+</div>
+
+<!-- MAIN VIEWS -->
+<div class="main">
+
+  <!-- ═══════ VIEW: GROUP ═══════ -->
+  <div class="view active" id="view-group">
+    <div>
+      <div class="ph-eyebrow">Executive Overview</div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between">
+        <div>
+          <div class="ph-title">KCB Group — Project &amp; Programme Portfolio</div>
+          <div class="ph-sub">4 portfolios · 4 standalone items · 5 subsidiaries · Q2 2026</div>
+        </div>
+        <div class="ph-acts">
+          <button class="btn btn-ghost">⬇ Export PPT</button>
+          <button class="btn btn-green">⟳ Refresh</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="kpi-strip kpis-6">
+      <div class="kpi-card"><div class="kpi-lbl">Total Items</div><div class="kpi-val">19</div><div class="kpi-foot">Projects &amp; Programmes</div><div class="kpi-bar"><div class="kpi-fill" style="width:100%;background:var(--green)"></div></div></div>
+      <div class="kpi-card"><div class="kpi-lbl">Portfolios</div><div class="kpi-val">4</div><div class="kpi-foot">Active portfolios</div><div class="kpi-bar"><div class="kpi-fill" style="width:100%;background:var(--green)"></div></div></div>
+      <div class="kpi-card"><div class="kpi-lbl">On Track</div><div class="kpi-val g">8</div><div class="kpi-foot">42% of items</div><div class="kpi-bar"><div class="kpi-fill" style="width:42%;background:var(--green)"></div></div></div>
+      <div class="kpi-card"><div class="kpi-lbl">At Risk</div><div class="kpi-val a">6</div><div class="kpi-foot">Needs monitoring</div><div class="kpi-bar"><div class="kpi-fill" style="width:32%;background:var(--amber)"></div></div></div>
+      <div class="kpi-card"><div class="kpi-lbl">Overdue</div><div class="kpi-val r">3</div><div class="kpi-foot">Escalation needed</div><div class="kpi-bar"><div class="kpi-fill" style="width:16%;background:var(--red)"></div></div></div>
+      <div class="kpi-card"><div class="kpi-lbl">Budget Used</div><div class="kpi-val">68%</div><div class="kpi-foot">KES 4.2B of 6.2B</div><div class="kpi-bar"><div class="kpi-fill" style="width:68%;background:var(--green)"></div></div></div>
+    </div>
+
+    <!-- HEATMAP -->
+    <div>
+      <div class="sec-hdr">
+        <div><div class="sec-title">Portfolio × Subsidiary Health Map</div><div class="sec-meta">Click a cell to filter · Click a portfolio name to drill in</div></div>
+        <div style="font-size:11px;color:var(--ink3)"><span style="color:var(--green)">■</span> On Track &nbsp;<span style="color:var(--amber)">■</span> At Risk &nbsp;<span style="color:var(--red)">■</span> Overdue</div>
+      </div>
+      <div class="heatmap-wrap">
+        <table class="hm-table">
+          <thead><tr>
+            <th class="hm-th">Portfolio</th>
+            <th class="hm-th">🇰🇪 KCB Kenya</th>
+            <th class="hm-th">🇺🇬 KCB Uganda</th>
+            <th class="hm-th">🇹🇿 KCB Tanzania</th>
+            <th class="hm-th">🇷🇼 KCB Rwanda</th>
+            <th class="hm-th">🇸🇸 KCB S. Sudan</th>
+          </tr></thead>
+          <tbody id="hm-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PORTFOLIOS + STANDALONE -->
+    <div>
+      <div class="sec-hdr"><div class="sec-title">Portfolios</div><div class="sec-meta">Click to explore projects &amp; programmes inside</div></div>
+      <div class="port-grid" id="port-cards"></div>
+    </div>
+
+    <div>
+      <div class="sec-hdr"><div class="sec-title">Standalone — Independent Projects &amp; Programmes</div><div class="sec-meta">Not attached to a portfolio</div></div>
+      <div class="standalone-grid" id="standalone-cards-group"></div>
+    </div>
+
+    <!-- BOTTOM -->
+    <div class="two-col">
+      <div class="risk-card-wrap">
+        <div class="sec-hdr" style="margin-bottom:10px"><div class="sec-title">🔴 Escalations &amp; Risks</div></div>
+        <div class="risk-row"><div class="risk-dot" style="background:var(--red)"></div><div><div class="risk-text">AML Platform — UAT deadline missed in TZ &amp; RW</div><div class="risk-meta">Risk · INIT-003 · 3 days ago</div></div></div>
+        <div class="risk-row"><div class="risk-dot" style="background:var(--amber)"></div><div><div class="risk-text">Oracle Fusion — procurement sign-off delayed, UG</div><div class="risk-meta">Issue · INIT-007 · 5 days ago</div></div></div>
+        <div class="risk-row"><div class="risk-dot" style="background:var(--amber)"></div><div><div class="risk-text">Core Banking — KE resource gap, Phase 3</div><div class="risk-meta">Risk · INIT-001 · 1 week ago</div></div></div>
+        <div class="risk-row"><div class="risk-dot" style="background:var(--red)"></div><div><div class="risk-text">FIKRA — budget overrun 14% in South Sudan</div><div class="risk-meta">Risk · PROG-002 · Yesterday</div></div></div>
+        <div class="risk-row"><div class="risk-dot" style="background:var(--amber)"></div><div><div class="risk-text">Mobi 2.0 — vendor delivery delay, all subsidiaries</div><div class="risk-meta">Issue · INIT-002 · 2 days ago</div></div></div>
+      </div>
+      <div class="risk-card-wrap">
+        <div class="sec-hdr" style="margin-bottom:10px"><div class="sec-title">📅 Upcoming Milestones</div></div>
+        <div class="risk-row"><div class="risk-dot" style="background:var(--green)"></div><div><div class="risk-text">Mobi 2.0 — KE Go-Live</div><div class="risk-meta">Jun 20 · On track</div></div></div>
+        <div class="risk-row"><div class="risk-dot" style="background:var(--amber)"></div><div><div class="risk-text">Core Banking — Phase 3 UAT all subs</div><div class="risk-meta">Jun 30 · At risk</div></div></div>
+        <div class="risk-row"><div class="risk-dot" style="background:var(--green)"></div><div><div class="risk-text">FIKRA — Pilot launch KE &amp; UG</div><div class="risk-meta">Jul 5 · On track</div></div></div>
+        <div class="risk-row"><div class="risk-dot" style="background:var(--red)"></div><div><div class="risk-text">AML Platform — Executive sign-off</div><div class="risk-meta">Jul 10 · Overdue</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ VIEW: PORTFOLIO DETAIL ═══════ -->
+  <div class="view" id="view-portfolio">
+    <div class="breadcrumb">
+      <span class="bc-item" onclick="goGroup()">Group Overview</span>
+      <span class="bc-sep">›</span>
+      <span class="bc-current" id="bc-port-name">Portfolio</span>
+    </div>
+    <div id="port-detail-header-wrap"></div>
+    <div id="port-detail-body"></div>
+  </div>
+
+  <!-- ═══════ VIEW: STANDALONE ═══════ -->
+  <div class="view" id="view-standalone">
+    <div class="breadcrumb">
+      <span class="bc-item" onclick="goGroup()">Group Overview</span>
+      <span class="bc-sep">›</span>
+      <span class="bc-current">Standalone Items</span>
+    </div>
+    <div>
+      <div class="ph-eyebrow">Independent Items</div>
+      <div class="ph-title">Standalone Projects &amp; Programmes</div>
+      <div class="ph-sub" style="margin-top:3px">Not assigned to any portfolio — managed independently</div>
+    </div>
+    <div class="standalone-grid" id="standalone-cards-view"></div>
+  </div>
+
+  <!-- ═══════ VIEW: SUB FILTER ═══════ -->
+  <div class="view" id="view-sub">
+    <div class="breadcrumb">
+      <span class="bc-item" onclick="goGroup()">Group Overview</span>
+      <span class="bc-sep">›</span>
+      <span class="bc-current" id="bc-sub-name">Subsidiary</span>
+    </div>
+    <div>
+      <div class="ph-eyebrow" id="sub-view-eyebrow">Subsidiary View</div>
+      <div class="ph-title" id="sub-view-title">All Projects</div>
+      <div class="ph-sub" id="sub-view-sub"></div>
+    </div>
+    <div class="kpi-strip kpis-4" id="sub-kpis"></div>
+    <div class="proj-table">
+      <div class="pt-filters">
+        <button class="pt-chip active" onclick="setSubStatusFilter('all',this)">All</button>
+        <button class="pt-chip" onclick="setSubStatusFilter('On Track',this)">On Track</button>
+        <button class="pt-chip" onclick="setSubStatusFilter('At Risk',this)">At Risk</button>
+        <button class="pt-chip" onclick="setSubStatusFilter('Overdue',this)">Overdue</button>
+      </div>
+      <div class="pt-head pt-head-6"><div>Project / Programme</div><div>Subsidiaries</div><div>Progress</div><div>Status</div><div>Portfolio</div><div>Due</div></div>
+      <div id="sub-proj-rows"></div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+</div><!-- /shell -->
+
+<!-- OVERLAY -->
+<div class="overlay" id="overlay" onclick="closePanel()"></div>
+
+<!-- SLIDE PANEL -->
+<div class="panel" id="panel">
+  <div class="panel-hdr">
+    <button class="panel-close" onclick="closePanel()">✕</button>
+    <div class="panel-eyebrow" id="pan-eyebrow"></div>
+    <div class="panel-title" id="pan-title"></div>
+    <div class="panel-sub" id="pan-sub"></div>
+  </div>
+  <div class="panel-body" id="pan-body"></div>
+</div>
+
+<script>
+// ── DATA ─────────────────────────────────────────────────────────────────────
+const SUBS=['KCB Kenya','KCB Uganda','KCB Tanzania','KCB Rwanda','KCB South Sudan'];
+const SUB_F={'KCB Kenya':'🇰🇪','KCB Uganda':'🇺🇬','KCB Tanzania':'🇹🇿','KCB Rwanda':'🇷🇼','KCB South Sudan':'🇸🇸'};
+const SUB_S={'KCB Kenya':'KE','KCB Uganda':'UG','KCB Tanzania':'TZ','KCB Rwanda':'RW','KCB South Sudan':'SS'};
+
+// Portfolios
+const PORTFOLIOS=[
+  {id:'p1',name:'Digital Transformation',desc:'Group-wide digital banking modernisation and platform uplift across all subsidiaries.',budget:'KES 2.8B'},
+  {id:'p2',name:'Risk & Compliance',desc:'Regulatory, AML, KYC, cybersecurity and ESG reporting programmes.',budget:'KES 1.5B'},
+  {id:'p3',name:'Infrastructure',desc:'Core technology infrastructure — data centres, Oracle systems, ATM networks, HR platforms.',budget:'KES 1.6B'},
+  {id:'p4',name:'Customer Experience',desc:'Digital lending, agency banking and CRM platforms to improve customer outcomes.',budget:'KES 830M'},
+];
+
+// Programmes (containers of projects within a portfolio)
+const PROGRAMMES=[
+  {id:'prog1',portfolioId:'p1',name:'Next-Gen Core Banking Programme',desc:'Full core banking system replacement across the group',budget:'KES 1.8B',status:'At Risk',subs:['KCB Kenya','KCB Uganda','KCB Tanzania','KCB Rwanda','KCB South Sudan'],projectIds:['P001','P002','P003']},
+  {id:'prog2',portfolioId:'p1',name:'Digital Channels Programme',desc:'Mobile, internet banking and open API platforms',budget:'KES 980M',status:'On Track',subs:['KCB Kenya','KCB Uganda','KCB Tanzania','KCB Rwanda'],projectIds:['P004','P005']},
+  {id:'prog3',portfolioId:'p2',name:'AML & Fraud Prevention Programme',desc:'Group-wide AML platform and fraud detection systems',budget:'KES 890M',status:'Overdue',subs:['KCB Kenya','KCB Uganda','KCB Tanzania','KCB Rwanda','KCB South Sudan'],projectIds:['P006','P007']},
+  {id:'prog4',portfolioId:'p3',name:'Enterprise Systems Modernisation',desc:'Oracle Fusion ERP, HCM and data centre upgrades',budget:'KES 1.1B',status:'At Risk',subs:['KCB Kenya','KCB Uganda','KCB Tanzania','KCB Rwanda','KCB South Sudan'],projectIds:['P008','P009','P010']},
+];
+
+// Projects
+const PROJECTS=[
+  // prog1
+  {id:'P001',programmeId:'prog1',portfolioId:'p1',name:'CBS Phase 1 — Kenya & Uganda',type:'Project',priority:'Critical',status:'At Risk',due:'2026-09-30',budget:'KES 650M',subs:['KCB Kenya','KCB Uganda'],subData:{'KCB Kenya':{pct:72,status:'At Risk',ms:['Business Case','Design','Procurement','Build','UAT','Go-Live'],msSt:['done','done','done','active','late','pending']},'KCB Uganda':{pct:45,status:'At Risk',ms:['Business Case','Design','Procurement','Build','UAT','Go-Live'],msSt:['done','done','done','active','pending','pending']}}},
+  {id:'P002',programmeId:'prog1',portfolioId:'p1',name:'CBS Phase 2 — Tanzania & Rwanda',type:'Project',priority:'Critical',status:'Planning',due:'2026-12-31',budget:'KES 580M',subs:['KCB Tanzania','KCB Rwanda'],subData:{'KCB Tanzania':{pct:28,status:'At Risk',ms:['Business Case','Design','Procurement','Build','UAT','Go-Live'],msSt:['done','done','active','pending','pending','pending']},'KCB Rwanda':{pct:18,status:'Planning',ms:['Business Case','Design','Procurement','Build','UAT','Go-Live'],msSt:['done','active','pending','pending','pending','pending']}}},
+  {id:'P003',programmeId:'prog1',portfolioId:'p1',name:'CBS Phase 3 — South Sudan',type:'Project',priority:'High',status:'Planning',due:'2027-03-31',budget:'KES 220M',subs:['KCB South Sudan'],subData:{'KCB South Sudan':{pct:10,status:'Planning',ms:['Business Case','Design','Procurement','Build','UAT','Go-Live'],msSt:['done','pending','pending','pending','pending','pending']}}},
+  // prog2
+  {id:'P004',programmeId:'prog2',portfolioId:'p1',name:'Mobile Banking 2.0 (Mobi)',type:'Project',priority:'High',status:'On Track',due:'2026-06-30',budget:'KES 620M',subs:['KCB Kenya','KCB Uganda','KCB Tanzania','KCB Rwanda'],subData:{'KCB Kenya':{pct:88,status:'On Track',ms:['Scoping','Design','Build','UAT','Go-Live'],msSt:['done','done','done','done','active']},'KCB Uganda':{pct:78,status:'On Track',ms:['Scoping','Design','Build','UAT','Go-Live'],msSt:['done','done','done','active','pending']},'KCB Tanzania':{pct:68,status:'On Track',ms:['Scoping','Design','Build','UAT','Go-Live'],msSt:['done','done','active','pending','pending']},'KCB Rwanda':{pct:52,status:'At Risk',ms:['Scoping','Design','Build','UAT','Go-Live'],msSt:['done','done','active','pending','pending']}}},
+  {id:'P005',programmeId:'prog2',portfolioId:'p1',name:'Open Banking API Platform',type:'Project',priority:'High',status:'On Track',due:'2026-09-15',budget:'KES 230M',subs:['KCB Kenya','KCB Uganda'],subData:{'KCB Kenya':{pct:60,status:'On Track',ms:['Design','Build','Certification','Launch'],msSt:['done','done','active','pending']},'KCB Uganda':{pct:45,status:'On Track',ms:['Design','Build','Certification','Launch'],msSt:['done','active','pending','pending']}}},
+  // prog3
+  {id:'P006',programmeId:'prog3',portfolioId:'p2',name:'AML / Compliance Platform',type:'Project',priority:'Critical',status:'Overdue',due:'2026-05-31',budget:'KES 550M',subs:['KCB Kenya','KCB Uganda','KCB Tanzania','KCB Rwanda','KCB South Sudan'],subData:{'KCB Kenya':{pct:35,status:'Overdue',ms:['Business Case','Procurement','Build','UAT','Sign-off'],msSt:['done','done','active','late','pending']},'KCB Uganda':{pct:28,status:'Overdue',ms:['Business Case','Procurement','Build','UAT','Sign-off'],msSt:['done','done','active','late','pending']},'KCB Tanzania':{pct:18,status:'Overdue',ms:['Business Case','Procurement','Build','UAT','Sign-off'],msSt:['done','active','pending','pending','pending']},'KCB Rwanda':{pct:12,status:'Overdue',ms:['Business Case','Procurement','Build','UAT','Sign-off'],msSt:['done','active','pending','pending','pending']},'KCB South Sudan':{pct:5,status:'Planning',ms:['Business Case','Procurement','Build','UAT','Sign-off'],msSt:['active','pending','pending','pending','pending']}}},
+  {id:'P007',programmeId:'prog3',portfolioId:'p2',name:'Fraud Detection System',type:'Project',priority:'High',status:'At Risk',due:'2026-08-31',budget:'KES 200M',subs:['KCB Kenya','KCB Tanzania'],subData:{'KCB Kenya':{pct:55,status:'At Risk',ms:['Design','Build','UAT','Go-Live'],msSt:['done','active','late','pending']},'KCB Tanzania':{pct:35,status:'At Risk',ms:['Design','Build','UAT','Go-Live'],msSt:['done','active','pending','pending']}}},
+  // prog4
+  {id:'P008',programmeId:'prog4',portfolioId:'p3',name:'Oracle Fusion Integration',type:'Project',priority:'High',status:'At Risk',due:'2026-10-15',budget:'KES 350M',subs:['KCB Kenya','KCB Uganda','KCB Tanzania','KCB Rwanda'],subData:{'KCB Kenya':{pct:58,status:'On Track',ms:['Discovery','Design','Integration','UAT','Cutover'],msSt:['done','done','active','pending','pending']},'KCB Uganda':{pct:40,status:'At Risk',ms:['Discovery','Design','Integration','UAT','Cutover'],msSt:['done','active','late','pending','pending']},'KCB Tanzania':{pct:28,status:'At Risk',ms:['Discovery','Design','Integration','UAT','Cutover'],msSt:['done','active','pending','pending','pending']},'KCB Rwanda':{pct:18,status:'Planning',ms:['Discovery','Design','Integration','UAT','Cutover'],msSt:['active','pending','pending','pending','pending']}}},
+  {id:'P009',programmeId:'prog4',portfolioId:'p3',name:'Group HR System (Oracle HCM)',type:'Project',priority:'Medium',status:'On Track',due:'2026-11-30',budget:'KES 420M',subs:['KCB Kenya','KCB Uganda','KCB Tanzania','KCB Rwanda','KCB South Sudan'],subData:{'KCB Kenya':{pct:50,status:'On Track',ms:['Design','Config','UAT','Go-Live'],msSt:['done','done','active','pending']},'KCB Uganda':{pct:45,status:'On Track',ms:['Design','Config','UAT','Go-Live'],msSt:['done','done','active','pending']},'KCB Tanzania':{pct:35,status:'On Track',ms:['Design','Config','UAT','Go-Live'],msSt:['done','active','pending','pending']},'KCB Rwanda':{pct:30,status:'On Track',ms:['Design','Config','UAT','Go-Live'],msSt:['done','active','pending','pending']},'KCB South Sudan':{pct:15,status:'Planning',ms:['Design','Config','UAT','Go-Live'],msSt:['active','pending','pending','pending']}}},
+  {id:'P010',programmeId:'prog4',portfolioId:'p3',name:'Data Centre Modernisation',type:'Project',priority:'Medium',status:'On Track',due:'2026-12-01',budget:'KES 340M',subs:['KCB Kenya','KCB Tanzania'],subData:{'KCB Kenya':{pct:42,status:'On Track',ms:['Assessment','Design','Procurement','Build','Migration'],msSt:['done','done','active','pending','pending']},'KCB Tanzania':{pct:25,status:'On Track',ms:['Assessment','Design','Procurement','Build','Migration'],msSt:['done','active','pending','pending','pending']}}},
+
+  // ── STANDALONE PROGRAMMES (no portfolioId)
+  {id:'SP001',programmeId:null,portfolioId:null,type:'Programme',name:'FIKRA Digital Lending Programme',priority:'High',status:'At Risk',due:'2026-08-01',budget:'KES 480M',desc:'Group-wide digital lending initiative covering KE, UG and SS markets.',subs:['KCB Kenya','KCB Uganda','KCB South Sudan'],subData:{'KCB Kenya':{pct:65,status:'On Track',ms:['Scoping','Build','Pilot','Launch'],msSt:['done','done','active','pending']},'KCB Uganda':{pct:55,status:'On Track',ms:['Scoping','Build','Pilot','Launch'],msSt:['done','done','active','pending']},'KCB South Sudan':{pct:30,status:'At Risk',ms:['Scoping','Build','Pilot','Launch'],msSt:['done','active','pending','pending']}}},
+  {id:'SP002',programmeId:null,portfolioId:null,type:'Programme',name:'KYC Digitisation Programme',priority:'High',status:'On Track',due:'2026-09-01',budget:'KES 210M',desc:'Group-level KYC digital onboarding across all subsidiaries.',subs:['KCB Kenya','KCB Uganda','KCB Tanzania','KCB Rwanda','KCB South Sudan'],subData:{'KCB Kenya':{pct:70,status:'On Track',ms:['Design','Build','Rollout'],msSt:['done','done','active']},'KCB Uganda':{pct:60,status:'On Track',ms:['Design','Build','Rollout'],msSt:['done','done','active']},'KCB Tanzania':{pct:50,status:'On Track',ms:['Design','Build','Rollout'],msSt:['done','active','pending']},'KCB Rwanda':{pct:40,status:'On Track',ms:['Design','Build','Rollout'],msSt:['done','active','pending']},'KCB South Sudan':{pct:25,status:'Planning',ms:['Design','Build','Rollout'],msSt:['active','pending','pending']}}},
+  // ── STANDALONE PROJECTS
+  {id:'SP003',programmeId:null,portfolioId:null,type:'Project',name:'Cybersecurity Framework Rollout',priority:'Critical',status:'On Track',due:'2026-08-31',budget:'KES 310M',desc:'Standalone group cybersecurity initiative — not under any portfolio.',subs:['KCB Kenya','KCB Uganda','KCB Tanzania','KCB Rwanda','KCB South Sudan'],subData:{'KCB Kenya':{pct:80,status:'On Track',ms:['Assessment','Design','Deploy','Review'],msSt:['done','done','done','active']},'KCB Uganda':{pct:65,status:'On Track',ms:['Assessment','Design','Deploy','Review'],msSt:['done','done','active','pending']},'KCB Tanzania':{pct:55,status:'On Track',ms:['Assessment','Design','Deploy','Review'],msSt:['done','done','active','pending']},'KCB Rwanda':{pct:45,status:'On Track',ms:['Assessment','Design','Deploy','Review'],msSt:['done','active','pending','pending']},'KCB South Sudan':{pct:30,status:'At Risk',ms:['Assessment','Design','Deploy','Review'],msSt:['done','late','pending','pending']}}},
+  {id:'SP004',programmeId:null,portfolioId:null,type:'Project',name:'ESG Reporting Framework',priority:'Medium',status:'At Risk',due:'2026-07-31',budget:'KES 75M',desc:'Standalone ESG data collection and regulatory reporting project.',subs:['KCB Kenya','KCB Uganda','KCB Tanzania'],subData:{'KCB Kenya':{pct:45,status:'At Risk',ms:['Scoping','Data Mapping','Reporting'],msSt:['done','late','pending']},'KCB Uganda':{pct:35,status:'At Risk',ms:['Scoping','Data Mapping','Reporting'],msSt:['done','active','pending']},'KCB Tanzania':{pct:20,status:'Planning',ms:['Scoping','Data Mapping','Reporting'],msSt:['done','pending','pending']}}},
+];
+
+const STANDALONE=PROJECTS.filter(p=>p.portfolioId===null);
+
+// ── HELPERS ──────────────────────────────────────────────────────────────────
+function sc(s){if(s==='On Track')return 'g';if(s==='At Risk')return 'a';if(s==='Overdue')return 'r';return 'b';}
+function spClass(s){return 'sp-'+sc(s);}
+function barColor(s){if(s==='Overdue'||s==='r')return '#DC2626';if(s==='At Risk'||s==='a')return '#D97706';return '#1B7A3E';}
+function avgPct(proj){const vals=Object.values(proj.subData);return Math.round(vals.reduce((a,b)=>a+b.pct,0)/vals.length);}
+function msClass(s){if(s==='done')return 'ms-done';if(s==='active')return 'ms-active';if(s==='late')return 'ms-late';return 'ms-pend';}
+function msLabel(s){if(s==='done')return '✓';if(s==='active')return '▶';if(s==='late')return '!';return '○';}
+function mblkClass(s){if(s==='done')return 'mblk-done';if(s==='active')return 'mblk-active';if(s==='late')return 'mblk-late';return 'mblk-pend';}
+function mblkLabel(s){if(s==='done')return '✓ Done';if(s==='active')return '▶ Active';if(s==='late')return '! Late';return '○ Pending';}
+function fmtDue(d){return new Date(d).toLocaleDateString('en-KE',{month:'short',day:'numeric',year:'numeric'});}
+function ragCountsForList(list){
+  const g=list.filter(x=>x.status==='On Track').length;
+  const a=list.filter(x=>x.status==='At Risk').length;
+  const r=list.filter(x=>x.status==='Overdue').length;
+  return {g,a,r};
+}
+function subPipsHtml(subs,highlightSub){
+  return subs.map(s=>`<span class="sub-tag${s===highlightSub?' hl':''}">${SUB_S[s]}</span>`).join('');
+}
+function progBarSmHtml(proj){
+  const p=avgPct(proj);const c=barColor(proj.status);
+  return `<div class="prog-bar-sm"><div class="pbsm-track"><div class="pbsm-fill" style="width:${p}%;background:${c}"></div></div><div class="pbsm-pct" style="color:${c}">${p}%</div></div>`;
+}
+
+// ── HEATMAP ──────────────────────────────────────────────────────────────────
+function buildHeatmap(){
+  const tbody=document.getElementById('hm-body');
+  tbody.innerHTML='';
+  PORTFOLIOS.forEach(port=>{
+    const portProjects=PROJECTS.filter(p=>p.portfolioId===port.id);
+    const tr=document.createElement('tr');tr.className='hm-row';
+    let html=`<td class="hm-td-label" onclick="goPortfolio('${port.id}')"><div class="hm-port-name">${port.name}</div><div class="hm-port-sub">${portProjects.length} items</div></td>`;
+    SUBS.forEach(sub=>{
+      const items=portProjects.filter(p=>p.subs.includes(sub));
+      if(!items.length){html+=`<td class="hm-cell cell-n" onclick="goPortfolio('${port.id}')"><div class="hm-inner"><div class="hm-pct">—</div></div></td>`;return;}
+      const pct=Math.round(items.map(i=>i.subData[sub]?i.subData[sub].pct:0).reduce((a,b)=>a+b,0)/items.length);
+      const statuses=items.map(i=>i.status);
+      const cls=statuses.includes('Overdue')?'cell-r':statuses.includes('At Risk')?'cell-a':'cell-g';
+      const stlbl=cls==='cell-r'?'Overdue':cls==='cell-a'?'At Risk':'On Track';
+      html+=`<td class="hm-cell ${cls}" onclick="goPortfolioSub('${port.id}','${sub}')"><div class="hm-inner"><div class="hm-pct">${pct}%</div><div class="hm-cnt">${items.length} item${items.length>1?'s':''}</div><div class="hm-st">${stlbl}</div></div></td>`;
+    });
+    tr.innerHTML=html;tbody.appendChild(tr);
+  });
+}
+
+// ── PORTFOLIO CARDS ──────────────────────────────────────────────────────────
+function buildPortCards(){
+  const wrap=document.getElementById('port-cards');
+  wrap.innerHTML=PORTFOLIOS.map(port=>{
+    const items=PROJECTS.filter(p=>p.portfolioId===port.id);
+    const {g,a,r}=ragCountsForList(items);
+    const pct=items.length?Math.round(items.map(avgPct).reduce((a,b)=>a+b,0)/items.length):0;
+    const allSubs=[...new Set(items.flatMap(p=>p.subs))];
+    return `<div class="port-card" onclick="goPortfolio('${port.id}')">
+      <div class="pc-top">
+        <div><div class="pc-name">${port.name}</div><div class="pc-type">Portfolio · ${items.length} items · ${port.budget}</div></div>
+        <div class="pc-arrow">›</div>
+      </div>
+      <div class="pc-stats">
+        <div class="pc-stat"><div class="pc-stat-val g">${g}</div><div class="pc-stat-lbl">On Track</div></div>
+        <div class="pc-stat"><div class="pc-stat-val a">${a}</div><div class="pc-stat-lbl">At Risk</div></div>
+        <div class="pc-stat"><div class="pc-stat-val r">${r}</div><div class="pc-stat-lbl">Overdue</div></div>
+        <div class="pc-stat"><div class="pc-stat-val">${pct}%</div><div class="pc-stat-lbl">Avg Progress</div></div>
+      </div>
+      <div class="pc-prog-bar"><div class="pc-prog-fill" style="width:${pct}%"></div></div>
+      <div class="pc-subs">${allSubs.map(s=>`<span class="sub-pip">${SUB_F[s]} ${SUB_S[s]}</span>`).join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── STANDALONE CARDS ─────────────────────────────────────────────────────────
+function standaloneCardHtml(item){
+  const pct=avgPct(item);const c=barColor(item.status);
+  const bclass=item.type==='Programme'?'badge-prog':'badge-proj';
+  return `<div class="sa-card" onclick="openItemPanel('${item.id}')">
+    <span class="sa-type-badge ${bclass}">${item.type}</span>
+    <div class="sa-status"><span class="sp ${spClass(item.status)}">${item.status}</span></div>
+    <div class="sa-name">${item.name}</div>
+    <div class="sa-meta">${item.id} · ${item.priority} Priority · ${item.budget}</div>
+    <div class="sa-prog"><div class="sa-pbar"><div class="sa-pfill" style="width:${pct}%;background:${c}"></div></div><div class="sa-ppct" style="color:${c}">${pct}%</div></div>
+    <div class="sa-subs">${subPipsHtml(item.subs,null)}</div>
+  </div>`;
+}
+function buildStandaloneCards(){
+  document.getElementById('standalone-cards-group').innerHTML=STANDALONE.map(standaloneCardHtml).join('');
+  document.getElementById('standalone-cards-view').innerHTML=STANDALONE.map(standaloneCardHtml).join('');
+}
+
+// ── PORTFOLIO DETAIL VIEW ────────────────────────────────────────────────────
+let _portFilterSub='all';
+function goPortfolio(portId, filterSub){
+  _portFilterSub=filterSub||'all';
+  const port=PORTFOLIOS.find(p=>p.id===portId);
+  showView('view-portfolio');
+  setSidebarActive('snav-'+portId);
+  document.getElementById('bc-port-name').textContent=port.name;
+
+  const allItems=PROJECTS.filter(p=>p.portfolioId===portId);
+  const progs=PROGRAMMES.filter(p=>p.portfolioId===portId);
+  const standalonePortItems=allItems.filter(p=>!p.programmeId); // projects not inside a programme
+  const {g,a,r}=ragCountsForList(allItems);
+  const pct=allItems.length?Math.round(allItems.map(avgPct).reduce((a,b)=>a+b,0)/allItems.length):0;
+
+  document.getElementById('port-detail-header-wrap').innerHTML=`
+    <div class="port-detail-header">
+      <div class="pdh-top">
+        <div><div class="pdh-name">${port.name}</div><div class="pdh-desc">${port.desc}</div></div>
+        <div class="ph-acts"><button class="btn btn-ghost">⬇ Export PPT</button></div>
+      </div>
+      <div class="pdh-stats">
+        <div class="pdh-stat"><div class="pdh-stat-val">${allItems.length}</div><div class="pdh-stat-lbl">Total Items</div></div>
+        <div class="pdh-stat"><div class="pdh-stat-val g">${g}</div><div class="pdh-stat-lbl">On Track</div></div>
+        <div class="pdh-stat"><div class="pdh-stat-val a">${a}</div><div class="pdh-stat-lbl">At Risk</div></div>
+        <div class="pdh-stat"><div class="pdh-stat-val r">${r}</div><div class="pdh-stat-lbl">Overdue</div></div>
+        <div class="pdh-stat"><div class="pdh-stat-val">${pct}%</div><div class="pdh-stat-lbl">Avg Progress</div></div>
+        <div class="pdh-stat"><div class="pdh-stat-val" style="font-size:16px">${port.budget}</div><div class="pdh-stat-lbl">Budget</div></div>
+      </div>
+    </div>`;
+
+  let body='';
+
+  // Programmes section
+  if(progs.length){
+    body+=`<div class="sec-hdr"><div class="sec-title">Programmes</div><div class="sec-meta">Click a programme to expand its projects</div></div>`;
+    body+=`<div style="display:flex;flex-direction:column;gap:12px">`;
+    progs.forEach(prog=>{
+      const progProjects=PROJECTS.filter(p=>p.programmeId===prog.id);
+      const ppct=progProjects.length?Math.round(progProjects.map(avgPct).reduce((a,b)=>a+b,0)/progProjects.length):0;
+      const pc=barColor(prog.status);
+      body+=`<div class="prog-card">
+        <div class="prog-card-header" onclick="openItemPanel('${prog.id}')">
+          <div>
+            <div class="prog-card-title">${prog.name}</div>
+            <div class="prog-card-id">${prog.id} · Programme · ${prog.budget} · ${progProjects.length} projects</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <span class="sp ${spClass(prog.status)}">${prog.status}</span>
+            <div style="display:flex;align-items:center;gap:6px">
+              <div style="width:80px;height:5px;background:var(--bg);border-radius:3px;overflow:hidden"><div style="width:${ppct}%;height:100%;background:${pc};border-radius:3px"></div></div>
+              <span style="font-size:11px;font-weight:700;color:${pc}">${ppct}%</span>
+            </div>
+            <span style="color:var(--ink4);font-size:14px">›</span>
+          </div>
+        </div>
+        <div class="prog-card-body">
+          <div class="prog-proj-list">
+            ${progProjects.map(proj=>{
+              const pp=avgPct(proj);const cc=barColor(proj.status);
+              return `<div class="prog-proj-row" onclick="openItemPanel('${proj.id}')">
+                <div><div class="pprow-name">${proj.name}</div><div style="font-size:10px;color:var(--ink3)">${proj.id} · ${proj.priority}</div></div>
+                <div class="pprow-right">
+                  <div class="sa-subs">${subPipsHtml(proj.subs,_portFilterSub)}</div>
+                  <div style="width:60px;height:4px;background:var(--bg);border-radius:2px;overflow:hidden"><div style="width:${pp}%;height:100%;background:${cc};border-radius:2px"></div></div>
+                  <span style="font-size:10px;font-weight:700;color:${cc};min-width:28px">${pp}%</span>
+                  <span class="sp ${spClass(proj.status)}">${proj.status}</span>
+                  <span style="color:var(--ink3);font-size:10px">${fmtDue(proj.due)}</span>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+      </div>`;
+    });
+    body+=`</div>`;
+  }
+
+  // Standalone projects in portfolio (no programme)
+  if(standalonePortItems.length){
+    body+=`<div style="margin-top:4px"><div class="sec-hdr"><div class="sec-title">Standalone Projects in this Portfolio</div><div class="sec-meta">Not part of a programme</div></div>`;
+    body+=`<div class="standalone-grid">${standalonePortItems.map(standaloneCardHtml).join('')}</div></div>`;
+  }
+
+  document.getElementById('port-detail-body').innerHTML=body;
+}
+function goPortfolioSub(portId,sub){goPortfolio(portId,sub);}
+
+// ── STANDALONE VIEW ──────────────────────────────────────────────────────────
+function goStandalone(){
+  showView('view-standalone');
+  setSidebarActive('snav-standalone');
+}
+
+// ── SUB VIEW ─────────────────────────────────────────────────────────────────
+let _subStatusFilter='all';
+function sidebarSub(sub){
+  _subStatusFilter='all';
+  document.getElementById('bc-sub-name').textContent=sub;
+  document.getElementById('sub-view-eyebrow').textContent=`${SUB_F[sub]} ${sub}`;
+  document.getElementById('sub-view-title').textContent=`All Projects — ${sub}`;
+  const items=[...PROJECTS].filter(p=>p.subs.includes(sub));
+  document.getElementById('sub-view-sub').textContent=`${items.length} items involve ${sub}`;
+  renderSubKpis(items,sub);
+  renderSubProjects(items,sub);
+  document.querySelectorAll('#view-sub .pt-chip').forEach((b,i)=>b.classList.toggle('active',i===0));
+  showView('view-sub');
+  setSidebarActive(null);
+}
+function renderSubKpis(items,sub){
+  const g=items.filter(x=>x.status==='On Track').length;
+  const a=items.filter(x=>x.status==='At Risk').length;
+  const r=items.filter(x=>x.status==='Overdue').length;
+  document.getElementById('sub-kpis').innerHTML=`
+    <div class="kpi-card"><div class="kpi-lbl">Total Items</div><div class="kpi-val">${items.length}</div><div class="kpi-foot">In ${sub}</div></div>
+    <div class="kpi-card"><div class="kpi-lbl">On Track</div><div class="kpi-val g">${g}</div><div class="kpi-foot">&nbsp;</div></div>
+    <div class="kpi-card"><div class="kpi-lbl">At Risk</div><div class="kpi-val a">${a}</div><div class="kpi-foot">&nbsp;</div></div>
+    <div class="kpi-card"><div class="kpi-lbl">Overdue</div><div class="kpi-val r">${r}</div><div class="kpi-foot">&nbsp;</div></div>`;
+}
+function renderSubProjects(items,sub){
+  const filtered=_subStatusFilter==='all'?items:items.filter(x=>x.status===_subStatusFilter);
+  document.getElementById('sub-proj-rows').innerHTML=filtered.map(proj=>{
+    const sd=proj.subData[sub];
+    const p=sd?sd.pct:avgPct(proj);
+    const s=sd?sd.status:proj.status;
+    const c=barColor(s);
+    const portName=proj.portfolioId?PORTFOLIOS.find(x=>x.id===proj.portfolioId)?.name:'Standalone';
+    return `<div class="pt-row pt-row-6" onclick="openItemPanel('${proj.id}')">
+      <div><div class="pt-name">${proj.name}</div><div class="pt-id">${proj.id} · ${proj.type||'Project'} · <strong>${proj.priority}</strong></div></div>
+      <div class="subs-row">${subPipsHtml(proj.subs,sub)}</div>
+      <div class="prog-bar-sm"><div class="pbsm-track"><div class="pbsm-fill" style="width:${p}%;background:${c}"></div></div><div class="pbsm-pct" style="color:${c}">${p}%</div></div>
+      <div><span class="sp ${spClass(s)}">${s}</span></div>
+      <div style="font-size:10px;color:var(--ink3)">${portName||'—'}</div>
+      <div class="due${proj.status==='Overdue'?' od':''}">${fmtDue(proj.due)}</div>
+    </div>`;
+  }).join('');
+}
+function setSubStatusFilter(val,btn){
+  _subStatusFilter=val;
+  document.querySelectorAll('#view-sub .pt-chip').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const sub=document.getElementById('bc-sub-name').textContent;
+  const items=PROJECTS.filter(p=>p.subs.includes(sub));
+  renderSubProjects(items,sub);
+}
+
+// ── ITEM PANEL ───────────────────────────────────────────────────────────────
+function openItemPanel(id){
+  // Could be a project, standalone item, or programme
+  const proj=PROJECTS.find(x=>x.id===id);
+  const prog=PROGRAMMES.find(x=>x.id===id);
+  if(proj) return openProjectPanel(proj);
+  if(prog) return openProgrammePanel(prog);
+}
+
+function openProjectPanel(proj){
+  const pct=avgPct(proj);
+  const port=proj.portfolioId?PORTFOLIOS.find(x=>x.id===proj.portfolioId):null;
+  const prog=proj.programmeId?PROGRAMMES.find(x=>x.id===proj.programmeId):null;
+  document.getElementById('pan-eyebrow').textContent=`${proj.id} · ${proj.type||'Project'} · ${proj.priority} Priority`;
+  document.getElementById('pan-title').textContent=proj.name;
+  document.getElementById('pan-sub').textContent=`${port?port.name+' Portfolio · ':'Standalone · '}${prog?prog.name+' · ':''}Due: ${fmtDue(proj.due)} · Budget: ${proj.budget}`;
+
+  const allMs=[...new Set(proj.subs.flatMap(s=>proj.subData[s].ms))];
+  let body=`
+    <div class="panel-stat-row">
+      <div class="panel-stat"><div class="ps-lbl">Overall Progress</div><div class="ps-val ${sc(proj.status)}">${pct}%</div></div>
+      <div class="panel-stat"><div class="ps-lbl">Status</div><div class="ps-val ${sc(proj.status)}">${proj.status}</div></div>
+      <div class="panel-stat"><div class="ps-lbl">Subsidiaries</div><div class="ps-val">${proj.subs.length}</div></div>
+      <div class="panel-stat"><div class="ps-lbl">Budget</div><div class="ps-val" style="font-size:15px">${proj.budget}</div></div>
+    </div>`;
+
+  // Sub comparison
+  body+=`<div><div class="sec-hdr" style="margin-bottom:10px"><div class="sec-title">Progress by Subsidiary</div></div><div class="sub-compare-list">`;
+  proj.subs.forEach(sub=>{
+    const sd=proj.subData[sub];const c=barColor(sd.status);
+    body+=`<div class="sc-row">
+      <div class="sc-row-top">
+        <div><div class="sc-name">${SUB_F[sub]} ${sub}</div></div>
+        <div class="sc-right"><span class="sp ${spClass(sd.status)}">${sd.status}</span><div class="sc-pct" style="color:${c}">${sd.pct}%</div></div>
+      </div>
+      <div class="sc-bar"><div class="sc-fill" style="width:${sd.pct}%;background:${c}"></div></div>
+      <div class="ms-row">${sd.ms.map((m,i)=>`<span class="ms-chip ${msClass(sd.msSt[i])}">${msLabel(sd.msSt[i])} ${m}</span>`).join('')}</div>
+    </div>`;
+  });
+  body+=`</div></div>`;
+
+  // Matrix table
+  body+=`<div><div class="sec-hdr" style="margin-bottom:10px"><div class="sec-title">Milestone Matrix</div></div><div class="matrix-scroll"><table class="matrix-tbl"><thead><tr><th>Subsidiary</th>${allMs.map(m=>`<th>${m}</th>`).join('')}</tr></thead><tbody>`;
+  proj.subs.forEach(sub=>{
+    const sd=proj.subData[sub];
+    body+=`<tr><td>${SUB_F[sub]} ${sub}</td>`;
+    allMs.forEach(m=>{const idx=sd.ms.indexOf(m);if(idx===-1){body+=`<td><span class="mblk-na">—</span></td>`;}else{body+=`<td><div class="mblk ${mblkClass(sd.msSt[idx])}">${mblkLabel(sd.msSt[idx])}</div></td>`;}});
+    body+=`</tr>`;
+  });
+  body+=`</tbody></table></div></div>`;
+
+  document.getElementById('pan-body').innerHTML=body;
+  document.getElementById('panel').classList.add('open');
+  document.getElementById('overlay').classList.add('vis');
+}
+
+function openProgrammePanel(prog){
+  const progProjects=PROJECTS.filter(p=>p.programmeId===prog.id);
+  const pct=progProjects.length?Math.round(progProjects.map(avgPct).reduce((a,b)=>a+b,0)/progProjects.length):0;
+  const {g,a,r}=ragCountsForList(progProjects);
+  document.getElementById('pan-eyebrow').textContent=`${prog.id} · Programme`;
+  document.getElementById('pan-title').textContent=prog.name;
+  document.getElementById('pan-sub').textContent=`${prog.desc} · Budget: ${prog.budget} · ${progProjects.length} projects`;
+
+  let body=`
+    <div class="panel-stat-row">
+      <div class="panel-stat"><div class="ps-lbl">Avg Progress</div><div class="ps-val ${sc(prog.status)}">${pct}%</div></div>
+      <div class="panel-stat"><div class="ps-lbl">Status</div><div class="ps-val ${sc(prog.status)}">${prog.status}</div></div>
+      <div class="panel-stat"><div class="ps-lbl">Projects</div><div class="ps-val">${progProjects.length}</div></div>
+      <div class="panel-stat"><div class="ps-lbl">Budget</div><div class="ps-val" style="font-size:15px">${prog.budget}</div></div>
+    </div>
+    <div><div class="sec-hdr" style="margin-bottom:10px"><div class="sec-title">RAG Summary</div></div>
+    <div style="display:flex;gap:12px">
+      <div class="panel-stat" style="flex:1"><div class="ps-lbl">On Track</div><div class="ps-val g">${g}</div></div>
+      <div class="panel-stat" style="flex:1"><div class="ps-lbl">At Risk</div><div class="ps-val a">${a}</div></div>
+      <div class="panel-stat" style="flex:1"><div class="ps-lbl">Overdue</div><div class="ps-val r">${r}</div></div>
+    </div></div>
+    <div><div class="sec-hdr" style="margin-bottom:10px"><div class="sec-title">Projects in this Programme</div><div class="sec-meta">Click a project to drill in</div></div>
+    <div style="display:flex;flex-direction:column;gap:7px">`;
+
+  progProjects.forEach(proj=>{
+    const pp=avgPct(proj);const cc=barColor(proj.status);
+    body+=`<div class="prog-proj-row" onclick="openItemPanel('${proj.id}')">
+      <div><div class="pprow-name">${proj.name}</div><div style="font-size:10px;color:var(--ink3)">${proj.id} · ${proj.priority}</div></div>
+      <div class="pprow-right">
+        ${subPipsHtml(proj.subs,null)}
+        <div style="width:60px;height:4px;background:var(--bg);border-radius:2px;overflow:hidden"><div style="width:${pp}%;height:100%;background:${cc};border-radius:2px"></div></div>
+        <span style="font-size:10px;font-weight:700;color:${cc}">${pp}%</span>
+        <span class="sp ${spClass(proj.status)}">${proj.status}</span>
+      </div>
+    </div>`;
+  });
+  body+=`</div></div>`;
+
+  document.getElementById('pan-body').innerHTML=body;
+  document.getElementById('panel').classList.add('open');
+  document.getElementById('overlay').classList.add('vis');
+}
+
+function closePanel(){
+  document.getElementById('panel').classList.remove('open');
+  document.getElementById('overlay').classList.remove('vis');
+}
+
+// ── NAVIGATION ────────────────────────────────────────────────────────────────
+function showView(id){
+  document.querySelectorAll('.view').forEach(v=>{v.classList.toggle('active',v.id===id);});
+}
+function setSidebarActive(id){
+  document.querySelectorAll('.snav').forEach(b=>{b.classList.toggle('active',b.id===id);});
+}
+function goGroup(){
+  showView('view-group');
+  setSidebarActive('snav-group');
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+buildHeatmap();
+buildPortCards();
+buildStandaloneCards();
+</script>
+</body>
+</html>
