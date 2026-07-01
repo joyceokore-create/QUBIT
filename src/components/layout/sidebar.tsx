@@ -1,24 +1,12 @@
-import {
-  AlertTriangle,
-  Briefcase,
-  ClipboardList,
-  KeyRound,
-  LayoutGrid,
-  Server,
-  Shield,
-  Target,
-  Users,
-  UsersRound,
-} from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { getSidebarNavData } from "@/server/nav";
 import { NavGroup } from "@/components/layout/nav-group";
-import { NavItem } from "@/components/layout/nav-item";
+import { NavItem, type NavIconName } from "@/components/layout/nav-item";
 
 // Portfolios have no icon field of their own — cycle a fixed set for visual variety,
 // matching the reference dashboard's per-portfolio icons.
-const PORTFOLIO_ICONS = [Briefcase, Shield, Server, Users];
+const PORTFOLIO_ICON_NAMES: NavIconName[] = ["briefcase", "shield", "server", "users"];
 
 export async function Sidebar() {
   const session = await auth();
@@ -39,7 +27,7 @@ export async function Sidebar() {
   return (
     <aside className="flex w-[216px] shrink-0 flex-col overflow-y-auto border-r border-ink-4 bg-white px-[10px] py-4">
       <NavGroup label="Navigation">
-        <NavItem href="/dashboard" icon={LayoutGrid}>
+        <NavItem href="/dashboard" icon="layout-grid">
           Group Overview
         </NavItem>
       </NavGroup>
@@ -50,7 +38,7 @@ export async function Sidebar() {
             <NavItem
               key={portfolio.id}
               href={`/portfolios/${portfolio.id}`}
-              icon={PORTFOLIO_ICONS[i % PORTFOLIO_ICONS.length]}
+              icon={PORTFOLIO_ICON_NAMES[i % PORTFOLIO_ICON_NAMES.length]}
               count={portfolio.itemCount}
             >
               {portfolio.name}
@@ -61,7 +49,7 @@ export async function Sidebar() {
 
       {showProjects && nav && (
         <NavGroup label="Standalone">
-          <NavItem href="/standalone" icon={Target} count={nav.standaloneCount}>
+          <NavItem href="/standalone" icon="target" count={nav.standaloneCount}>
             Independent Items
           </NavItem>
         </NavGroup>
@@ -80,13 +68,13 @@ export async function Sidebar() {
 
       {showAdmin && (
         <NavGroup label="Administration">
-          <NavItem href="/admin/users" icon={UsersRound}>
+          <NavItem href="/admin/users" icon="users-round">
             Users
           </NavItem>
-          <NavItem href="/admin/roles" icon={KeyRound}>
+          <NavItem href="/admin/roles" icon="key-round">
             Roles
           </NavItem>
-          <NavItem href="/admin/audit" icon={ClipboardList}>
+          <NavItem href="/admin/audit" icon="clipboard-list">
             Audit Log
           </NavItem>
         </NavGroup>
@@ -94,7 +82,7 @@ export async function Sidebar() {
 
       {showRisks && nav && (
         <div className="mt-auto border-t border-background pt-3.5">
-          <NavItem href="/risks" icon={AlertTriangle} badge={nav.openRaidCount}>
+          <NavItem href="/risks" icon="alert-triangle" badge={nav.openRaidCount}>
             Risks &amp; Issues
           </NavItem>
         </div>

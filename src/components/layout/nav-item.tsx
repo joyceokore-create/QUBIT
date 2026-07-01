@@ -2,20 +2,50 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ComponentType } from "react";
+import {
+  AlertTriangle,
+  Briefcase,
+  ClipboardList,
+  KeyRound,
+  LayoutGrid,
+  Server,
+  Shield,
+  Target,
+  Users,
+  UsersRound,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// Icons are resolved here, inside the client component, and Sidebar (a server component)
+// only ever passes the string key below — a bare component reference (even wrapped in an
+// unrendered <Icon /> element) isn't serializable across the server→client boundary.
+const ICONS = {
+  "layout-grid": LayoutGrid,
+  briefcase: Briefcase,
+  shield: Shield,
+  server: Server,
+  users: Users,
+  target: Target,
+  "alert-triangle": AlertTriangle,
+  "users-round": UsersRound,
+  "key-round": KeyRound,
+  "clipboard-list": ClipboardList,
+} as const;
+
+export type NavIconName = keyof typeof ICONS;
 
 interface NavItemProps {
   href: string;
-  icon?: ComponentType<{ className?: string }>;
+  icon?: NavIconName;
   count?: number;
   badge?: number;
   children: React.ReactNode;
 }
 
-export function NavItem({ href, icon: Icon, count, badge, children }: NavItemProps) {
+export function NavItem({ href, icon, count, badge, children }: NavItemProps) {
   const pathname = usePathname();
   const active = href === "/dashboard" ? pathname === href : pathname.startsWith(href);
+  const Icon = icon ? ICONS[icon] : null;
 
   return (
     <Link
