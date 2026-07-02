@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { listUsers } from "@/server/users";
+import { listDepartments } from "@/server/departments";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
@@ -15,7 +16,7 @@ export default async function AdminUsersPage() {
     userId: session.user.id,
     roles: session.user.roles,
   };
-  const users = await listUsers(ctx);
+  const [users, departments] = await Promise.all([listUsers(ctx), listDepartments(ctx)]);
 
   return (
     <div className="flex flex-1 flex-col gap-[22px] p-[26px]">
@@ -38,6 +39,8 @@ export default async function AdminUsersPage() {
               <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Roles</TableHead>
+              <TableHead>Department</TableHead>
+              <TableHead>Manager</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -56,11 +59,13 @@ export default async function AdminUsersPage() {
                     ))}
                   </div>
                 </TableCell>
+                <TableCell className="text-ink-2">{u.departmentName ?? "—"}</TableCell>
+                <TableCell className="text-ink-2">{u.managerName ?? "—"}</TableCell>
                 <TableCell>
                   <Badge variant={u.status === "ACTIVE" ? "default" : "outline"}>{u.status}</Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  <UserRowActions user={u} currentUserId={session.user.id} />
+                  <UserRowActions user={u} currentUserId={session.user.id} departments={departments} users={users} />
                 </TableCell>
               </TableRow>
             ))}

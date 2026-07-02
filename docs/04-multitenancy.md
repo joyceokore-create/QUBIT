@@ -42,7 +42,8 @@ CREATE POLICY tenant_isolation_project ON project
 
 Apply the same pattern to: `org_unit`, `portfolio`, `programme`, `project`,
 `project_org_status`, `milestone`, `task`, `risk`, `issue`, `change_request`, `comment`,
-`document`, `decision`, `notification`, `audit_log`, `user`, `role_assignment`, etc.
+`document`, `decision`, `notification`, `audit_log`, `user`, `role_assignment`,
+`department`, etc.
 
 ## The `withTenant()` helper (src/lib/tenant.ts)
 

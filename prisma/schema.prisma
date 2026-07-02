@@ -27,6 +27,7 @@ model Tenant {
   orgUnits         OrgUnit[]
   users            User[]
   roleAssignments  RoleAssignment[]
+  departments      Department[]
   portfolios       Portfolio[]
   programmes       Programme[]
   projects         Project[]
@@ -50,6 +51,7 @@ model OrgUnit {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   projectOrgStatuses ProjectOrgStatus[]
+  departments        Department[]
 
   @@unique([tenantId, code])
   @@map("org_unit")
@@ -66,13 +68,52 @@ model User {
   mfaSecret               String?  @map("mfa_secret") // encrypted at rest, see src/lib/mfa.ts
   status                  String   @default("ACTIVE") // "ACTIVE" | "SUSPENDED" | "DELETED"
   deletedAt               DateTime? @map("deleted_at")
+  departmentId            String?     @map("department_id")
+  department              Department? @relation("UserDepartment", fields: [departmentId], references: [id])
+  // Who this user reports to. Self-relation — see docs/05-data-model.md. Longer manager
+  // cycles (A -> B -> A) aren't guarded; nothing today traverses this chain beyond a
+  // direct lookup, so it's inert bad data rather than an active bug (unlike Department's
+  // parentId, which IS walked for cycle prevention because hierarchy queries rely on it).
+  managerId               String?  @map("manager_id")
+  manager                 User?    @relation("UserManager", fields: [managerId], references: [id])
   createdAt               DateTime @default(now()) @map("created_at")
   updatedAt               DateTime @updatedAt @map("updated_at")
 
-  roles RoleAssignment[]
+  roles             RoleAssignment[]
+  reports           User[]           @relation("UserManager")
+  headOfDepartments Department[]     @relation("DepartmentHead")
 
   @@unique([tenantId, email])
   @@map("user")
+}
+
+// Org-structure hierarchy — ships empty (see docs/05-data-model.md). Optionally scoped to
+// an OrgUnit (subsidiary/country) so KCB can model per-country departments while Riverbank
+// (effectively one HQ org unit) leaves it unset. No @@unique on name: department names
+// aren't guaranteed unique within a tenant (two different parents can each have an
+// "Operations" child), and a composite unique with a nullable orgUnitId wouldn't help
+// anyway since Postgres treats NULL as distinct.
+model Department {
+  id         String       @id @default(uuid())
+  tenantId   String       @map("tenant_id")
+  tenant     Tenant       @relation(fields: [tenantId], references: [id])
+  name       String
+  orgUnitId  String?      @map("org_unit_id")
+  orgUnit    OrgUnit?     @relation(fields: [orgUnitId], references: [id])
+  parentId   String?      @map("parent_id")
+  parent     Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id])
+  children   Department[] @relation("DepartmentHierarchy")
+  headUserId String?      @map("head_user_id")
+  // Purely informational — being set as a department's head does NOT grant the
+  // (unrelated, pre-existing) DepartmentHead RBAC role.
+  headUser   User?        @relation("DepartmentHead", fields: [headUserId], references: [id])
+  members    User[]       @relation("UserDepartment")
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+
+  @@index([tenantId, parentId])
+  @@index([tenantId, orgUnitId])
+  @@map("department")
 }
 
 model RoleAssignment {

@@ -35,6 +35,10 @@ export interface AdminUserSummary {
   email: string;
   status: string;
   roles: string[];
+  departmentId: string | null;
+  departmentName: string | null;
+  managerId: string | null;
+  managerName: string | null;
   createdAt: Date;
 }
 
@@ -45,7 +49,11 @@ export async function listUsers(
   return withTenant(ctx, async (tx) => {
     const users = await tx.user.findMany({
       where: opts.includeDeleted ? undefined : { status: { not: "DELETED" } },
-      include: { roles: true },
+      include: {
+        roles: true,
+        department: { select: { name: true } },
+        manager: { select: { name: true } },
+      },
       orderBy: { name: "asc" },
     });
     return users.map((u) => ({
@@ -54,6 +62,10 @@ export async function listUsers(
       email: u.email,
       status: u.status,
       roles: u.roles.map((r) => r.role),
+      departmentId: u.departmentId,
+      departmentName: u.department?.name ?? null,
+      managerId: u.managerId,
+      managerName: u.manager?.name ?? null,
       createdAt: u.createdAt,
     }));
   });
@@ -158,6 +170,53 @@ export async function setUserStatus(
   });
 }
 
+export const UpdateUserDepartmentInput = z.object({
+  departmentId: z.string().uuid().nullable(),
+  managerId: z.string().uuid().nullable(),
+});
+export type UpdateUserDepartmentInput = z.infer<typeof UpdateUserDepartmentInput>;
+
+export async function updateUserDepartment(
+  ctx: TenantContext,
+  userId: string,
+  input: UpdateUserDepartmentInput,
+): Promise<void> {
+  if (input.managerId && input.managerId === userId) {
+    throw new UserAdminError("A user cannot be their own manager.", "SELF_MANAGER");
+  }
+
+  await withTenant(ctx, async (tx) => {
+    const before = await tx.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { departmentId: true, managerId: true },
+    });
+
+    if (input.departmentId) {
+      const department = await tx.department.findUnique({ where: { id: input.departmentId } });
+      if (!department) throw new UserAdminError("Department not found.", "NOT_FOUND");
+    }
+    if (input.managerId) {
+      const manager = await tx.user.findUnique({ where: { id: input.managerId } });
+      if (!manager || manager.status === "DELETED") {
+        throw new UserAdminError("Manager not found.", "NOT_FOUND");
+      }
+    }
+
+    await tx.user.update({
+      where: { id: userId },
+      data: { departmentId: input.departmentId, managerId: input.managerId },
+    });
+
+    await audit(tx, ctx, {
+      action: "update",
+      entityType: "user",
+      entityId: userId,
+      before,
+      after: input,
+    });
+  });
+}
+
 export async function softDeleteUser(ctx: TenantContext, userId: string): Promise<void> {
   if (userId === ctx.userId) {
     throw new UserAdminError("You cannot delete your own account.", "SELF_ACTION");
@@ -169,6 +228,11 @@ export async function softDeleteUser(ctx: TenantContext, userId: string): Promis
     const before = await tx.user.findUniqueOrThrow({ where: { id: userId } });
 
     await tx.roleAssignment.deleteMany({ where: { userId } });
+    // Stop this user from silently lingering as someone's manager or a department's head
+    // once deleted — folded into the same "delete" audit entry, not audited separately,
+    // matching how roleAssignment.deleteMany just above isn't audited on its own either.
+    await tx.department.updateMany({ where: { headUserId: userId }, data: { headUserId: null } });
+    await tx.user.updateMany({ where: { managerId: userId }, data: { managerId: null } });
     await tx.user.update({
       where: { id: userId },
       data: {

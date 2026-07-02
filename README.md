@@ -98,8 +98,18 @@ dashboard, portfolio/programme/project drill-down) are complete, plus an unplann
   FR-IAM-01). A browsable permission catalogue and an IAM audit log viewer round it out.
   `PlatformSuperAdmin` was broadened to read-only (`*:read` + `tenant:switch`) since a role
   with no visibility can't oversee anything — the actual tenant-switch mechanism itself is
-  still a follow-up. Departments, CSV bulk upload, and custom role creation are explicitly
-  deferred (see `docs/06-api-spec.md`'s Administration section).
+  still a follow-up. CSV bulk upload and custom role creation are explicitly deferred (see
+  `docs/06-api-spec.md`'s Administration section).
+- **Department / org structure** (`/admin/departments`, gated on the same `iam:manage`
+  permission): hierarchical departments (self-referential `parentId`, cycle-checked on
+  every update), an optional link to an `OrgUnit` so KCB can model per-country departments
+  while Riverbank leaves it unset, and an informational `headUserId` that does **not**
+  grant the unrelated `DepartmentHead` RBAC role. A user's department + manager (also
+  self-referential — `User.managerId`) are assigned from `/admin/users`. Ships with **zero
+  seeded rows** — real structure is entered by hand (CSV bulk import is a tracked
+  follow-up, not built now), consistent with CLAUDE.md's no-real-PII rule. Delete is
+  guarded against departments that still have children or member users; soft-deleting a
+  user nulls out any dangling `managerId`/`headUserId` references to them.
 - **Portfolio, programme & project drill-down** (`src/server/projects.ts`,
   `/api/portfolios/:id`, `/api/programmes/:id`, `/api/projects`, `/api/projects/:id`):
   portfolio detail page (header stats, programme cards, standalone-in-portfolio grid,
@@ -120,9 +130,11 @@ dashboard, portfolio/programme/project drill-down) are complete, plus an unplann
   `ComingSoon` placeholder naming the milestone that lands them, instead of a dead link.
 - `tests/rls/` and `tests/unit/` cover cross-tenant isolation, audit-row correctness,
   role-by-role permission checks, the full admin user lifecycle (create → role
-  diff → suspend → soft-delete, including self-lockout guards), and the project
+  diff → suspend → soft-delete, including self-lockout guards), the project
   create/update lifecycle (duplicate-code rejection, per-tenant code uniqueness,
-  audit before/after snapshots, cross-tenant update rejection).
+  audit before/after snapshots, cross-tenant update rejection), and the department
+  lifecycle (hierarchy, cycle prevention, delete guards, self-manager rejection,
+  soft-delete cascade nulling `managerId`/`headUserId`, tenant isolation).
 
 See [`docs/10-build-plan.md`](./docs/10-build-plan.md) for what's next (Milestone 6:
 subsidiary view).

@@ -76,11 +76,24 @@ None of these let a caller act on their own account (suspend/delete/self-demote 
 `SystemAdmin`) — a deliberate guard against accidental lockout, enforced in
 `src/server/users.ts`, not just the UI.
 
-**Deferred** (not built in v1): Departments (FR-IAM-03), CSV bulk user upload (FR-IAM-02),
-custom role creation — roles stay hard-coded (`src/lib/rbac.ts`) — and the actual
-`PlatformSuperAdmin` tenant-switch mechanism (`POST /api/tenant/switch` from the Session/
-tenant table above is still unimplemented; the role currently only grants read-only
-oversight, not an actual switch).
+#### Departments (FR-IAM-03)
+
+Ships with schema + admin UI only — zero seeded rows; real structure is entered by hand
+through `/admin/departments` and `/admin/users` (no CSV import yet, see Deferred below).
+Gated on `iam:manage`, same as the rest of Administration — no dedicated permission.
+
+| Method | Path | Permission | Purpose |
+|--------|------|-----------|---------|
+| POST | `/api/admin/departments` | `iam:manage` | Create a department (audited `create`) |
+| PATCH | `/api/admin/departments/:id` | `iam:manage` | Update name/parent/org unit/head; rejects a parent change that would create a cycle (audited `update`) |
+| DELETE | `/api/admin/departments/:id` | `iam:manage` | Delete; rejects if it has child departments or member users (audited `delete`) |
+| PATCH | `/api/admin/users/:id/department` | `iam:manage` | Set a user's department + manager; rejects self-as-manager (audited `update` on the user) |
+
+**Deferred** (not built in v1): CSV bulk user upload (FR-IAM-02), custom role creation —
+roles stay hard-coded (`src/lib/rbac.ts`) — and the actual `PlatformSuperAdmin`
+tenant-switch mechanism (`POST /api/tenant/switch` from the Session/tenant table above is
+still unimplemented; the role currently only grants read-only oversight, not an actual
+switch).
 
 ## Example: create risk
 

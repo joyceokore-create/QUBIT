@@ -74,6 +74,9 @@ export async function Sidebar() {
           <NavItem href="/admin/users" icon="users-round">
             Users
           </NavItem>
+          <NavItem href="/admin/departments" icon="network">
+            Departments
+          </NavItem>
           <NavItem href="/admin/roles" icon="key-round">
             Roles
           </NavItem>

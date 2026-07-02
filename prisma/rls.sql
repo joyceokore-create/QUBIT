@@ -11,6 +11,7 @@ BEGIN
     'org_unit',
     'user',
     'role_assignment',
+    'department',
     'portfolio',
     'programme',
     'project',

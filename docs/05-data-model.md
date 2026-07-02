@@ -12,6 +12,7 @@ Derived from the dashboard reference and the QUBIT feature set. Phase A entities
 | org_unit | A | Sub-organisation / subsidiary (e.g. KCB Kenya) |
 | user | A | Belongs to one tenant; auth identity |
 | role_assignment | A | User↔role with optional scope |
+| department | A | Org-structure hierarchy; optional link to org_unit and head_user; ships empty, no RBAC side-effects from headUserId |
 | portfolio | A | Groups programmes/projects; owner; target budget |
 | programme | A | Sits between portfolio and projects |
 | project | A | Project or standalone; priority; status; due; budget |
@@ -89,6 +90,10 @@ model User {
   mfaSecret     String?                  // encrypted at rest
   status        String   @default("ACTIVE")  // "ACTIVE" | "SUSPENDED" | "DELETED"
   deletedAt     DateTime?                 // set by soft-delete (FR-IAM-01); see Admin & IAM v1
+  departmentId  String?                   // added for org structure; see Department below
+  department    Department? @relation(fields: [departmentId], references: [id])
+  managerId     String?                   // self-relation — who this user reports to
+  manager       User?    @relation("UserManager", fields: [managerId], references: [id])
   roles         RoleAssignment[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -103,6 +108,20 @@ model RoleAssignment {
   role       String                       // Role enum value
   scopeType  String?                      // "portfolio" | "orgUnit" | null
   scopeId    String?
+}
+
+model Department {                        // org structure — ships empty, entered by hand
+  id         String  @id @default(uuid())
+  tenantId   String
+  name       String
+  orgUnitId  String?                      // optional link to a subsidiary (KCB per-country)
+  orgUnit    OrgUnit? @relation(fields: [orgUnitId], references: [id])
+  parentId   String?                      // self-relation for hierarchy; cycle-checked
+  parent     Department? @relation("DepartmentHierarchy", fields: [parentId], references: [id])
+  children   Department[] @relation("DepartmentHierarchy")
+  headUserId String?                      // informational only — no RBAC role grant
+  headUser   User?   @relation(fields: [headUserId], references: [id])
+  members    User[]
 }
 
 model Portfolio {

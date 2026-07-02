@@ -20,42 +20,36 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { EditRolesDialog } from "./edit-roles-dialog";
 import { EditDepartmentDialog } from "./edit-department-dialog";
-import type { AdminUserSummary } from "@/server/users";
 import type { DepartmentSummary } from "@/server/departments";
+import type { AdminUserSummary } from "@/server/users";
 
-interface UserRowActionsProps {
-  user: AdminUserSummary;
-  currentUserId: string;
+interface DepartmentRowActionsProps {
+  department: DepartmentSummary;
   departments: DepartmentSummary[];
+  orgUnits: { id: string; name: string }[];
   users: AdminUserSummary[];
 }
 
-export function UserRowActions({ user, currentUserId, departments, users }: UserRowActionsProps) {
+export function DepartmentRowActions({ department, departments, orgUnits, users }: DepartmentRowActionsProps) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
-  const [departmentOpen, setDepartmentOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const isSelf = user.id === currentUserId;
-
-  if (user.status === "DELETED") {
-    return <span className="text-xs text-ink-3">—</span>;
-  }
-
-  async function toggleSuspend() {
-    setBusy(true);
-    const action = user.status === "ACTIVE" ? "suspend" : "reactivate";
-    await fetch(`/api/admin/users/${user.id}/${action}`, { method: "POST" });
-    setBusy(false);
-    router.refresh();
-  }
 
   async function confirmDelete() {
     setBusy(true);
-    await fetch(`/api/admin/users/${user.id}`, { method: "DELETE" });
+    setDeleteError(null);
+    const res = await fetch(`/api/admin/departments/${department.id}`, { method: "DELETE" });
     setBusy(false);
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setDeleteError(body?.error?.message ?? "Could not delete department.");
+      return;
+    }
+
     setDeleteOpen(false);
     router.refresh();
   }
@@ -64,41 +58,47 @@ export function UserRowActions({ user, currentUserId, departments, users }: User
     <>
       <DropdownMenu>
         <DropdownMenuTrigger
-          render={<Button variant="ghost" size="icon-sm" aria-label="User actions" />}
+          render={<Button variant="ghost" size="icon-sm" aria-label="Department actions" />}
         >
           <MoreHorizontal className="h-4 w-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => setEditOpen(true)}>Edit roles</DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setDepartmentOpen(true)}>Edit department</DropdownMenuItem>
-          <DropdownMenuItem disabled={isSelf || busy} onSelect={toggleSuspend}>
-            {user.status === "ACTIVE" ? "Suspend" : "Reactivate"}
-          </DropdownMenuItem>
-          <DropdownMenuItem variant="destructive" disabled={isSelf} onSelect={() => setDeleteOpen(true)}>
+          <DropdownMenuItem onSelect={() => setEditOpen(true)}>Edit</DropdownMenuItem>
+          <DropdownMenuItem
+            variant="destructive"
+            onSelect={() => {
+              setDeleteError(null);
+              setDeleteOpen(true);
+            }}
+          >
             Delete
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <EditRolesDialog user={user} open={editOpen} onOpenChange={setEditOpen} />
       <EditDepartmentDialog
-        user={user}
+        department={department}
         departments={departments}
+        orgUnits={orgUnits}
         users={users}
-        open={departmentOpen}
-        onOpenChange={setDepartmentOpen}
+        open={editOpen}
+        onOpenChange={setEditOpen}
       />
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete {user.name}?</AlertDialogTitle>
+            <AlertDialogTitle>Delete {department.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This scrubs their name, email and password, revokes every role, and blocks
-              sign-in. Historical records (audit log, risk/issue ownership) are preserved.
-              This can&apos;t be undone.
+              This can&apos;t be undone. Child departments and members must be reassigned
+              first.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {deleteError && (
+            <p role="alert" className="text-sm text-status-red">
+              {deleteError}
+            </p>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction disabled={busy} onClick={confirmDelete}>

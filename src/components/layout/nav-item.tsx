@@ -8,6 +8,7 @@ import {
   ClipboardList,
   KeyRound,
   LayoutGrid,
+  Network,
   Server,
   Shield,
   Target,
@@ -30,6 +31,7 @@ const ICONS = {
   "users-round": UsersRound,
   "key-round": KeyRound,
   "clipboard-list": ClipboardList,
+  network: Network,
 } as const;
 
 export type NavIconName = keyof typeof ICONS;
