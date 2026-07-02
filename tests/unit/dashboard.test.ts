@@ -9,7 +9,7 @@ import {
 
 describe("avgProgress", () => {
   it("averages a project's subsidiary progress values", () => {
-    expect(avgProgress({ orgStatuses: [{ orgUnitId: "a", progress: 72, status: "AtRisk" }, { orgUnitId: "b", progress: 45, status: "AtRisk" }] })).toBe(59);
+    expect(avgProgress({ orgStatuses: [{ progress: 72 }, { progress: 45 }] })).toBe(59);
   });
 
   it("returns 0 for a project with no subsidiaries", () => {

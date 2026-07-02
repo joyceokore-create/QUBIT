@@ -58,8 +58,9 @@ pnpm lint && pnpm typecheck  # quality gates (must pass before a milestone is "d
 
 ## Project status
 
-Milestones 1–4 (database/RLS, auth/RBAC/audit, app shell/theming, Group Overview
-dashboard) are complete, plus an unplanned **Admin & IAM v1** pass:
+Milestones 1–5 (database/RLS, auth/RBAC/audit, app shell/theming, Group Overview
+dashboard, portfolio/programme/project drill-down) are complete, plus an unplanned
+**Admin & IAM v1** pass:
 
 - **Group Overview dashboard** (`/dashboard`): KPI strip, portfolio × subsidiary health
   map (click a cell to drill into that portfolio filtered to a subsidiary, click a
@@ -99,14 +100,32 @@ dashboard) are complete, plus an unplanned **Admin & IAM v1** pass:
   with no visibility can't oversee anything — the actual tenant-switch mechanism itself is
   still a follow-up. Departments, CSV bulk upload, and custom role creation are explicitly
   deferred (see `docs/06-api-spec.md`'s Administration section).
-- Nav destinations not yet built (portfolio/subsidiary detail, standalone, RAID) render a
+- **Portfolio, programme & project drill-down** (`src/server/projects.ts`,
+  `/api/portfolios/:id`, `/api/programmes/:id`, `/api/projects`, `/api/projects/:id`):
+  portfolio detail page (header stats, programme cards, standalone-in-portfolio grid,
+  `?sub=` heatmap-cell deep-link), and a reusable SlidePanel (project + programme
+  variants) driven by React Context so any card/row across the app can open the same
+  panel — Progress-by-Subsidiary bars and the full Milestone Matrix render inside it.
+  Project create (scoped to a portfolio, optional programme) and edit
+  (status/priority/due date/budget — Project has no `owner` field, a pre-existing
+  doc/schema mismatch) are both permission-gated and audited with before/after
+  snapshots. Full drill path Group Overview → Portfolio → Programme → Project panel
+  verified end-to-end for both tenants, including cross-tenant isolation (a KCB session
+  gets `404` on a Riverbank project id) and the edit audit trail.
+- Riverbank's 25 standalone projects are real business data imported from
+  `docs/Riverbank Projects.docx` (names, descriptions, per-stage progress); team member
+  names were anonymized to generic role labels (`Project Lead`, `Contributor`) per
+  CLAUDE.md's no-real-PII rule — never real employee names in seed data.
+- Nav destinations not yet built (subsidiary detail, standalone, RAID) render a
   `ComingSoon` placeholder naming the milestone that lands them, instead of a dead link.
 - `tests/rls/` and `tests/unit/` cover cross-tenant isolation, audit-row correctness,
-  role-by-role permission checks, and the full admin user lifecycle (create → role
-  diff → suspend → soft-delete), including self-lockout guards.
+  role-by-role permission checks, the full admin user lifecycle (create → role
+  diff → suspend → soft-delete, including self-lockout guards), and the project
+  create/update lifecycle (duplicate-code rejection, per-tenant code uniqueness,
+  audit before/after snapshots, cross-tenant update rejection).
 
-See [`docs/10-build-plan.md`](./docs/10-build-plan.md) for what's next (Milestone 5:
-portfolio, programme & project drill-down).
+See [`docs/10-build-plan.md`](./docs/10-build-plan.md) for what's next (Milestone 6:
+subsidiary view).
 
 `dashboard:read` (needed for `/dashboard`, everyone's post-login landing page) is now
 granted to every role except `DepartmentHead`, a dynamic approval-only role — see

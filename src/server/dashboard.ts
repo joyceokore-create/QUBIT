@@ -27,7 +27,7 @@ export interface ProjectWithStatus {
 }
 
 /** A project's overall progress = the average of its subsidiaries' progress. */
-export function avgProgress(project: Pick<ProjectWithStatus, "orgStatuses">): number {
+export function avgProgress(project: { orgStatuses: { progress: number }[] }): number {
   if (project.orgStatuses.length === 0) return 0;
   const sum = project.orgStatuses.reduce((acc, s) => acc + s.progress, 0);
   return Math.round(sum / project.orgStatuses.length);

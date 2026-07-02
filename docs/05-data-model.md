@@ -135,6 +135,7 @@ model Project {
   tenantId    String
   code        String                       // "P001"
   name        String
+  description String?                      // added Milestone 5 — the original extract omitted it
   type        String                       // ItemType
   portfolioId String?
   programmeId String?
@@ -144,6 +145,10 @@ model Project {
   status      String
   dueDate     DateTime?
   budget      String?
+  team        String?                      // free-text placeholder, e.g. "Project Lead,
+                                             // Contributor" — never real employee names;
+                                             // real per-person assignment is Resource/
+                                             // Allocation (Phase C)
   orgStatuses ProjectOrgStatus[]
   risks       Risk[]
   issues      Issue[]

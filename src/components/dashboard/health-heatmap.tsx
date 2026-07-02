@@ -79,7 +79,7 @@ export function HealthHeatmap({ data }: { data: HeatmapData }) {
                       >
                         {cell ? (
                           <Link
-                            href={`/portfolios/${row.portfolioId}?sub=${orgUnit.id}`}
+                            href={`/portfolios/${row.portfolioId}?sub=${orgUnit.code}`}
                             className={cn(
                               "block rounded-[7px] border px-[10px] py-2",
                               CELL_CLASSES[cell.status],

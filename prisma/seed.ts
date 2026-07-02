@@ -61,13 +61,16 @@ interface SubStatusSeed {
 interface ProjectSeed {
   code: string;
   name: string;
+  description?: string;
   type: "Project" | "Programme";
   portfolioKey: string | null;
   programmeKey: string | null;
   priority: string;
   status: string;
   due: string | null;
-  budget: string;
+  budget: string | null;
+  // Free-text role placeholders only (e.g. "Project Lead, Contributor") — never real names.
+  team?: string;
   subs: Record<string, SubStatusSeed>;
 }
 interface RiskSeed {
@@ -717,6 +720,252 @@ const KCB_SEED: TenantSeed = {
 
 // ── Riverbank Group — smaller synthetic set for isolation testing ────────────
 
+// ── Riverbank's real, current project portfolio ───────────────────────────────
+// Source: docs/Riverbank Projects.docx (as of 2026-07-02). Names, descriptions and stage
+// progress are real; team member names are NOT — replaced with generic role placeholders
+// per CLAUDE.md's "no real PII in seeds" rule (employee names are confidential personal
+// data per docs/11-security-compliance.md). Priority and due dates aren't in the source
+// document, so every item is defaulted to "Medium" / no date rather than invented.
+const RBS_STAGE_NAMES = [
+  "Prototype",
+  "Business Case",
+  "Business Case Approval (KCB)",
+  "BRD",
+  "MVP1",
+  "SIT",
+  "UAT",
+  "Go Live",
+];
+const RBS_MARK_STATE: Record<string, string> = {
+  "✓": "done",
+  "In Progress": "active",
+  "Not Started": "pending",
+  Delayed: "late",
+  Rejected: "late",
+  Deferred: "late",
+  "N/A": "pending",
+  "-": "pending",
+};
+
+interface RbsProjectSource {
+  num: number;
+  name: string;
+  description: string;
+  /** 8 marks, in RBS_STAGE_NAMES order, exactly as recorded in the source document. */
+  marks: string[];
+  teamSize: number;
+}
+
+function rbsToProjectSeed(src: RbsProjectSource): ProjectSeed {
+  const msSt = src.marks.map((m) => RBS_MARK_STATE[m] ?? "pending");
+  const doneCount = src.marks.filter((m) => m === "✓").length;
+  const pct = Math.round((doneCount / src.marks.length) * 100);
+  const hasBlocker = src.marks.some((m) => m === "Delayed" || m === "Rejected" || m === "Deferred");
+  const goLiveDone = msSt[msSt.length - 1] === "done";
+  const prototypeDone = msSt[0] === "done";
+  const status = goLiveDone ? "Completed" : hasBlocker ? "AtRisk" : !prototypeDone ? "Planning" : "OnTrack";
+  const team =
+    src.teamSize <= 1
+      ? "Project Lead"
+      : ["Project Lead", ...Array(src.teamSize - 1).fill("Contributor")].join(", ");
+
+  return {
+    code: `RBS-${String(src.num).padStart(2, "0")}`,
+    name: src.name,
+    description: src.description,
+    team,
+    type: "Project",
+    portfolioKey: null,
+    programmeKey: null,
+    priority: "Medium",
+    status,
+    due: null,
+    budget: null,
+    subs: {
+      HQ: { pct, status, ms: RBS_STAGE_NAMES, msSt },
+    },
+  };
+}
+
+const RBS_PROJECTS: RbsProjectSource[] = [
+  {
+    num: 1,
+    name: "HomeQuest",
+    description: "Automated rent collection & property workflows",
+    marks: ["✓", "✓", "✓", "✓", "✓", "Not Started", "Not Started", "Not Started"],
+    teamSize: 2,
+  },
+  {
+    num: 2,
+    name: "Asset Valuation",
+    description: "Managing details for properties used as collateral in bank lending",
+    marks: ["✓", "✓", "In Progress", "In Progress", "In Progress", "Not Started", "Not Started", "Not Started"],
+    teamSize: 2,
+  },
+  {
+    num: 3,
+    name: "Curis (Insurance)",
+    description: "Digital medical scheme administration.",
+    marks: ["✓", "In Progress", "In Progress", "In Progress", "Not Started", "Not Started", "Not Started", "Not Started"],
+    teamSize: 3,
+  },
+  {
+    num: 4,
+    name: "Sifa",
+    description: "Faith-based membership & giving automation",
+    marks: ["✓", "✓", "✓", "✓", "✓", "In Progress", "Not Started", "Not Started"],
+    teamSize: 4,
+  },
+  {
+    num: 5,
+    name: "Fikra",
+    description: "Group staff innovation hub",
+    marks: ["✓", "✓", "✓", "✓", "✓", "Not Started", "Not Started", "Not Started"],
+    teamSize: 1,
+  },
+  {
+    num: 6,
+    name: "Lumi",
+    description: "AI document knowledge platform",
+    marks: ["✓", "✓", "Delayed", "Delayed", "Delayed", "Not Started", "Not Started", "Not Started"],
+    teamSize: 4,
+  },
+  {
+    num: 8,
+    name: "RetailFlow",
+    description: "Point of commerce retail solution",
+    marks: ["In Progress", "In Progress", "In Progress", "In Progress", "In Progress", "Not Started", "Not Started", "Not Started"],
+    teamSize: 3,
+  },
+  {
+    num: 9,
+    name: "Qubit",
+    description: "Enterprise project tracking dashboard",
+    marks: ["✓", "✓", "In Progress", "In Progress", "In Progress", "Not Started", "Not Started", "Not Started"],
+    teamSize: 3,
+  },
+  {
+    num: 10,
+    name: "Tarion Founders",
+    description: "Crowdfunding platform",
+    marks: ["✓", "In Progress", "In Progress", "In Progress", "Not Started", "Not Started", "Not Started", "Not Started"],
+    teamSize: 3,
+  },
+  {
+    num: 11,
+    name: "Checksmart",
+    description: "Biometric social-benefit disbursement platform",
+    marks: ["✓", "✓", "✓", "✓", "✓", "In Progress", "Not Started", "Not Started"],
+    teamSize: 3,
+  },
+  {
+    num: 12,
+    name: "Qora",
+    description: "Automated AI-driven document parsing for credit",
+    marks: ["✓", "In Progress", "In Progress", "In Progress", "Not Started", "Not Started", "Not Started", "Not Started"],
+    teamSize: 3,
+  },
+  {
+    num: 13,
+    name: "Vertex",
+    description: "Group-wide AI enablement & training",
+    marks: ["✓", "✓", "In Progress", "In Progress", "Not Started", "Not Started", "Not Started", "Not Started"],
+    teamSize: 2,
+  },
+  {
+    num: 14,
+    name: "Keza",
+    description: "Micro & small enterprise AI-investment platform",
+    marks: ["✓", "✓", "In Progress", "In Progress", "Not Started", "Not Started", "Not Started", "Not Started"],
+    teamSize: 3,
+  },
+  {
+    num: 15,
+    name: "ZEDFY",
+    description: "E-commerce",
+    marks: ["✓", "In Progress", "In Progress", "In Progress", "In Progress", "Not Started", "Not Started", "Not Started"],
+    teamSize: 2,
+  },
+  {
+    num: 16,
+    name: "ZED-UNO",
+    description: "Restaurant and walk-in solution",
+    marks: ["✓", "In Progress", "In Progress", "In Progress", "In Progress", "Not Started", "Not Started", "Not Started"],
+    teamSize: 3,
+  },
+  {
+    num: 17,
+    name: "ZED-WELCO",
+    description: "Bookings and accommodation solution",
+    marks: ["✓", "In Progress", "In Progress", "In Progress", "In Progress", "Not Started", "Not Started", "Not Started"],
+    teamSize: 2,
+  },
+  {
+    num: 18,
+    name: "ZED-SAFIRI",
+    description: "Transport SACCO digital payments & contribution",
+    marks: ["✓", "✓", "In Progress", "In Progress", "In Progress", "Not Started", "Not Started", "Not Started"],
+    teamSize: 3,
+  },
+  {
+    num: 19,
+    name: "Travira",
+    description: "School travel marketplace with embedded financing",
+    marks: ["In Progress", "In Progress", "In Progress", "In Progress", "In Progress", "Not Started", "Not Started", "Not Started"],
+    teamSize: 3,
+  },
+  {
+    num: 20,
+    name: "Tramia",
+    description: "Virtual assets and tokenization",
+    marks: ["In Progress", "In Progress", "In Progress", "In Progress", "In Progress", "Not Started", "Not Started", "Not Started"],
+    teamSize: 3,
+  },
+  {
+    num: 21,
+    name: "Anchor Pario",
+    description: "AI-powered procurement and business case management, replacing Oracle Procurement.",
+    marks: ["In Progress", "In Progress", "In Progress", "In Progress", "In Progress", "Not Started", "Not Started", "Not Started"],
+    teamSize: 3,
+  },
+  {
+    num: 22,
+    name: "Anchor Genra",
+    description: "AI-powered human resource management covering the full hire-to-retire lifecycle, replacing Oracle HCM.",
+    marks: ["In Progress", "In Progress", "In Progress", "In Progress", "In Progress", "Not Started", "Not Started", "Not Started"],
+    teamSize: 3,
+  },
+  {
+    num: 23,
+    name: "Anchor Fiscus",
+    description: "AI-powered financials, replacing Oracle Financials.",
+    marks: ["Not Started", "Not Started", "Not Started", "Not Started", "Not Started", "Not Started", "Not Started", "Not Started"],
+    teamSize: 1,
+  },
+  {
+    num: 24,
+    name: "Anchor FAL",
+    description:
+      "The Financial Abstraction Layer, the intelligent middleware that connects all platforms to the financial system of record.",
+    marks: ["Not Started", "Not Started", "Not Started", "Not Started", "Not Started", "Not Started", "Not Started", "Not Started"],
+    teamSize: 3,
+  },
+  {
+    num: 25,
+    name: "Zuqi",
+    description: "Field sales & supply chain management platform",
+    marks: ["✓", "Rejected", "Rejected", "N/A", "In Progress", "Not Started", "Not Started", "Not Started"],
+    teamSize: 3,
+  },
+  {
+    num: 26,
+    name: "HELB",
+    description: "Field sales & supply chain management platform",
+    marks: ["✓", "Deferred", "-", "-", "-", "-", "-", "-"],
+    teamSize: 2,
+  },
+];
+
 const RIVERBANK_SEED: TenantSeed = {
   slug: "riverbank",
   name: "Riverbank Group",
@@ -740,151 +989,14 @@ const RIVERBANK_SEED: TenantSeed = {
     { email: "george.mutuku@riverbank.example.invalid", name: "George Mutuku", roles: ["ProjectManager"] },
     { email: "hannah.chebet@riverbank.example.invalid", name: "Hannah Chebet", roles: ["SystemAdmin"] },
   ],
-  portfolios: [
-    {
-      key: "rb-p1",
-      name: "Client Delivery Platforms",
-      description: "Client-facing delivery and collaboration platforms for Riverbank engagements.",
-      budget: "KES 450M",
-    },
-    {
-      key: "rb-p2",
-      name: "Internal Systems Modernisation",
-      description: "Internal ERP, HR and security tooling upgrades.",
-      budget: "KES 210M",
-    },
-  ],
-  programmes: [
-    {
-      key: "rb-prog1",
-      portfolioKey: "rb-p1",
-      name: "Delivery Portal Programme",
-      description: "Client portal and reporting programme",
-      status: "On Track",
-      budget: "KES 260M",
-    },
-    {
-      key: "rb-prog2",
-      portfolioKey: "rb-p2",
-      name: "ERP Upgrade Programme",
-      description: "Finance and HR ERP modernisation",
-      status: "At Risk",
-      budget: "KES 150M",
-    },
-  ],
-  projects: [
-    {
-      code: "RBP001",
-      name: "Client Portal Revamp",
-      type: "Project",
-      portfolioKey: "rb-p1",
-      programmeKey: "rb-prog1",
-      priority: "High",
-      status: "On Track",
-      due: "2026-10-31",
-      budget: "KES 120M",
-      subs: {
-        HQ: {
-          pct: 75,
-          status: "On Track",
-          ms: ["Design", "Build", "UAT", "Launch"],
-          msSt: ["done", "done", "active", "pending"],
-        },
-        WR: {
-          pct: 50,
-          status: "On Track",
-          ms: ["Design", "Build", "UAT", "Launch"],
-          msSt: ["done", "active", "pending", "pending"],
-        },
-      },
-    },
-    {
-      code: "RBP002",
-      name: "Partner API Gateway",
-      type: "Project",
-      portfolioKey: "rb-p1",
-      programmeKey: "rb-prog1",
-      priority: "Medium",
-      status: "Planning",
-      due: "2027-01-31",
-      budget: "KES 60M",
-      subs: {
-        HQ: {
-          pct: 20,
-          status: "Planning",
-          ms: ["Design", "Build", "Certify", "Launch"],
-          msSt: ["active", "pending", "pending", "pending"],
-        },
-      },
-    },
-    {
-      code: "RBP003",
-      name: "Finance ERP Migration",
-      type: "Project",
-      portfolioKey: "rb-p2",
-      programmeKey: "rb-prog2",
-      priority: "Critical",
-      status: "At Risk",
-      due: "2026-09-15",
-      budget: "KES 150M",
-      subs: {
-        HQ: {
-          pct: 40,
-          status: "At Risk",
-          ms: ["Discovery", "Design", "Migration", "UAT", "Cutover"],
-          msSt: ["done", "active", "late", "pending", "pending"],
-        },
-        CR: {
-          pct: 22,
-          status: "At Risk",
-          ms: ["Discovery", "Design", "Migration", "UAT", "Cutover"],
-          msSt: ["done", "active", "pending", "pending", "pending"],
-        },
-      },
-    },
-    {
-      code: "RBSP001",
-      name: "Cyber Hygiene Audit",
-      type: "Project",
-      portfolioKey: null,
-      programmeKey: null,
-      priority: "Medium",
-      status: "On Track",
-      due: "2026-08-01",
-      budget: "KES 20M",
-      subs: {
-        HQ: {
-          pct: 60,
-          status: "On Track",
-          ms: ["Assessment", "Remediation", "Review"],
-          msSt: ["done", "active", "pending"],
-        },
-      },
-    },
-  ],
-  risks: [
-    {
-      title: "ERP migration cutover risk at Riverbank HQ",
-      projectCode: "RBP003",
-      category: "Technical",
-      probability: 3,
-      impact: 4,
-      mitigation: "Add a rollback plan and an extra cutover rehearsal.",
-      ownerEmail: "george.mutuku@riverbank.example.invalid",
-      status: "Open",
-      daysAgo: 4,
-    },
-  ],
-  issues: [
-    {
-      title: "Partner API Gateway scope creep from late partner requirements",
-      projectCode: "RBP002",
-      severity: "Medium",
-      ownerEmail: "farah.karanja@riverbank.example.invalid",
-      status: "Open",
-      daysAgo: 2,
-    },
-  ],
+  portfolios: [],
+  programmes: [],
+  projects: RBS_PROJECTS.map(rbsToProjectSeed),
+  // The old fictional risks/issues referenced projects that no longer exist — no real
+  // RAID data was provided alongside the real project list, so these are left empty
+  // rather than invented.
+  risks: [],
+  issues: [],
 };
 
 // ── Seeding machinery ─────────────────────────────────────────────────────────
@@ -985,6 +1097,7 @@ async function seedTenant(seed: TenantSeed) {
           tenantId: tenant.id,
           code: proj.code,
           name: proj.name,
+          description: proj.description ?? null,
           type: proj.type,
           portfolioId: proj.portfolioKey ? (portfolioIdByKey.get(proj.portfolioKey) ?? null) : null,
           programmeId: proj.programmeKey ? (programmeIdByKey.get(proj.programmeKey) ?? null) : null,
@@ -992,6 +1105,7 @@ async function seedTenant(seed: TenantSeed) {
           status: mapStatus(proj.status),
           dueDate: proj.due ? new Date(proj.due) : null,
           budget: proj.budget,
+          team: proj.team ?? null,
         },
       });
       projectIdByCode.set(proj.code, created.id);

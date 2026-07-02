@@ -132,6 +132,7 @@ model Project {
   tenant      Tenant     @relation(fields: [tenantId], references: [id])
   code        String
   name        String
+  description String?
   type        String
   portfolioId String?    @map("portfolio_id")
   portfolio   Portfolio? @relation(fields: [portfolioId], references: [id])
@@ -141,6 +142,9 @@ model Project {
   status      String
   dueDate     DateTime?  @map("due_date")
   budget      String?
+  // Free-text placeholder (e.g. "Project Lead, Contributor") — real per-person assignment
+  // belongs to Resource/Allocation (Phase C), not invented here. Never real employee names.
+  team        String?
   createdAt   DateTime   @default(now()) @map("created_at")
   updatedAt   DateTime   @updatedAt @map("updated_at")
 

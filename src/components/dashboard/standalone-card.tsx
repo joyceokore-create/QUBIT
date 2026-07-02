@@ -1,7 +1,10 @@
+"use client";
+
 import { cn } from "@/lib/utils";
 import type { StandaloneCardData } from "@/server/dashboard";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { EmptyState } from "@/components/dashboard/empty-state";
+import { usePanel } from "@/components/panels/panel-context";
 
 function barColorForStatus(status: string) {
   if (status === "Overdue") return "bg-status-red";
@@ -9,11 +12,18 @@ function barColorForStatus(status: string) {
   return "bg-status-green";
 }
 
-// Individual items open in a slide panel per docs/09-ui-spec.md — that component lands
-// with the portfolio & project drill-down milestone, so these cards are display-only for now.
+// Standalone "programmes" (e.g. FIKRA) are still Project rows in the schema (type:
+// "Programme", no portfolio/programme link) — there's no separate Programme record for
+// them, so every standalone card opens the project panel regardless of its type label.
 function StandaloneCard({ item }: { item: StandaloneCardData }) {
+  const { openProject } = usePanel();
+
   return (
-    <div className="relative rounded-[10px] border border-ink-4 bg-white p-[15px_16px] transition-all hover:border-[#a0c9b0] hover:shadow-[var(--shadow)]">
+    <button
+      type="button"
+      onClick={() => openProject(item.id)}
+      className="relative block w-full rounded-[10px] border border-ink-4 bg-white p-[15px_16px] text-left transition-all hover:border-[#a0c9b0] hover:shadow-[var(--shadow)]"
+    >
       <span
         className={cn(
           "mb-2 inline-block rounded-[3px] px-2 py-0.5 text-[9px] font-bold tracking-[0.5px] uppercase",
@@ -48,7 +58,7 @@ function StandaloneCard({ item }: { item: StandaloneCardData }) {
           </span>
         ))}
       </div>
-    </div>
+    </button>
   );
 }
 
