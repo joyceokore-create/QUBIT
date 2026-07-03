@@ -17,6 +17,8 @@ This is the entry point. Read documents in this order.
 11. **11-security-compliance.md** — security controls and regulatory context.
 12. **12-testing-qa.md** — testing strategy.
 13. **13-glossary.md** — terms and naming conventions.
+14. **14-stakeholder-feedback-backlog.md** — raw stakeholder feedback mapped to phases;
+    reference only, not scheduled work.
 
 ## Document readiness checklist
 
