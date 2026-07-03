@@ -58,9 +58,9 @@ pnpm lint && pnpm typecheck  # quality gates (must pass before a milestone is "d
 
 ## Project status
 
-Milestones 1–5 (database/RLS, auth/RBAC/audit, app shell/theming, Group Overview
-dashboard, portfolio/programme/project drill-down) are complete, plus an unplanned
-**Admin & IAM v1** pass:
+Milestones 1–6 (database/RLS, auth/RBAC/audit, app shell/theming, Group Overview
+dashboard, portfolio/programme/project drill-down, subsidiary view) are complete, plus two
+unplanned passes, **Admin & IAM v1** and **Department / org structure**:
 
 - **Group Overview dashboard** (`/dashboard`): KPI strip, portfolio × subsidiary health
   map (click a cell to drill into that portfolio filtered to a subsidiary, click a
@@ -126,18 +126,29 @@ dashboard, portfolio/programme/project drill-down) are complete, plus an unplann
   `docs/Riverbank Projects.docx` (names, descriptions, per-stage progress); team member
   names were anonymized to generic role labels (`Project Lead`, `Contributor`) per
   CLAUDE.md's no-real-PII rule — never real employee names in seed data.
-- Nav destinations not yet built (subsidiary detail, standalone, RAID) render a
-  `ComingSoon` placeholder naming the milestone that lands them, instead of a dead link.
+- **Subsidiary view** (`/subsidiaries/:orgUnitId`, `src/server/subsidiaries.ts`,
+  `/api/subsidiaries/:orgUnitId/projects`): KPI strip (Total Items/On Track/At Risk/Overdue)
+  scoped to that org unit, and a filterable project table (status chips + client-side
+  search) showing each project's status/progress **for that subsidiary specifically**
+  (from `ProjectOrgStatus`, not the project's overall rollup), with pips highlighting the
+  current org unit and a row click opening the shared project SlidePanel. The heatmap
+  cell's `?sub=` deep-link already correctly targets the portfolio view (Milestone 5,
+  per `docs/09-ui-spec.md`'s Screen 1/2 design) — the sidebar's Subsidiaries group is this
+  page's only entry point, by org unit id.
+- Nav destinations not yet built (standalone, RAID) render a `ComingSoon` placeholder
+  naming the milestone that lands them, instead of a dead link.
 - `tests/rls/` and `tests/unit/` cover cross-tenant isolation, audit-row correctness,
   role-by-role permission checks, the full admin user lifecycle (create → role
   diff → suspend → soft-delete, including self-lockout guards), the project
   create/update lifecycle (duplicate-code rejection, per-tenant code uniqueness,
-  audit before/after snapshots, cross-tenant update rejection), and the department
+  audit before/after snapshots, cross-tenant update rejection), the department
   lifecycle (hierarchy, cycle prevention, delete guards, self-manager rejection,
-  soft-delete cascade nulling `managerId`/`headUserId`, tenant isolation).
+  soft-delete cascade nulling `managerId`/`headUserId`, tenant isolation), and the
+  subsidiary view (KPI counts, per-org-unit status/progress vs. overall rollup,
+  status/search filtering, tenant isolation).
 
-See [`docs/10-build-plan.md`](./docs/10-build-plan.md) for what's next (Milestone 6:
-subsidiary view).
+See [`docs/10-build-plan.md`](./docs/10-build-plan.md) for what's next (Milestone 7:
+RAID — risks, issues, gap report).
 
 `dashboard:read` (needed for `/dashboard`, everyone's post-login landing page) is now
 granted to every role except `DepartmentHead`, a dynamic approval-only role — see
