@@ -992,11 +992,66 @@ const RIVERBANK_SEED: TenantSeed = {
   portfolios: [],
   programmes: [],
   projects: RBS_PROJECTS.map(rbsToProjectSeed),
-  // The old fictional risks/issues referenced projects that no longer exist — no real
-  // RAID data was provided alongside the real project list, so these are left empty
-  // rather than invented.
-  risks: [],
-  issues: [],
+  // Synthetic RAID content (risk/issue text is business data, not personal data) against
+  // the real RBS-xx project codes, owned by the already-seeded synthetic Riverbank
+  // identities above — added for Milestone 7 so the RAID screen isn't empty on day one.
+  risks: [
+    {
+      title: "Lumi vendor delivery slippage across all three delayed milestones",
+      projectCode: "RBS-06",
+      category: "Operational",
+      probability: 4,
+      impact: 4,
+      mitigation: "Escalate to vendor account lead; re-baseline BRD/MVP1/SIT dates.",
+      ownerEmail: "george.mutuku@riverbank.example.invalid",
+      // "Closed" (not "Open") because it's materialised below — matches the invariant
+      // src/server/risks.ts's materialiseRisk() enforces (a materialised risk is always
+      // "Closed", distinguished from a resolved one only by the issue link).
+      status: "Closed",
+      daysAgo: 4,
+    },
+    {
+      title: "Zuqi go/no-go pilot pending after two rejected stage gates",
+      projectCode: "RBS-25",
+      category: "Pilot/Test Area",
+      probability: 3,
+      impact: 3,
+      mitigation: "Re-scope BRD/approval stage before re-attempting the SIT-area pilot.",
+      ownerEmail: "farah.karanja@riverbank.example.invalid",
+      status: "Monitoring",
+      daysAgo: 10,
+    },
+    {
+      title: "RetailFlow SIT resourcing gap ahead of UAT",
+      projectCode: "RBS-08",
+      category: "Operational",
+      probability: 3,
+      impact: 3,
+      mitigation: "Backfill a QA contractor for the SIT window.",
+      ownerEmail: "hannah.chebet@riverbank.example.invalid",
+      status: "Open",
+      daysAgo: 6,
+    },
+  ],
+  issues: [
+    {
+      title: "Lumi vendor delay materialised into a missed SIT milestone",
+      projectCode: "RBS-06",
+      severity: "High",
+      ownerEmail: "george.mutuku@riverbank.example.invalid",
+      status: "Open",
+      originRiskTitle: "Lumi vendor delivery slippage across all three delayed milestones",
+      daysAgo: 2,
+    },
+    {
+      title: "Asset Valuation data-mapping discrepancy found in Business Case review",
+      projectCode: "RBS-02",
+      severity: "Medium",
+      ownerEmail: "joyce.okore@riverbank.solutions",
+      status: "Open",
+      daysAgo: 3,
+    },
+  ],
 };
 
 // ── Seeding machinery ─────────────────────────────────────────────────────────

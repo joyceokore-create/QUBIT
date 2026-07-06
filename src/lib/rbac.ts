@@ -11,7 +11,17 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
   // day-to-day user who needs a dashboard landing page.
   ProjectManager: ["dashboard:read", "project:*", "risk:*", "issue:*", "task:*"],
   FinanceManager: ["dashboard:read", "finance:*"],
-  Contributor: ["dashboard:read", "task:*", "risk:create", "issue:create", "timesheet:submit"],
+  // risk:read/issue:read added (Milestone 7) — a role that can create but not see its own
+  // risks/issues couldn't even reach the "Risks & Issues" nav item, gated on risk:read.
+  Contributor: [
+    "dashboard:read",
+    "task:*",
+    "risk:read",
+    "risk:create",
+    "issue:read",
+    "issue:create",
+    "timesheet:submit",
+  ],
   Viewer: ["*:read"],
   DepartmentHead: ["approvals:decide"],
   // Cross-tenant admin — read-only oversight everywhere, no business-data authoring

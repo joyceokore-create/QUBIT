@@ -32,11 +32,13 @@ describe("rbac.can()", () => {
     expect(can(ctx, "iam:manage")).toBe(false);
   });
 
-  it("limits Contributor to dashboard + task work plus creating (not updating) risks/issues", () => {
+  it("limits Contributor to dashboard + task work plus reading/creating (not updating) risks/issues", () => {
     const ctx = ctxWithRoles(["Contributor"]);
     expect(can(ctx, "dashboard:read")).toBe(true);
     expect(can(ctx, "task:update")).toBe(true);
+    expect(can(ctx, "risk:read")).toBe(true);
     expect(can(ctx, "risk:create")).toBe(true);
+    expect(can(ctx, "issue:read")).toBe(true);
     expect(can(ctx, "issue:create")).toBe(true);
     expect(can(ctx, "timesheet:submit")).toBe(true);
     expect(can(ctx, "risk:update")).toBe(false);

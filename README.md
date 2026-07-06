@@ -58,9 +58,9 @@ pnpm lint && pnpm typecheck  # quality gates (must pass before a milestone is "d
 
 ## Project status
 
-Milestones 1–6 (database/RLS, auth/RBAC/audit, app shell/theming, Group Overview
-dashboard, portfolio/programme/project drill-down, subsidiary view) are complete, plus two
-unplanned passes, **Admin & IAM v1** and **Department / org structure**:
+Milestones 1–7 (database/RLS, auth/RBAC/audit, app shell/theming, Group Overview
+dashboard, portfolio/programme/project drill-down, subsidiary view, RAID) are complete,
+plus two unplanned passes, **Admin & IAM v1** and **Department / org structure**:
 
 - **Group Overview dashboard** (`/dashboard`): KPI strip, portfolio × subsidiary health
   map (click a cell to drill into that portfolio filtered to a subsidiary, click a
@@ -135,20 +135,37 @@ unplanned passes, **Admin & IAM v1** and **Department / org structure**:
   cell's `?sub=` deep-link already correctly targets the portfolio view (Milestone 5,
   per `docs/09-ui-spec.md`'s Screen 1/2 design) — the sidebar's Subsidiaries group is this
   page's only entry point, by org unit id.
-- Nav destinations not yet built (standalone, RAID) render a `ComingSoon` placeholder
-  naming the milestone that lands them, instead of a dead link.
+- **RAID** (`/risks`, tabs: Risks | Issues | Gap Report; `src/server/risks.ts`,
+  `issues.ts`, `raid.ts`; `/api/risks`, `/api/issues`, `/api/raid/gap-report`): a risk
+  register with a new probability×impact heat rating (1–25 score bucketed into
+  Low/Medium/High/Critical, reusing the app's existing 4 status colors), owner assignment,
+  and a one-way "Materialise" action that converts a risk into an issue while preserving
+  `originRiskId` — the risk's status flips to the existing `"Closed"` terminal value (not a
+  new status) so the sidebar's open-count badge keeps working unmodified, and a
+  `materialised` flag distinguishes "closed via materialise" from "closed via resolution" in
+  the UI. The Gap Report tab flags issues with no prior tracked risk, or whose origin risk
+  currently has no owner/mitigation — supporting the PRD's post-implementation-review use
+  case. The PRD's pilot-phase/go-no-go use case is covered via `Risk.category =
+  "Pilot/Test Area"`, no dedicated entity. `Contributor`'s RBAC grant gained
+  `risk:read`/`issue:read` (previously had create-only access and couldn't even see the nav
+  item). Riverbank was seeded with synthetic risks/issues (real `RBS-xx` project codes,
+  already-seeded synthetic owners) since none existed before this milestone.
+- Nav destinations not yet built (standalone) render a `ComingSoon` placeholder naming the
+  milestone that lands them, instead of a dead link.
 - `tests/rls/` and `tests/unit/` cover cross-tenant isolation, audit-row correctness,
   role-by-role permission checks, the full admin user lifecycle (create → role
   diff → suspend → soft-delete, including self-lockout guards), the project
   create/update lifecycle (duplicate-code rejection, per-tenant code uniqueness,
   audit before/after snapshots, cross-tenant update rejection), the department
   lifecycle (hierarchy, cycle prevention, delete guards, self-manager rejection,
-  soft-delete cascade nulling `managerId`/`headUserId`, tenant isolation), and the
-  subsidiary view (KPI counts, per-org-unit status/progress vs. overall rollup,
-  status/search filtering, tenant isolation).
+  soft-delete cascade nulling `managerId`/`headUserId`, tenant isolation), the subsidiary
+  view (KPI counts, per-org-unit status/progress vs. overall rollup, status/search
+  filtering, tenant isolation), and the RAID lifecycle (create/update audit trail,
+  materialise creating the issue + closing the risk + rejecting a second materialise, gap
+  report classification, tenant isolation).
 
-See [`docs/10-build-plan.md`](./docs/10-build-plan.md) for what's next (Milestone 7:
-RAID — risks, issues, gap report).
+See [`docs/10-build-plan.md`](./docs/10-build-plan.md) for what's next (Milestone 8:
+hardening & polish).
 
 `dashboard:read` (needed for `/dashboard`, everyone's post-login landing page) is now
 granted to every role except `DepartmentHead`, a dynamic approval-only role — see

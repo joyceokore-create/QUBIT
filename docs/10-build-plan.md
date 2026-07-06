@@ -60,6 +60,9 @@ audited. Ask for review before starting the next.
 - Materialise risk → issue preserving `originRiskId`; issues list.
 - Gap report endpoint + screen (PIR: occurred issues vs owned risks).
 - **Done when:** the three PMO use cases in `docs/01-prd.md` are demonstrable end to end.
+- PMO use case #2 (pilot-phase test-area identification, pre-GTM go/no-go) is covered via
+  `Risk.category = "Pilot/Test Area"` — no dedicated `TestArea` entity; the Risks tab's list
+  and filters give the needed visibility.
 
 ## Milestone 8 — Hardening & polish
 - Accessibility pass; error boundaries; consistent empty/loading; toasts (sonner).
