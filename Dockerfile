@@ -3,14 +3,14 @@
 # `prisma migrate deploy` at startup, then serves the standalone server.
 
 # ── 1. Dependencies ────────────────────────────────────────────────────────────
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml .npmrc ./
 RUN corepack enable && pnpm install --frozen-lockfile
 
 # ── 2. Build ─────────────────────────────────────────────────────────────────--
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
@@ -19,7 +19,7 @@ COPY . .
 RUN corepack enable && pnpm prisma generate && pnpm build
 
 # ── 3. Runner ────────────────────────────────────────────────────────────────--
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 RUN apk add --no-cache openssl
 WORKDIR /app
 ENV NODE_ENV=production \
@@ -35,12 +35,12 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# Prisma schema + migrations + CLI + generated client, so the entrypoint can run
-# `prisma migrate deploy` (schema + RLS policies) against the live DB at startup.
+# Prisma schema + migrations, plus the FULL node_modules so the Prisma CLI can run
+# `prisma migrate deploy` (schema + RLS policies) at startup. The Next standalone trace
+# bundles the app's runtime deps but omits the CLI's own deps (e.g. @prisma/config →
+# effect), so we copy node_modules wholesale over the standalone one.
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules ./node_modules
 COPY docker/entrypoint.sh ./entrypoint.sh
 
 RUN chmod +x ./entrypoint.sh && chown -R nextjs:nodejs /app
