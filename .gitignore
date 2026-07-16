@@ -49,3 +49,6 @@ design_handoff_qubit_ai_command_center*/
 
 # Claude Code agent worktrees, transcripts, plans (not project source)
 .claude/
+
+# Generated deploy secrets (per-host)
+docker/.deploy.env

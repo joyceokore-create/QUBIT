@@ -51,5 +51,19 @@ services:
     ports:
       - "${APP_PORT:-3000}:3000"
 
+  # One-off toolchain (full deps + source + tsx) for scripts like bootstrap-tenant.
+  # Not started by `up` (profile-gated); invoked via `docker compose --profile tools run`.
+  tools:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    profiles: ["tools"]
+    env_file:
+      - .env.production
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   pgdata:
