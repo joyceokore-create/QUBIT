@@ -1,0 +1,55 @@
+# QUBIT — production-ish container stack (app + Postgres 17).
+#
+# Setup:
+#   1. cp .env.production.example .env.production   # fill AUTH_SECRET, MFA_ENCRYPTION_KEY,
+#                                                   #   AUTH_URL (your domain), Q_AI_* …
+#   2. Set POSTGRES_PASSWORD + APP_DB_PASSWORD below (or via a compose .env), and make the
+#      DATABASE_URL password in .env.production match APP_DB_PASSWORD, host = `db`:
+#        DATABASE_URL="postgresql://qubit:<APP_DB_PASSWORD>@db:5432/qubit?schema=public"
+#   3. docker compose up -d --build
+#   4. First deploy only — create the tenant + first admin (NOT the demo seed):
+#        docker compose exec app node node_modules/prisma/build/index.js migrate status
+#        docker compose run --rm --entrypoint sh app -c \
+#          'ADMIN_EMAIL=you@yourco.com ADMIN_NAME="You" npx tsx scripts/bootstrap-tenant.ts --tenant riverbank'
+#      (bootstrap needs the dev toolchain; alternatively run it from a checkout against the DB.)
+#
+# RLS: the app connects as the NON-superuser `qubit` role created by docker/db-init.sh, so
+# the per-table FORCE row-level security is enforced. Never point DATABASE_URL at postgres.
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-qubit}
+      # Consumed by db-init.sh to create the non-superuser app role.
+      APP_DB_USER: ${APP_DB_USER:-qubit}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-qubit}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/db-init.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${POSTGRES_DB:-qubit}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    # Not published by default — only the app needs it. Uncomment to inspect locally.
+    # ports: ["5432:5432"]
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-3000}:3000"
+
+volumes:
+  pgdata:

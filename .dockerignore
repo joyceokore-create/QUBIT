@@ -1,0 +1,32 @@
+# Build context hygiene — keep the image lean and never bake secrets/artifacts in.
+node_modules
+.next
+out
+build
+dist
+
+# Secrets & local env (injected at runtime via env_file / secret store)
+.env
+.env.*.local
+.env.production
+
+# Onboarding PII / import artifacts (org rule: never leaves the operator's machine)
+import
+
+# VCS, agent, and design artifacts
+.git
+.claude
+*.zip
+design_handoff_qubit_ai_command_center*/
+
+# Tests, reports, docs — not needed in the runtime image
+tests
+playwright-report
+test-results
+coverage
+docs
+*.md
+
+# Misc
+.DS_Store
+*.log
