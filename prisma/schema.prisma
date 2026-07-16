@@ -37,6 +37,44 @@ model Tenant {
   issues           Issue[]
   auditLogs        AuditLog[]
 
+  // ── ClickUp transformation (docs/clickup-transformation) — additive ──
+  spaces           Space[]
+  folders          Folder[]
+  lists            List[]
+  statusGroups     StatusGroup[]
+  statuses         Status[]
+  tasksV2          Task[]
+  taskDependencies TaskDependency[]
+  tags             Tag[]
+  taskTags         TaskTag[]
+  taskAssignees    TaskAssignee[]
+  taskWatchers     TaskWatcher[]
+  activities       Activity[]
+  checklists       Checklist[]
+  checklistItems   ChecklistItem[]
+  comments         Comment[]
+  fieldDefinitions FieldDefinition[]
+  fieldValues      FieldValue[]
+  views            View[]
+  timeEntries      TimeEntry[]
+  automations      Automation[]
+  automationRuns   AutomationRun[]
+
+  // ── MVP1 — Riverbank teams & resource allocation ──
+  teams            Team[]
+  teamMembers      TeamMember[]
+  projectMembers   ProjectMember[]
+  projectTeams     ProjectTeam[]
+  aiCallLogs       AiCallLog[]
+  projectTasks     ProjectTask[]
+  blockers         Blocker[]
+  projectDocuments ProjectDocument[]
+  statusUpdates    ProjectStatusUpdate[]
+  notifications    Notification[]
+  projectIntegrations ProjectIntegration[]
+  projectMilestones ProjectMilestone[]
+  sharedReports    SharedReport[]
+
   @@map("tenant")
 }
 
@@ -68,6 +106,8 @@ model User {
   mfaSecret               String?  @map("mfa_secret") // encrypted at rest, see src/lib/mfa.ts
   status                  String   @default("ACTIVE") // "ACTIVE" | "SUSPENDED" | "DELETED"
   deletedAt               DateTime? @map("deleted_at")
+  lastLoginAt             DateTime? @map("last_login_at") // null = invited but never signed in
+  mustChangePassword      Boolean  @default(false) @map("must_change_password") // invited users reset on first sign-in
   departmentId            String?     @map("department_id")
   department              Department? @relation("UserDepartment", fields: [departmentId], references: [id])
   // Who this user reports to. Self-relation — see docs/05-data-model.md. Longer manager
@@ -83,8 +123,219 @@ model User {
   reports           User[]           @relation("UserManager")
   headOfDepartments Department[]     @relation("DepartmentHead")
 
+  // ── ClickUp transformation (docs/clickup-transformation) — additive ──
+  tasksCreated      Task[]           @relation("TaskCreatedBy")
+  taskAssignments   TaskAssignee[]
+  taskWatching      TaskWatcher[]
+  commentsAuthored  Comment[]
+
+  // ── MVP1 — Riverbank teams & resource allocation ──
+  teamsLed          Team[]           @relation("TeamLead")
+  teamMemberships   TeamMember[]
+  projectAllocations ProjectMember[]
+  projectsLed       Project[]        @relation("ProjectLead")
+  aiCallLogs        AiCallLog[]
+  assignedProjectTasks ProjectTask[] @relation("ProjectTaskAssignee")
+  ownedBlockers     Blocker[]        @relation("BlockerOwner")
+  authoredDocuments ProjectDocument[] @relation("DocumentAuthor")
+  statusUpdatesPosted ProjectStatusUpdate[] @relation("StatusAuthor")
+  notifications     Notification[]   @relation("UserNotifications")
+  sharedReports     SharedReport[]   @relation("SharedReportAuthor")
+
   @@unique([tenantId, email])
   @@map("user")
+}
+
+// Q copilot call log (MVP1 Phase C). Metrics only — NEVER prompt text, report
+// content, or PII. Tenant-scoped + RLS like every other table. See src/server/q.
+model AiCallLog {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  userId       String?  @map("user_id")
+  user         User?    @relation(fields: [userId], references: [id])
+  purpose      String   // "report:project" | "report:resource" | "report:portfolio"
+  model        String
+  usedAi       Boolean  @default(true) @map("used_ai")
+  inputTokens  Int      @default(0) @map("input_tokens")
+  outputTokens Int      @default(0) @map("output_tokens")
+  latencyMs    Int      @default(0) @map("latency_ms")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt])
+  @@map("ai_call_log")
+}
+
+// A point-in-time report snapshot published for sharing (MVP1 reports centre). Stores the
+// rendered Markdown so a shared link is stable (doesn't drift as underlying data changes).
+// Tenant-scoped + RLS: a link resolves only for a signed-in viewer in the same tenant.
+model SharedReport {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  // High-entropy URL token (never the id) — see src/server/q/shares.ts.
+  token       String   @unique
+  type        String // project | resource | portfolio | manager | member
+  targetId    String?  @map("target_id") // the project/person the report is about, if any
+  title       String
+  periodLabel String   @map("period_label")
+  markdown    String
+  usedAi      Boolean  @default(false) @map("used_ai")
+  createdById String?  @map("created_by_id")
+  createdBy   User?    @relation("SharedReportAuthor", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt])
+  @@map("shared_report")
+}
+
+// MVP1 PRD Modules 5–7 — executable project tasks (AI-generated from a BRD/plan or added
+// manually), their execution status, and the data auto-progress is computed from. Distinct
+// from the ClickUp `task` model (that surface is out of the MVP nav).
+model ProjectTask {
+  id          String    @id @default(uuid())
+  tenantId    String    @map("tenant_id")
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  projectId   String    @map("project_id")
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  phase       String? // Discovery / Requirements / Design / … (PRD Module 4)
+  ownerRole   String?   @map("owner_role") // suggested project role (PRD Module 5)
+  priority    String    @default("Medium") // Low | Medium | High | Critical
+  status      String    @default("NotStarted") // NotStarted | InProgress | Blocked | Completed
+  estimate    String? // free-form estimated effort, e.g. "3d"
+  assigneeId  String?   @map("assignee_id")
+  assignee    User?     @relation("ProjectTaskAssignee", fields: [assigneeId], references: [id])
+  dueDate     DateTime? @map("due_date")
+  orderIndex  Int       @default(0) @map("order_index")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([tenantId, projectId])
+  @@map("project_task")
+}
+
+// MVP1 PRD Module 10 — Blocker Register. Distinct from Risk (a future possibility) and
+// Issue (a materialised risk): a blocker is a live impediment on a project right now.
+model Blocker {
+  id              String   @id @default(uuid())
+  tenantId        String   @map("tenant_id")
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  projectId       String   @map("project_id")
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  description     String
+  severity        String   @default("Medium") // Low | Medium | Critical
+  status          String   @default("Open") // Open | Resolved
+  ownerId         String?  @map("owner_id")
+  owner           User?    @relation("BlockerOwner", fields: [ownerId], references: [id])
+  resolutionNotes String?  @map("resolution_notes")
+  dateRaised      DateTime @default(now()) @map("date_raised")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId, projectId])
+  @@map("blocker")
+}
+
+// Project Workspace — attached documentation (BRD, plans, specs). `content` holds the
+// text/markdown body (also what Q grounds on); `fileData` holds a base64 blob for PDF
+// uploads (download). A doc can be Uploaded or AI-drafted and move through a review state.
+model ProjectDocument {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  projectId   String   @map("project_id")
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String
+  kind        String   @default("Other") // BRD | Plan | Spec | Note | Other
+  format      String   @default("text") // text | markdown | pdf
+  content     String? // text/markdown body
+  fileData    String?  @map("file_data") // base64 (pdf uploads)
+  status      String   @default("Final") // Draft | PendingReview | Final
+  source      String   @default("Uploaded") // Uploaded | AIDrafted
+  createdById String?  @map("created_by_id")
+  createdBy   User?    @relation("DocumentAuthor", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId, projectId])
+  @@map("project_document")
+}
+
+// Project Workspace — status updates. Posting one fans out Notifications to the project's
+// managers and testers (see src/server/status-updates.ts).
+model ProjectStatusUpdate {
+  id         String   @id @default(uuid())
+  tenantId   String   @map("tenant_id")
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  projectId  String   @map("project_id")
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  body       String
+  rag        String   @default("Green") // Green | Amber | Red
+  postedById String?  @map("posted_by_id")
+  postedBy   User?    @relation("StatusAuthor", fields: [postedById], references: [id])
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, projectId])
+  @@map("project_status_update")
+}
+
+// In-app notifications (workspace loop). Tenant-scoped; each row targets one recipient.
+model Notification {
+  id        String    @id @default(uuid())
+  tenantId  String    @map("tenant_id")
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  userId    String    @map("user_id")
+  user      User      @relation("UserNotifications", fields: [userId], references: [id])
+  kind      String // status_update | brd_review
+  message   String
+  link      String?
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([tenantId, userId, readAt])
+  @@map("notification")
+}
+
+// Project Workspace — per-project integration connections (GitHub, YouTrack, Teams, …).
+// Stores connect state + the linked resource; live data sync (that "Feeds Q") is wired via
+// connectors in a later phase — this is the config surface.
+model ProjectIntegration {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  projectId String   @map("project_id")
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  provider  String // github | youtrack | teams | calendar | github_actions | sentry
+  connected Boolean  @default(false)
+  resource  String? // repo / channel / project identifier
+  secret    String? // encrypted access token (src/lib/secret-box.ts) — never plaintext
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([projectId, provider])
+  @@index([tenantId, projectId])
+  @@map("project_integration")
+}
+
+// PRD Module 8 — project milestones (schedule checkpoints). Powers the workspace Deadlines
+// tab; overdue = Pending with a past due date.
+model ProjectMilestone {
+  id         String    @id @default(uuid())
+  tenantId   String    @map("tenant_id")
+  tenant     Tenant    @relation(fields: [tenantId], references: [id])
+  projectId  String    @map("project_id")
+  project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name       String
+  dueDate    DateTime? @map("due_date")
+  status     String    @default("Pending") // Pending | Done
+  orderIndex Int       @default(0) @map("order_index")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  @@index([tenantId, projectId])
+  @@map("project_milestone")
 }
 
 // Org-structure hierarchy — ships empty (see docs/05-data-model.md). Optionally scoped to
@@ -174,6 +425,12 @@ model Project {
   code        String
   name        String
   description String?
+  // PRD Module 2 — project definition fields (all optional; back-compat).
+  client        String?
+  objective     String?
+  mission       String?
+  businessOwner String?   @map("business_owner")
+  startDate     DateTime? @map("start_date")
   type        String
   portfolioId String?    @map("portfolio_id")
   portfolio   Portfolio? @relation(fields: [portfolioId], references: [id])
@@ -183,15 +440,25 @@ model Project {
   status      String
   dueDate     DateTime?  @map("due_date")
   budget      String?
-  // Free-text placeholder (e.g. "Project Lead, Contributor") — real per-person assignment
-  // belongs to Resource/Allocation (Phase C), not invented here. Never real employee names.
+  // Legacy free-text summary (kept for back-compat). Real per-person assignment now
+  // lives in ProjectMember; teams assigned via ProjectTeam (MVP1).
   team        String?
+  leadUserId  String?    @map("lead_user_id")
+  lead        User?      @relation("ProjectLead", fields: [leadUserId], references: [id])
   createdAt   DateTime   @default(now()) @map("created_at")
   updatedAt   DateTime   @updatedAt @map("updated_at")
 
   orgStatuses ProjectOrgStatus[]
   risks       Risk[]
   issues      Issue[]
+  members     ProjectMember[]
+  teams       ProjectTeam[]
+  projectTasks ProjectTask[]
+  blockers    Blocker[]
+  documents   ProjectDocument[]
+  statusUpdates ProjectStatusUpdate[]
+  integrations ProjectIntegration[]
+  milestonesV2 ProjectMilestone[]
 
   @@unique([tenantId, code])
   @@map("project")
@@ -285,4 +552,571 @@ model AuditLog {
   createdAt  DateTime @default(now()) @map("created_at")
 
   @@map("audit_log")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ClickUp transformation — Phase 0 foundation (docs/clickup-transformation/03-data-model.md)
+// Additive only: existing PPM tables above are untouched until Phase 8.
+// Conventions kept from the PPM schema: snake_case @map, tenant_id + Tenant
+// relation, RLS policy per table (prisma/rls.sql). New models use cuid ids
+// (per the spec) and fractional Float orderIndex. Decision log: DECISIONS.md.
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum LocationType {
+  SPACE
+  FOLDER
+  LIST
+  EVERYTHING
+  USER
+}
+
+enum StatusType {
+  OPEN
+  ACTIVE
+  DONE
+  CLOSED
+}
+
+enum Priority {
+  URGENT
+  HIGH
+  NORMAL
+  LOW
+}
+
+enum DependencyType {
+  BLOCKS
+  WAITING_ON
+  LINKED
+}
+
+// ── Hierarchy: Space → Folder → List ──────────────────────────────────────
+
+model Space {
+  id         String   @id @default(cuid())
+  tenantId   String   @map("tenant_id")
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  name       String
+  icon       String? // emoji or token key
+  color      String? // token key, never raw hex
+  isPrivate  Boolean  @default(false) @map("is_private")
+  archived   Boolean  @default(false)
+  orderIndex Float    @map("order_index")
+  settings   Json     @default("{}") // ClickApps toggles
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  folders      Folder[]
+  lists        List[] // folderless lists
+  statusGroups StatusGroup[]
+  tags         Tag[]
+
+  @@index([tenantId])
+  @@map("space")
+}
+
+model Folder {
+  id         String   @id @default(cuid())
+  tenantId   String   @map("tenant_id")
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  spaceId    String   @map("space_id")
+  space      Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  parentId   String?  @map("parent_id") // subfolders
+  parent     Folder?  @relation("FolderParent", fields: [parentId], references: [id], onDelete: Cascade)
+  children   Folder[] @relation("FolderParent")
+  name       String
+  archived   Boolean  @default(false)
+  orderIndex Float    @map("order_index")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  lists List[]
+
+  @@index([tenantId, spaceId])
+  @@map("folder")
+}
+
+model List {
+  id                String       @id @default(cuid())
+  tenantId          String       @map("tenant_id")
+  tenant            Tenant       @relation(fields: [tenantId], references: [id])
+  spaceId           String       @map("space_id")
+  space             Space        @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  folderId          String?      @map("folder_id") // null = folderless
+  folder            Folder?      @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  name              String
+  description       Json? // editor JSON
+  archived          Boolean      @default(false)
+  orderIndex        Float        @map("order_index")
+  statusGroupId     String?      @map("status_group_id") // null = inherit from folder/space
+  statusGroup       StatusGroup? @relation(fields: [statusGroupId], references: [id])
+  defaultAssigneeId String?      @map("default_assignee_id") // info field, resolved in app
+  startDate         DateTime?    @map("start_date")
+  dueDate           DateTime?    @map("due_date")
+  priority          Int? // list-level info field
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  tasks Task[]
+
+  @@index([tenantId, spaceId])
+  @@map("list")
+}
+
+// ── Statuses ───────────────────────────────────────────────────────────────
+
+model StatusGroup {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  spaceId   String?  @map("space_id") // owning space (null = reusable/global)
+  space     Space?   @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  statuses Status[]
+  lists    List[]
+
+  @@index([tenantId])
+  @@map("status_group")
+}
+
+model Status {
+  id            String      @id @default(cuid())
+  tenantId      String      @map("tenant_id") // added for uniform RLS (see DECISIONS.md)
+  tenant        Tenant      @relation(fields: [tenantId], references: [id])
+  statusGroupId String      @map("status_group_id")
+  statusGroup   StatusGroup @relation(fields: [statusGroupId], references: [id], onDelete: Cascade)
+  name          String
+  colorToken    String      @map("color_token") // semantic token (RAG palette stays semantic)
+  type          StatusType
+  orderIndex    Float       @map("order_index")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  tasks Task[]
+
+  @@index([tenantId, statusGroupId])
+  @@map("status")
+}
+
+// ── Tasks ────────────────────────────────────────────────────────────────
+
+model Task {
+  id           String    @id @default(cuid())
+  tenantId     String    @map("tenant_id")
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  listId       String    @map("list_id")
+  list         List      @relation(fields: [listId], references: [id], onDelete: Cascade)
+  parentId     String?   @map("parent_id") // subtask (unlimited nesting; UI caps at 3)
+  parent       Task?     @relation("TaskParent", fields: [parentId], references: [id], onDelete: Cascade)
+  children     Task[]    @relation("TaskParent")
+  name         String
+  description  Json? // editor JSON
+  statusId     String    @map("status_id")
+  status       Status    @relation(fields: [statusId], references: [id])
+  priority     Priority?
+  startDate    DateTime? @map("start_date")
+  dueDate      DateTime? @map("due_date")
+  isMilestone  Boolean   @default(false) @map("is_milestone")
+  timeEstimate Int?      @map("time_estimate") // minutes
+  sprintPoints Float?    @map("sprint_points")
+  orderIndex   Float     @map("order_index")
+  archived     Boolean   @default(false)
+  deletedAt    DateTime? @map("deleted_at")
+  createdById  String    @map("created_by_id")
+  createdBy    User      @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  seq          Int // per-tenant human ID → "QBT-1042"
+  recurrence   Json? // RRULE + behavior
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  assignees    TaskAssignee[]
+  watchers     TaskWatcher[]
+  tags         TaskTag[]
+  dependencies TaskDependency[] @relation("DependencyFrom")
+  dependents   TaskDependency[] @relation("DependencyTo")
+  checklists   Checklist[]
+  comments     Comment[]
+  fieldValues  FieldValue[]
+  timeEntries  TimeEntry[]
+
+  @@unique([tenantId, seq])
+  @@index([tenantId, listId, statusId])
+  @@index([tenantId, dueDate])
+  @@map("task")
+}
+
+model TaskDependency {
+  id        String         @id @default(cuid())
+  tenantId  String         @map("tenant_id")
+  tenant    Tenant         @relation(fields: [tenantId], references: [id])
+  fromId    String         @map("from_id") // blocking task
+  from      Task           @relation("DependencyFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  toId      String         @map("to_id") // waiting task
+  to        Task           @relation("DependencyTo", fields: [toId], references: [id], onDelete: Cascade)
+  type      DependencyType
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  @@unique([fromId, toId, type])
+  @@index([tenantId])
+  @@map("task_dependency")
+}
+
+model Tag {
+  id         String   @id @default(cuid())
+  tenantId   String   @map("tenant_id")
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  spaceId    String   @map("space_id")
+  space      Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  name       String
+  colorToken String   @map("color_token")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  taskTags TaskTag[]
+
+  @@unique([spaceId, name])
+  @@index([tenantId])
+  @@map("tag")
+}
+
+model TaskTag {
+  tenantId String @map("tenant_id") // added for uniform RLS (see DECISIONS.md)
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+  taskId   String @map("task_id")
+  task     Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tagId    String @map("tag_id")
+  tag      Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, tagId])
+  @@index([tenantId])
+  @@map("task_tag")
+}
+
+model TaskAssignee {
+  tenantId String @map("tenant_id") // added for uniform RLS (see DECISIONS.md)
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+  taskId   String @map("task_id")
+  task     Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId   String @map("user_id")
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@index([tenantId])
+  @@map("task_assignee")
+}
+
+model TaskWatcher {
+  tenantId String @map("tenant_id") // added for uniform RLS (see DECISIONS.md)
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+  taskId   String @map("task_id")
+  task     Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId   String @map("user_id")
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@index([tenantId])
+  @@map("task_watcher")
+}
+
+// ── Activity: immutable event log (feeds activity tab, automations, audit) ──
+
+model Activity {
+  id         String   @id @default(cuid())
+  tenantId   String   @map("tenant_id")
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  actorId    String?  @map("actor_id") // null = system / automation / Q
+  objectType String   @map("object_type")
+  objectId   String   @map("object_id")
+  verb       String // e.g. task.status_changed, comment.added
+  data       Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, objectType, objectId, createdAt])
+  @@map("activity")
+}
+
+// ── Checklists & Comments (Phase 1 Increment 3 — 04-module-specs §2) ─────────
+
+model Checklist {
+  id         String   @id @default(cuid())
+  tenantId   String   @map("tenant_id")
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  taskId     String   @map("task_id")
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  name       String
+  orderIndex Float    @map("order_index")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  items ChecklistItem[]
+
+  @@index([tenantId, taskId])
+  @@map("checklist")
+}
+
+model ChecklistItem {
+  id          String    @id @default(cuid())
+  tenantId    String    @map("tenant_id") // for uniform RLS (DECISIONS D0.1)
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  checklistId String    @map("checklist_id")
+  checklist   Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  name        String
+  done        Boolean   @default(false)
+  assigneeId  String?   @map("assignee_id") // may reference a user; no FK (see DECISIONS)
+  orderIndex  Float     @map("order_index")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([tenantId, checklistId])
+  @@map("checklist_item")
+}
+
+model Comment {
+  id           String    @id @default(cuid())
+  tenantId     String    @map("tenant_id")
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  taskId       String    @map("task_id")
+  task         Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId     String    @map("author_id")
+  author       User      @relation(fields: [authorId], references: [id])
+  parentId     String?   @map("parent_id") // one-level threading
+  parent       Comment?  @relation("CommentThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies      Comment[] @relation("CommentThread")
+  content      Json // editor JSON (text/mentions/task links)
+  assignedToId String?   @map("assigned_to_id") // "assigned comment" action item
+  resolvedAt   DateTime? @map("resolved_at")
+  reactions    Json      @default("{}") // { "👍": [userId, …] }
+  editedAt     DateTime? @map("edited_at")
+  deletedAt    DateTime? @map("deleted_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@index([tenantId, taskId, createdAt])
+  @@map("comment")
+}
+
+// ── Custom fields (Phase 1 Increment 6 — 04-module-specs §3) ─────────────────
+
+enum FieldType {
+  TEXT
+  LONG_TEXT
+  NUMBER
+  MONEY
+  DATE
+  DROPDOWN
+  LABELS
+  CHECKBOX
+  URL
+  EMAIL
+  PHONE
+  PEOPLE
+  RATING
+  PROGRESS_AUTO
+  PROGRESS_MANUAL
+  FORMULA
+  RELATIONSHIP
+  FILES
+  AI
+}
+
+model FieldDefinition {
+  id           String       @id @default(cuid())
+  tenantId     String       @map("tenant_id")
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  locationType LocationType @map("location_type") // SPACE | FOLDER | LIST — inherited downward
+  locationId   String       @map("location_id")
+  name         String
+  type         FieldType
+  config       Json         @default("{}") // options, currency, formula, ai prompt, etc.
+  required     Boolean      @default(false)
+  orderIndex   Float        @map("order_index")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  values FieldValue[]
+
+  @@index([tenantId, locationType, locationId])
+  @@map("field_definition")
+}
+
+model FieldValue {
+  id       String          @id @default(cuid())
+  tenantId String          @map("tenant_id")
+  tenant   Tenant          @relation(fields: [tenantId], references: [id])
+  taskId   String          @map("task_id")
+  task     Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fieldId  String          @map("field_id")
+  field    FieldDefinition @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  value    Json // typed by FieldType, Zod-validated server-side
+
+  @@unique([taskId, fieldId])
+  @@index([tenantId, taskId])
+  @@map("field_value")
+}
+
+// ── Views engine (Phase 2 — 03-data-model.md §Views) ─────────────────────────
+
+enum ViewType {
+  LIST
+  BOARD
+  CALENDAR
+  GANTT
+  TABLE
+  TIMELINE
+  WORKLOAD
+  MINDMAP
+}
+
+model View {
+  id           String       @id @default(cuid())
+  tenantId     String       @map("tenant_id")
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  locationType LocationType @map("location_type") // SPACE | FOLDER | LIST | EVERYTHING | USER
+  locationId   String?      @map("location_id")
+  type         ViewType
+  name         String
+  isDefault    Boolean      @default(false) @map("is_default")
+  isPinned     Boolean      @default(false) @map("is_pinned")
+  createdById  String       @map("created_by_id")
+  config       Json         @default("{}") // { filters[], groupBy, sortBy[], visibleFieldIds[], meMode }
+  shareToken   String?      @unique @map("share_token")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  @@index([tenantId, locationType, locationId])
+  @@map("view")
+}
+
+// ── Time tracking (Phase 3 — 03-data-model.md §Time) ─────────────────────────
+
+model TimeEntry {
+  id          String    @id @default(cuid())
+  tenantId    String    @map("tenant_id")
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  taskId      String    @map("task_id")
+  task        Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId      String    @map("user_id")
+  start       DateTime
+  end         DateTime? // null = running timer (one running per user, enforced)
+  durationMin Int?      @map("duration_min") // derived on stop; manual entries set directly
+  note        String?
+  billable    Boolean   @default(false)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([tenantId, userId, start])
+  @@map("time_entry")
+}
+
+// ── Automations (Phase 5 — 03-data-model.md §Automations) ────────────────────
+
+enum RunStatus {
+  SUCCESS
+  FAILED
+  SKIPPED
+}
+
+model Automation {
+  id           String       @id @default(cuid())
+  tenantId     String       @map("tenant_id")
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  locationType LocationType @map("location_type")
+  locationId   String       @map("location_id")
+  name         String
+  active       Boolean      @default(true)
+  trigger      Json // { type, params }
+  conditions   Json         @default("[]") // [{ field, op, value }] (AND)
+  actions      Json // ordered [{ type, params }]
+  runCount     Int          @default(0) @map("run_count")
+  createdById  String       @map("created_by_id")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  runs AutomationRun[]
+
+  @@index([tenantId, locationType, locationId])
+  @@map("automation")
+}
+
+model AutomationRun {
+  id           String     @id @default(cuid())
+  tenantId     String     @map("tenant_id")
+  tenant       Tenant     @relation(fields: [tenantId], references: [id])
+  automationId String     @map("automation_id")
+  automation   Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  status       RunStatus
+  log          Json       @default("{}") // { trigger, matched, actions[], error?, loopGuarded? }
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  @@index([tenantId, automationId, createdAt])
+  @@map("automation_run")
+}
+
+// ── MVP1 — Riverbank teams & resource allocation (docs plan: MVP1) ───────────
+// Teams are cross-functional groups of people, distinct from the Department org
+// hierarchy. Projects get resourced by allocating people (ProjectMember) and/or
+// assigning whole teams (ProjectTeam). uuid ids to match the PPM neighbourhood.
+
+model Team {
+  id          String       @id @default(uuid())
+  tenantId    String       @map("tenant_id")
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  name        String
+  description String?
+  leadUserId  String?      @map("lead_user_id")
+  lead        User?        @relation("TeamLead", fields: [leadUserId], references: [id])
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  members      TeamMember[]
+  projectTeams ProjectTeam[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("team")
+}
+
+model TeamMember {
+  tenantId String @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+  teamId   String @map("team_id")
+  team     Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId   String @map("user_id")
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([teamId, userId])
+  @@index([tenantId])
+  @@map("team_member")
+}
+
+model ProjectMember {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  projectId     String   @map("project_id")
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId        String   @map("user_id")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role          String // e.g. "Project Lead", "Developer", "Analyst"
+  allocationPct Int?     @map("allocation_pct") // 0–100, optional
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([projectId, userId])
+  @@index([tenantId, userId])
+  @@map("project_member")
+}
+
+model ProjectTeam {
+  tenantId  String  @map("tenant_id")
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  projectId String  @map("project_id")
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  teamId    String  @map("team_id")
+  team      Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, teamId])
+  @@index([tenantId])
+  @@map("project_team")
 }

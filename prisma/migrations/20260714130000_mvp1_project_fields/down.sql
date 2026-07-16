@@ -1,0 +1,1 @@
+ALTER TABLE "project" DROP COLUMN IF EXISTS "client", DROP COLUMN IF EXISTS "objective", DROP COLUMN IF EXISTS "mission", DROP COLUMN IF EXISTS "business_owner", DROP COLUMN IF EXISTS "start_date";

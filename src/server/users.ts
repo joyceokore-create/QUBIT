@@ -2,7 +2,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
-import { hashPassword, validatePasswordPolicy } from "@/lib/password";
+import { hashPassword, validatePasswordPolicy, isPasswordReused, pushPasswordHistory } from "@/lib/password";
 import { ROLE_PERMISSIONS } from "@/lib/rbac";
 
 const ROLE_KEYS = Object.keys(ROLE_PERMISSIONS) as [string, ...string[]];
@@ -12,6 +12,11 @@ export const CreateUserInput = z.object({
   email: z.string().email(),
   password: z.string().min(1),
   roles: z.array(z.enum(ROLE_KEYS)).min(1),
+  departmentId: z.string().min(1).nullable().optional(),
+  // Optional placement at invite time — so PMs/developers land on a team + project.
+  teamId: z.string().min(1).nullable().optional(),
+  projectId: z.string().min(1).nullable().optional(),
+  projectRole: z.string().min(1).nullable().optional(),
 });
 export type CreateUserInput = z.infer<typeof CreateUserInput>;
 
@@ -40,6 +45,10 @@ export interface AdminUserSummary {
   managerId: string | null;
   managerName: string | null;
   createdAt: Date;
+  lastLoginAt: Date | null;
+  mfaEnabled: boolean;
+  teamCount: number;
+  projectCount: number;
 }
 
 export async function listUsers(
@@ -53,6 +62,7 @@ export async function listUsers(
         roles: true,
         department: { select: { name: true } },
         manager: { select: { name: true } },
+        _count: { select: { teamMemberships: true, projectAllocations: true } },
       },
       orderBy: { name: "asc" },
     });
@@ -67,7 +77,34 @@ export async function listUsers(
       managerId: u.managerId,
       managerName: u.manager?.name ?? null,
       createdAt: u.createdAt,
+      lastLoginAt: u.lastLoginAt,
+      mfaEnabled: u.mfaSecret !== null,
+      teamCount: u._count.teamMemberships,
+      projectCount: u._count.projectAllocations,
     }));
+  });
+}
+
+/** First-login acceptance — the signed-in user sets their own password, lifting the
+ *  mustChangePassword gate. Enforces the policy + no-reuse of recent passwords. */
+export async function completeOnboarding(ctx: TenantContext, newPassword: string): Promise<void> {
+  const policyError = validatePasswordPolicy(newPassword);
+  if (policyError) throw new UserAdminError(policyError, "WEAK_PASSWORD");
+  await withTenant(ctx, async (tx) => {
+    const user = await tx.user.findUniqueOrThrow({ where: { id: ctx.userId } });
+    const history = user.passwordHash ? [user.passwordHash, ...user.previousPasswordHashes] : user.previousPasswordHashes;
+    if (await isPasswordReused(newPassword, history)) {
+      throw new UserAdminError("Choose a password you haven’t used recently.", "REUSED");
+    }
+    await tx.user.update({
+      where: { id: ctx.userId },
+      data: {
+        passwordHash: await hashPassword(newPassword),
+        previousPasswordHashes: user.passwordHash ? pushPasswordHistory(user.previousPasswordHashes, user.passwordHash) : user.previousPasswordHashes,
+        mustChangePassword: false,
+      },
+    });
+    await audit(tx, ctx, { action: "update", entityType: "user", entityId: ctx.userId, after: { onboarded: true } });
   });
 }
 
@@ -86,8 +123,22 @@ export async function createUser(ctx: TenantContext, input: CreateUserInput) {
       throw new UserAdminError("A user with this email already exists.", "EMAIL_TAKEN");
     }
 
+    // Optional org unit — validate it belongs to this tenant (RLS scopes the lookup).
+    if (input.departmentId) {
+      const dept = await tx.department.findUnique({ where: { id: input.departmentId }, select: { id: true } });
+      if (!dept) throw new UserAdminError("Selected org unit was not found.", "DEPT_NOT_FOUND");
+    }
+
     const user = await tx.user.create({
-      data: { tenantId: ctx.tenantId, email, name: input.name, status: "ACTIVE", passwordHash },
+      data: {
+        tenantId: ctx.tenantId,
+        email,
+        name: input.name,
+        status: "ACTIVE",
+        passwordHash,
+        departmentId: input.departmentId ?? null,
+        mustChangePassword: true, // invited with a temp password — reset on first sign-in
+      },
     });
 
     for (const role of input.roles) {
@@ -97,6 +148,20 @@ export async function createUser(ctx: TenantContext, input: CreateUserInput) {
         entityType: "user",
         entityId: user.id,
         after: { role },
+      });
+    }
+
+    // Optional placement: add to a team and/or allocate to a project so they land ready.
+    if (input.teamId) {
+      const team = await tx.team.findUnique({ where: { id: input.teamId }, select: { id: true } });
+      if (!team) throw new UserAdminError("Selected team was not found.", "TEAM_NOT_FOUND");
+      await tx.teamMember.create({ data: { tenantId: ctx.tenantId, teamId: input.teamId, userId: user.id } });
+    }
+    if (input.projectId) {
+      const project = await tx.project.findUnique({ where: { id: input.projectId }, select: { id: true } });
+      if (!project) throw new UserAdminError("Selected project was not found.", "PROJECT_NOT_FOUND");
+      await tx.projectMember.create({
+        data: { tenantId: ctx.tenantId, projectId: input.projectId, userId: user.id, role: input.projectRole || "Contributor" },
       });
     }
 

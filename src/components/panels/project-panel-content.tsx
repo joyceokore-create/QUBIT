@@ -9,7 +9,13 @@ import {
   statusBarClass,
   formatDate,
 } from "@/components/panels/panel-primitives";
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
 import { EditProjectDialog } from "@/components/panels/edit-project-dialog";
+import { ProjectResourcesSection } from "@/components/panels/project-resources-section";
+import { ProjectTasksSection } from "@/components/panels/project-tasks-section";
+import { ProjectBlockersSection } from "@/components/panels/project-blockers-section";
+import { AskQAbout } from "@/components/q/ask-q-about";
 
 export interface ProjectPanelJson {
   id: string;
@@ -22,6 +28,11 @@ export interface ProjectPanelJson {
   dueDate: string | null;
   budget: string | null;
   team: string | null;
+  client: string | null;
+  objective: string | null;
+  mission: string | null;
+  businessOwner: string | null;
+  startDate: string | null;
   portfolioName: string | null;
   programmeName: string | null;
   avgProgress: number;
@@ -67,6 +78,13 @@ export function ProjectPanelContent({ data, onUpdated }: ProjectPanelContentProp
       </SheetHeader>
 
       <div className="flex flex-col gap-[22px] p-[22px_26px]">
+        <Link
+          href={`/projects/${data.id}`}
+          className="flex items-center justify-center gap-1.5 rounded-[10px] border border-[var(--w10)] bg-[var(--w04)] px-4 py-2.5 text-[12.5px] font-semibold text-ink-2 transition-colors hover:border-brand hover:text-brand"
+        >
+          Open project workspace <ArrowUpRight className="size-4" />
+        </Link>
+
         {data.description && <p className="text-xs text-ink-2">{data.description}</p>}
 
         <div className="grid grid-cols-4 gap-2.5">
@@ -86,6 +104,30 @@ export function ProjectPanelContent({ data, onUpdated }: ProjectPanelContentProp
           </p>
         )}
 
+        {(data.client || data.businessOwner || data.objective || data.mission || data.startDate) && (
+          <div className="flex flex-col gap-2 rounded-[8px] bg-background p-[13px_15px]">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              {data.client && <DefItem label="Client" value={data.client} />}
+              {data.businessOwner && <DefItem label="Business Owner" value={data.businessOwner} />}
+              {(data.startDate || data.dueDate) && (
+                <DefItem label="Timeline" value={`${formatDate(data.startDate)} → ${formatDate(data.dueDate)}`} />
+              )}
+            </div>
+            {data.objective && <DefItem label="Objective" value={data.objective} />}
+            {data.mission && <DefItem label="Mission" value={data.mission} />}
+          </div>
+        )}
+
+        <ProjectResourcesSection projectId={data.id} canEdit={data.canEdit} />
+
+        <ProjectTasksSection projectId={data.id} canEdit={data.canEdit} />
+
+        <ProjectBlockersSection projectId={data.id} canEdit={data.canEdit} />
+
+        <AskQAbout type="project" targetId={data.id} label="Ask Q about this project" />
+
+        {data.subsidiaries.length > 0 && (
+        <>
         <div>
           <div className="mb-2.5 text-[13px] font-semibold text-foreground">Progress by Subsidiary</div>
           <div className="flex flex-col gap-2">
@@ -157,7 +199,18 @@ export function ProjectPanelContent({ data, onUpdated }: ProjectPanelContentProp
             </table>
           </div>
         </div>
+        </>
+        )}
       </div>
+    </div>
+  );
+}
+
+function DefItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.6px] text-ink-3">{label}</div>
+      <div className="text-xs text-ink-2">{value}</div>
     </div>
   );
 }

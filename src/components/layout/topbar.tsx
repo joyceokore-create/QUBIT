@@ -1,17 +1,19 @@
 import Link from "next/link";
-import { LayoutGrid } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
+import { prisma } from "@/lib/db";
+import { QubitLogo } from "@/components/brand/qubit-logo";
+import { NavPills } from "@/components/layout/nav-pills";
 import { TenantChip } from "@/components/layout/tenant-chip";
 import { UserMenu } from "@/components/layout/user-menu";
+import { AskQButton } from "@/components/layout/ask-q-button";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { NotificationBell } from "@/components/layout/notification-bell";
+import { TimerWidget } from "@/components/clickup/timer-widget";
 
-const NAV_TABS = [
-  { label: "Dashboard", href: "/dashboard", enabled: true },
-  { label: "Executive View", href: "/dashboard", enabled: false },
-  { label: "My Tasks", href: "/tasks", enabled: false },
-  { label: "Reports", href: "/reports", enabled: false },
-];
-
+// Sticky 62px app-shell topbar (design_handoff screen 1). Replaces the sidebar
+// for the reimagined screens: brand logo, nav pills, theme toggle, tenant
+// switcher (gated on tenant:switch), Ask Q, and the avatar/sign-out menu.
 export async function Topbar() {
   const session = await auth();
   if (!session?.user) return null;
@@ -22,49 +24,46 @@ export async function Topbar() {
     roles: session.user.roles,
   };
 
+  const canManageIam = can(ctx, "iam:manage");
+  const canSwitchTenant = can(ctx, "tenant:switch");
+
+  // Tenant list only needed (and only queried) for the switcher. The tenant
+  // table has no RLS and names aren't sensitive (they appear on the landing page).
+  const tenants = canSwitchTenant
+    ? (await prisma.tenant.findMany({ orderBy: { name: "asc" }, select: { slug: true, name: true } }))
+    : [];
+
   return (
-    <header className="sticky top-0 z-50 flex h-[54px] shrink-0 items-center gap-5 border-b border-ink-4 bg-white px-6">
-      <Link
-        href="/dashboard"
-        className="flex shrink-0 items-center gap-2 font-heading text-base font-extrabold tracking-[-0.5px] text-foreground"
-      >
-        <span className="flex h-[26px] w-[26px] items-center justify-center rounded-[6px] bg-brand">
-          <LayoutGrid className="h-3.5 w-3.5 text-white" strokeWidth={2.5} />
-        </span>
-        QUBIT
+    <header
+      className="sticky top-0 z-40 flex h-[62px] items-center gap-[22px] border-b border-[var(--tbbd)] px-6 backdrop-blur-[16px] backdrop-saturate-[1.2]"
+      style={{ background: "var(--topbar)" }}
+    >
+      {/* Periodic sheen sweeping across the gradient (both themes). */}
+      <span aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+        <span
+          className="absolute inset-y-0 -left-1/3 w-1/3 [animation:topbarSheen_7s_ease-in-out_infinite]"
+          style={{ background: "linear-gradient(100deg, transparent, rgba(255,255,255,0.14), transparent)" }}
+        />
+      </span>
+
+      <Link href="/dashboard" className="relative flex items-center gap-[11px]">
+        <QubitLogo square={9} gap={2.5} radius={2.5} color="var(--tbglyph)" />
+        <span className="font-heading text-[16.5px] font-bold tracking-[2.5px] text-[var(--tbinkS)]">QUBIT</span>
       </Link>
 
-      <div className="h-[22px] w-px shrink-0 bg-ink-4" />
+      <NavPills canManageIam={canManageIam} />
 
-      <nav className="flex gap-0.5">
-        {NAV_TABS.map((tab) =>
-          tab.enabled ? (
-            <Link
-              key={tab.label}
-              href={tab.href}
-              className="rounded-[6px] bg-brand-light px-[11px] py-[5px] text-xs font-semibold text-brand"
-            >
-              {tab.label}
-            </Link>
-          ) : (
-            <span
-              key={tab.label}
-              title="Coming soon"
-              className="cursor-not-allowed rounded-[6px] px-[11px] py-[5px] text-xs font-medium text-ink-3 opacity-50"
-            >
-              {tab.label}
-            </span>
-          ),
-        )}
-      </nav>
-
-      <div className="ml-auto flex items-center gap-2.5">
-        <TenantChip
-          tenantName={session.user.tenantName}
-          canSwitch={can(ctx, "tenant:switch")}
-        />
-        <UserMenu name={session.user.name ?? ""} email={session.user.email ?? ""} />
-      </div>
+      <TimerWidget />
+      <NotificationBell />
+      <ThemeToggle />
+      <TenantChip
+        currentSlug={session.user.tenantSlug}
+        currentName={session.user.tenantName}
+        canSwitch={canSwitchTenant}
+        tenants={tenants}
+      />
+      <AskQButton />
+      <UserMenu name={session.user.name ?? ""} email={session.user.email ?? ""} />
     </header>
   );
 }

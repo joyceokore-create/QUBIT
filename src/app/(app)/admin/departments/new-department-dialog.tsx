@@ -105,7 +105,11 @@ export function NewDepartmentDialog({ departments, orgUnits, users }: NewDepartm
 
           <div className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-ink-2">Parent department</span>
-            <Select value={parentId} onValueChange={(v) => setParentId(v ?? "none")}>
+            <Select
+              value={parentId}
+              onValueChange={(v) => setParentId(v ?? "none")}
+              items={{ none: "None — top level", ...Object.fromEntries(parentOptions.map((o) => [o.id, o.label])) }}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -122,7 +126,11 @@ export function NewDepartmentDialog({ departments, orgUnits, users }: NewDepartm
 
           <div className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-ink-2">Org unit</span>
-            <Select value={orgUnitId} onValueChange={(v) => setOrgUnitId(v ?? "none")}>
+            <Select
+              value={orgUnitId}
+              onValueChange={(v) => setOrgUnitId(v ?? "none")}
+              items={{ none: "None", ...Object.fromEntries(orgUnits.map((o) => [o.id, o.name])) }}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -139,7 +147,11 @@ export function NewDepartmentDialog({ departments, orgUnits, users }: NewDepartm
 
           <div className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-ink-2">Head of department</span>
-            <Select value={headUserId} onValueChange={(v) => setHeadUserId(v ?? "none")}>
+            <Select
+              value={headUserId}
+              onValueChange={(v) => setHeadUserId(v ?? "none")}
+              items={{ none: "None", ...Object.fromEntries(users.map((u) => [u.id, u.name])) }}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>

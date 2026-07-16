@@ -71,15 +71,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         resetRateLimit(rateLimitKey);
 
+        // Record last sign-in (onboarding tracking) — best-effort, never blocks login.
+        await withTenant({ tenantId: tenant.id, userId: user.id }, (tx) =>
+          tx.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }),
+        ).catch(() => {});
+
         return {
           id: user.id,
           email: user.email,
           name: user.name,
           tenantId: tenant.id,
+          tenantSlug: tenant.slug,
           tenantName: tenant.name,
           roles: user.roles.map((r) => r.role),
           brandColor: tenant.brandColor,
           brandLight: tenant.brandLight,
+          mustChangePassword: user.mustChangePassword,
         };
       },
     }),

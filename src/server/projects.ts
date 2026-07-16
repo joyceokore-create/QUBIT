@@ -7,6 +7,15 @@ import { avgProgress, ragCounts } from "@/server/dashboard";
 const PROJECT_STATUSES = ["Planning", "OnTrack", "AtRisk", "Overdue", "Completed", "Cancelled"] as const;
 const PROJECT_PRIORITIES = ["Low", "Medium", "High", "Critical"] as const;
 
+// PRD Module 2 definition fields, reused by create + update.
+const ProjectDefinitionFields = {
+  client: z.string().nullable().optional(),
+  objective: z.string().nullable().optional(),
+  mission: z.string().nullable().optional(),
+  businessOwner: z.string().nullable().optional(),
+  startDate: z.string().datetime().nullable().optional(),
+};
+
 export const CreateProjectInput = z.object({
   code: z.string().min(1),
   name: z.string().min(1),
@@ -18,17 +27,22 @@ export const CreateProjectInput = z.object({
   budget: z.string().nullable().optional(),
   portfolioId: z.string().uuid().nullable().optional(),
   programmeId: z.string().uuid().nullable().optional(),
+  ...ProjectDefinitionFields,
 });
 export type CreateProjectInput = z.infer<typeof CreateProjectInput>;
 
-// docs/06-api-spec.md describes updating "status/dates/owner/budget" — Project has no
-// owner field in the actual schema (a doc/schema mismatch pre-dating this milestone), so
-// only the fields that really exist are editable here.
+// Editable project fields. MVP1 widened this beyond status/priority/dates/budget to
+// name/description and a real project lead (Project.leadUserId), so PMs can maintain
+// projects fully from the UI. Per-person resourcing lives in ProjectMember (resources.ts).
 export const UpdateProjectInput = z.object({
+  name: z.string().min(1).optional(),
+  description: z.string().nullable().optional(),
   status: z.enum(PROJECT_STATUSES).optional(),
   priority: z.enum(PROJECT_PRIORITIES).optional(),
   dueDate: z.string().datetime().nullable().optional(),
   budget: z.string().nullable().optional(),
+  leadUserId: z.string().uuid().nullable().optional(),
+  ...ProjectDefinitionFields,
 });
 export type UpdateProjectInput = z.infer<typeof UpdateProjectInput>;
 
@@ -243,6 +257,12 @@ export interface ProjectPanelData {
   dueDate: Date | null;
   budget: string | null;
   team: string | null;
+  client: string | null;
+  objective: string | null;
+  mission: string | null;
+  businessOwner: string | null;
+  startDate: Date | null;
+  leadName: string | null;
   portfolioName: string | null;
   programmeName: string | null;
   avgProgress: number;
@@ -259,6 +279,7 @@ export async function getProjectPanelData(
       include: {
         portfolio: { select: { name: true } },
         programme: { select: { name: true } },
+        lead: { select: { name: true } },
         orgStatuses: {
           include: {
             orgUnit: { select: { id: true, code: true, name: true, flag: true } },
@@ -280,6 +301,12 @@ export async function getProjectPanelData(
       dueDate: project.dueDate,
       budget: project.budget,
       team: project.team,
+      client: project.client,
+      objective: project.objective,
+      mission: project.mission,
+      businessOwner: project.businessOwner,
+      startDate: project.startDate,
+      leadName: project.lead?.name ?? null,
       portfolioName: project.portfolio?.name ?? null,
       programmeName: project.programme?.name ?? null,
       avgProgress: avgProgress(project),
@@ -383,6 +410,11 @@ export async function createProject(ctx: TenantContext, input: CreateProjectInpu
         budget: input.budget ?? null,
         portfolioId: input.portfolioId ?? null,
         programmeId: input.programmeId ?? null,
+        client: input.client ?? null,
+        objective: input.objective ?? null,
+        mission: input.mission ?? null,
+        businessOwner: input.businessOwner ?? null,
+        startDate: input.startDate ? new Date(input.startDate) : null,
       },
     });
 
@@ -405,13 +437,29 @@ export async function updateProject(
   return withTenant(ctx, async (tx) => {
     const before = await tx.project.findUniqueOrThrow({ where: { id: projectId } });
 
+    if (input.leadUserId) {
+      // Lead must be a real user in this tenant (RLS-scoped lookup).
+      await tx.user.findUniqueOrThrow({ where: { id: input.leadUserId } }).catch(() => {
+        throw new ProjectError("Lead user not found.", "LEAD_NOT_FOUND");
+      });
+    }
+
     const after = await tx.project.update({
       where: { id: projectId },
       data: {
+        name: input.name,
+        description: input.description === undefined ? undefined : input.description,
         status: input.status,
         priority: input.priority,
         dueDate: input.dueDate === undefined ? undefined : input.dueDate ? new Date(input.dueDate) : null,
         budget: input.budget === undefined ? undefined : input.budget,
+        leadUserId: input.leadUserId === undefined ? undefined : input.leadUserId,
+        client: input.client === undefined ? undefined : input.client,
+        objective: input.objective === undefined ? undefined : input.objective,
+        mission: input.mission === undefined ? undefined : input.mission,
+        businessOwner: input.businessOwner === undefined ? undefined : input.businessOwner,
+        startDate:
+          input.startDate === undefined ? undefined : input.startDate ? new Date(input.startDate) : null,
       },
     });
 
@@ -419,8 +467,22 @@ export async function updateProject(
       action: "update",
       entityType: "project",
       entityId: projectId,
-      before: { status: before.status, priority: before.priority, dueDate: before.dueDate, budget: before.budget },
-      after: { status: after.status, priority: after.priority, dueDate: after.dueDate, budget: after.budget },
+      before: {
+        name: before.name,
+        status: before.status,
+        priority: before.priority,
+        dueDate: before.dueDate,
+        budget: before.budget,
+        leadUserId: before.leadUserId,
+      },
+      after: {
+        name: after.name,
+        status: after.status,
+        priority: after.priority,
+        dueDate: after.dueDate,
+        budget: after.budget,
+        leadUserId: after.leadUserId,
+      },
     });
 
     return after;

@@ -11,7 +11,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { getInitials } from "@/lib/format";
 
 interface UserMenuProps {
@@ -22,12 +21,12 @@ interface UserMenuProps {
 export function UserMenu({ name, email }: UserMenuProps) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger aria-label="Account menu" className="shrink-0 rounded-full">
-        <Avatar className="h-[30px] w-[30px]">
-          <AvatarFallback className="bg-brand text-[11px] font-bold text-white">
-            {getInitials(name)}
-          </AvatarFallback>
-        </Avatar>
+      <DropdownMenuTrigger
+        aria-label="Account menu"
+        className="flex size-[34px] flex-none items-center justify-center rounded-full border border-[var(--w10)] text-[11.5px] font-bold text-[var(--ink3)] transition-colors hover:border-brand"
+        style={{ background: "linear-gradient(135deg, var(--av1), var(--av2))" }}
+      >
+        {getInitials(name)}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>

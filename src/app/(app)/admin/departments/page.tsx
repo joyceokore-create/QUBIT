@@ -1,20 +1,18 @@
 import { auth } from "@/lib/auth";
 import { listDepartments, listOrgUnitOptions } from "@/server/departments";
 import { listUsers } from "@/server/users";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Breadcrumb } from "@/components/layout/breadcrumb";
+import { AdminHeader } from "../admin-header";
 import { NewDepartmentDialog } from "./new-department-dialog";
 import { DepartmentRowActions } from "./department-row-actions";
+
+const CARD = "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]";
+const ROW = "grid grid-cols-[minmax(0,1.4fr)_140px_140px_140px_70px_40px] items-center gap-3.5 p-[10px_18px]";
 
 export default async function AdminDepartmentsPage() {
   const session = await auth();
   if (!session?.user) return null;
 
-  const ctx = {
-    tenantId: session.user.tenantId,
-    userId: session.user.id,
-    roles: session.user.roles,
-  };
+  const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles };
   const [departments, orgUnits, users] = await Promise.all([
     listDepartments(ctx),
     listOrgUnitOptions(ctx),
@@ -23,58 +21,49 @@ export default async function AdminDepartmentsPage() {
   const departmentById = new Map(departments.map((d) => [d.id, d]));
 
   return (
-    <div className="flex flex-1 flex-col gap-[22px] p-[26px]">
-      <Breadcrumb items={[{ label: "Group Overview", href: "/dashboard" }, { label: "Departments" }]} />
+    <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
+      <AdminHeader
+        subtitle={`${departments.length} ${departments.length === 1 ? "department" : "departments"} · org structure ships empty by design (no seeded PII)`}
+        action={<NewDepartmentDialog departments={departments} orgUnits={orgUnits} users={users} />}
+      />
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-heading text-[21px] font-bold tracking-[-0.5px] text-foreground">
-            Departments
-          </h1>
-          <p className="mt-[3px] text-xs text-ink-3">
-            {departments.length} departments in this organization
+      {departments.length === 0 ? (
+        <div className="flex min-h-[240px] flex-col items-center justify-center gap-3 rounded-[16px] border border-dashed border-[var(--hair)] p-10 text-center [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.06s_both]">
+          <span aria-hidden className="grid grid-cols-2 grid-rows-2 gap-1 opacity-35">
+            <span className="size-3.5 rounded-[4px] bg-[var(--ink4)]" />
+            <span className="size-3.5 rounded-[4px]" style={{ background: "color-mix(in oklab, var(--ink4) 45%, transparent)" }} />
+            <span className="size-3.5 rounded-[4px]" style={{ background: "color-mix(in oklab, var(--ink4) 45%, transparent)" }} />
+            <span className="size-3.5 rounded-[4px] bg-[var(--ink4)]" />
+          </span>
+          <div className="text-[13px] font-semibold text-[var(--qink)]">No departments yet</div>
+          <p className="max-w-[380px] text-[12px] leading-[1.55] text-[var(--ink4)]">
+            Real departments are entered by hand — the hierarchy is cycle-checked on every update, and the head field is
+            informational (it never grants the DepartmentHead role).
           </p>
         </div>
-        <NewDepartmentDialog departments={departments} orgUnits={orgUnits} users={users} />
-      </div>
-
-      <div className="overflow-hidden rounded-[10px] border border-ink-4 bg-white">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Parent</TableHead>
-              <TableHead>Org Unit</TableHead>
-              <TableHead>Head</TableHead>
-              <TableHead>Members</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {departments.map((d) => (
-              <TableRow key={d.id}>
-                <TableCell className="font-medium">{d.name}</TableCell>
-                <TableCell className="text-ink-2">
-                  {d.parentId ? (departmentById.get(d.parentId)?.name ?? "—") : "—"}
-                </TableCell>
-                <TableCell className="text-ink-2">{d.orgUnitName ?? "—"}</TableCell>
-                <TableCell className="text-ink-2">{d.headUserName ?? "—"}</TableCell>
-                <TableCell className="text-ink-2">{d.memberCount}</TableCell>
-                <TableCell className="text-right">
-                  <DepartmentRowActions department={d} departments={departments} orgUnits={orgUnits} users={users} />
-                </TableCell>
-              </TableRow>
-            ))}
-            {departments.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center text-ink-3">
-                  No departments yet.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
+      ) : (
+        <div className={`overflow-hidden [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.06s_both] ${CARD}`} style={{ background: "var(--cardbg)" }}>
+          <div className="overflow-x-auto">
+            <div className="min-w-[720px]">
+              <div className={`${ROW} border-b border-[var(--hair)] font-mono text-[9px] font-semibold uppercase tracking-[1.6px] text-[var(--ink4)]`}>
+                <span>Name</span><span>Parent</span><span>Org unit</span><span>Head</span><span>Members</span><span className="text-right">·</span>
+              </div>
+              {departments.map((d) => (
+                <div key={d.id} className={`${ROW} border-b border-[var(--hair2)] transition-colors last:border-0 hover:bg-[var(--wash)]`}>
+                  <span className="truncate text-[13px] font-semibold text-[var(--qink)]">{d.name}</span>
+                  <span className="truncate text-[12px] text-[var(--ink3)]">{d.parentId ? (departmentById.get(d.parentId)?.name ?? "—") : "—"}</span>
+                  <span className="truncate text-[12px] text-[var(--ink3)]">{d.orgUnitName ?? "—"}</span>
+                  <span className="truncate text-[12px] text-[var(--ink3)]">{d.headUserName ?? "—"}</span>
+                  <span className="font-mono text-[11px] text-[var(--ink4)]">{d.memberCount}</span>
+                  <span className="flex justify-end">
+                    <DepartmentRowActions department={d} departments={departments} orgUnits={orgUnits} users={users} />
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </main>
   );
 }

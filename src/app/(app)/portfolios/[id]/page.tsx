@@ -55,7 +55,7 @@ export default async function PortfolioDetailPage({
     <div className="flex flex-1 flex-col gap-[22px] p-[26px]">
       <Breadcrumb items={[{ label: "Group Overview", href: "/dashboard" }, { label: portfolio.name }]} />
 
-      <div className="rounded-[10px] border border-ink-4 bg-white p-[20px_22px]">
+      <div className="rounded-[10px] border border-ink-4 bg-card p-[20px_22px]">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             <div className="font-heading text-lg font-bold tracking-[-0.3px] text-foreground">

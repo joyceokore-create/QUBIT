@@ -24,7 +24,8 @@ const eslintConfig = [
   {
     ignores: [
       "node_modules/**",
-      ".next/**",
+      "**/.next/**", // top-level + nested build output (e.g. .claude/worktrees/*/.next)
+      ".claude/**", // agent worktrees, transcripts, generated artifacts — never source
       "out/**",
       "build/**",
       "next-env.d.ts",

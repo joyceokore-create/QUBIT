@@ -79,7 +79,11 @@ export function EditDepartmentDialog({ user, departments, users, open, onOpenCha
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-ink-2">Department</span>
-            <Select value={departmentId} onValueChange={(v) => setDepartmentId(v ?? "none")}>
+            <Select
+              value={departmentId}
+              onValueChange={(v) => setDepartmentId(v ?? "none")}
+              items={{ none: "None", ...Object.fromEntries(departments.map((d) => [d.id, d.name])) }}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -96,7 +100,11 @@ export function EditDepartmentDialog({ user, departments, users, open, onOpenCha
 
           <div className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-ink-2">Manager</span>
-            <Select value={managerId} onValueChange={(v) => setManagerId(v ?? "none")}>
+            <Select
+              value={managerId}
+              onValueChange={(v) => setManagerId(v ?? "none")}
+              items={{ none: "None", ...Object.fromEntries(managerOptions.map((u) => [u.id, u.name])) }}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>

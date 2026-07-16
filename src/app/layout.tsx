@@ -1,19 +1,28 @@
 import type { Metadata } from "next";
-import { Inter, Syne } from "next/font/google";
+import { Archivo, Instrument_Sans, IBM_Plex_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { ThemeProvider } from "@/components/theme/theme-provider";
 import "./globals.css";
 
-const inter = Inter({
-  variable: "--font-inter",
+// QUBIT App v3 type system: Archivo (headings/wordmark), Instrument Sans (body),
+// IBM Plex Mono (labels, codes, metrics).
+const instrument = Instrument_Sans({
+  variable: "--font-instrument",
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
+  weight: ["400", "500", "600", "700"],
 });
 
-const syne = Syne({
-  variable: "--font-syne",
+const archivo = Archivo({
+  variable: "--font-archivo",
   subsets: ["latin"],
-  weight: ["600", "700", "800"],
+  weight: ["500", "600", "700", "800"],
+});
+
+const plexMono = IBM_Plex_Mono({
+  variable: "--font-plex",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
 });
 
 export const metadata: Metadata = {
@@ -27,12 +36,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${inter.variable} ${syne.variable} antialiased`}>
-        <TooltipProvider>
-          {children}
-          <Toaster />
-        </TooltipProvider>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${instrument.variable} ${archivo.variable} ${plexMono.variable} antialiased`}>
+        <ThemeProvider>
+          <TooltipProvider>
+            {children}
+            <Toaster />
+          </TooltipProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

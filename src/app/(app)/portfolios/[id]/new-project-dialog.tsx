@@ -166,7 +166,11 @@ export function NewProjectDialog({ portfolioId, programmes }: NewProjectDialogPr
           {programmes.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <span className="text-sm font-medium text-ink-2">Programme</span>
-              <Select value={programmeId} onValueChange={(v) => setProgrammeId(v ?? "none")}>
+              <Select
+                value={programmeId}
+                onValueChange={(v) => setProgrammeId(v ?? "none")}
+                items={{ none: "None — standalone in this portfolio", ...Object.fromEntries(programmes.map((p) => [p.id, p.name])) }}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>

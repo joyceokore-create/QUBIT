@@ -5,11 +5,14 @@ import type { TenantContext } from "@/lib/tenant";
 export const ROLE_PERMISSIONS: Record<string, string[]> = {
   SystemAdmin: ["*:*", "iam:manage"],
   PortfolioManager: ["dashboard:read", "portfolio:*", "project:read", "risk:read", "reports:read"],
+  // PRD §5 "Executive" — read-only portfolio visibility + executive reports. Distinct
+  // from PortfolioManager (which can author portfolios); Executive never writes.
+  Executive: ["dashboard:read", "portfolio:read", "project:read", "risk:read", "issue:read", "reports:read"],
   // dashboard:read added to these three (Milestone 4) — /dashboard is every user's
   // post-login landing page, and without it they hit a Forbidden wall immediately after
   // signing in. DepartmentHead is left as-is: a dynamic, approval-only role, not a
   // day-to-day user who needs a dashboard landing page.
-  ProjectManager: ["dashboard:read", "project:*", "risk:*", "issue:*", "task:*"],
+  ProjectManager: ["dashboard:read", "project:*", "risk:*", "issue:*", "task:*", "reports:read"],
   FinanceManager: ["dashboard:read", "finance:*"],
   // risk:read/issue:read added (Milestone 7) — a role that can create but not see its own
   // risks/issues couldn't even reach the "Risks & Issues" nav item, gated on risk:read.

@@ -1,0 +1,4 @@
+projectCode,email,role,allocationPct
+EX-01,person.three@example.invalid,Project Lead,60
+EX-01,person.four@example.invalid,Engineer,40
+EX-02,person.two@example.invalid,Project Lead,30

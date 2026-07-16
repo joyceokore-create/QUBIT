@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS "automation_run" CASCADE;
+DROP TABLE IF EXISTS "automation" CASCADE;
+DROP TYPE IF EXISTS "RunStatus";

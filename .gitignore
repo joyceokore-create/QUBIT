@@ -37,3 +37,14 @@ next-env.d.ts
 prisma/*.db
 
 /node_modules/.prisma/client
+
+# MVP1 onboarding — real Riverbank PII in CSVs + import report/temp credentials.
+# NEVER commit these (org data-handling rules).
+/import/
+
+# Design-handoff bundles + prototypes (large binaries / not source)
+*.zip
+design_handoff_qubit_ai_command_center*/
+
+# Claude Code agent worktrees, transcripts, plans (not project source)
+.claude/

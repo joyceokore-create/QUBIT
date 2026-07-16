@@ -7,11 +7,37 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-inter);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-syne);
+  --font-sans: var(--font-instrument);
+  --font-mono: var(--font-plex);
+  --font-heading: var(--font-archivo);
 
-  /* QUBIT design system — docs/08-design-system.md */
+  /* ── QUBIT AI Command Center tokens (design_handoff) ─────────────────
+     Namespaced q-tokens so future screens can use `bg-qcard`, `text-qink`
+     etc. without colliding with shadcn's own --background/--card. Every
+     value is a CSS variable set per-theme below. */
+  --color-qbg: var(--qbg);
+  --color-qcard: var(--qcard);
+  --color-card2: var(--card2);
+  --color-drawer: var(--drawer);
+  --color-menu: var(--menu);
+  --color-elev: var(--elev);
+  --color-topbar: var(--topbar);
+  --color-qink: var(--qink);
+  --color-ink-35: var(--ink35);
+  --color-ink-5: var(--ink5);
+  --color-ink-6: var(--ink6);
+  --color-ok: var(--ok);
+  --color-ok-bg: var(--okbg);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warnbg);
+  --color-bad: var(--bad);
+  --color-bad-bg: var(--badbg);
+  --color-info: var(--qinfo);
+  --color-info-bg: var(--infobg);
+  --color-onbrand: var(--onbrand);
+
+  /* QUBIT legacy design system — docs/08-design-system.md (aliased onto the
+     q-tokens above so existing components reskin automatically). */
   --color-brand: var(--brand);
   --color-brand-mid: var(--brand-mid);
   --color-brand-light: var(--brand-light);
@@ -68,102 +94,417 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* ── LIGHT theme (default `:root` scope) ────────────────────────────────
+   Dark is the design's default *appearance* (next-themes defaultTheme=dark),
+   but light lives on :root as the token fallback per the handoff. Values are
+   the canonical palette from `QUBIT Command Center.dc.html` → applyTheme(). */
 :root {
-  /* Tenant brand tokens — default to KCB Group; overridden per-tenant in the
-     authenticated (app) layout once auth/tenancy lands (Milestone 3). See
-     docs/08-design-system.md. */
-  --brand: #1b7a3e;
-  --brand-mid: #2ea055;
-  --brand-light: #e8f5ee;
+  color-scheme: light;
 
-  /* Fixed tokens (both tenants) */
-  --bg: #f5f5f3;
-  --white: #ffffff;
-  --ink: #0d0d0d;
-  --ink2: #4a4a4a;
-  --ink3: #8a8a8a;
-  --ink4: #c8c8c8;
-  --amber: #d97706;
-  --amber-bg: #fef3c7;
-  --red: #dc2626;
-  --red-bg: #fee2e2;
-  --blue: #1d4ed8;
-  --blue-bg: #dbeafe;
-  --green-status: #1b7a3e;
-  /* Status→colour mapping's On Track pill bg (docs/08-design-system.md) — the doc's fixed
-     token list omitted this counterpart to amber-bg/red-bg/blue-bg; added for consistency. */
-  --green-status-bg: #dcfce7;
+  /* Product & tenant brand (per theme). --brand defaults to the product green
+     (KCB); the (app) layout overrides it per-tenant with a theme-aware var
+     reference so it flips correctly on the ☼/☾ toggle. RAG colours below are
+     semantic and NEVER per-tenant. */
+  --pbrand: #1b7a3e;
+  --rbrand: #c8151b;
+  --onbrand: #ffffff;
+  --glowA: 18%;
+  --brand: var(--pbrand);
+
+  /* Surfaces & inks (light) — warm paper (QUBIT App v3) */
+  --qbg: #f1efe9;
+  --qcard: #fdfcf8;
+  --card2: #faf8f2;
+  --drawer: #fdfcf8;
+  --menu: #fdfcf8;
+  --elev: #e9e5dc;
+  --topbar: linear-gradient(95deg, #0b2239 0%, #11402e 52%, color-mix(in oklab, var(--brand) 88%, #0b2239) 108%);
+  /* Topbar ink (light): the bar is a dark navy→green gradient, so nav text is white
+     and the logo glyph stays product-green — matches the prototype exactly. */
+  --tbink: rgba(255, 255, 255, 0.75);
+  --tbinkS: #ffffff;
+  --tbglyph: #37b96a;
+  --tbactivebg: rgba(255, 255, 255, 0.16);
+  --tbactivec: #ffffff;
+  --tbchipbg: rgba(255, 255, 255, 0.12);
+  --tbchipbd: rgba(255, 255, 255, 0.22);
+  --tbbd: transparent;
+  --qink: #1a1512;
+  --ink2: #352e28;
+  --ink3: #57504a;
+  --ink35: #6a625a;
+  --ink4: #7c746b;
+  --ink5: #a39a91;
+  --ink6: #c4bcb1;
+
+  /* RAG / status (light) — all pairings ≥4.5:1 on paper and on their tint */
+  --ok: #15803d;
+  --okbg: #dcfce7;
+  --warn: #9a6a05;
+  --warnbg: #fef3c7;
+  --bad: #b91c1c;
+  --badbg: #fee2e2;
+  --qinfo: #1d4ed8;
+  --infobg: #dbeafe;
+
+  /* Glass cards + atmosphere (QUBIT App v3) */
+  --cardbg: rgba(253, 252, 248, 0.86);
+  --cardbd: rgba(32, 26, 20, 0.09);
+  --glassblur: 10px;
+  --cardsh: 0 1px 2px rgba(32, 26, 20, 0.05), 0 8px 28px rgba(32, 26, 20, 0.06);
+  --insethl: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --hair: rgba(32, 26, 20, 0.1);
+  --hair2: rgba(32, 26, 20, 0.06);
+  --wash: rgba(32, 26, 20, 0.04);
+  --wash2: rgba(32, 26, 20, 0.065);
+  --scrim: rgba(24, 18, 14, 0.4);
+  /* Ambient field — amb1 flips per-tenant (brand); amb2/amb3 are fixed QUBIT navy/green */
+  --amb1: color-mix(in oklab, var(--brand) 8%, transparent);
+  --amb2: rgba(11, 34, 57, 0.09);
+  --amb3: rgba(17, 64, 46, 0.07);
+  /* Stage-gate cells: passed / active / late / pending */
+  --stD: #4a433c;
+  --stA: var(--brand);
+  --stL: #d99a06;
+  --stP: rgba(32, 26, 20, 0.1);
+
+  /* Alpha washes — ink alpha in light */
+  --w02: rgba(17, 27, 21, 0.035);
+  --w03: rgba(17, 27, 21, 0.05);
+  --w04: rgba(17, 27, 21, 0.06);
+  --w05: rgba(17, 27, 21, 0.07);
+  --w06: rgba(17, 27, 21, 0.08);
+  --w07: rgba(17, 27, 21, 0.13);
+  --w08: rgba(17, 27, 21, 0.145);
+  --w09: rgba(17, 27, 21, 0.155);
+  --w10: rgba(17, 27, 21, 0.165);
+  --w11: rgba(17, 27, 21, 0.175);
+  --w12: rgba(17, 27, 21, 0.19);
+  --w14: rgba(17, 27, 21, 0.21);
+  --w16: rgba(17, 27, 21, 0.24);
+  --w18: rgba(17, 27, 21, 0.28);
+  --w30: rgba(17, 27, 21, 0.4);
+
+  /* Overlays, shadows, avatar gradient stops (light) */
+  --ovl: rgba(16, 24, 19, 0.38);
+  --ovl2: rgba(16, 24, 19, 0.45);
+  --sh45: rgba(28, 44, 34, 0.12);
+  --sh50: rgba(28, 44, 34, 0.13);
+  --sh55: rgba(28, 44, 34, 0.15);
+  --sh60: rgba(28, 44, 34, 0.18);
+  --av1: #e8e3da;
+  --av2: #d8d2c7;
+
+  /* ── Legacy aliases (docs/08-design-system.md) → q-tokens.
+     Defined once; they resolve per-theme because the referenced q-tokens are
+     overridden in .dark. */
+  --brand-mid: var(--brand);
+  --brand-light: color-mix(in oklab, var(--brand) 13%, transparent);
+  --ink: var(--qink);
+  --white: var(--qcard);
+  --bg: var(--qbg);
+  --amber: var(--warn);
+  --amber-bg: var(--warnbg);
+  --red: var(--bad);
+  --red-bg: var(--badbg);
+  --blue: var(--qinfo);
+  --blue-bg: var(--infobg);
+  --green-status: var(--ok);
+  --green-status-bg: var(--okbg);
   --r: 10px;
   --r-sm: 6px;
-  --shadow: 0 2px 8px rgba(0, 0, 0, 0.07), 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.13), 0 2px 6px rgba(0, 0, 0, 0.07);
+  --shadow: 0 2px 8px var(--sh50), 0 1px 2px var(--sh45);
+  --shadow-lg: 0 18px 50px var(--sh55);
 
-  --background: var(--bg);
-  --foreground: var(--ink);
-  --card: var(--white);
-  --card-foreground: var(--ink);
-  --popover: var(--white);
-  --popover-foreground: var(--ink);
+  /* ── shadcn semantic vars → q-tokens (also resolve per-theme). */
+  --background: var(--qbg);
+  --foreground: var(--qink);
+  --card: var(--qcard);
+  --card-foreground: var(--qink);
+  --popover: var(--menu);
+  --popover-foreground: var(--qink);
   --primary: var(--brand);
-  --primary-foreground: var(--white);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: var(--ink);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: var(--ink2);
-  --accent: var(--brand-light);
+  --primary-foreground: var(--onbrand);
+  --secondary: var(--elev);
+  --secondary-foreground: var(--qink);
+  --muted: var(--elev);
+  --muted-foreground: var(--ink4);
+  --accent: color-mix(in oklab, var(--brand) 13%, transparent);
   --accent-foreground: var(--brand);
-  --destructive: var(--red);
-  --border: var(--ink4);
-  --input: var(--ink4);
+  --destructive: var(--bad);
+  --border: var(--w08);
+  --input: var(--w10);
   --ring: var(--brand);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
   --radius: 10px;
-  --sidebar: var(--white);
-  --sidebar-foreground: var(--ink);
+  --chart-1: var(--brand);
+  --chart-2: var(--qinfo);
+  --chart-3: var(--warn);
+  --chart-4: var(--bad);
+  --chart-5: var(--ink4);
+  --sidebar: var(--qcard);
+  --sidebar-foreground: var(--qink);
   --sidebar-primary: var(--brand);
-  --sidebar-primary-foreground: var(--white);
-  --sidebar-accent: var(--brand-light);
+  --sidebar-primary-foreground: var(--onbrand);
+  --sidebar-accent: color-mix(in oklab, var(--brand) 13%, transparent);
   --sidebar-accent-foreground: var(--brand);
-  --sidebar-border: var(--ink4);
+  --sidebar-border: var(--w08);
   --sidebar-ring: var(--brand);
 }
 
+/* ── DARK theme override — only the raw q-token *values* change; every alias
+   and semantic var above re-resolves through them automatically. */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  color-scheme: dark;
+
+  --pbrand: #3ecf8e;
+  --rbrand: #f4534d;
+  --onbrand: #160707;
+  --glowA: 34%;
+
+  --qbg: #151110;
+  --qcard: #1b1613;
+  --card2: #1e1815;
+  --drawer: #181310;
+  --menu: #201a16;
+  --elev: #241f1b;
+  --topbar: rgba(21, 16, 14, 0.72);
+  /* Topbar ink (dark): the bar blends into the dark shell; nav ink is grey→light and
+     the active pill/logo glyph pick up the tenant brand. */
+  --tbink: #8a948c;
+  --tbinkS: #edf1ec;
+  /* Brand-dependent dark tokens (glyph / active pill) are resolved at the app-shell
+     scope below, where the per-tenant --brand override lives — declaring them here
+     would pre-resolve var(--brand) against the html-level default (green). */
+  --tbchipbg: rgba(255, 255, 255, 0.04);
+  --tbchipbd: rgba(255, 255, 255, 0.1);
+  --tbbd: rgba(255, 255, 255, 0.07);
+  --qink: #f1ebe4;
+  --ink2: #d8cfc6;
+  --ink3: #b3a99f;
+  --ink35: #9c948b;
+  --ink4: #847b72;
+  --ink5: #5c554e;
+  --ink6: #3d3833;
+
+  --ok: #3ecf8e;
+  --okbg: rgba(62, 207, 142, 0.12);
+  --warn: #f2b13c;
+  --warnbg: rgba(242, 177, 60, 0.13);
+  --bad: #ff6f66;
+  --badbg: rgba(255, 111, 102, 0.14);
+  --qinfo: #6fa5ff;
+  --infobg: rgba(111, 165, 255, 0.14);
+
+  /* Glass cards + atmosphere (QUBIT App v3 — dark) */
+  --cardbg: rgba(255, 243, 232, 0.045);
+  --cardbd: rgba(255, 255, 255, 0.09);
+  --glassblur: 18px;
+  --cardsh: 0 14px 44px rgba(0, 0, 0, 0.38);
+  --insethl: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --hair: rgba(255, 255, 255, 0.13);
+  --hair2: rgba(255, 255, 255, 0.08);
+  --wash: rgba(255, 255, 255, 0.035);
+  --wash2: rgba(255, 255, 255, 0.06);
+  --scrim: rgba(0, 0, 0, 0.55);
+  --amb1: color-mix(in oklab, var(--brand) 14%, transparent);
+  --amb2: rgba(64, 99, 168, 0.11);
+  --amb3: rgba(242, 177, 60, 0.07);
+  --stD: #978d83;
+  --stA: var(--brand);
+  --stL: #f2b13c;
+  --stP: rgba(255, 255, 255, 0.08);
+
+  --w02: rgba(255, 255, 255, 0.025);
+  --w03: rgba(255, 255, 255, 0.03);
+  --w04: rgba(255, 255, 255, 0.045);
+  --w05: rgba(255, 255, 255, 0.05);
+  --w06: rgba(255, 255, 255, 0.06);
+  --w07: rgba(255, 255, 255, 0.07);
+  --w08: rgba(255, 255, 255, 0.08);
+  --w09: rgba(255, 255, 255, 0.09);
+  --w10: rgba(255, 255, 255, 0.1);
+  --w11: rgba(255, 255, 255, 0.11);
+  --w12: rgba(255, 255, 255, 0.12);
+  --w14: rgba(255, 255, 255, 0.14);
+  --w16: rgba(255, 255, 255, 0.16);
+  --w18: rgba(255, 255, 255, 0.18);
+  --w30: rgba(255, 255, 255, 0.3);
+
+  --ovl: rgba(4, 7, 5, 0.6);
+  --ovl2: rgba(4, 7, 5, 0.65);
+  --sh45: rgba(0, 0, 0, 0.45);
+  --sh50: rgba(0, 0, 0, 0.5);
+  --sh55: rgba(0, 0, 0, 0.55);
+  --sh60: rgba(0, 0, 0, 0.6);
+  --av1: #3a322c;
+  --av2: #241f1b;
+}
+
+/* Dark-theme topbar brand tokens, resolved where the per-tenant --brand lives (the
+   app-shell wrapper) so the logo glyph + active pill are the tenant colour (Riverbank
+   red / KCB green), not the html-level default. Light mode keeps the literal
+   product-green glyph + white active pill from :root. */
+.dark .app-shell {
+  --tbglyph: var(--brand);
+  --tbactivec: var(--brand);
+  --tbactivebg: color-mix(in oklab, var(--brand) 14%, transparent);
+}
+
+/* Motion primitives from the prototype (design_handoff). pulseGlow reads
+   --brand, so it halos in the tenant colour in-app and product green pre-auth. */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes pulseGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--brand) var(--glowA), transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 7px transparent;
+  }
+}
+
+/* Q copilot drawer (MVP1 Phase C). */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* ── QUBIT App v3 motion ── */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes arcIn {
+  from {
+    stroke-dasharray: 0 400;
+  }
+}
+@keyframes drawerIn {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes scrimIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes drift1 {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(70px, 50px) scale(1.12);
+  }
+}
+@keyframes drift2 {
+  from {
+    transform: translate(0, 0) scale(1.05);
+  }
+  to {
+    transform: translate(-80px, 40px) scale(0.95);
+  }
+}
+@keyframes drift3 {
+  from {
+    transform: translate(0, 0) scale(0.95);
+  }
+  to {
+    transform: translate(50px, -60px) scale(1.1);
+  }
+}
+/* Topbar sheen — a soft highlight sweeps across the gradient every few seconds, then rests. */
+@keyframes topbarSheen {
+  0% {
+    transform: translateX(0);
+  }
+  22% {
+    transform: translateX(400%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+/* Accessibility: honour reduced-motion — disable the ambient/entrance/sheen animations and
+   collapse long transitions. Governs every v3 motion primitive above. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@layer components {
+  /* Landing/marketing hover affordances (design_handoff screen 0a). Kept as
+     component classes because the brand-tinted color-mix borders are awkward as
+     inline Tailwind arbitrary values. Product-branded (--pbrand), never tenant. */
+  .q-lift {
+    transition:
+      transform 0.15s ease,
+      border-color 0.15s ease;
+  }
+  .q-lift:hover {
+    transform: translateY(-2px);
+  }
+  .q-card-hover {
+    transition: border-color 0.18s ease;
+  }
+  .q-card-hover:hover {
+    border-color: color-mix(in oklab, var(--pbrand) 50%, transparent);
+  }
 }
 
 @layer base {
@@ -171,7 +512,7 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground text-[13px] leading-[1.5];
+    @apply bg-background text-foreground text-[13.5px] leading-[1.5];
   }
   html {
     @apply font-sans;

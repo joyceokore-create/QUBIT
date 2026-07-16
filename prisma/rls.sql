@@ -19,7 +19,46 @@ BEGIN
     'milestone',
     'risk',
     'issue',
-    'audit_log'
+    'audit_log',
+    -- ClickUp transformation (docs/clickup-transformation) — every new tenant-owned
+    -- table carries tenant_id and the same isolation policy (incl. join tables, for
+    -- defense-in-depth — see DECISIONS.md).
+    'space',
+    'folder',
+    'list',
+    'status_group',
+    'status',
+    'task',
+    'task_dependency',
+    'tag',
+    'task_tag',
+    'task_assignee',
+    'task_watcher',
+    'activity',
+    'checklist',
+    'checklist_item',
+    'comment',
+    'field_definition',
+    'field_value',
+    'view',
+    'time_entry',
+    'automation',
+    'automation_run',
+    'team',
+    'team_member',
+    'project_member',
+    'project_team',
+    -- MVP1 Q copilot (Phase C) — metrics only, still tenant-scoped.
+    'ai_call_log',
+    -- MVP1 PRD Modules 5–7 — executable project tasks.
+    'project_task',
+    'blocker',
+    'project_document',
+    'notification',
+    'project_integration',
+    'project_milestone',
+    'project_status_update',
+    'shared_report'
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);

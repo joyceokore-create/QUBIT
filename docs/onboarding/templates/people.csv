@@ -1,0 +1,5 @@
+name,email,roles,department,manager
+Person One,person.one@example.invalid,SystemAdmin,Technology,
+Person Two,person.two@example.invalid,PortfolioManager,Executive Office,person.one@example.invalid
+Person Three,person.three@example.invalid,ProjectManager,Digital Banking,person.two@example.invalid
+Person Four,person.four@example.invalid,Contributor,Digital Banking,person.three@example.invalid

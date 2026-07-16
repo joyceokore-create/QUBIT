@@ -109,7 +109,11 @@ export function EditIssueDialog({ issue, users, open, onOpenChange }: EditIssueD
 
           <div className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-ink-2">Owner</span>
-            <Select value={ownerId} onValueChange={(v) => setOwnerId(v ?? "none")}>
+            <Select
+              value={ownerId}
+              onValueChange={(v) => setOwnerId(v ?? "none")}
+              items={{ none: "None", ...Object.fromEntries(users.map((u) => [u.id, u.name])) }}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
