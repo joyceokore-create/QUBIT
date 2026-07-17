@@ -34,6 +34,21 @@ const MAX_TOKENS = 2000;
 export type QReportType = "project" | "resource" | "portfolio" | "manager" | "member";
 export type ReportPeriod = "week" | "month" | "all";
 
+/** The report a viewer gets when they ask for "a report" with no type (PROMPT §7):
+ * SuperAdmin / Executive / heads → portfolio; ProjectManager → manager; else → member. */
+export function defaultReportType(roles: string[]): QReportType {
+  if (
+    roles.includes("PlatformSuperAdmin") ||
+    roles.includes("Executive") ||
+    roles.includes("HeadOfProjects") ||
+    roles.includes("HeadOfQA")
+  ) {
+    return "portfolio";
+  }
+  if (roles.includes("ProjectManager")) return "manager";
+  return "member";
+}
+
 export class QReportError extends Error {
   constructor(
     message: string,

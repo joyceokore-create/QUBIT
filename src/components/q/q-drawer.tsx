@@ -5,6 +5,7 @@ import { ArrowLeft, Send, Sparkles, X } from "lucide-react";
 import { QubitLogo } from "@/components/brand/qubit-logo";
 import { Markdown } from "@/components/q/markdown";
 import { useQ } from "@/components/q/q-provider";
+import { qSuggestionChips } from "@/lib/q-chips";
 
 type ReportType = "project" | "resource" | "portfolio" | "manager" | "member";
 interface ProjectOpt {
@@ -18,7 +19,7 @@ interface ChatMsg {
 }
 
 export function QDrawer({ canReports = false }: { canReports?: boolean }) {
-  const { open, closeQ, userId, pending, clearPending } = useQ();
+  const { open, closeQ, userId, roles, pending, clearPending } = useQ();
   const [view, setView] = useState<"home" | "picker" | "loading" | "report" | "chat">("home");
   const [markdown, setMarkdown] = useState("");
   const [usedAi, setUsedAi] = useState(false);
@@ -178,6 +179,12 @@ export function QDrawer({ canReports = false }: { canReports?: boolean }) {
                   </>
                 )}
               </div>
+              <div className="flex flex-col gap-2">
+                <div className="font-mono text-[8.5px] uppercase tracking-[1.8px] text-[var(--ink5)]">Try asking</div>
+                {qSuggestionChips(roles).map((c) => (
+                  <Chip key={c.label} label={c.label} onClick={() => void sendChat(c.prompt)} />
+                ))}
+              </div>
               <p className="text-[11.5px] leading-[1.5] text-[var(--ink5)]">
                 …or ask me anything below — I’ll look it up across your projects, tasks, risks, blockers, docs and connected
                 tools. For downloadable &amp; shareable weekly/monthly reports, visit{" "}
@@ -307,7 +314,7 @@ export function QDrawer({ canReports = false }: { canReports?: boolean }) {
   );
 }
 
-function Chip({ label, hint, onClick }: { label: string; hint: string; onClick: () => void }) {
+function Chip({ label, hint, onClick }: { label: string; hint?: string; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -315,7 +322,7 @@ function Chip({ label, hint, onClick }: { label: string; hint: string; onClick: 
       className="flex flex-col gap-0.5 rounded-[12px] border border-[var(--hair)] bg-[var(--wash)] p-3 text-left transition-[transform,border-color] duration-200 hover:translate-x-[3px] hover:border-[color-mix(in_oklab,var(--brand)_45%,transparent)]"
     >
       <span className="text-[13px] font-semibold text-[var(--qink)]">{label}</span>
-      <span className="text-[11px] text-[var(--ink4)]">{hint}</span>
+      {hint && <span className="text-[11px] text-[var(--ink4)]">{hint}</span>}
     </button>
   );
 }

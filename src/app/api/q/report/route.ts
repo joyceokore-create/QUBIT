@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { requirePermission } from "@/lib/api-guard";
-import { generateReport, QReportError } from "@/server/q/report";
+import { generateReport, QReportError, defaultReportType } from "@/server/q/report";
 import { canAccessReport } from "@/server/q/access";
 
 const Body = z.object({
-  type: z.enum(["project", "resource", "portfolio", "manager", "member"]),
+  // Optional — when omitted, Q picks the viewer's role-default report (§7).
+  type: z.enum(["project", "resource", "portfolio", "manager", "member"]).optional(),
   targetId: z.string().min(1).optional(),
   period: z.enum(["week", "month", "all"]).optional(),
 });
@@ -22,7 +23,8 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: { code: "VALIDATION", message: "Invalid request." } }, { status: 400 });
   }
-  const { type, targetId, period } = parsed.data;
+  const { targetId, period } = parsed.data;
+  const type = parsed.data.type ?? defaultReportType(guard.ctx.roles);
 
   if (!(await canAccessReport(guard.ctx, type, targetId))) {
     return NextResponse.json(

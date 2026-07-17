@@ -13,6 +13,7 @@ export interface QPending {
 interface QState {
   open: boolean;
   userId: string;
+  roles: string[];
   pending: QPending | null;
   /** Open Q to the suggestion home. */
   openQ: () => void;
@@ -24,7 +25,7 @@ interface QState {
 
 const QContext = createContext<QState | null>(null);
 
-export function QProvider({ userId, children }: { userId: string; children: React.ReactNode }) {
+export function QProvider({ userId, roles, children }: { userId: string; roles: string[]; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<QPending | null>(null);
   return (
@@ -32,6 +33,7 @@ export function QProvider({ userId, children }: { userId: string; children: Reac
       value={{
         open,
         userId,
+        roles,
         pending,
         openQ: () => {
           setPending(null);

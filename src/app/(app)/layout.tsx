@@ -35,7 +35,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div style={brandStyle} className="app-shell relative isolate min-h-screen bg-background">
       <AmbientField />
-      <QProvider userId={session.user.id}>
+      <QProvider userId={session.user.id} roles={session.user.roles}>
         <SlidePanelStateProvider>
           <div className="relative z-[1]">
             <Topbar />
