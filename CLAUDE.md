@@ -52,6 +52,36 @@ pnpm test:e2e                # Playwright e2e
 pnpm lint && pnpm typecheck  # quality gates (must pass before a milestone is "done")
 ```
 
+## Deployment
+
+QUBIT runs as a Docker Compose stack (app + Postgres 17) on the box
+`osbui@192.168.2.43`, under `/home/osbui/applications/qubit`, published on host port
+**3001**. Public URL: **https://q.fikrawork.com** (team-run openresty reverse proxy →
+box:3001, TLS terminated at the proxy).
+
+**Push changes with one command** (from this repo, over SSH key `~/.ssh/id_ed25519`):
+
+```bash
+./scripts/deploy.sh            # rsync → docker compose up -d --build → verify
+./scripts/deploy.sh --no-build # sync + restart only (no image rebuild)
+./scripts/deploy.sh --logs     # deploy then tail app logs
+```
+
+The script never ships `node_modules`, `.next`, `.git`, or `.env*` — production secrets
+live only in `.env.production` / `.env` **on the box** and are left untouched. Prisma
+migrations run automatically at container startup, so schema changes deploy with no
+extra step.
+
+**Env / config gotchas:**
+- `.env.production` on the box holds runtime secrets. `AUTH_URL` MUST be the public URL
+  (`https://q.fikrawork.com`) with `AUTH_TRUST_HOST=true`, or NextAuth emits broken
+  internal-IP callback URLs.
+- Build toolchain is pinned: `packageManager: pnpm@9.15.9` (lockfile is v9.0; pnpm 10/11
+  break on the build-script approval gate) and the Docker image uses Node 22. `.npmrc`
+  sets `node-linker=hoisted` so Prisma's generated client resolves for the Docker build.
+- LAN access from a `192.168.1.x` Mac needs the `192.168.2.50` alias/route (see
+  `~/qubit-alias-setup/`); the public URL works regardless of the Mac's alias.
+
 ## Definition of done (per milestone)
 
 - Feature works for BOTH tenants with correct theming.

@@ -17,6 +17,7 @@
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
+  "packageManager": "pnpm@9.15.9",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",
     "@auth/prisma-adapter": "^2.11.2",

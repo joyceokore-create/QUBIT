@@ -27,6 +27,9 @@ coverage
 docs
 *.md
 
+# Deploy tooling — editing it must not invalidate the image build cache
+scripts/deploy.sh
+
 # Misc
 .DS_Store
 *.log
