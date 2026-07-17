@@ -79,11 +79,12 @@ to the full-write tenant superadmin. The migration demotes the old grants to `Ex
 *before* promoting `SystemAdmin`, so today's read-only accounts are never silently elevated
 to full write.
 
-> **Transitional keys.** Existing write routes are still gated on the coarse legacy
-> `project:update`, and admin routes on `iam:manage`. Canonical roles are mapped onto those
-> keys until each route adopts the fine-grained keys / `src/lib/access.ts` helpers in its
-> own phase (DECISIONS DM1.4). `dashboard:read` is part of the global-read base, so every
-> role lands on `/dashboard` after sign-in.
+> **Transitional keys.** Non-admin write routes are still gated on the coarse legacy
+> `project:update`; canonical roles are mapped onto it until each route adopts the
+> fine-grained keys / `src/lib/access.ts` helpers in its own phase (DECISIONS DM1.4). The
+> **admin routes migrated in Phase 4** to `admin:access` + per-action keys + scoped helpers
+> (DECISIONS DM1.9). `dashboard:read` is part of the global-read base, so every role lands on
+> `/dashboard` after sign-in.
 
 ### Editable role permissions (Phase 1.5)
 

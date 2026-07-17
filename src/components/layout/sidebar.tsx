@@ -23,7 +23,7 @@ export async function Sidebar() {
   const showPortfolios = can(ctx, "portfolio:read");
   const showProjects = can(ctx, "project:read");
   const showRisks = can(ctx, "risk:read");
-  const showAdmin = can(ctx, "iam:manage");
+  const showAdmin = can(ctx, "admin:access");
   const nav = showPortfolios || showProjects || showRisks ? await getSidebarNavData(ctx) : null;
 
   return (

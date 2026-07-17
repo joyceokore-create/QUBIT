@@ -135,6 +135,30 @@ action (`src/lib/auth-actions.ts`) invoked via `<form action>`, which clears the
 redirects server-side. (`redirectTo`, not the deprecated `callbackUrl`, is the correct v5
 client option — but the server action sidesteps the client path entirely.)
 
+## MVP1 — Admin console scoping, Phase 4 (2026-07-17)
+
+### DM1.9 — Admin routes migrated off the coarse `iam:manage` to per-action gates
+PROMPT §5. The admin console is now visible to SuperAdmin + both heads (`admin:access`), with
+authority enforced **server-side per action** (not by hiding tabs):
+- users create/invite → `users:invite` (SuperAdmin + heads); roles / suspend / reactivate /
+  delete → `users:roles` / `users:suspend` (SuperAdmin only)
+- departments create → `departments:manage` (SuperAdmin only at the role level); department
+  `[id]` edit/delete → `canManageDepartment` (SuperAdmin any, a head = their own dept);
+  user↔department membership → same scope
+- teams create → `teams:create`; team `[id]` manage → `canManageTeam` (SuperAdmin + heads, or
+  the team lead)
+- audit view → SuperAdmin only; Admin → Roles editing → `roles:manage` (SuperAdmin only)
+
+The Users tab renders **read-only for heads** (directory + Invite; no roles/suspend/delete);
+nav pills + sidebar show Admin/Teams on `admin:access`. This retires the DM1.4 transitional
+`iam:manage` gating for the admin surface (write routes elsewhere still use `project:update`
+until their own phases).
+
+**Deferred (noted, not silently dropped):** admin-header tab-hiding for heads (a head can
+still reach Roles read-only, and Audit → Forbidden — a rough edge, not a security hole); the
+non-admin "Teams page for everyone" and the project **join-request flow** → Phase 5 (they also
+unblock the stubbed PM dashboard widget).
+
 ## Phase 0 — Foundation (2026-07-10)
 
 ### D0.1 — `tenantId` + RLS on every new table, including join tables

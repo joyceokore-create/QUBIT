@@ -3,7 +3,7 @@ import { requirePermission } from "@/lib/api-guard";
 import { createTeam, CreateTeamInput, TeamError } from "@/server/teams";
 
 export async function POST(req: Request) {
-  const guard = await requirePermission("iam:manage");
+  const guard = await requirePermission("teams:create");
   if ("response" in guard) return guard.response;
   const parsed = CreateTeamInput.safeParse(await req.json());
   if (!parsed.success) {

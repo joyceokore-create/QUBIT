@@ -3,7 +3,7 @@ import { requirePermission } from "@/lib/api-guard";
 import { softDeleteUser, UserAdminError } from "@/server/users";
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requirePermission("iam:manage");
+  const guard = await requirePermission("users:suspend");
   if ("response" in guard) return guard.response;
   const { id } = await params;
 

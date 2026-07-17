@@ -61,7 +61,9 @@ export default async function AdminUsersPage() {
   const session = await auth();
   if (!session?.user) return null;
   const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
-  if (!can(ctx, "iam:manage")) return <Forbidden />;
+  if (!can(ctx, "admin:access")) return <Forbidden />;
+  const canManageUsers = can(ctx, "users:roles"); // full CRUD — PlatformSuperAdmin only
+  const canInvite = can(ctx, "users:invite"); // PlatformSuperAdmin + heads
 
   const [users, departments, teams, projects] = await Promise.all([
     listUsers(ctx),
@@ -76,14 +78,16 @@ export default async function AdminUsersPage() {
       <AdminHeader
         subtitle={`${users.length} ${users.length === 1 ? "user" : "users"} · directory, roles & access for ${session.user.tenantName}`}
         action={
-          <NewUserDialog
-            departments={departments.map((d) => ({ id: d.id, name: d.name }))}
-            teams={teams.map((t) => ({ id: t.id, name: t.name }))}
-            projects={projects.map((p) => ({ id: p.id, code: p.code, name: p.name }))}
-          />
+          canInvite ? (
+            <NewUserDialog
+              departments={departments.map((d) => ({ id: d.id, name: d.name }))}
+              teams={teams.map((t) => ({ id: t.id, name: t.name }))}
+              projects={projects.map((p) => ({ id: p.id, code: p.code, name: p.name }))}
+            />
+          ) : undefined
         }
       />
-      <UsersClient users={users} departments={departments} currentUserId={session.user.id} insights={insights} />
+      <UsersClient users={users} departments={departments} currentUserId={session.user.id} insights={insights} canManage={canManageUsers} />
     </main>
   );
 }

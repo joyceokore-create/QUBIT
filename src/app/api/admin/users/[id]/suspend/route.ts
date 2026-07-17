@@ -3,7 +3,7 @@ import { requirePermission } from "@/lib/api-guard";
 import { setUserStatus, UserAdminError } from "@/server/users";
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requirePermission("iam:manage");
+  const guard = await requirePermission("users:suspend");
   if ("response" in guard) return guard.response;
   const { id } = await params;
 

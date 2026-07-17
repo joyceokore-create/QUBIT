@@ -30,9 +30,11 @@ interface UserRowActionsProps {
   currentUserId: string;
   departments: DepartmentSummary[];
   users: AdminUserSummary[];
+  /** Full CRUD (roles/suspend/delete) — PlatformSuperAdmin. Heads only get department membership. */
+  canManage: boolean;
 }
 
-export function UserRowActions({ user, currentUserId, departments, users }: UserRowActionsProps) {
+export function UserRowActions({ user, currentUserId, departments, users, canManage }: UserRowActionsProps) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
   const [departmentOpen, setDepartmentOpen] = useState(false);
@@ -69,14 +71,18 @@ export function UserRowActions({ user, currentUserId, departments, users }: User
           <MoreHorizontal className="h-4 w-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => setEditOpen(true)}>Edit roles</DropdownMenuItem>
+          {canManage && <DropdownMenuItem onSelect={() => setEditOpen(true)}>Edit roles</DropdownMenuItem>}
           <DropdownMenuItem onSelect={() => setDepartmentOpen(true)}>Edit department</DropdownMenuItem>
-          <DropdownMenuItem disabled={isSelf || busy} onSelect={toggleSuspend}>
-            {user.status === "ACTIVE" ? "Suspend" : "Reactivate"}
-          </DropdownMenuItem>
-          <DropdownMenuItem variant="destructive" disabled={isSelf} onSelect={() => setDeleteOpen(true)}>
-            Delete
-          </DropdownMenuItem>
+          {canManage && (
+            <DropdownMenuItem disabled={isSelf || busy} onSelect={toggleSuspend}>
+              {user.status === "ACTIVE" ? "Suspend" : "Reactivate"}
+            </DropdownMenuItem>
+          )}
+          {canManage && (
+            <DropdownMenuItem variant="destructive" disabled={isSelf} onSelect={() => setDeleteOpen(true)}>
+              Delete
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 

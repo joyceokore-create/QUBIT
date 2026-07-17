@@ -25,7 +25,7 @@ export async function Topbar() {
     permissions: session.user.permissions,
   };
 
-  const canManageIam = can(ctx, "iam:manage");
+  const canAccessAdmin = can(ctx, "admin:access");
   const canSwitchTenant = can(ctx, "tenant:switch");
 
   // Tenant list only needed (and only queried) for the switcher. The tenant
@@ -52,7 +52,7 @@ export async function Topbar() {
         <span className="font-heading text-[16.5px] font-bold tracking-[2.5px] text-[var(--tbinkS)]">QUBIT</span>
       </Link>
 
-      <NavPills canManageIam={canManageIam} />
+      <NavPills canAccessAdmin={canAccessAdmin} />
 
       <TimerWidget />
       <NotificationBell />

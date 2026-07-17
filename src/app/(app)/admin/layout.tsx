@@ -13,7 +13,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     permissions: session.user.permissions,
   };
 
-  if (!can(ctx, "iam:manage")) {
+  // Console is visible to SuperAdmin + both heads (admin:access). Per-action authority
+  // (user CRUD, department edits, team management) is enforced server-side per route below —
+  // NOT by hiding tabs (PROMPT §5).
+  if (!can(ctx, "admin:access")) {
     return <Forbidden />;
   }
 

@@ -3,7 +3,7 @@ import { requirePermission } from "@/lib/api-guard";
 import { createUser, CreateUserInput, UserAdminError } from "@/server/users";
 
 export async function POST(req: Request) {
-  const guard = await requirePermission("iam:manage");
+  const guard = await requirePermission("users:invite");
   if ("response" in guard) return guard.response;
 
   const parsed = CreateUserInput.safeParse(await req.json());

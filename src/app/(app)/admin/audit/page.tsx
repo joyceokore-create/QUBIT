@@ -1,6 +1,8 @@
 import { format } from "date-fns";
 import { auth } from "@/lib/auth";
+import { can } from "@/lib/rbac";
 import { listAuditLog } from "@/server/audit";
+import { Forbidden } from "@/components/forbidden";
 import { AdminHeader } from "../admin-header";
 
 const CARD = "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]";
@@ -11,6 +13,8 @@ export default async function AdminAuditPage() {
   if (!session?.user) return null;
 
   const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
+  // Audit is a super-admin surface (§5): heads' scoped console has no audit view.
+  if (!can(ctx, "iam:manage")) return <Forbidden />;
   const rows = await listAuditLog(ctx);
 
   return (

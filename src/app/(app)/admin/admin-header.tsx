@@ -20,7 +20,7 @@ export function AdminHeader({ subtitle, action }: { subtitle?: string; action?: 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="mb-1.5 font-mono text-[10px] font-semibold uppercase tracking-[2.4px] text-[var(--ink4)]">
-            Administration · IAM v1 · gated on iam:manage
+            Administration · IAM v1 · gated on admin:access
           </div>
           <h1 className="font-heading text-[27px] font-bold tracking-[-.8px] text-[var(--qink)]">Admin</h1>
           {subtitle && <p className="mt-1 text-[12px] text-[var(--ink4)]">{subtitle}</p>}

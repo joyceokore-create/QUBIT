@@ -3,7 +3,7 @@ import { requirePermission } from "@/lib/api-guard";
 import { createDepartment, CreateDepartmentInput, DepartmentAdminError } from "@/server/departments";
 
 export async function POST(req: Request) {
-  const guard = await requirePermission("iam:manage");
+  const guard = await requirePermission("departments:manage");
   if ("response" in guard) return guard.response;
 
   const parsed = CreateDepartmentInput.safeParse(await req.json());
