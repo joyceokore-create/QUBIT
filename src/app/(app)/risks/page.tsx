@@ -21,6 +21,7 @@ export default async function RisksPage() {
     tenantId: session.user.tenantId,
     userId: session.user.id,
     roles: session.user.roles,
+    permissions: session.user.permissions,
   };
 
   if (!can(ctx, "risk:read")) {

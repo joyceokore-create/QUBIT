@@ -74,6 +74,7 @@ model Tenant {
   projectIntegrations ProjectIntegration[]
   projectMilestones ProjectMilestone[]
   sharedReports    SharedReport[]
+  rolePermissions  RolePermission[]
 
   @@map("tenant")
 }
@@ -380,6 +381,24 @@ model RoleAssignment {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("role_assignment")
+}
+
+// Tenant-editable role → permission grants (Phase 1.5). A canonical role's permission set
+// is the CODE default (src/lib/rbac.ts ROLE_PERMISSIONS) UNLESS this table has rows for that
+// (tenant, role) — in which case those rows fully define the role's permissions for that
+// tenant. PlatformSuperAdmin is never stored/edited here (always full "*"). Effective
+// permissions are resolved at login into the session; see src/server/role-permissions.ts.
+model RolePermission {
+  id         String   @id @default(uuid())
+  tenantId   String   @map("tenant_id")
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  role       String
+  permission String
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([tenantId, role, permission])
+  @@index([tenantId, role])
+  @@map("role_permission")
 }
 
 model Portfolio {

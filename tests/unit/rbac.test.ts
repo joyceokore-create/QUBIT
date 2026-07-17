@@ -62,3 +62,29 @@ describe("rbac.can() — matcher mechanics", () => {
     expect(can(ctx, "dashboard:read")).toBe(false);
   });
 });
+
+describe("rbac.can() — baked session permissions (Phase 1.5)", () => {
+  it("uses ctx.permissions when present, ignoring the role code-map", () => {
+    // A Member whose session was granted task:write via a tenant role override.
+    const ctx: TenantContext = {
+      tenantId: "t1",
+      userId: "u1",
+      roles: ["Member"],
+      permissions: ["project:read", "task:write"],
+    };
+    expect(can(ctx, "task:write")).toBe(true);
+    expect(can(ctx, "project:read")).toBe(true);
+    expect(can(ctx, "project:create")).toBe(false); // not in the baked set
+  });
+
+  it("falls back to the role code-map when ctx.permissions is absent", () => {
+    const ctx = ctxWithRoles(["Member"]); // no permissions field
+    expect(can(ctx, "project:read")).toBe(true);
+    expect(can(ctx, "task:write")).toBe(false); // Member has no task:write by default
+  });
+
+  it("treats a present-but-empty permission set as deny-all (no fallback)", () => {
+    const ctx: TenantContext = { tenantId: "t1", userId: "u1", roles: ["PlatformSuperAdmin"], permissions: [] };
+    expect(can(ctx, "project:read")).toBe(false);
+  });
+});

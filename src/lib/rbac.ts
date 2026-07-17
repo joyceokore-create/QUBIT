@@ -145,6 +145,7 @@ export const PERMISSION_CATALOGUE = [
   "users:suspend",
   "users:roles",
   "users:reset",
+  "roles:manage", // edit role → permission sets (PlatformSuperAdmin only)
   "departments:manage",
   // Teams
   "teams:create",
@@ -207,6 +208,12 @@ function matchesPermission(granted: string, requested: string): boolean {
  * (portfolio/orgUnit/project/department); tenant-wide assignments don't use it yet.
  */
 export function can(ctx: TenantContext, permission: string, _scope?: Scope): boolean {
+  // When the session carries resolved effective permissions (baked at login, honouring any
+  // tenant role-permission overrides — Phase 1.5), use them directly. Otherwise fall back to
+  // the code role → permission defaults (tests, internal ctx, and pre-existing sessions).
+  if (ctx.permissions) {
+    return ctx.permissions.some((granted) => matchesPermission(granted, permission));
+  }
   return ctx.roles.some((role) => {
     const grants = ROLE_PERMISSIONS[role];
     if (!grants) return false;

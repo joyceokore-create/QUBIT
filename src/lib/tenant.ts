@@ -5,6 +5,13 @@ export interface TenantContext {
   tenantId: string;
   userId: string;
   roles: string[];
+  /**
+   * Effective permissions resolved at login (code role defaults merged with any tenant
+   * role-permission overrides — see src/server/role-permissions.ts). When present, `can()`
+   * uses these directly; when absent it falls back to the code role → permission map. Optional
+   * so tests and internal contexts can construct a ctx from roles alone.
+   */
+  permissions?: string[];
 }
 
 /**
@@ -41,5 +48,6 @@ export async function getTenantContext(): Promise<TenantContext> {
     tenantId: session.user.tenantId,
     userId: session.user.id,
     roles: session.user.roles ?? [],
+    permissions: session.user.permissions,
   };
 }

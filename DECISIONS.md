@@ -108,6 +108,33 @@ Also fixed a pre-existing `resetTenant` gap that blocked re-seeding: it never de
 `shared_report` rows (added in a later migration) and now also clears the seeded
 `department` rows; both hold a RESTRICT tenant FK.
 
+## MVP1 — Editable role permissions & sign-out, Phase 1.5 (2026-07-17)
+
+### DM1.7 — Role → permission sets are tenant-editable (reverses "roles fixed in code")
+Requested by Joyce: admins can customise what each role may do (e.g. grant `Member`
+`task:write` / `issue:write`). New `RolePermission` table (tenant-scoped, FORCE RLS,
+migration `20260717130000_role_permissions`) holds per-tenant overrides. A role's effective
+permissions are the code default (`rbac.ts` ROLE_PERMISSIONS) UNLESS the tenant has rows for
+that role — replace semantics. Saving the exact default or an empty set clears the override.
+**PlatformSuperAdmin is LOCKED to `*`** — never editable — so an admin can't remove their own
+access. Edited in Admin → Roles (gated on the new `roles:manage`, PlatformSuperAdmin-only).
+
+**Resolution model:** effective permissions are resolved at LOGIN and baked into the session
+(`session.user.permissions`, via `src/server/role-permissions.ts`). `can()` uses
+`ctx.permissions` when present and falls back to the code role-map otherwise — so the Phase 1
+tests, internal contexts, and pre-existing sessions keep working unchanged, and `can()` stays
+synchronous (no async refactor of ~20 call sites). Every ctx-construction site now carries
+`permissions`. **Trade-off (accepted):** a permission change takes effect on each affected
+user's NEXT sign-in, not mid-session. Changing a USER's role assignment
+(Admin → Users → Edit roles → PATCH) was already supported and is unchanged.
+
+### DM1.8 — Sign-out moved to a server action
+The account dropdown's client `signOut()` (`next-auth/react`) could be aborted when the menu
+unmounts on select, and is less reliable behind the reverse proxy. Replaced with a server
+action (`src/lib/auth-actions.ts`) invoked via `<form action>`, which clears the session and
+redirects server-side. (`redirectTo`, not the deprecated `callbackUrl`, is the correct v5
+client option — but the server action sidesteps the client path entirely.)
+
 ## Phase 0 — Foundation (2026-07-10)
 
 ### D0.1 — `tenantId` + RLS on every new table, including join tables

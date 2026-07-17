@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { signOut } from "next-auth/react";
 import { LogOut, ShieldCheck } from "lucide-react";
+import { signOutAction } from "@/lib/auth-actions";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,10 +41,12 @@ export function UserMenu({ name, email }: UserMenuProps) {
           Two-factor authentication
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onSelect={() => signOut({ redirectTo: "/login" })}>
-          <LogOut />
-          Sign out
-        </DropdownMenuItem>
+        <form action={signOutAction} className="w-full">
+          <DropdownMenuItem variant="destructive" render={<button type="submit" className="w-full" />}>
+            <LogOut />
+            Sign out
+          </DropdownMenuItem>
+        </form>
       </DropdownMenuContent>
     </DropdownMenu>
   );

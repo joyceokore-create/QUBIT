@@ -6,6 +6,7 @@ declare module "next-auth" {
     tenantSlug: string;
     tenantName: string;
     roles: string[];
+    permissions: string[];
     brandColor: string;
     brandLight: string;
     mustChangePassword?: boolean;
@@ -18,6 +19,7 @@ declare module "next-auth" {
       tenantSlug: string;
       tenantName: string;
       roles: string[];
+      permissions: string[];
       brandColor: string;
       brandLight: string;
       mustChangePassword?: boolean;
@@ -31,6 +33,7 @@ declare module "next-auth/jwt" {
     tenantSlug?: string;
     tenantName?: string;
     roles?: string[];
+    permissions?: string[];
     brandColor?: string;
     brandLight?: string;
     mustChangePassword?: boolean;

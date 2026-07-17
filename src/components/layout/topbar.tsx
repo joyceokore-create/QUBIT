@@ -22,6 +22,7 @@ export async function Topbar() {
     tenantId: session.user.tenantId,
     userId: session.user.id,
     roles: session.user.roles,
+    permissions: session.user.permissions,
   };
 
   const canManageIam = can(ctx, "iam:manage");

@@ -85,6 +85,16 @@ to full write.
 > own phase (DECISIONS DM1.4). `dashboard:read` is part of the global-read base, so every
 > role lands on `/dashboard` after sign-in.
 
+### Editable role permissions (Phase 1.5)
+
+The permission SETS above are **code defaults**. Each role's set is tenant-editable in
+Admin → Roles (gated on `roles:manage`, PlatformSuperAdmin-only). Overrides live in the
+`role_permission` table (per-tenant, FORCE RLS); a role with no rows uses its code default.
+**PlatformSuperAdmin is locked to full access (`*`) and can't be edited** (lockout guard).
+Effective permissions are resolved at sign-in and baked into the session, so a change applies
+on the affected user's **next login**. See DECISIONS DM1.7. (Assigning a role to a *user* is
+separate — Admin → Users → Edit roles.)
+
 ### Permission check
 
 ```ts

@@ -39,6 +39,7 @@ export default async function SubsidiaryPage({
     tenantId: session.user.tenantId,
     userId: session.user.id,
     roles: session.user.roles,
+    permissions: session.user.permissions,
   };
   const subsidiary = await getSubsidiaryDetail(ctx, orgUnitId);
   if (!subsidiary) notFound();

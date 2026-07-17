@@ -58,7 +58,9 @@ BEGIN
     'project_integration',
     'project_milestone',
     'project_status_update',
-    'shared_report'
+    'shared_report',
+    -- Phase 1.5 — tenant-editable role → permission grants.
+    'role_permission'
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);

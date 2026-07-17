@@ -10,7 +10,7 @@ export default async function AdminAuditPage() {
   const session = await auth();
   if (!session?.user) return null;
 
-  const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles };
+  const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
   const rows = await listAuditLog(ctx);
 
   return (

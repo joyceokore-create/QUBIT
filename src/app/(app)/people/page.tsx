@@ -8,7 +8,7 @@ import { Forbidden } from "@/components/forbidden";
 export default async function PeoplePage() {
   const session = await auth();
   if (!session?.user) return null;
-  const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles };
+  const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
   if (!can(ctx, "project:read")) return <Forbidden />;
 
   const people = await listWorkload(ctx);

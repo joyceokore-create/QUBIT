@@ -10,6 +10,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     tenantId: session.user.tenantId,
     userId: session.user.id,
     roles: session.user.roles,
+    permissions: session.user.permissions,
   };
 
   if (!can(ctx, "iam:manage")) {

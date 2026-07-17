@@ -7,6 +7,7 @@ import { resolveTenantByEmailDomain } from "@/lib/tenant-domain";
 import { verifyPassword } from "@/lib/password";
 import { decryptMfaSecret, verifyTotp } from "@/lib/mfa";
 import { checkRateLimit, recordFailure, resetRateLimit } from "@/lib/rate-limit";
+import { resolvePermissionsForRoles } from "@/server/role-permissions";
 
 const CredentialsSchema = z.object({
   email: z.string().email(),
@@ -71,6 +72,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         resetRateLimit(rateLimitKey);
 
+        const roles = user.roles.map((r) => r.role);
+        // Resolve effective permissions once, at login, and bake them into the session so
+        // can() stays synchronous. Honours any tenant role-permission overrides (Phase 1.5).
+        const permissions = await withTenant({ tenantId: tenant.id, userId: user.id }, (tx) =>
+          resolvePermissionsForRoles(tx, tenant.id, roles),
+        );
+
         // Record last sign-in (onboarding tracking) — best-effort, never blocks login.
         await withTenant({ tenantId: tenant.id, userId: user.id }, (tx) =>
           tx.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }),
@@ -83,7 +91,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           tenantId: tenant.id,
           tenantSlug: tenant.slug,
           tenantName: tenant.name,
-          roles: user.roles.map((r) => r.role),
+          roles,
+          permissions,
           brandColor: tenant.brandColor,
           brandLight: tenant.brandLight,
           mustChangePassword: user.mustChangePassword,

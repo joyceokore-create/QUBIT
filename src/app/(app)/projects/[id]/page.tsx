@@ -11,7 +11,7 @@ import type { ProjectPanelJson } from "@/components/panels/project-panel-content
 export default async function ProjectWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return null;
-  const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles };
+  const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
   const { id } = await params;
 
   if (!(await canViewProject(ctx, id))) return <Forbidden />;

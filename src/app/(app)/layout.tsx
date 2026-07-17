@@ -29,7 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const brandStyle: BrandStyle = {
     "--brand": session.user.tenantSlug === "riverbank" ? "var(--rbrand)" : "var(--pbrand)",
   };
-  const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles };
+  const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
   const canReports = can(ctx, "reports:read");
 
   return (

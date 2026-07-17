@@ -16,6 +16,7 @@ export async function Sidebar() {
     tenantId: session.user.tenantId,
     userId: session.user.id,
     roles: session.user.roles,
+    permissions: session.user.permissions,
   };
 
   const showDashboard = can(ctx, "dashboard:read");

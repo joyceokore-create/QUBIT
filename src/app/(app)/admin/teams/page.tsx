@@ -13,7 +13,7 @@ import { TeamRowActions } from "./team-row-actions";
 export default async function AdminTeamsPage() {
   const session = await auth();
   if (!session?.user) return null;
-  const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles };
+  const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
   if (!can(ctx, "iam:manage")) return <Forbidden />;
 
   const [teams, users] = await Promise.all([listTeams(ctx), listUsers(ctx)]);

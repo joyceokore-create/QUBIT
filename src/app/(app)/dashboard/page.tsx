@@ -27,7 +27,7 @@ function roleLabel(roles: string[]): string {
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user) return null;
-  const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles };
+  const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
   if (!can(ctx, "dashboard:read")) return <Forbidden />;
 
   const [projects, escalations, milestones, workload, memberCounts] = await Promise.all([
