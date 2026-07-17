@@ -30,7 +30,7 @@ describe("Department lifecycle", () => {
     }
     kcbId = kcb.id;
     riverbankId = riverbank.id;
-    ctx = { tenantId: kcbId, userId: "test-dept-actor", roles: ["SystemAdmin"] };
+    ctx = { tenantId: kcbId, userId: "test-dept-actor", roles: ["PlatformSuperAdmin"] };
   });
 
   beforeEach(async () => {
@@ -176,7 +176,7 @@ describe("Department lifecycle", () => {
     const riverbankCtx: TenantContext = {
       tenantId: riverbankId,
       userId: "test-dept-actor",
-      roles: ["SystemAdmin"],
+      roles: ["PlatformSuperAdmin"],
     };
     const found = await withTenant(riverbankCtx, (tx) => tx.department.findUnique({ where: { id: department.id } }));
     expect(found).toBeNull();

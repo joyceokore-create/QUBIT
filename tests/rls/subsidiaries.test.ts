@@ -21,7 +21,7 @@ describe("Subsidiary view", () => {
     }
     kcbId = kcb.id;
     riverbankId = riverbank.id;
-    ctx = { tenantId: kcbId, userId: "test-subsidiary-actor", roles: ["SystemAdmin"] };
+    ctx = { tenantId: kcbId, userId: "test-subsidiary-actor", roles: ["PlatformSuperAdmin"] };
 
     const ke = await withTenant(ctx, (tx) => tx.orgUnit.findFirstOrThrow({ where: { code: "KE" } }));
     keOrgUnitId = ke.id;
@@ -84,7 +84,7 @@ describe("Subsidiary view", () => {
     const riverbankCtx: TenantContext = {
       tenantId: riverbankId,
       userId: "test-subsidiary-actor",
-      roles: ["SystemAdmin"],
+      roles: ["PlatformSuperAdmin"],
     };
     const result = await getSubsidiaryDetail(riverbankCtx, keOrgUnitId);
     expect(result).toBeNull();

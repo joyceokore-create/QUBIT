@@ -1,19 +1,29 @@
-import { can } from "@/lib/rbac";
+import { canReportOnPerson } from "@/lib/access";
 import type { TenantContext } from "@/lib/tenant";
 import type { QReportType } from "@/server/q/report";
 
 /**
  * Single source of truth for who may generate/share a given report (used by the report
- * route, the share route, and the reports centre UI so they never drift).
+ * route, the share route, and the reports centre UI so they never drift). Model (PROMPT §2):
  *
- * Rule: a user can always run a report **about themselves** (`member`/`resource` targeting
- * their own id, or no target). Any report about a project, the portfolio, delivery, or
- * *another* person is a management view and requires `reports:read` — held by
- * ProjectManager, PortfolioManager, Executive, Viewer (read-only), and SystemAdmin.
+ *  - A person report (member/resource) about YOURSELF → always allowed.
+ *  - A person report about ANOTHER person → `report:resource:others` (PlatformSuperAdmin,
+ *    Executive, HeadOfProjects, HeadOfQA — any person) OR a ProjectManager for a member of a
+ *    project they lead / are PM-member of. Decided by `canReportOnPerson` under RLS.
+ *  - Portfolio / delivery(manager) / project reports → read-all world (every authenticated
+ *    user), since they summarise globally-readable tenant data.
+ *
+ * Async because the person-scoping path reads project membership under RLS. Prompts are not
+ * a security boundary — this gate is enforced at the tool/route layer (see api/q/report).
  */
-export function canAccessReport(ctx: TenantContext, type: QReportType, targetId?: string): boolean {
-  const aboutSelf =
-    (type === "member" || type === "resource") && (!targetId || targetId === ctx.userId);
-  if (aboutSelf) return true;
-  return can(ctx, "reports:read");
+export async function canAccessReport(
+  ctx: TenantContext,
+  type: QReportType,
+  targetId?: string,
+): Promise<boolean> {
+  if (type === "resource" || type === "member") {
+    return canReportOnPerson(ctx, targetId);
+  }
+  // portfolio | manager | project — read-only summaries over globally-readable data.
+  return true;
 }

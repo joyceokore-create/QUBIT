@@ -36,6 +36,13 @@ interface UserSeed {
   email: string;
   name: string;
   roles: string[];
+  // Flat department placement (DM1.1) — resolved to Department.id after departments seed.
+  departmentName?: string;
+}
+interface DepartmentSeed {
+  name: string;
+  // Department head (informational + drives the departments:manage scope). Resolved by email.
+  headUserEmail?: string;
 }
 interface PortfolioSeed {
   key: string;
@@ -105,6 +112,7 @@ interface TenantSeed {
   domains: string[];
   orgUnits: OrgUnitSeed[];
   users: UserSeed[];
+  departments?: DepartmentSeed[];
   portfolios: PortfolioSeed[];
   programmes: ProgrammeSeed[];
   projects: ProjectSeed[];
@@ -129,7 +137,7 @@ const KCB_SEED: TenantSeed = {
   ],
   // Only the tenant's super-admin is seeded — every other user is onboarded in-app.
   users: [
-    { email: "daniel.kiptoo@kcb.example.invalid", name: "Daniel Kiptoo", roles: ["SystemAdmin", "PlatformSuperAdmin"] },
+    { email: "daniel.kiptoo@kcb.example.invalid", name: "Daniel Kiptoo", roles: ["PlatformSuperAdmin"] },
   ],
   portfolios: [
     {
@@ -974,16 +982,28 @@ const RIVERBANK_SEED: TenantSeed = {
   // used for the firm's own QUBIT access, alongside the synthetic demo domain below.
   domains: ["riverbank.solutions", "riverbank.example.invalid"],
   orgUnits: [
-    { code: "HQ", name: "Riverbank Head Office" },
-    { code: "WR", name: "Riverbank West Region" },
-    { code: "CR", name: "Riverbank Coast Region" },
+    // DM1.1: Riverbank is ONE flat organization. A single anchor org unit remains only
+    // because ProjectOrgStatus.orgUnitId is non-nullable; it is hidden from the UI by the
+    // ≤1-org-unit nav guard. The old WR/CR "regions" were wrong and are removed.
+    { code: "HQ", name: "Riverbank" },
   ],
-  // Only the tenant's super-admin is seeded — every other user is onboarded in-app.
+  // Flat departments (DM1.1). Riverbank is the firm's REAL tenant, so no synthetic people
+  // are seeded — departments start headless and real members (incl. department heads and the
+  // Head/Executive/PM roles) are onboarded in-app.
+  departments: [
+    { name: "HR" },
+    { name: "Development" },
+    { name: "QA" },
+    { name: "PMO" },
+    { name: "Executive Office" },
+  ],
+  // Only the tenant's real super-admin is seeded; every other user is onboarded in-app.
   users: [
     {
       email: "joyce.okore@riverbank.solutions",
       name: "Joyce Okore",
-      roles: ["SystemAdmin", "PlatformSuperAdmin"],
+      roles: ["PlatformSuperAdmin"],
+      departmentName: "Executive Office",
     },
   ],
   portfolios: [],
@@ -1102,6 +1122,13 @@ async function resetTenant(slug: string) {
     await tx.project.deleteMany({});
     await tx.programme.deleteMany({});
     await tx.portfolio.deleteMany({});
+    // shared_report + department both hold a RESTRICT tenant FK and must be cleared before
+    // the tenant delete. Null the user↔department and department self/head cross-references
+    // first so the deleteMany calls don't trip their own FKs (managers, dept heads, parents).
+    await tx.sharedReport.deleteMany({});
+    await tx.user.updateMany({ data: { departmentId: null, managerId: null } });
+    await tx.department.updateMany({ data: { headUserId: null, parentId: null } });
+    await tx.department.deleteMany({});
     await tx.roleAssignment.deleteMany({});
     await tx.user.deleteMany({});
     await tx.orgUnit.deleteMany({});
@@ -1149,6 +1176,28 @@ async function seedTenant(seed: TenantSeed) {
           data: { tenantId: tenant.id, userId: created.id, role },
         });
       }
+    }
+
+    // Departments (DM1.1) — flat for Riverbank (orgUnitId left unset); leadership is
+    // expressed via headUserId + Head roles, not a separate department. Created after users
+    // so headUserEmail resolves; user placement is applied straight after.
+    const departmentIdByName = new Map<string, string>();
+    for (const d of seed.departments ?? []) {
+      const created = await tx.department.create({
+        data: {
+          tenantId: tenant.id,
+          name: d.name,
+          headUserId: d.headUserEmail ? (userIdByEmail.get(d.headUserEmail) ?? null) : null,
+        },
+      });
+      departmentIdByName.set(d.name, created.id);
+    }
+    for (const u of seed.users) {
+      if (!u.departmentName) continue;
+      const departmentId = departmentIdByName.get(u.departmentName);
+      const userId = userIdByEmail.get(u.email);
+      if (!departmentId || !userId) continue;
+      await tx.user.update({ where: { id: userId }, data: { departmentId } });
     }
 
     const portfolioIdByKey = new Map<string, string>();

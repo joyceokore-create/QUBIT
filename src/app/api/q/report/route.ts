@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   }
   const { type, targetId, period } = parsed.data;
 
-  if (!canAccessReport(guard.ctx, type, targetId)) {
+  if (!(await canAccessReport(guard.ctx, type, targetId))) {
     return NextResponse.json(
       { error: { code: "FORBIDDEN", message: "You don't have permission to run that report." } },
       { status: 403 },

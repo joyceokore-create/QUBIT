@@ -33,6 +33,81 @@ wrong and must be removed.
 5. Post-MVP1 (Phase C/D): make `ProjectOrgStatus.orgUnitId` optional (or move
    status to Project level) and drop the anchor org unit.
 
+## MVP1 — Personalized dashboards, Phase 1 (2026-07-17)
+
+Roles/permissions groundwork for role- and identity-personalized dashboards
+(`PROMPT-personalized-dashboards.md`). Confirmed with Joyce in-session.
+
+### DM1.2 — Consolidated to six canonical roles; `PlatformSuperAdmin` repurposed
+The legacy role set (SystemAdmin, PortfolioManager, Executive, FinanceManager,
+Contributor, Viewer, DepartmentHead, PlatformSuperAdmin) collapses to six tenant
+roles: **PlatformSuperAdmin, HeadOfProjects, HeadOfQA, Executive, ProjectManager,
+Member**. Migration `20260717120000_canonical_roles` remaps existing
+`role_assignment` grants:
+
+| Legacy role | Canonical |
+|---|---|
+| SystemAdmin | PlatformSuperAdmin |
+| PlatformSuperAdmin (old, read-only oversight) | Executive |
+| PortfolioManager | HeadOfProjects |
+| FinanceManager | Executive |
+| Contributor | Member |
+| Viewer | Member |
+| DepartmentHead | Member (dept-head powers now derive from `Department.headUserId` + a Head role) |
+
+`PlatformSuperAdmin` previously meant a **cross-tenant, read-only** oversight role
+("no business-data authoring", docs/07); it is now the full-write tenant superadmin.
+**Security-critical:** the migration demotes old-`PlatformSuperAdmin` → `Executive`
+*before* promoting `SystemAdmin` → `PlatformSuperAdmin`, so today's read-only
+oversight accounts are never silently elevated to full write. `role_assignment` has
+FORCE RLS and `migrate deploy` runs as the non-superuser app role, so the remap
+disables RLS on the table for the UPDATE, then restores ENABLE + FORCE.
+
+### DM1.3 — "Global read, scoped write": role-level `can()` + async resource helpers
+Every authenticated user READs everything in their tenant (RLS still scopes to the
+tenant). WRITE is scoped. `can()` (src/lib/rbac.ts) stays a pure role→permission check
+and answers only role-level questions. Resource-scoped writes ("edit THIS project
+because I lead it", "report on a person in MY project", "budget for MY project", "QA
+edits a task in Testing/UAT", "manage MY department", "manage MY team") are decided by
+async helpers in **src/lib/access.ts** that read membership under RLS and never trust a
+client-supplied scope. A role denied at the role level may still be granted for a
+specific resource it owns/leads. The matcher supports N-segment keys and `*` wildcards
+(`teams:*`, `report:resource:others`, superadmin `*`).
+
+### DM1.4 — Legacy coarse keys retained transitionally
+~35 existing write routes are gated on the coarse `project:update`, and all admin
+routes on `iam:manage`. Phase 1 does NOT rewrite those guards (that is Phase 3/4 work
+and would regress every write path). Instead the canonical roles are mapped onto those
+keys (ProjectManager + HeadOfProjects get `project:update`; only PlatformSuperAdmin
+holds `iam:manage`, via its `*` grant). Each route migrates to the fine-grained new
+keys / access.ts helpers in the phase that touches it. Consequence for Phase 1: a PM can
+still edit any project via the coarse key (per-project scoping via `canWriteProject`
+lands with the workspace phase), and heads' scoped admin console is deferred to Phase 4.
+
+### DM1.5 — Permission matrix seeded at the unit layer
+`PROMPT` §8 asks for `tests/rls/permissions-matrix.test.ts` asserting via the API. The
+role×action decision spine is a pure function, so it lives in
+**tests/unit/permissions-matrix.test.ts** (runnable without a DB). API-level and
+resource-scoped rows (join requests, teams:create, budget, QA phase) are added under
+tests/rls as each phase builds its routes — logged, not silently skipped.
+
+### DM1.6 — Riverbank seed rebuilt to DM1.1 (done this phase, per Joyce)
+Dropped the wrong `WR`/`CR` region org units (kept the single hidden `HQ` anchor,
+renamed "Riverbank"); added the flat departments **HR · Development · QA · PMO ·
+Executive Office** (headless). Sidebar "Subsidiaries" group now hidden when a tenant has
+≤1 org unit.
+
+Riverbank is the firm's REAL tenant (`riverbank.solutions`), so only the real owner
+account **Joyce Okore (PlatformSuperAdmin)** is seeded — no synthetic demo people. (An
+earlier draft of this phase seeded six role-varied users to make the §4 persona-dashboard
+acceptance demoable; removed per Joyce 2026-07-17.) Consequence: the six-persona
+acceptance is exercised by onboarding users in-app — or via the fully-synthetic KCB
+tenant — not from the Riverbank seed.
+
+Also fixed a pre-existing `resetTenant` gap that blocked re-seeding: it never deleted
+`shared_report` rows (added in a later migration) and now also clears the seeded
+`department` rows; both hold a RESTRICT tenant FK.
+
 ## Phase 0 — Foundation (2026-07-10)
 
 ### D0.1 — `tenantId` + RLS on every new table, including join tables

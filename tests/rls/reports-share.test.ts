@@ -105,16 +105,17 @@ describe("MVP1 — reports centre (period, sharing, access)", () => {
     expect(leaked).toBeNull(); // Riverbank cannot read KCB's shared report
   });
 
-  it("authorises own reports for everyone, but gates project/other-person on reports:read", () => {
+  it("authorises own + read-all reports for everyone, and gates another person's workload", async () => {
     const base = { tenantId: kcb.tenantId, userId: kcb.userId };
-    // Own reports — allowed with no roles.
-    expect(canAccessReport({ ...base, roles: [] }, "member", kcb.userId)).toBe(true);
-    expect(canAccessReport({ ...base, roles: [] }, "resource")).toBe(true); // no target → self
-    // Someone else's / a project / portfolio — needs reports:read.
-    expect(canAccessReport({ ...base, roles: [] }, "member", "another-user")).toBe(false);
-    expect(canAccessReport({ ...base, roles: [] }, "project", projectId)).toBe(false);
-    expect(canAccessReport({ ...base, roles: ["Contributor"] }, "portfolio")).toBe(false);
-    expect(canAccessReport({ ...base, roles: ["ProjectManager"] }, "project", projectId)).toBe(true);
-    expect(canAccessReport({ ...base, roles: ["Executive"] }, "resource", "another-user")).toBe(true);
+    // Own person reports — allowed with no roles.
+    expect(await canAccessReport({ ...base, roles: [] }, "member", kcb.userId)).toBe(true);
+    expect(await canAccessReport({ ...base, roles: [] }, "resource")).toBe(true); // no target → self
+    // Portfolio + project reports are read-all world — allowed for everyone (PROMPT §2).
+    expect(await canAccessReport({ ...base, roles: ["Member"] }, "portfolio")).toBe(true);
+    expect(await canAccessReport({ ...base, roles: ["Member"] }, "project", projectId)).toBe(true);
+    // Another person's workload — denied without report:resource:others or project scope.
+    expect(await canAccessReport({ ...base, roles: ["Member"] }, "member", "another-user")).toBe(false);
+    // Executive / heads may report on anyone.
+    expect(await canAccessReport({ ...base, roles: ["Executive"] }, "resource", "another-user")).toBe(true);
   });
 });

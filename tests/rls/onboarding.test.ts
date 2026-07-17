@@ -14,7 +14,7 @@ describe("Onboarding tracking", () => {
     const k = await prisma.tenant.findUnique({ where: { slug: "kcb" } });
     if (!k) throw new Error("Seed required.");
     const admin = await withTenant({ tenantId: k.id, userId: "seed" }, (tx) => tx.user.findFirstOrThrow({ where: { status: "ACTIVE" } }));
-    kcb = { tenantId: k.id, userId: admin.id, roles: ["SystemAdmin"] };
+    kcb = { tenantId: k.id, userId: admin.id, roles: ["PlatformSuperAdmin"] };
     await createUser(kcb, { name: "Invitee One", email, password: "Passw0rd!23xyz", roles: ["Contributor"] });
   });
 

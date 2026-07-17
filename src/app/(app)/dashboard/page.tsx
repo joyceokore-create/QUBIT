@@ -16,8 +16,10 @@ import { gateCells, projectRank as rank, statusBarTok as barTok, statusMeta } fr
 // status), and Signals / Milestones / Workload rails.
 
 function roleLabel(roles: string[]): string {
-  if (roles.includes("SystemAdmin")) return "Super Admin";
-  if (roles.includes("PortfolioManager") || roles.includes("PlatformSuperAdmin")) return "Executive";
+  if (roles.includes("PlatformSuperAdmin")) return "Super Admin";
+  if (roles.includes("HeadOfProjects")) return "Head of Projects";
+  if (roles.includes("HeadOfQA")) return "Head of QA";
+  if (roles.includes("Executive")) return "Executive";
   if (roles.includes("ProjectManager")) return "Project Manager";
   return "Member";
 }

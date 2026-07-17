@@ -24,7 +24,7 @@ describe("RAID lifecycle", () => {
     }
     kcbId = kcb.id;
     riverbankId = riverbank.id;
-    ctx = { tenantId: kcbId, userId: "test-raid-actor", roles: ["SystemAdmin"] };
+    ctx = { tenantId: kcbId, userId: "test-raid-actor", roles: ["PlatformSuperAdmin"] };
   });
 
   beforeEach(async () => {
@@ -110,7 +110,7 @@ describe("RAID lifecycle", () => {
     const riverbankCtx: TenantContext = {
       tenantId: riverbankId,
       userId: "test-raid-actor",
-      roles: ["SystemAdmin"],
+      roles: ["PlatformSuperAdmin"],
     };
     await expect(updateRisk(riverbankCtx, risk.id, { status: "Closed" })).rejects.toThrow();
     await expect(materialiseRisk(riverbankCtx, risk.id, {})).rejects.toThrow();

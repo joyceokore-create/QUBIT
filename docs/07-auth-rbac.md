@@ -32,33 +32,58 @@ callbacks: {
 }
 ```
 
-## Roles → permissions
+## Roles → permissions (canonical — MVP1 Phase 1, 2026-07-17)
 
-Roles bundle permission keys. Permissions are fixed strings checked in `rbac.ts`.
+The product consolidated to **six canonical tenant roles**; multi-role users are allowed.
+Model: **global read, scoped write** — every authenticated user READs all portfolios,
+projects, tasks, risks, blockers, milestones and docs in their tenant (RLS still scopes to
+the tenant), while WRITE is scoped. `can()` (`src/lib/rbac.ts`) answers only role-level
+questions; resource-scoped writes are decided by async helpers in `src/lib/access.ts` that
+read membership under RLS and never trust a client-supplied scope (DECISIONS DM1.3).
+Permissions are fixed colon-delimited strings; `*` matches anything.
 
-| Role | Key permissions (Phase A subset) |
-|------|----------------------------------|
-| SystemAdmin | all within tenant; `iam:manage`; can bypass approvals (audited) |
-| PortfolioManager | `dashboard:read`, `portfolio:*`, `project:read`, `risk:read`, reports:read |
-| ProjectManager | `dashboard:read`, `project:*`, `risk:*`, `issue:*`, `task:*` (own projects) |
-| FinanceManager | `dashboard:read`, finance:* (Phase C) |
-| Contributor | `dashboard:read`, `task:*` (assigned), `risk:create`, `issue:create`, `timesheet:submit` |
-| Viewer | `*:read` only |
-| DepartmentHead | dynamic approval role (resource allocation approvals) — no `dashboard:read`; not a day-to-day dashboard user |
-| PlatformSuperAdmin | `*:read` + `tenant:switch` — cross-tenant admin, read-only oversight, no business-data authoring |
+| Role | Meaning | Role-level grants (beyond the global-read base) |
+|------|---------|-------------------------------------------------|
+| PlatformSuperAdmin | Superadmin | everything (`*`) — admin console, all user management, all writes |
+| HeadOfProjects | PMO lead — delivery governance across all projects | admin:access, users:invite, teams:manage:all, project:create, project:write (any), milestone/task/risk/issue/blocker:write, budget:read, report:resource:others |
+| HeadOfQA | QA lead — quality governance across all projects | admin:access, users:invite, teams:manage:all, project:create, risk/issue/blocker:write, budget:read, report:resource:others; task:write on Testing/UAT tasks (resource-scoped) |
+| Executive | CEO/CTO/execs — read-everything | budget:read, report:resource:others; no admin, no user management, no authoring |
+| ProjectManager | Runs the projects they lead / are PM-member of | project:create, milestone/task/risk/issue/blocker:write; project:write + budget:read + report:resource:others are per-project (resource-scoped) |
+| Member | Executes assigned work (default) | writes only to tasks assigned to them / risks & blockers they own, plus join requests — all resource-scoped |
 
-> **Update (Milestone 4):** `dashboard:read` added to `ProjectManager`, `FinanceManager`,
-> and `Contributor`. `/dashboard` is every user's post-login landing page (`middleware.ts`
-> redirects there after sign-in); without it, these three roles hit a Forbidden page
-> immediately after logging in. `DepartmentHead` was deliberately left out — it's a
-> dynamic, approval-only role, not a day-to-day user needing a dashboard.
+**Action gates (PROMPT §2).** `admin:access` = SuperAdmin + both heads. `users:create/
+suspend/roles/reset` = SuperAdmin **only**; `users:invite` = SuperAdmin + heads.
+`teams:create` = everyone (creator becomes team lead); `teams:manage:own` = team lead;
+`teams:manage:all` = SuperAdmin + heads. `project:create` = SuperAdmin + heads + PM.
+`budget:read` is hidden from Members. `report:resource:others` = SuperAdmin, Executive,
+both heads (any person) + PM (own project members only). `report:portfolio` and
+`report:resource:self` = everyone.
 
-> **Update (Admin & IAM v1):** `PlatformSuperAdmin` was broadened from `tenant:switch`-only
-> to `*:read` + `tenant:switch`. A role with zero read access can't meaningfully oversee
-> anything, and "no business-data authoring" (this doc's own words) already implies reads
-> are fine — only create/update/delete are excluded. The actual tenant-switch mechanism
-> (session update, switch UI) is still unimplemented; this role currently only grants
-> read-only visibility into its own tenant.
+### Legacy → canonical mapping
+
+Migration `20260717120000_canonical_roles` remaps existing `role_assignment` grants
+(DECISIONS DM1.2):
+
+| Legacy role | Canonical |
+|---|---|
+| SystemAdmin | PlatformSuperAdmin |
+| PlatformSuperAdmin (old cross-tenant, read-only oversight) | Executive |
+| PortfolioManager | HeadOfProjects |
+| FinanceManager | Executive |
+| Contributor | Member |
+| Viewer | Member |
+| DepartmentHead | Member (dept-head powers now derive from `Department.headUserId` + a Head role) |
+
+The `PlatformSuperAdmin` **name was repurposed** from the former read-only oversight role
+to the full-write tenant superadmin. The migration demotes the old grants to `Executive`
+*before* promoting `SystemAdmin`, so today's read-only accounts are never silently elevated
+to full write.
+
+> **Transitional keys.** Existing write routes are still gated on the coarse legacy
+> `project:update`, and admin routes on `iam:manage`. Canonical roles are mapped onto those
+> keys until each route adopts the fine-grained keys / `src/lib/access.ts` helpers in its
+> own phase (DECISIONS DM1.4). `dashboard:read` is part of the global-read base, so every
+> role lands on `/dashboard` after sign-in.
 
 ### Permission check
 
@@ -75,7 +100,7 @@ matches against the permission, honouring wildcards (`project:*`).
 ## Segregation of Duties (SoD)
 
 - The submitter of an approvable item cannot approve it (enforce in the approval engine, Phase C).
-- Role grants/revocations are performed only by `SystemAdmin`/`PlatformSuperAdmin` and audited.
+- Role grants/revocations are performed only by `PlatformSuperAdmin` (the tenant superadmin) and audited.
 
 ## Navigation adapts to permissions
 

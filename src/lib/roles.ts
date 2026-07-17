@@ -28,14 +28,14 @@ export type ProjectRole = (typeof PROJECT_ROLES)[number];
  */
 export const ONBOARDING_ROLE_TIERS = [
   {
-    key: "SystemAdmin",
+    key: "PlatformSuperAdmin",
     label: "Administrator",
     desc: "Full system administration — users, roles, and settings.",
   },
   {
     key: "Executive",
     label: "Executive",
-    desc: "Read-only portfolio visibility and executive reports.",
+    desc: "Read-everything portfolio visibility and executive reports.",
   },
   {
     key: "ProjectManager",
@@ -43,9 +43,11 @@ export const ONBOARDING_ROLE_TIERS = [
     desc: "Create & manage projects, teams, tasks, milestones and risks.",
   },
   {
-    key: "Contributor",
+    key: "Member",
     label: "Member",
     desc: "Execute assigned tasks and update their progress.",
   },
 ] as const;
+// HeadOfProjects / HeadOfQA are assigned via "Edit roles" (power-user path), not the
+// onboarding quick-pick — they are governance roles, not a common onboarding tier.
 export type OnboardingRoleKey = (typeof ONBOARDING_ROLE_TIERS)[number]["key"];

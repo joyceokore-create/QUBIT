@@ -55,7 +55,7 @@ export function NewUserDialog({
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<OnboardingRoleKey>("Contributor");
+  const [role, setRole] = useState<OnboardingRoleKey>("Member");
   const [departmentId, setDepartmentId] = useState("none");
   const [teamId, setTeamId] = useState("none");
   const [projectId, setProjectId] = useState("none");
@@ -77,7 +77,7 @@ export function NewUserDialog({
     setStep(0);
     setName("");
     setEmail("");
-    setRole("Contributor");
+    setRole("Member");
     setDepartmentId("none");
     setTeamId("none");
     setProjectId("none");

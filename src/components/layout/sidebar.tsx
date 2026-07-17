@@ -58,7 +58,9 @@ export async function Sidebar() {
         </NavGroup>
       )}
 
-      {showProjects && nav && nav.orgUnits.length > 0 && (
+      {/* DM1.1: hide the Subsidiaries group for a flat, single-org tenant (Riverbank keeps
+          one hidden anchor org unit). Only tenants with a real multi-org structure (KCB) show it. */}
+      {showProjects && nav && nav.orgUnits.length > 1 && (
         <NavGroup label="Subsidiaries">
           {nav.orgUnits.map((orgUnit) => (
             <NavItem key={orgUnit.id} href={`/subsidiaries/${orgUnit.id}`}>

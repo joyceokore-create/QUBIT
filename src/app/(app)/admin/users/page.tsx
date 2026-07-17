@@ -25,10 +25,10 @@ function buildInsights(
   const out: AdminInsight[] = [];
   const active = users.filter((u) => u.status === "ACTIVE");
   const pending = active.filter((u) => u.lastLoginAt === null);
-  const noMfaAdmins = users.filter((u) => u.status !== "DELETED" && u.roles.includes("SystemAdmin") && !u.mfaEnabled);
+  const noMfaAdmins = users.filter((u) => u.status !== "DELETED" && u.roles.includes("PlatformSuperAdmin") && !u.mfaEnabled);
   const suspended = users.filter((u) => u.status === "SUSPENDED");
   const noDept = users.filter((u) => u.status !== "DELETED" && !u.departmentName);
-  const admins = users.filter((u) => u.roles.includes("SystemAdmin") && u.status === "ACTIVE");
+  const admins = users.filter((u) => u.roles.includes("PlatformSuperAdmin") && u.status === "ACTIVE");
 
   if (pending.length)
     out.push({

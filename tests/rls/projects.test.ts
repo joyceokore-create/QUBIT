@@ -22,7 +22,7 @@ describe("Project create/update lifecycle", () => {
     }
     kcbId = kcb.id;
     riverbankId = riverbank.id;
-    ctx = { tenantId: kcbId, userId: "test-project-actor", roles: ["SystemAdmin"] };
+    ctx = { tenantId: kcbId, userId: "test-project-actor", roles: ["PlatformSuperAdmin"] };
   });
 
   beforeEach(async () => {
@@ -92,7 +92,7 @@ describe("Project create/update lifecycle", () => {
     const riverbankCtx: TenantContext = {
       tenantId: riverbankId,
       userId: "test-project-actor",
-      roles: ["SystemAdmin"],
+      roles: ["PlatformSuperAdmin"],
     };
     const rbProject = await createProject(riverbankCtx, {
       code: TEST_CODE,
@@ -148,7 +148,7 @@ describe("Project create/update lifecycle", () => {
     const riverbankCtx: TenantContext = {
       tenantId: riverbankId,
       userId: "test-project-actor",
-      roles: ["SystemAdmin"],
+      roles: ["PlatformSuperAdmin"],
     };
     await expect(updateProject(riverbankCtx, project.id, { status: "OnTrack" })).rejects.toThrow();
   });

@@ -161,7 +161,7 @@ export async function createUser(ctx: TenantContext, input: CreateUserInput) {
       const project = await tx.project.findUnique({ where: { id: input.projectId }, select: { id: true } });
       if (!project) throw new UserAdminError("Selected project was not found.", "PROJECT_NOT_FOUND");
       await tx.projectMember.create({
-        data: { tenantId: ctx.tenantId, projectId: input.projectId, userId: user.id, role: input.projectRole || "Contributor" },
+        data: { tenantId: ctx.tenantId, projectId: input.projectId, userId: user.id, role: input.projectRole || "Developer" },
       });
     }
 
@@ -181,8 +181,12 @@ export async function updateUserRoles(
   userId: string,
   roles: string[],
 ): Promise<void> {
-  if (userId === ctx.userId && ctx.roles.includes("SystemAdmin") && !roles.includes("SystemAdmin")) {
-    throw new UserAdminError("You cannot remove your own SystemAdmin role.", "SELF_DEMOTE");
+  if (
+    userId === ctx.userId &&
+    ctx.roles.includes("PlatformSuperAdmin") &&
+    !roles.includes("PlatformSuperAdmin")
+  ) {
+    throw new UserAdminError("You cannot remove your own PlatformSuperAdmin role.", "SELF_DEMOTE");
   }
 
   await withTenant(ctx, async (tx) => {

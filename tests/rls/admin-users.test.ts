@@ -29,7 +29,7 @@ describe("Admin/IAM user lifecycle", () => {
     }
     kcbId = kcb.id;
     riverbankId = riverbank.id;
-    adminCtx = { tenantId: kcbId, userId: "test-admin-actor", roles: ["SystemAdmin"] };
+    adminCtx = { tenantId: kcbId, userId: "test-admin-actor", roles: ["PlatformSuperAdmin"] };
   });
 
   beforeEach(async () => {
@@ -139,11 +139,11 @@ describe("Admin/IAM user lifecycle", () => {
   });
 
   it("blocks an admin from suspending, deleting, or self-demoting their own account", async () => {
-    const selfCtx: TenantContext = { tenantId: kcbId, userId: "self-actor", roles: ["SystemAdmin"] };
+    const selfCtx: TenantContext = { tenantId: kcbId, userId: "self-actor", roles: ["PlatformSuperAdmin"] };
 
     await expect(setUserStatus(selfCtx, "self-actor", "SUSPENDED")).rejects.toThrow(UserAdminError);
     await expect(softDeleteUser(selfCtx, "self-actor")).rejects.toThrow(UserAdminError);
-    await expect(updateUserRoles(selfCtx, "self-actor", ["Viewer"])).rejects.toThrow(UserAdminError);
+    await expect(updateUserRoles(selfCtx, "self-actor", ["Member"])).rejects.toThrow(UserAdminError);
   });
 
   it("keeps admin-managed users tenant-isolated", async () => {
@@ -157,7 +157,7 @@ describe("Admin/IAM user lifecycle", () => {
     const riverbankCtx: TenantContext = {
       tenantId: riverbankId,
       userId: "test-admin-actor",
-      roles: ["SystemAdmin"],
+      roles: ["PlatformSuperAdmin"],
     };
     const riverbankUsers = await listUsers(riverbankCtx);
     expect(riverbankUsers.find((u) => u.id === user.id)).toBeUndefined();
