@@ -1,4 +1,5 @@
 import { withTenant, type TenantContext } from "@/lib/tenant";
+import { reportableUserIds } from "@/lib/access";
 import { listProjects, getProjectPanelData, type ProjectListItem } from "@/server/projects";
 import { listProjectMembers, listWorkload, type WorkloadRow } from "@/server/resources";
 import { listBlockers } from "@/server/blockers";
@@ -263,8 +264,21 @@ export async function mockChat(
     return wrap(out.join("\n\n"), [...tools]);
   }
 
-  // ── Person-scoped ────────────────────────────────────────────────────────────
-  const people = await listWorkload(ctx);
+  // ── Person-scoped (access-gated, §7) ─────────────────────────────────────────
+  const allPeople = await listWorkload(ctx);
+  const reportable = await reportableUserIds(ctx);
+  const people = reportable === "all" ? allPeople : allPeople.filter((p) => reportable.has(p.userId));
+  // Refuse another individual's workload if out of scope; offer the team aggregate instead.
+  if (reportable !== "all" && /work|allocat|assigned|doing|load|responsible|owns?|busy|block|next|should|priorit|focus/.test(q)) {
+    const outOfScope = findPerson(allPeople, q);
+    if (outOfScope && !reportable.has(outOfScope.userId)) {
+      const over = allPeople.filter((p) => p.totalPct > 100).length;
+      return wrap(
+        `I can't share **${outOfScope.name}**'s individual workload — that's limited to executives, heads, and whoever manages their projects. Team aggregate: **${allPeople.length}** people, **${over}** over-allocated. Ask a head or exec for an individual view.`,
+        ["list_workload"],
+      );
+    }
+  }
   const person = findPerson(people, q);
   if (person && /work|allocat|assigned|doing|load|responsible|owns?|project|busy|block|next|should|priorit|focus/.test(q)) {
     const label = `**${person.name}**`;
@@ -335,7 +349,7 @@ export async function mockChat(
   if (/how many|number of|\bcount\b|how much/.test(q)) {
     if (/blocker/.test(q)) return wrap(`There are **${(await listBlockers(ctx, {})).filter((b) => b.status === "Open").length}** open blockers across all projects.`, ["list_blockers"]);
     if (/\brisk/.test(q)) return wrap(`There are **${(await listRisks(ctx, {})).filter((r) => r.status !== "Closed").length}** open risks.`, ["list_risks"]);
-    if (/people|person|member|staff|user/.test(q)) return wrap(`There are **${people.length}** people.`, ["list_workload"]);
+    if (/people|person|member|staff|user/.test(q)) return wrap(`There are **${allPeople.length}** people.`, ["list_workload"]);
     return wrap(`There are **${(await listProjects(ctx, {})).length}** projects.`, ["list_projects"]);
   }
 

@@ -96,6 +96,35 @@ export async function canReportOnPerson(ctx: TenantContext, targetUserId?: strin
   });
 }
 
+/**
+ * The set of users the viewer may see person-level data for (Q workload/person queries, §7):
+ * "all" for SuperAdmin / Executive / heads (report:resource:others); otherwise themselves plus
+ * members of any project they lead or PM. Q gates its person tools on this so a Member can't
+ * extract another person's workload — enforced at the tool layer, not just the prompt.
+ */
+export async function reportableUserIds(ctx: TenantContext): Promise<"all" | Set<string>> {
+  if (can(ctx, "report:resource:others")) return "all";
+  return withTenant(ctx, async (tx) => {
+    const [led, pmMemberships] = await Promise.all([
+      tx.project.findMany({ where: { leadUserId: ctx.userId }, select: { id: true } }),
+      tx.projectMember.findMany({
+        where: { userId: ctx.userId, role: { in: PROJECT_WRITE_ROLES } },
+        select: { projectId: true },
+      }),
+    ]);
+    const projectIds = [...new Set([...led.map((p) => p.id), ...pmMemberships.map((m) => m.projectId)])];
+    const ids = new Set<string>([ctx.userId]); // always themselves
+    if (projectIds.length) {
+      const members = await tx.projectMember.findMany({
+        where: { projectId: { in: projectIds } },
+        select: { userId: true },
+      });
+      for (const m of members) ids.add(m.userId);
+    }
+    return ids;
+  });
+}
+
 /** Can the viewer manage this team (rename, membership, set lead)? Team lead, heads, SuperAdmin. */
 export async function canManageTeam(ctx: TenantContext, teamId: string): Promise<boolean> {
   if (can(ctx, "teams:manage:all")) return true; // SuperAdmin, both heads

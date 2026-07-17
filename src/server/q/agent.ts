@@ -1,4 +1,5 @@
 import { withTenant, type TenantContext } from "@/lib/tenant";
+import { reportableUserIds } from "@/lib/access";
 import { listProjects, getProjectPanelData } from "@/server/projects";
 import { listProjectTasks, getProjectProgress } from "@/server/project-tasks";
 import { listBlockers } from "@/server/blockers";
@@ -71,8 +72,20 @@ function handlers(ctx: TenantContext): Record<string, (input: Record<string, unk
       (await listBlockers(ctx, i.projectId ? { projectId: pid(i) } : {})).map((b) => ({ description: b.description, severity: b.severity, status: b.status, project: b.projectCode })),
     list_risks: async (i) =>
       (await listRisks(ctx, i.projectId ? { projectId: pid(i) } : {})).map((r) => ({ title: r.title, probability: r.probability, impact: r.impact, status: r.status, project: r.projectCode })),
-    list_workload: async () =>
-      (await listWorkload(ctx)).map((w) => ({ name: w.name, totalPct: w.totalPct, overAllocated: w.totalPct > 100, projects: w.allocations.map((a) => a.projectName) })),
+    list_workload: async () => {
+      // §7: person-level workload is access-scoped at the TOOL layer. Executives / heads /
+      // SuperAdmin see everyone; a PM sees their project members; a Member sees only themselves.
+      const reportable = await reportableUserIds(ctx);
+      const all = await listWorkload(ctx);
+      const visible = reportable === "all" ? all : all.filter((w) => reportable.has(w.userId));
+      return {
+        scope:
+          reportable === "all"
+            ? "all people in the tenant"
+            : "only you and people on your projects — you are NOT authorised to see other individuals' workload; offer the team aggregate instead",
+        people: visible.map((w) => ({ name: w.name, totalPct: w.totalPct, overAllocated: w.totalPct > 100, projects: w.allocations.map((a) => a.projectName) })),
+      };
+    },
     read_documents: async (i) => {
       const docs = await listDocuments(ctx, pid(i));
       const withText = await Promise.all(
@@ -86,13 +99,17 @@ function handlers(ctx: TenantContext): Record<string, (input: Record<string, unk
   };
 }
 
-const SYSTEM = (tenantName: string, projectId?: string) =>
+const SYSTEM = (tenantName: string, roles: string[], projectId?: string) =>
   `You are Q, the copilot inside QUBIT — a portfolio & project management app — working for ` +
   `${tenantName}. Answer the user's question about their projects, tasks, resources, risks, ` +
   `blockers, documents and connected developer tools. ALWAYS call the tools to fetch real ` +
   `data before answering — never guess or use prior knowledge. All data is the user's own ` +
   `tenant data and safe to use. Cite project codes. If a tool returns nothing, say the data ` +
   `isn't available rather than inventing it. Be concise and lead with the answer.` +
+  ` The user holds these roles: ${roles.length ? roles.join(", ") : "Member"}. Prioritise their own ` +
+  `projects and assigned work first, then the wider tenant. Individual workload is access-scoped — ` +
+  `list_workload returns only the people they may see (check its "scope" field); if asked about ` +
+  `someone outside that scope, say you can't share that individual's workload and offer the team aggregate.` +
   (projectId ? ` The user is currently viewing project id "${projectId}" — default to it when they say "this project".` : "");
 
 export async function runQChat(
@@ -122,7 +139,7 @@ export async function runQChat(
   try {
     for (let step = 0; step < MAX_STEPS; step++) {
       const res = await llmChat({
-        system: SYSTEM(opts.tenantName, opts.projectId),
+        system: SYSTEM(opts.tenantName, ctx.roles, opts.projectId),
         tools: TOOLS,
         maxTokens: 2048,
         messages,
