@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Check } from "lucide-react";
 import { usePanel } from "@/components/panels/panel-context";
+import { ApprovalQueue } from "./approval-queue";
 
 interface Task {
   id: string;
@@ -23,10 +25,23 @@ function fmtDue(iso: string | null): string {
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" }).toUpperCase();
 }
 
-export function MyTasksClient({ name, tasks: initial }: { name: string; tasks: Task[] }) {
+export function MyTasksClient({
+  name,
+  roles,
+  tasks: initial,
+  managed,
+  inTest,
+}: {
+  name: string;
+  roles: string[];
+  tasks: Task[];
+  managed: Task[];
+  inTest: Task[];
+}) {
   const { openProject } = usePanel();
   const [tasks, setTasks] = useState<Task[]>(initial);
   const [busy, setBusy] = useState<Set<string>>(new Set());
+  const pureMember = roles.length === 0 || roles.every((r) => r === "Member");
 
   async function toggle(id: string) {
     const t = tasks.find((x) => x.id === id);
@@ -58,13 +73,14 @@ export function MyTasksClient({ name, tasks: initial }: { name: string; tasks: T
   const buckets = useMemo(() => {
     const open = tasks.filter((t) => t.status !== "Completed");
     const dueMs = (t: Task) => (t.dueDate ? new Date(t.dueDate).getTime() : null);
-    const overdue = open.filter((t) => dueMs(t) !== null && dueMs(t)! < now);
-    const dueThisWeek = open.filter((t) => dueMs(t) !== null && dueMs(t)! >= now && dueMs(t)! <= now + 7 * DAY);
-    const later = open.filter((t) => !overdue.includes(t) && !dueThisWeek.includes(t));
+    const blocked = open.filter((t) => t.status === "Blocked");
+    const overdue = open.filter((t) => t.status !== "Blocked" && dueMs(t) !== null && dueMs(t)! < now);
+    const dueThisWeek = open.filter((t) => t.status !== "Blocked" && dueMs(t) !== null && dueMs(t)! >= now && dueMs(t)! <= now + 7 * DAY);
+    const later = open.filter((t) => t.status !== "Blocked" && !overdue.includes(t) && !dueThisWeek.includes(t));
     const recentlyCompleted = tasks
       .filter((t) => t.status === "Completed" && new Date(t.updatedAt).getTime() >= now - 14 * DAY)
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-    return { open, overdue, dueThisWeek, later, recentlyCompleted };
+    return { open, blocked, overdue, dueThisWeek, later, recentlyCompleted };
   }, [tasks, now]);
 
   // Focus queue: three most-urgent open tasks (overdue → due-this-week → rest), then by priority.
@@ -83,6 +99,7 @@ export function MyTasksClient({ name, tasks: initial }: { name: string; tasks: T
   const bucketDefs = [
     { key: "overdue", label: "Overdue", tok: "--bad", items: buckets.overdue },
     { key: "dueThisWeek", label: "Due this week", tok: "--warn", items: buckets.dueThisWeek },
+    { key: "blocked", label: "Blocked — waiting on others", tok: "--bad", items: buckets.blocked },
     { key: "later", label: "Open", tok: "--qinfo", items: buckets.later },
     { key: "recentlyCompleted", label: "Recently completed", tok: "--ok", items: buckets.recentlyCompleted, muted: true },
   ] as const;
@@ -132,6 +149,9 @@ export function MyTasksClient({ name, tasks: initial }: { name: string; tasks: T
         </div>
       )}
 
+      {/* Awaiting my approval (join requests) — self-hides when empty */}
+      <ApprovalQueue />
+
       {/* Buckets */}
       <div className="flex flex-col gap-3.5 [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.1s_both]">
         {bucketDefs.map((b) =>
@@ -178,11 +198,74 @@ export function MyTasksClient({ name, tasks: initial }: { name: string; tasks: T
         )}
       </div>
 
-      {tasks.length === 0 && (
-        <div className="rounded-[16px] border border-dashed border-[var(--hair)] p-10 text-center text-[13px] text-[var(--ink4)]">
-          No tasks assigned to you yet. A project manager assigns tasks from the project panel.
+      {/* Role-aware sections (§6) */}
+      {managed.length > 0 && (
+        <ReferenceSection label="Across my projects" sub="ASSIGNED TO THE TEAM" items={managed} openProject={openProject} />
+      )}
+      {inTest.length > 0 && (
+        <ReferenceSection label="In test" sub="TESTING · UAT · SIT" items={inTest} openProject={openProject} />
+      )}
+
+      {tasks.length === 0 && managed.length === 0 && inTest.length === 0 && (
+        <div className="rounded-[16px] border border-dashed border-[var(--hair)] p-10 text-center [animation:rise_.5s_cubic-bezier(.22,1,.36,1)_both]">
+          <p className="text-[13px] text-[var(--ink3)]">
+            {pureMember
+              ? "No tasks assigned yet — join a project to get started."
+              : "Nothing is assigned to you right now."}
+          </p>
+          {pureMember && (
+            <Link
+              href="/projects"
+              className="mt-3 inline-block rounded-full bg-[var(--brand)] px-4 py-2 text-[12.5px] font-bold text-[var(--onbrand)]"
+              style={{ boxShadow: "0 4px 16px color-mix(in oklab, var(--brand) var(--glowA), transparent)" }}
+            >
+              Browse projects to join
+            </Link>
+          )}
         </div>
       )}
     </main>
+  );
+}
+
+/** Read-only reference list for role-aware sections (PM "across my projects", QA "in test").
+ * These are other people's tasks, so no complete-toggle — just deep-link to the project. */
+function ReferenceSection({
+  label,
+  sub,
+  items,
+  openProject,
+}: {
+  label: string;
+  sub: string;
+  items: Task[];
+  openProject: (id: string) => void;
+}) {
+  return (
+    <section className="[animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.12s_both]">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="size-1.5 rounded-[2px] bg-[var(--qinfo)]" />
+        <span className="font-mono text-[9.5px] font-semibold uppercase tracking-[2px] text-[var(--ink3)]">{label}</span>
+        <span className="font-mono text-[9px] tracking-[1px] text-[var(--ink5)]">{sub}</span>
+        <span className="font-mono text-[9.5px] text-[var(--ink5)]">{items.length}</span>
+      </div>
+      <div
+        className="overflow-hidden rounded-[14px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]"
+        style={{ background: "var(--cardbg)" }}
+      >
+        {items.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => openProject(t.projectId)}
+            className="flex w-full items-center gap-3 border-b border-[var(--hair2)] p-[10px_15px] text-left transition-colors last:border-0 hover:bg-[var(--wash)]"
+          >
+            <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--ink2)]">{t.title}</span>
+            <span className="flex-none rounded-[5px] bg-[var(--wash2)] px-2 py-[3px] font-mono text-[9.5px] tracking-[1px] text-[var(--ink3)]">{t.projectCode}</span>
+            <span className="w-12 flex-none text-right font-mono text-[10px] text-[var(--ink4)]">{t.dueDate ? fmtDue(t.dueDate) : ""}</span>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }

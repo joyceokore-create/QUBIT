@@ -14,6 +14,7 @@ import { DocumentsSection } from "@/components/workspace/documents-section";
 import { StatusUpdatesSection } from "@/components/workspace/status-updates-section";
 import { IntegrationsGrid } from "@/components/workspace/integrations-grid";
 import { AskQAbout } from "@/components/q/ask-q-about";
+import { RequestToJoinButton } from "@/components/workspace/request-to-join-button";
 import { statusMeta } from "@/lib/project-view";
 import type { ProjectPanelJson } from "@/components/panels/project-panel-content";
 
@@ -122,6 +123,7 @@ export function ProjectWorkspace({
               <span className="text-[12px] text-[var(--ink3)]">{members.length} {members.length === 1 ? "member" : "members"}</span>
             </div>
             <AskQAbout type="project" targetId={data.id} label="Ask Q about this project" />
+            {!data.isMember && <RequestToJoinButton projectId={data.id} />}
           </div>
         </div>
 

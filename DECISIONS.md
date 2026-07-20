@@ -181,6 +181,26 @@ routes off the coarse `project:update`/`risk:create` role gates to authenticate-
 The workspace/panel split `canEdit` (settings/team — lead/PM/heads) from `canContribute`
 (tasks/blockers — any member). Editing project SETTINGS/team stays lead/PM/heads.
 
+## MVP1 — My Tasks buckets & join requests, Phase 5 (2026-07-18)
+
+### DM1.12 — My Tasks role-aware buckets (§6)
+Added to the personal My Tasks list: a "Blocked — waiting on others" bucket (everyone), an
+"Across my projects" section for ProjectManager/HeadOfProjects (open tasks on projects they run,
+assigned to the team), an "In test" section for HeadOfQA (Testing/UAT/SIT tasks), and a
+role-aware empty state (pure Members get a "join a project" CTA). Role sections are read-only
+reference lists (other people's tasks — deep-link only).
+
+### DM1.13 — Project join-request flow (§2/§5/§6)
+`JoinRequest` model + migration `20260718120000_join_requests` (tenant-scoped, FORCE RLS).
+Anyone may request to join a project (`project:join:request`); the project's lead/PM — or a
+head/SuperAdmin (`project:write`) — approves or denies, enforced server-side via
+`canWriteProject`. Approval creates a `ProjectMember` with the granted role; an **Executive who
+joins defaults to `Stakeholder`** (assumption 5). Surfaced as a "Request to join" button on
+projects the viewer isn't part of and an "Awaiting my approval" queue in My Tasks (self-hiding →
+fills the §6 bucket). One Pending request per (project, user) is enforced in app code. Also
+fixed `resetTenant` to clear `role_permission` before the tenant delete (`join_request` cascades
+with projects). **Still open:** the AI plan-approval flow (`ProjectTask.approvalStatus`).
+
 ## Phase 0 — Foundation (2026-07-10)
 
 ### D0.1 — `tenantId` + RLS on every new table, including join tables

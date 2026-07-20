@@ -99,6 +99,69 @@ export async function listMyTasks(ctx: TenantContext, userId: string): Promise<M
   });
 }
 
+const PM_PROJECT_ROLES = ["Project Manager"];
+
+function rowToMyTask(t: {
+  id: string;
+  title: string;
+  projectId: string;
+  status: string;
+  priority: string;
+  dueDate: Date | null;
+  updatedAt: Date;
+  project: { code: string; name: string };
+}): MyTaskRow {
+  return {
+    id: t.id,
+    title: t.title,
+    projectId: t.projectId,
+    projectCode: t.project.code,
+    projectName: t.project.name,
+    status: t.status,
+    priority: t.priority,
+    dueDate: t.dueDate,
+    updatedAt: t.updatedAt,
+  };
+}
+
+/** Open tasks on projects the viewer runs (lead or PM-member), assigned to someone else —
+ * the PM "across my projects" bucket in My Tasks (§6). */
+export async function listManagedTasks(ctx: TenantContext, userId: string): Promise<MyTaskRow[]> {
+  return withTenant(ctx, async (tx) => {
+    const [led, pm] = await Promise.all([
+      tx.project.findMany({ where: { leadUserId: userId }, select: { id: true } }),
+      tx.projectMember.findMany({ where: { userId, role: { in: PM_PROJECT_ROLES } }, select: { projectId: true } }),
+    ]);
+    const ids = [...new Set([...led.map((p) => p.id), ...pm.map((m) => m.projectId)])];
+    if (!ids.length) return [];
+    const rows = await tx.projectTask.findMany({
+      where: { projectId: { in: ids }, status: { not: "Completed" }, NOT: { assigneeId: userId } },
+      include: { project: { select: { code: true, name: true } } },
+      orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
+    });
+    return rows.map(rowToMyTask);
+  });
+}
+
+/** Open tasks in a Testing / UAT / SIT phase — the HeadOfQA "in test" bucket in My Tasks (§6). */
+export async function listTasksInTestPhase(ctx: TenantContext): Promise<MyTaskRow[]> {
+  return withTenant(ctx, async (tx) => {
+    const rows = await tx.projectTask.findMany({
+      where: {
+        status: { not: "Completed" },
+        OR: [
+          { phase: { contains: "Test", mode: "insensitive" } },
+          { phase: { contains: "UAT", mode: "insensitive" } },
+          { phase: { contains: "SIT", mode: "insensitive" } },
+        ],
+      },
+      include: { project: { select: { code: true, name: true } } },
+      orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
+    });
+    return rows.map(rowToMyTask);
+  });
+}
+
 export interface ProjectProgress {
   total: number;
   completed: number;

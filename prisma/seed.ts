@@ -1126,6 +1126,8 @@ async function resetTenant(slug: string) {
     // the tenant delete. Null the user↔department and department self/head cross-references
     // first so the deleteMany calls don't trip their own FKs (managers, dept heads, parents).
     await tx.sharedReport.deleteMany({});
+    await tx.rolePermission.deleteMany({}); // RESTRICT tenant FK — clear before tenant delete
+    await tx.joinRequest.deleteMany({}); // cascades with projects, but clear explicitly too
     await tx.user.updateMany({ data: { departmentId: null, managerId: null } });
     await tx.department.updateMany({ data: { headUserId: null, parentId: null } });
     await tx.department.deleteMany({});

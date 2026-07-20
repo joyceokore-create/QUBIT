@@ -38,6 +38,7 @@ export interface ProjectPanelJson {
   avgProgress: number;
   canEdit: boolean; // project settings / team — lead, PM, heads, SuperAdmin
   canContribute: boolean; // tasks + blockers — any project member (per Joyce)
+  isMember: boolean; // the viewer leads or is allocated to this project
   subsidiaries: {
     orgUnitId: string;
     code: string;

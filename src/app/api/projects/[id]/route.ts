@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/api-guard";
 import { can } from "@/lib/rbac";
 import { canContributeToProject } from "@/lib/access";
+import { withTenant } from "@/lib/tenant";
 import { getProjectPanelData, updateProject, UpdateProjectInput } from "@/server/projects";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -16,10 +17,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       { status: 404 },
     );
   }
+  const isMember = await withTenant(guard.ctx, async (tx) => {
+    const [lead, m] = await Promise.all([
+      tx.project.findFirst({ where: { id, leadUserId: guard.ctx.userId }, select: { id: true } }),
+      tx.projectMember.findFirst({ where: { projectId: id, userId: guard.ctx.userId }, select: { id: true } }),
+    ]);
+    return Boolean(lead || m);
+  });
   return NextResponse.json({
     ...project,
     canEdit: can(guard.ctx, "project:update"), // project settings / team
     canContribute: await canContributeToProject(guard.ctx, id), // tasks + blockers
+    isMember,
   });
 }
 
