@@ -368,6 +368,19 @@ controls, never a wall**. What landed:
   lead + PM member (mirrors DM1.17 behaviour — MINE filters and member counts have
   data to show). 385/385 tests green; verified in-browser end-to-end.
 
+### DM1.21 — Auto-generated project codes (per Joyce, 2026-07-20)
+The New-project dialogs no longer ask for a code. `createProject` derives it from the
+name: initials of the first three words ("Asset Valuation System" → AVS), or the first
+three letters of a single-word name ("HomeQuest" → HOM); short/empty leftovers pad to
+3 chars. Collisions within the tenant get a numeric suffix (AVS → AVS2 → AVS3 — no
+hyphen, so task keys stay unambiguous: AVS2-1). A concurrent same-name race that trips
+the tenant+code unique index is retried with a fresh suffix (max 3 attempts).
+`CreateProjectInput.code` stays optional-and-honoured for the API, tests and seed.
+Verified live: two "Orbit Pay Gateway" creates → OPG, OPG2. 386/386 tests green.
+
+Observed while verifying (pre-existing, NOT from this change): a dev-mode hydration
+mismatch on Base-UI auto-generated dropdown ids in the Topbar — tracked separately.
+
 ## Phase 0 — Foundation (2026-07-10)
 
 ### D0.1 — `tenantId` + RLS on every new table, including join tables
