@@ -29,6 +29,8 @@ interface ProjectRow {
   budget: string | null;
   avgProgress: number;
   memberCount: number;
+  /** The viewer leads this project or is allocated to it — powers the MINE chip. */
+  isMine: boolean;
 }
 
 const STATUSES = ["Planning", "OnTrack", "AtRisk", "Overdue", "Completed", "Cancelled"];
@@ -47,6 +49,7 @@ export function ProjectsClient({
   const { openProject } = usePanel();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
+  const [mineOnly, setMineOnly] = useState(false);
 
   // Filter chips: All + each status present in the data, worst-status first, with counts.
   const chips = useMemo(() => {
@@ -56,6 +59,7 @@ export function ProjectsClient({
       ...present.map((s) => ({ key: s, label: statusMeta(s).label, count: projects.filter((p) => p.status === s).length })),
     ];
   }, [projects]);
+  const mineCount = useMemo(() => projects.filter((p) => p.isMine).length, [projects]);
 
   const filtered = useMemo(
     () =>
@@ -63,10 +67,11 @@ export function ProjectsClient({
         .filter(
           (p) =>
             (status === "all" || p.status === status) &&
+            (!mineOnly || p.isMine) &&
             (q === "" || p.name.toLowerCase().includes(q.toLowerCase()) || p.code.toLowerCase().includes(q.toLowerCase())),
         )
         .sort((a, b) => projectRank(b.status) - projectRank(a.status) || a.name.localeCompare(b.name)),
-    [projects, q, status],
+    [projects, q, status, mineOnly],
   );
 
   return (
@@ -110,6 +115,19 @@ export function ProjectsClient({
             </button>
           );
         })}
+        <button
+          type="button"
+          onClick={() => setMineOnly((m) => !m)}
+          title="Projects you lead or are allocated to"
+          className="flex items-center gap-1.5 rounded-full border px-[13px] py-[7px] font-mono text-[10px] font-semibold tracking-[1px] transition-colors"
+          style={{
+            borderColor: mineOnly ? "var(--brand)" : "var(--hair)",
+            background: mineOnly ? "color-mix(in oklab, var(--brand) 10%, transparent)" : "transparent",
+            color: mineOnly ? "var(--brand)" : "var(--ink3)",
+          }}
+        >
+          MINE <span className="opacity-55">{mineCount}</span>
+        </button>
         <span className="flex-1" />
         <span className="font-mono text-[10px] tracking-[1px] text-[var(--ink4)]">{filtered.length} SHOWN</span>
       </div>

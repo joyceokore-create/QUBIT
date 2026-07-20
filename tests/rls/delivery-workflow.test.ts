@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { canContributeToProject, canWriteProject, canPublishTask } from "@/lib/access";
-import { addTasks, listProjectTasks, updateTask } from "@/server/project-tasks";
+import { addTasks, listProjectTasks, listMyTasks, updateTask, flagTaskBlocked } from "@/server/project-tasks";
 import { createProject } from "@/server/projects";
 
 describe("delivery workflow (6.2) — publish gate + notifications", () => {
@@ -76,6 +76,16 @@ describe("delivery workflow (6.2) — publish gate + notifications", () => {
     );
     expect(notes).toHaveLength(1); // the Draft assignment stays silent (§2.2)
     expect(notes[0].message).toContain("Build the widget");
+    expect(notes[0].link).toMatch(/\?tab=Board&task=/); // deep-links to the highlighted card
+  });
+
+  it("surfaces the blocked reason on My Tasks (work-cycle UX)", async () => {
+    const widget = (await listProjectTasks(ctx(devId), projectId)).find((t) => t.title === "Build the widget")!;
+    await flagTaskBlocked(ctx(devId), widget.id, { description: "Waiting on API credentials" });
+    const mine = await listMyTasks(ctx(devId), devId);
+    const row = mine.find((t) => t.id === widget.id)!;
+    expect(row.blocked).toBe(true);
+    expect(row.blockedReason).toBe("Waiting on API credentials");
   });
 
   it("notifies on re-assignment via updateTask, and the bug reporter when it reaches In QA", async () => {

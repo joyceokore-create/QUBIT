@@ -69,7 +69,7 @@ export default async function RisksPage() {
           {canReadIssues && <TabsTrigger value="gap-report">Gap Report</TabsTrigger>}
         </TabsList>
         <TabsContent value="risks" className="mt-[18px]">
-          <RiskTable risks={risks} users={users} canUpdate={canUpdateRisk} />
+          <RiskTable risks={risks} users={users} canUpdate={canUpdateRisk} viewerId={ctx.userId} />
         </TabsContent>
         {canReadIssues && (
           <TabsContent value="issues" className="mt-[18px]">

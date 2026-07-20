@@ -58,16 +58,28 @@ export function ProjectBoard({
   canEdit,
   canPublish = canEdit,
   viewerCategory = "Stakeholder",
+  viewerId,
+  focusTaskId = null,
+  initialLens = null,
 }: {
   projectId: string;
   canEdit: boolean;
   canPublish?: boolean;
   viewerCategory?: ProjectRoleCategory;
+  viewerId?: string;
+  /** Deep link (?task=): scroll to and pulse this card once tasks load. */
+  focusTaskId?: string | null;
+  /** Deep link (?lens=): overrides the role-default lens. */
+  initialLens?: BoardLens | null;
 }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [progress, setProgress] = useState<Progress>({ total: 0, completed: 0, blocked: 0, pct: 0 });
   const [genOpen, setGenOpen] = useState(false);
-  const [lens, setLens] = useState<BoardLens>(() => defaultLens(viewerCategory));
+  const [lens, setLens] = useState<BoardLens>(() => initialLens ?? defaultLens(viewerCategory));
+  // "Mine" filter (per Joyce: filtering of mine everywhere). Focus by default for makers,
+  // whole board by default for PM/stakeholders. A filter the user controls — never a wall.
+  const [mine, setMine] = useState<boolean>(() => !!viewerId && (viewerCategory === "Dev" || viewerCategory === "QA"));
+  const [highlightId, setHighlightId] = useState<string | null>(null);
   const [members, setMembers] = useState<MemberOpt[]>([]);
   const [newTitle, setNewTitle] = useState("");
   const [newType, setNewType] = useState<string>("Feature");
@@ -93,6 +105,26 @@ export function ProjectBoard({
       .then((d) => setMembers(d.data ?? []))
       .catch(() => {});
   }, [canEdit, projectId]);
+
+  // Deep-linked card (?task=): make sure it's visible (lens + Mine can't hide it),
+  // scroll it into view, and pulse it briefly.
+  useEffect(() => {
+    if (!focusTaskId || tasks.length === 0) return;
+    const target = tasks.find((t) => t.id === focusTaskId);
+    if (!target) return;
+    if (!lensFilter(lens, target)) setLens("all");
+    if (mine && target.assigneeId !== viewerId) setMine(false);
+    setHighlightId(focusTaskId);
+    const scroll = window.setTimeout(() => {
+      document.getElementById(`task-${focusTaskId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
+    const clear = window.setTimeout(() => setHighlightId(null), 3500);
+    return () => {
+      window.clearTimeout(scroll);
+      window.clearTimeout(clear);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run when the deep-linked card first appears
+  }, [focusTaskId, tasks.length > 0]);
 
   const move = async (id: string, status: string) => {
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status } : t))); // optimistic
@@ -166,14 +198,22 @@ export function ProjectBoard({
   };
 
   // One task list, three lenses (6.2). On the QA lens, unassigned bugs are pinned in the
-  // Triage strip instead of sitting in a column.
+  // Triage strip instead of sitting in a column. The Mine chip narrows to the viewer's
+  // assignments; the triage strip is exempt (unassigned bugs are nobody's — yet).
   const triage = useMemo(() => (lens === "qa" ? tasks.filter(isTriageBug) : []), [lens, tasks]);
   const visible = useMemo(
-    () => tasks.filter((t) => lensFilter(lens, t) && !(lens === "qa" && isTriageBug(t))),
-    [lens, tasks],
+    () =>
+      tasks.filter(
+        (t) =>
+          lensFilter(lens, t) &&
+          !(lens === "qa" && isTriageBug(t)) &&
+          (!mine || t.assigneeId === viewerId),
+      ),
+    [lens, tasks, mine, viewerId],
   );
   const overloads = useMemo(() => wipOverloads(tasks), [tasks]);
   const lensCount = (l: BoardLens) => tasks.filter((t) => lensFilter(l, t)).length;
+  const mineCount = useMemo(() => tasks.filter((t) => t.assigneeId === viewerId).length, [tasks, viewerId]);
   const bugAssignees = members.length ? members : [];
 
   return (
@@ -243,6 +283,24 @@ export function ProjectBoard({
             </button>
           );
         })}
+        {viewerId && (
+          <>
+            <span className="mx-1 h-4 w-px bg-[var(--hair)]" />
+            <button
+              type="button"
+              onClick={() => setMine((m) => !m)}
+              className="rounded-full border px-3 py-1 text-[11.5px] font-semibold transition-colors"
+              title="Show only tasks assigned to you"
+              style={{
+                borderColor: mine ? "var(--brand)" : "var(--hair)",
+                background: mine ? "color-mix(in oklab, var(--brand) 10%, transparent)" : "transparent",
+                color: mine ? "var(--brand)" : "var(--ink4)",
+              }}
+            >
+              Mine <span className="font-mono text-[9.5px] opacity-70">{mineCount}</span>
+            </button>
+          </>
+        )}
       </div>
 
       {/* QA triage strip: unassigned bugs, pinned until someone owns them. */}
@@ -337,25 +395,30 @@ export function ProjectBoard({
                 const overdue = t.dueDate && t.status !== "Completed" && new Date(t.dueDate).getTime() < now;
                 const aging = !t.blocked && isAging(t.lastActivityAt, t.status, new Date(now));
                 const sevTok = t.severity === "Critical" || t.severity === "High" ? "--bad" : "--warn";
+                const focused = highlightId === t.id;
                 return (
                   <div
                     key={t.id}
+                    id={`task-${t.id}`}
                     draggable={canEdit}
                     onDragStart={(e) => {
                       e.dataTransfer.setData("text/plain", t.id);
                       setDragId(t.id);
                     }}
                     onDragEnd={() => setDragId(null)}
-                    className="flex flex-col gap-1.5 rounded-[10px] border bg-[var(--qcard)] p-2.5 text-xs"
+                    className="flex flex-col gap-1.5 rounded-[10px] border bg-[var(--qcard)] p-2.5 text-xs transition-shadow duration-500"
                     title={aging ? "No activity for over 5 business days" : undefined}
                     style={{
                       cursor: canEdit ? "grab" : "default",
                       opacity: dragId === t.id ? 0.5 : 1,
-                      borderColor: t.blocked
-                        ? "color-mix(in oklab, var(--bad) 45%, transparent)"
-                        : aging
-                          ? "color-mix(in oklab, var(--warn) 45%, transparent)"
-                          : "var(--w07)",
+                      borderColor: focused
+                        ? "var(--brand)"
+                        : t.blocked
+                          ? "color-mix(in oklab, var(--bad) 45%, transparent)"
+                          : aging
+                            ? "color-mix(in oklab, var(--warn) 45%, transparent)"
+                            : "var(--w07)",
+                      boxShadow: focused ? "0 0 0 3px color-mix(in oklab, var(--brand) 30%, transparent)" : undefined,
                     }}
                   >
                     <span className="font-medium text-[var(--qink)]">

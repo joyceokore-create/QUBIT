@@ -17,6 +17,7 @@ const toClient = (t: MyTaskRow) => ({
   status: t.status,
   priority: t.priority,
   blocked: t.blocked,
+  blockedReason: t.blockedReason,
   dueDate: t.dueDate ? t.dueDate.toISOString() : null,
   updatedAt: t.updatedAt.toISOString(),
 });

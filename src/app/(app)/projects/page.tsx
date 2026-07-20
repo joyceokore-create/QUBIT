@@ -13,11 +13,15 @@ export default async function ProjectsPage() {
   const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
   if (!can(ctx, "project:read")) return <Forbidden />;
 
-  const [projects, memberCounts] = await Promise.all([
+  const [projects, memberCounts, myMemberships, myLeads] = await Promise.all([
     listProjects(ctx),
     forTenant(ctx, (tx) => tx.projectMember.groupBy({ by: ["projectId"], _count: { _all: true } })),
+    forTenant(ctx, (tx) => tx.projectMember.findMany({ where: { userId: ctx.userId }, select: { projectId: true } })),
+    forTenant(ctx, (tx) => tx.project.findMany({ where: { leadUserId: ctx.userId }, select: { id: true } })),
   ]);
   const countByProject = new Map(memberCounts.map((r) => [r.projectId, r._count._all]));
+  // "Mine" = the viewer leads it or is allocated to it (per Joyce: filter mine everywhere).
+  const mineIds = new Set([...myMemberships.map((m) => m.projectId), ...myLeads.map((p) => p.id)]);
 
   return (
     <ProjectsClient
@@ -33,6 +37,7 @@ export default async function ProjectsPage() {
         budget: p.budget,
         avgProgress: p.avgProgress,
         memberCount: countByProject.get(p.id) ?? 0,
+        isMine: mineIds.has(p.id),
       }))}
       canCreate={can(ctx, "project:create")}
     />

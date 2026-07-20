@@ -61,7 +61,7 @@ export interface ProjectTaskRow {
 
 const OPEN_BLOCKER_SELECT = {
   where: { status: "Open" },
-  select: { id: true },
+  select: { id: true, description: true },
   take: 1,
 } as const;
 
@@ -105,6 +105,8 @@ export interface MyTaskRow {
   status: string;
   priority: string;
   blocked: boolean;
+  /** Why it's stuck (the open linked blocker's description) — shown in the Blocked bucket. */
+  blockedReason: string | null;
   dueDate: Date | null;
   updatedAt: Date;
 }
@@ -132,7 +134,7 @@ function rowToMyTask(t: {
   dueDate: Date | null;
   updatedAt: Date;
   project: { code: string; name: string };
-  blockers: { id: string }[];
+  blockers: { id: string; description: string }[];
 }): MyTaskRow {
   return {
     id: t.id,
@@ -143,6 +145,7 @@ function rowToMyTask(t: {
     status: t.status,
     priority: t.priority,
     blocked: t.blockers.length > 0,
+    blockedReason: t.blockers[0]?.description ?? null,
     dueDate: t.dueDate,
     updatedAt: t.updatedAt,
   };
@@ -282,7 +285,7 @@ export async function addTasks(
     const keys = approvalStatus === "Published" ? await allocateTaskKeys(tx, ctx.tenantId, projectId, tasks.length) : [];
     const max = await tx.projectTask.aggregate({ where: { projectId }, _max: { orderIndex: true } });
     let order = (max._max.orderIndex ?? -1) + 1;
-    await tx.projectTask.createMany({
+    const created = await tx.projectTask.createManyAndReturn({
       data: tasks.map((t, i) => ({
         tenantId: ctx.tenantId,
         projectId,
@@ -303,20 +306,22 @@ export async function addTasks(
         approvalStatus,
         orderIndex: order++,
       })),
+      select: { id: true, title: true, type: true, assigneeId: true },
     });
     // Tell people work landed on them (6.2) — but never for Drafts (unapproved AI output
-    // must stay invisible, §2.2) and never the creator assigning to themselves.
+    // must stay invisible, §2.2) and never the creator assigning to themselves. Links
+    // deep-link to the highlighted card (work-cycle UX).
     if (approvalStatus === "Published") {
       await notifyUsers(
         tx,
         ctx,
-        tasks
+        created
           .filter((t) => t.assigneeId && t.assigneeId !== ctx.userId)
           .map((t) => ({
             userId: t.assigneeId as string,
             kind: "task_assigned",
             message: `${t.type === "Bug" ? "Bug" : "Task"} assigned to you on ${project.name}: ${t.title.slice(0, 90)}`,
-            link: `/projects/${projectId}`,
+            link: `/projects/${projectId}?tab=Board&task=${t.id}`,
           })),
       );
     }
@@ -417,7 +422,7 @@ export async function updateTask(ctx: TenantContext, taskId: string, input: Upda
           userId: input.assigneeId,
           kind: "task_assigned",
           message: `${before.type === "Bug" ? "Bug" : "Task"} assigned to you on ${before.project.name}: ${label.slice(0, 90)}`,
-          link: `/projects/${before.projectId}`,
+          link: `/projects/${before.projectId}?tab=Board&task=${taskId}`,
         });
       }
       const reachedQa = input.status === "InQA" && before.status !== "InQA";
@@ -426,7 +431,7 @@ export async function updateTask(ctx: TenantContext, taskId: string, input: Upda
           userId: before.reporterId,
           kind: "bug_ready_for_qa",
           message: `Your bug is ready to verify on ${before.project.name}: ${label.slice(0, 90)}`,
-          link: `/projects/${before.projectId}`,
+          link: `/projects/${before.projectId}?tab=Board&task=${taskId}&lens=qa`,
         });
       }
       await notifyUsers(tx, ctx, notes);

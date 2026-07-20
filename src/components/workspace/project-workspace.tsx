@@ -58,12 +58,22 @@ const CARD = "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)
 export function ProjectWorkspace({
   data,
   members,
+  viewerId,
+  initialTab,
+  focusTaskId = null,
+  initialLens = null,
 }: {
   data: ProjectPanelJson;
   members: { name: string }[];
+  viewerId?: string;
+  initialTab?: string;
+  focusTaskId?: string | null;
+  initialLens?: "all" | "dev" | "qa" | null;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("Overview");
+  const [tab, setTab] = useState<Tab>(() =>
+    TABS.includes(initialTab as Tab) ? (initialTab as Tab) : focusTaskId ? "Board" : "Overview",
+  );
   const canEdit = data.canEdit;
   const canContribute = data.canContribute; // tasks + blockers: any project member
   const eyebrow = [data.portfolioName, data.programmeName].filter(Boolean).join(" · ") || "Standalone";
@@ -195,6 +205,9 @@ export function ProjectWorkspace({
             canEdit={canContribute}
             canPublish={data.canPublish ?? data.canEdit}
             viewerCategory={data.viewerCategory ?? "Stakeholder"}
+            viewerId={viewerId}
+            focusTaskId={focusTaskId}
+            initialLens={initialLens}
           />
         )}
         {tab === "Documents" && <DocumentsSection projectId={data.id} canEdit={canEdit} />}

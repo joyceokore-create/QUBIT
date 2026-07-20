@@ -20,20 +20,24 @@ interface RiskTableProps {
   risks: RiskListItem[];
   users: AdminUserSummary[];
   canUpdate: boolean;
+  /** Enables the "Mine" chip (risks the viewer owns) — per Joyce: filter mine everywhere. */
+  viewerId?: string;
 }
 
-export function RiskTable({ risks, users, canUpdate }: RiskTableProps) {
+export function RiskTable({ risks, users, canUpdate, viewerId }: RiskTableProps) {
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [mineOnly, setMineOnly] = useState(false);
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return risks.filter((r) => {
       if (statusFilter && r.status !== statusFilter) return false;
+      if (mineOnly && r.ownerId !== viewerId) return false;
       if (q && !r.title.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [risks, statusFilter, query]);
+  }, [risks, statusFilter, mineOnly, viewerId, query]);
 
   return (
     <div className="overflow-hidden rounded-[10px] border border-ink-4 bg-white">
@@ -50,6 +54,17 @@ export function RiskTable({ risks, users, canUpdate }: RiskTableProps) {
               {chip.label}
             </Button>
           ))}
+          {viewerId && (
+            <Button
+              type="button"
+              size="sm"
+              variant={mineOnly ? "default" : "outline"}
+              onClick={() => setMineOnly((m) => !m)}
+              title="Risks you own"
+            >
+              Mine ({risks.filter((r) => r.ownerId === viewerId).length})
+            </Button>
+          )}
         </div>
         <div className="relative w-full max-w-[240px]">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-ink-3" />

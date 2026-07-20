@@ -11,11 +11,20 @@ import { Forbidden } from "@/components/forbidden";
 import { ProjectWorkspace } from "@/components/workspace/project-workspace";
 import type { ProjectPanelJson } from "@/components/panels/project-panel-content";
 
-export default async function ProjectWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProjectWorkspacePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  // Deep links (work-cycle UX): ?tab=Board&task=<id> jumps to a highlighted card;
+  // ?lens=qa|dev|all picks the board lens. My Tasks rows and notifications use these.
+  searchParams: Promise<{ tab?: string; task?: string; lens?: string }>;
+}) {
   const session = await auth();
   if (!session?.user) return null;
   const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
   const { id } = await params;
+  const sp = await searchParams;
 
   if (!(await canViewProject(ctx, id))) return <Forbidden />;
 
@@ -55,6 +64,13 @@ export default async function ProjectWorkspacePage({ params }: { params: Promise
   };
 
   return (
-    <ProjectWorkspace data={data} members={members.map((m) => ({ name: m.name }))} />
+    <ProjectWorkspace
+      data={data}
+      members={members.map((m) => ({ name: m.name }))}
+      viewerId={ctx.userId}
+      initialTab={sp.tab}
+      focusTaskId={sp.task ?? null}
+      initialLens={sp.lens === "qa" || sp.lens === "dev" || sp.lens === "all" ? sp.lens : null}
+    />
   );
 }

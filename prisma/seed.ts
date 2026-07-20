@@ -1321,6 +1321,13 @@ async function seedTenant(seed: TenantSeed) {
     const seedUserId = [...userIdByEmail.values()][0];
     if (firstProject && seedUserId) {
       const code = seed.projects[0].code;
+      // The demo project gets a real PM: first user leads it and is enrolled as a
+      // Project Manager member (mirrors createProject's behaviour, DM1.17) — so the
+      // MINE filters, member counts and join-request routing have data to show.
+      await tx.project.update({ where: { id: firstProject }, data: { leadUserId: seedUserId } });
+      await tx.projectMember.create({
+        data: { tenantId: tenant.id, projectId: firstProject, userId: seedUserId, role: "Project Manager" },
+      });
       const demoTasks = [
         { title: "Confirm scope with business owner", type: "Feature", status: "Completed", phase: "Requirements" },
         { title: "Build data-export service", type: "Feature", status: "InProgress", phase: "Development" },
