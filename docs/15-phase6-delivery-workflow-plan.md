@@ -53,7 +53,7 @@ Phase 6 builds **on top of `ProjectTask`** (the MVP board). The dormant ClickUp-
 
 ---
 
-## Milestone 6.1 — Task taxonomy, keys & status expansion
+## Milestone 6.1 — Task taxonomy, keys & status expansion — ✅ SHIPPED (DM1.16/DM1.17, deployed 2026-07-20)
 
 The foundation; everything else depends on it.
 
@@ -108,7 +108,7 @@ assigns contiguous keys under concurrency (test); status enum enforced; progress
 My Tasks correct for the new statuses; RLS test covers `project_task_counter`; migration
 of legacy "Blocked" tasks verified on seed data.
 
-## Milestone 6.2 — Role-lens boards & QA authoring flow
+## Milestone 6.2 — Role-lens boards & QA authoring flow — ✅ SHIPPED (DM1.19; swimlanes deferred)
 
 One `ProjectTask` table, three saved lenses — **no data-separated boards**.
 
@@ -145,6 +145,11 @@ member-add UI (role select).
 typed, templated bug assigned to a dev; triage group works; blocked flag round-trips to
 the Blocker register; publish gate enforced server-side (test: Developer member can
 generate but not publish); all new mutations audited.
+
+> **Data-migration rule for 6.3+ (DM1.18):** on the box, `migrate deploy` runs as the
+> RLS-forced `qubit` role — tenant-table DML in migrations silently matches 0 rows.
+> Loop tenants with `set_config('app.tenant_id', …)` in a `DO` block, or backfill in app
+> code. The `webhook_delivery` / `task_commit_link` tables below are new (DDL — safe).
 
 ## Milestone 6.3 — GitHub commit automation (webhook + parser)
 

@@ -301,6 +301,49 @@ RESTRICT — user deletes fail if their notifications survive). 372/372 tests gr
 Deferred (noted for 6.2): notify the requester on approve/deny; notify an assignee when
 a task is assigned to them.
 
+### DM1.18 — OPS GOTCHA: SQL data migrations silently no-op in production
+Discovered while verifying the 6.1 deploy. On the box, `prisma migrate deploy` runs as
+the **`qubit` app role** (non-superuser, no BYPASSRLS), tables are owned by `qubit`, and
+`prisma/rls.sql` uses **FORCE ROW LEVEL SECURITY** — so with no `app.tenant_id` set, the
+tenant policies deny every row and any data-migration `UPDATE`/`INSERT` on tenant tables
+**matches 0 rows without erroring**. DDL is unaffected. Locally the DB user is a
+superuser, so data migrations work — the failure is production-only and silent.
+The 6.1 migration was verified unaffected (prod had 0 Blocked tasks; checked as
+superuser post-deploy). **Rule for every future data migration:** wrap tenant-table DML
+in a `DO $$` block that iterates `SELECT id FROM tenant` (the tenant table carries no
+RLS) and runs `PERFORM set_config('app.tenant_id', <id>, true)` before the DML for each
+tenant — or ship the change as an app-level backfill instead.
+
+### DM1.19 — Milestone 6.2 shipped: role-lens boards + QA authoring flow
+No schema change. What landed:
+
+- **Lenses** (`src/lib/board-lens.ts`, pure + unit-tested): All / Dev / QA tabs filter
+  ONE task list — never separate boards. Dev = non-Bug work + assigned bugs; QA =
+  InReview/InQA + all bugs, with unassigned bugs pinned in a **Triage strip** (inline
+  assign). Default lens from the viewer's `projectRoleCategory` (lead/publisher → PM →
+  "All"), passed through the workspace page as `viewerCategory`.
+- **Publish gate enforced** (DM1.15 №3): `POST /tasks/publish` and any `approvalStatus`
+  change via `PATCH /api/tasks/[id]` now require `canWriteProject` (new
+  `canPublishTask` helper). Non-publishers see "N drafts awaiting PM approval" instead
+  of the approve button. Generation stays any-member.
+- **Bug filing** (`bug-dialog.tsx`): typed Bug with severity, steps-to-reproduce
+  template, assignee dropdown filtered to Dev-category members (falls back to all
+  members on small teams), optional `parentTaskId` ("found while testing", validated
+  same-project in `addTasks`).
+- **Notifications** (all skipped for Drafts so unapproved AI stays invisible):
+  `task_assigned` on create/re-assign (never self); `bug_ready_for_qa` to the REPORTER
+  when a Bug reaches InQA — QA closes bugs, devs don't self-certify; join-request
+  approve/deny now notifies the requester (closes the DM1.17 loop).
+- **Board hygiene**: aging tint + "Stale" chip (> 5 business days without activity, only
+  InProgress/InReview); soft WIP warning on the In-progress column header (> 3 open per
+  assignee, tooltip names them); task-key chip is click-to-copy (feeds the 6.3 commit
+  grammar); severity badge on bugs.
+- **Deferred from the 6.2 plan**: PM swimlanes by assignee/milestone — parked until the
+  milestone-linking UI exists (milestoneId is in the schema since 6.1 but unused in UI).
+
+Verified in-browser (lens tabs + counts, triage, bug dialog, publish-gate hint) and by
+`tests/unit/board-lens.test.ts` + `tests/rls/delivery-workflow.test.ts`. 384/384 green.
+
 ## Phase 0 — Foundation (2026-07-10)
 
 ### D0.1 — `tenantId` + RLS on every new table, including join tables
