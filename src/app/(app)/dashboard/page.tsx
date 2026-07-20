@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { forTenant } from "@/server/tenant-db";
@@ -7,41 +6,31 @@ import { listProjects, type ProjectListItem } from "@/server/projects";
 import { getEscalations, getUpcomingMilestones } from "@/server/dashboard";
 import { listWorkload } from "@/server/resources";
 import { getBriefing } from "@/server/relevance";
-import { accessibleDashboards, resolveView, DASHBOARDS } from "@/lib/dashboards";
 import { Forbidden } from "@/components/forbidden";
 import { LiveClock } from "@/components/command/live-clock";
 import { BriefingHero } from "@/components/dashboard/briefing-hero";
-import { DashboardSwitcher } from "@/components/dashboard/dashboard-switcher";
-import { ExecutiveBody, QaBody, PmBody, AdminBody } from "@/components/dashboard/bodies";
 import { gateCells, projectRank as rank, statusBarTok as barTok, statusMeta } from "@/lib/project-view";
 
-// ── QUBIT App v3 dashboard — role-composed "command center" (PROMPT §4). One shell; the
-// viewer's highest-priority role sets the landing view (Members land on My Tasks), and
-// multi-role users switch views via the pills. The briefing hero is fed by getBriefing(viewer)
-// so the "3 things need your attention" are personally relevant. Per-role widget bodies layer
-// onto this shell in a follow-up increment.
+// ── QUBIT App v3 dashboard — ONE command center for everyone. The all-projects delivery
+// ledger is visible to every user (global read); the briefing hero above it is the
+// personalized overview (getBriefing(viewer) — scoped to the viewer's own projects/work).
+// Writes are gated elsewhere: creating projects is role-gated, and risks/tasks can only be
+// written in a project you're a member of.
 
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
+function roleLabel(roles: string[]): string {
+  if (roles.includes("PlatformSuperAdmin")) return "Super Admin";
+  if (roles.includes("HeadOfProjects")) return "Head of Projects";
+  if (roles.includes("HeadOfQA")) return "Head of QA";
+  if (roles.includes("Executive")) return "Executive";
+  if (roles.includes("ProjectManager")) return "Project Manager";
+  return "Member";
+}
+
+export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user) return null;
   const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
   if (!can(ctx, "dashboard:read")) return <Forbidden />;
-
-  // Resolve which role dashboard to render; Members land on My Tasks (§4/§6).
-  const view = resolveView(session.user.roles, (await searchParams).view);
-  if (DASHBOARDS[view].landing === "/my-tasks") redirect("/my-tasks");
-  const def = DASHBOARDS[view];
-  const switcherOptions = accessibleDashboards(session.user.roles).map((r) => ({ role: r, label: DASHBOARDS[r].label }));
-
-  // Per-role body below the shared hero. Only the rendered element's async component runs;
-  // HeadOfProjects + the default fall through to the delivery ledger below.
-  const altBody: Record<string, React.ReactNode> = {
-    Executive: <ExecutiveBody ctx={ctx} />,
-    HeadOfQA: <QaBody ctx={ctx} />,
-    ProjectManager: <PmBody ctx={ctx} />,
-    PlatformSuperAdmin: <AdminBody ctx={ctx} />,
-  };
-  const body = altBody[view];
 
   const [briefing, projects, escalations, milestones, workload, memberCounts] = await Promise.all([
     getBriefing(ctx, 3),
@@ -68,7 +57,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const firstName = (session.user.name ?? "there").split(/\s+/)[0];
   const today = new Date().toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" }).toUpperCase();
 
-  // Delivery ledger groups (only non-empty render).
+  // Delivery ledger groups (only non-empty render). Shows ALL projects to every user.
   const toRow = (p: ProjectListItem) => {
     const m = statusMeta(p.status);
     return {
@@ -110,9 +99,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   return (
     <div>
-      {/* Role-switcher pills (multi-role users) */}
-      <DashboardSwitcher options={switcherOptions} current={view} />
-
       {/* Group overview strip */}
       <div className="mx-auto flex w-full max-w-[1360px] items-baseline gap-3.5 px-6 pt-[18px] [animation:rise_.5s_cubic-bezier(.22,1,.36,1)_both]">
         <span className="font-mono text-[10.5px] font-semibold tracking-[2.4px] text-[var(--ink4)]">GROUP OVERVIEW</span>
@@ -126,18 +112,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       </div>
 
       <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-3.5 p-[14px_24px_90px]">
-        {/* ── Briefing hero — personalized via getBriefing(viewer) ── */}
+        {/* ── Briefing hero — personalized overview via getBriefing(viewer) ── */}
         <BriefingHero
           firstName={firstName}
-          roleLabel={def.label}
+          roleLabel={roleLabel(session.user.roles)}
           tenantName={session.user.tenantName}
           items={briefing}
           health={health}
           distribution={{ onTrack, needAttention, planning, total }}
         />
 
-        {body ?? (
-          <>
         {/* ── KPI strip ── */}
         <section
           className="grid grid-cols-3 overflow-hidden rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25] md:grid-cols-6 [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.1s_both]"
@@ -156,7 +140,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           ))}
         </section>
 
-        {/* ── Delivery ledger + rails ── */}
+        {/* ── Delivery ledger (ALL projects) + rails ── */}
         <section className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_344px]">
           <div
             className="overflow-hidden rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25] [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.16s_both]"
@@ -263,8 +247,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </Rail>
           </aside>
         </section>
-          </>
-        )}
       </main>
     </div>
   );

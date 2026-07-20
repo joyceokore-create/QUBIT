@@ -64,6 +64,7 @@ export function ProjectWorkspace({
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("Overview");
   const canEdit = data.canEdit;
+  const canContribute = data.canContribute; // tasks + blockers: any project member
   const eyebrow = [data.portfolioName, data.programmeName].filter(Boolean).join(" · ") || "Standalone";
   const tl = timeline(data.dueDate);
   const sm = statusMeta(data.status);
@@ -186,7 +187,7 @@ export function ProjectWorkspace({
             </aside>
           </div>
         )}
-        {tab === "Board" && <ProjectBoard projectId={data.id} canEdit={canEdit} />}
+        {tab === "Board" && <ProjectBoard projectId={data.id} canEdit={canContribute} />}
         {tab === "Documents" && <DocumentsSection projectId={data.id} canEdit={canEdit} />}
         {tab === "Deadlines" && (
           <div className="flex flex-col gap-3.5">
@@ -194,7 +195,7 @@ export function ProjectWorkspace({
               <ProjectMilestonesSection projectId={data.id} canEdit={canEdit} />
             </div>
             <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
-              <ProjectBlockersSection projectId={data.id} canEdit={canEdit} />
+              <ProjectBlockersSection projectId={data.id} canEdit={canContribute} />
             </div>
           </div>
         )}

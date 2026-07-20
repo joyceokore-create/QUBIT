@@ -33,3 +33,9 @@ export async function requirePermission(permission: string): Promise<Guard> {
 
   return { ctx };
 }
+
+/** Standard 403 for a secondary, resource-scoped authorization check (run after
+ * requirePermission authenticates + confirms the baseline read capability). */
+export function forbidden(message = "You don't have permission to do this."): NextResponse {
+  return NextResponse.json({ error: { code: "FORBIDDEN", message } }, { status: 403 });
+}

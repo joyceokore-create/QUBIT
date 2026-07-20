@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
-import { requirePermission } from "@/lib/api-guard";
+import { requirePermission, forbidden } from "@/lib/api-guard";
+import { canWriteRisk } from "@/lib/access";
 import { updateRisk, UpdateRiskInput, RiskError } from "@/server/risks";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requirePermission("risk:update");
+  const guard = await requirePermission("risk:read");
   if ("response" in guard) return guard.response;
   const { id } = await params;
+
+  if (!(await canWriteRisk(guard.ctx, id))) {
+    return forbidden("You can only edit risks on a project you're part of.");
+  }
 
   const parsed = UpdateRiskInput.safeParse(await req.json());
   if (!parsed.success) {

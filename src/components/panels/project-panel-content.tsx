@@ -36,7 +36,8 @@ export interface ProjectPanelJson {
   portfolioName: string | null;
   programmeName: string | null;
   avgProgress: number;
-  canEdit: boolean;
+  canEdit: boolean; // project settings / team — lead, PM, heads, SuperAdmin
+  canContribute: boolean; // tasks + blockers — any project member (per Joyce)
   subsidiaries: {
     orgUnitId: string;
     code: string;
@@ -120,9 +121,9 @@ export function ProjectPanelContent({ data, onUpdated }: ProjectPanelContentProp
 
         <ProjectResourcesSection projectId={data.id} canEdit={data.canEdit} />
 
-        <ProjectTasksSection projectId={data.id} canEdit={data.canEdit} />
+        <ProjectTasksSection projectId={data.id} canEdit={data.canContribute} />
 
-        <ProjectBlockersSection projectId={data.id} canEdit={data.canEdit} />
+        <ProjectBlockersSection projectId={data.id} canEdit={data.canContribute} />
 
         <AskQAbout type="project" targetId={data.id} label="Ask Q about this project" />
 

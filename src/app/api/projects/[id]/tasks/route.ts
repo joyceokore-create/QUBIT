@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requirePermission } from "@/lib/api-guard";
+import { requirePermission, forbidden } from "@/lib/api-guard";
+import { canContributeToProject } from "@/lib/access";
 import { listProjectTasks, getProjectProgress, addTasks, TaskInput, TaskError } from "@/server/project-tasks";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -19,13 +20,16 @@ export async function GET(_req: Request, { params }: Ctx) {
 const PostBody = z.object({ tasks: z.array(TaskInput).min(1) });
 
 export async function POST(req: Request, { params }: Ctx) {
-  const guard = await requirePermission("project:update");
+  const guard = await requirePermission("project:read");
   if ("response" in guard) return guard.response;
+  const { id } = await params;
+  if (!(await canContributeToProject(guard.ctx, id))) {
+    return forbidden("You can only add tasks to a project you're part of.");
+  }
   const parsed = PostBody.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: { code: "VALIDATION", message: "Invalid tasks." } }, { status: 400 });
   }
-  const { id } = await params;
   try {
     return NextResponse.json(await addTasks(guard.ctx, id, parsed.data.tasks), { status: 201 });
   } catch (e) {

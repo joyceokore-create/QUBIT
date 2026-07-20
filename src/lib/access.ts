@@ -33,6 +33,16 @@ async function isDeliveryOwnerTx(tx: Tx, userId: string, projectId: string): Pro
   return Boolean(lead || member);
 }
 
+/** True if `userId` is a MEMBER of `projectId` — its lead OR any allocated member (any role).
+ * "Part of the project": risks/tasks may be written by anyone on the project (per Joyce). */
+async function isProjectMemberTx(tx: Tx, userId: string, projectId: string): Promise<boolean> {
+  const [lead, member] = await Promise.all([
+    tx.project.findFirst({ where: { id: projectId, leadUserId: userId }, select: { id: true } }),
+    tx.projectMember.findFirst({ where: { projectId, userId }, select: { id: true } }),
+  ]);
+  return Boolean(lead || member);
+}
+
 /** Can the viewer edit this project (fields, dates, members, milestones)? PROMPT §2 project:write. */
 export async function canWriteProject(ctx: TenantContext, projectId: string): Promise<boolean> {
   if (can(ctx, "project:write")) return true; // PlatformSuperAdmin, HeadOfProjects
@@ -46,7 +56,8 @@ export async function canReadBudget(ctx: TenantContext, projectId?: string): Pro
   return withTenant(ctx, (tx) => isDeliveryOwnerTx(tx, ctx.userId, projectId));
 }
 
-/** Can the viewer write this risk/blocker? Owner, the project's lead/PM, or a management role. */
+/** Can the viewer write this risk/blocker? A management role, the owner, or any member of the
+ * project (the only block is a project you're not part of — per Joyce). */
 export async function canWriteRiskOrBlocker(
   ctx: TenantContext,
   opts: { projectId?: string | null; ownerId?: string | null },
@@ -54,7 +65,7 @@ export async function canWriteRiskOrBlocker(
   if (can(ctx, "risk:write")) return true; // ProjectManager, both heads, SuperAdmin
   if (opts.ownerId && opts.ownerId === ctx.userId) return true; // the owner writes their own
   if (!opts.projectId) return false;
-  return withTenant(ctx, (tx) => isDeliveryOwnerTx(tx, ctx.userId, opts.projectId!));
+  return withTenant(ctx, (tx) => isProjectMemberTx(tx, ctx.userId, opts.projectId!));
 }
 
 /** Can the viewer write this task? Full authority for lead/PM/roles; assignee for their own;
@@ -69,7 +80,38 @@ export async function canWriteTask(ctx: TenantContext, taskId: string): Promise<
     if (!task) return false;
     if (task.assigneeId === ctx.userId) return true; // assignee: status/progress/comments
     if (ctx.roles.includes("HeadOfQA") && isQaPhase(task.phase)) return true;
-    return isDeliveryOwnerTx(tx, ctx.userId, task.projectId);
+    return isProjectMemberTx(tx, ctx.userId, task.projectId); // any member of the project
+  });
+}
+
+/** Can the viewer create/write risks/tasks/blockers WITHIN this project? A management role
+ * (task/risk write) OR a member of the project. Used by the create routes — the only block is
+ * a project you're not part of. */
+export async function canContributeToProject(ctx: TenantContext, projectId: string): Promise<boolean> {
+  if (can(ctx, "task:write") || can(ctx, "risk:write")) return true; // mgmt roles (PM/heads/SuperAdmin)
+  return withTenant(ctx, (tx) => isProjectMemberTx(tx, ctx.userId, projectId));
+}
+
+/** Resolve a risk by id and decide write access (management role, owner, or project member). */
+export async function canWriteRisk(ctx: TenantContext, riskId: string): Promise<boolean> {
+  if (can(ctx, "risk:write")) return true;
+  return withTenant(ctx, async (tx) => {
+    const risk = await tx.risk.findUnique({ where: { id: riskId }, select: { projectId: true, ownerId: true } });
+    if (!risk) return false;
+    if (risk.ownerId === ctx.userId) return true;
+    if (!risk.projectId) return false;
+    return isProjectMemberTx(tx, ctx.userId, risk.projectId);
+  });
+}
+
+/** Resolve a blocker by id and decide write access (management role, owner, or project member). */
+export async function canWriteBlocker(ctx: TenantContext, blockerId: string): Promise<boolean> {
+  if (can(ctx, "risk:write")) return true;
+  return withTenant(ctx, async (tx) => {
+    const b = await tx.blocker.findUnique({ where: { id: blockerId }, select: { projectId: true, ownerId: true } });
+    if (!b) return false;
+    if (b.ownerId === ctx.userId) return true;
+    return isProjectMemberTx(tx, ctx.userId, b.projectId);
   });
 }
 

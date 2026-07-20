@@ -159,6 +159,28 @@ still reach Roles read-only, and Audit → Forbidden — a rough edge, not a sec
 non-admin "Teams page for everyone" and the project **join-request flow** → Phase 5 (they also
 unblock the stubbed PM dashboard widget).
 
+## MVP1 — Dashboard scope & contribution writes (2026-07-18, per Joyce)
+
+### DM1.10 — One all-projects dashboard + personalized overview (reverts the Phase 3 per-role bodies)
+Every user's dashboard shows ALL projects (the delivery ledger); the personalized part is the
+OVERVIEW — the briefing hero (`getBriefing`), scoped to the viewer's own projects/work. The
+Phase 3 per-role bodies (Executive/HeadOfQA/PM/SuperAdmin) that REPLACED the project list with
+role-specific widgets are removed, along with the role-switcher, the landing-priority routing
+(Members no longer redirect off `/dashboard`), and the AI token count. Deleted:
+`lib/dashboards.ts`, `components/dashboard/{bodies,widgets,dashboard-switcher}.tsx` and their
+tests. The briefing hero + the `getBriefing` relevance engine stay.
+
+### DM1.11 — Writes gated on project MEMBERSHIP, not lead/PM (loosens DM1.3 §2)
+The only write restrictions are (a) creating a project (role-gated: SuperAdmin, heads,
+ProjectManager) and (b) writing risks/tasks/blockers in a project you're NOT part of. So ANY
+member of a project — its lead OR any allocated member of any project-role — may create/edit
+its tasks, risks and blockers, not just the lead/PM. Implemented by loosening
+`canWriteTask`/`canWriteRiskOrBlocker` to `isProjectMemberTx`, adding `canContributeToProject`
++ `canWriteRisk`/`canWriteBlocker` (`src/lib/access.ts`), and moving the task/risk/blocker write
+routes off the coarse `project:update`/`risk:create` role gates to authenticate-then-membership.
+The workspace/panel split `canEdit` (settings/team — lead/PM/heads) from `canContribute`
+(tasks/blockers — any member). Editing project SETTINGS/team stays lead/PM/heads.
+
 ## Phase 0 — Foundation (2026-07-10)
 
 ### D0.1 — `tenantId` + RLS on every new table, including join tables
