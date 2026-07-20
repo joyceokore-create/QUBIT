@@ -61,21 +61,22 @@ model Tenant {
   automationRuns   AutomationRun[]
 
   // ── MVP1 — Riverbank teams & resource allocation ──
-  teams            Team[]
-  teamMembers      TeamMember[]
-  projectMembers   ProjectMember[]
-  projectTeams     ProjectTeam[]
-  aiCallLogs       AiCallLog[]
-  projectTasks     ProjectTask[]
-  blockers         Blocker[]
-  projectDocuments ProjectDocument[]
-  statusUpdates    ProjectStatusUpdate[]
-  notifications    Notification[]
+  teams               Team[]
+  teamMembers         TeamMember[]
+  projectMembers      ProjectMember[]
+  projectTeams        ProjectTeam[]
+  aiCallLogs          AiCallLog[]
+  projectTasks        ProjectTask[]
+  projectTaskCounters ProjectTaskCounter[]
+  blockers            Blocker[]
+  projectDocuments    ProjectDocument[]
+  statusUpdates       ProjectStatusUpdate[]
+  notifications       Notification[]
   projectIntegrations ProjectIntegration[]
-  projectMilestones ProjectMilestone[]
-  sharedReports    SharedReport[]
-  rolePermissions  RolePermission[]
-  joinRequests     JoinRequest[]
+  projectMilestones   ProjectMilestone[]
+  sharedReports       SharedReport[]
+  rolePermissions     RolePermission[]
+  joinRequests        JoinRequest[]
 
   @@map("tenant")
 }
@@ -98,53 +99,54 @@ model OrgUnit {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  tenantId     String   @map("tenant_id")
-  tenant       Tenant   @relation(fields: [tenantId], references: [id])
-  email                   String
-  name                    String
-  passwordHash            String?  @map("password_hash")
-  previousPasswordHashes  String[] @default([]) @map("previous_password_hashes")
-  mfaSecret               String?  @map("mfa_secret") // encrypted at rest, see src/lib/mfa.ts
-  status                  String   @default("ACTIVE") // "ACTIVE" | "SUSPENDED" | "DELETED"
-  deletedAt               DateTime? @map("deleted_at")
-  lastLoginAt             DateTime? @map("last_login_at") // null = invited but never signed in
-  mustChangePassword      Boolean  @default(false) @map("must_change_password") // invited users reset on first sign-in
-  departmentId            String?     @map("department_id")
-  department              Department? @relation("UserDepartment", fields: [departmentId], references: [id])
+  id                     String      @id @default(uuid())
+  tenantId               String      @map("tenant_id")
+  tenant                 Tenant      @relation(fields: [tenantId], references: [id])
+  email                  String
+  name                   String
+  passwordHash           String?     @map("password_hash")
+  previousPasswordHashes String[]    @default([]) @map("previous_password_hashes")
+  mfaSecret              String?     @map("mfa_secret") // encrypted at rest, see src/lib/mfa.ts
+  status                 String      @default("ACTIVE") // "ACTIVE" | "SUSPENDED" | "DELETED"
+  deletedAt              DateTime?   @map("deleted_at")
+  lastLoginAt            DateTime?   @map("last_login_at") // null = invited but never signed in
+  mustChangePassword     Boolean     @default(false) @map("must_change_password") // invited users reset on first sign-in
+  departmentId           String?     @map("department_id")
+  department             Department? @relation("UserDepartment", fields: [departmentId], references: [id])
   // Who this user reports to. Self-relation — see docs/05-data-model.md. Longer manager
   // cycles (A -> B -> A) aren't guarded; nothing today traverses this chain beyond a
   // direct lookup, so it's inert bad data rather than an active bug (unlike Department's
   // parentId, which IS walked for cycle prevention because hierarchy queries rely on it).
-  managerId               String?  @map("manager_id")
-  manager                 User?    @relation("UserManager", fields: [managerId], references: [id])
-  createdAt               DateTime @default(now()) @map("created_at")
-  updatedAt               DateTime @updatedAt @map("updated_at")
+  managerId              String?     @map("manager_id")
+  manager                User?       @relation("UserManager", fields: [managerId], references: [id])
+  createdAt              DateTime    @default(now()) @map("created_at")
+  updatedAt              DateTime    @updatedAt @map("updated_at")
 
   roles             RoleAssignment[]
   reports           User[]           @relation("UserManager")
   headOfDepartments Department[]     @relation("DepartmentHead")
 
   // ── ClickUp transformation (docs/clickup-transformation) — additive ──
-  tasksCreated      Task[]           @relation("TaskCreatedBy")
-  taskAssignments   TaskAssignee[]
-  taskWatching      TaskWatcher[]
-  commentsAuthored  Comment[]
+  tasksCreated     Task[]         @relation("TaskCreatedBy")
+  taskAssignments  TaskAssignee[]
+  taskWatching     TaskWatcher[]
+  commentsAuthored Comment[]
 
   // ── MVP1 — Riverbank teams & resource allocation ──
-  teamsLed          Team[]           @relation("TeamLead")
-  teamMemberships   TeamMember[]
-  projectAllocations ProjectMember[]
-  projectsLed       Project[]        @relation("ProjectLead")
-  aiCallLogs        AiCallLog[]
-  assignedProjectTasks ProjectTask[] @relation("ProjectTaskAssignee")
-  ownedBlockers     Blocker[]        @relation("BlockerOwner")
-  authoredDocuments ProjectDocument[] @relation("DocumentAuthor")
-  statusUpdatesPosted ProjectStatusUpdate[] @relation("StatusAuthor")
-  notifications     Notification[]   @relation("UserNotifications")
-  sharedReports     SharedReport[]   @relation("SharedReportAuthor")
-  joinRequests        JoinRequest[]  @relation("JoinRequestUser")
-  joinRequestsDecided JoinRequest[]  @relation("JoinRequestDecider")
+  teamsLed             Team[]                @relation("TeamLead")
+  teamMemberships      TeamMember[]
+  projectAllocations   ProjectMember[]
+  projectsLed          Project[]             @relation("ProjectLead")
+  aiCallLogs           AiCallLog[]
+  assignedProjectTasks ProjectTask[]         @relation("ProjectTaskAssignee")
+  reportedProjectTasks ProjectTask[]         @relation("ProjectTaskReporter")
+  ownedBlockers        Blocker[]             @relation("BlockerOwner")
+  authoredDocuments    ProjectDocument[]     @relation("DocumentAuthor")
+  statusUpdatesPosted  ProjectStatusUpdate[] @relation("StatusAuthor")
+  notifications        Notification[]        @relation("UserNotifications")
+  sharedReports        SharedReport[]        @relation("SharedReportAuthor")
+  joinRequests         JoinRequest[]         @relation("JoinRequestUser")
+  joinRequestsDecided  JoinRequest[]         @relation("JoinRequestDecider")
 
   @@unique([tenantId, email])
   @@map("user")
@@ -158,7 +160,7 @@ model AiCallLog {
   tenant       Tenant   @relation(fields: [tenantId], references: [id])
   userId       String?  @map("user_id")
   user         User?    @relation(fields: [userId], references: [id])
-  purpose      String   // "report:project" | "report:resource" | "report:portfolio"
+  purpose      String // "report:project" | "report:resource" | "report:portfolio"
   model        String
   usedAi       Boolean  @default(true) @map("used_ai")
   inputTokens  Int      @default(0) @map("input_tokens")
@@ -197,49 +199,87 @@ model SharedReport {
 // manually), their execution status, and the data auto-progress is computed from. Distinct
 // from the ClickUp `task` model (that surface is out of the MVP nav).
 model ProjectTask {
-  id          String    @id @default(uuid())
-  tenantId    String    @map("tenant_id")
-  tenant      Tenant    @relation(fields: [tenantId], references: [id])
-  projectId   String    @map("project_id")
-  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  title       String
-  description String?
-  phase       String? // Discovery / Requirements / Design / … (PRD Module 4)
-  ownerRole   String?   @map("owner_role") // suggested project role (PRD Module 5)
-  priority    String    @default("Medium") // Low | Medium | High | Critical
-  status      String    @default("NotStarted") // NotStarted | InProgress | Blocked | Completed
+  id               String            @id @default(uuid())
+  tenantId         String            @map("tenant_id")
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  projectId        String            @map("project_id")
+  project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title            String
+  description      String?
+  phase            String? // Discovery / Requirements / Design / … (PRD Module 4)
+  ownerRole        String?           @map("owner_role") // suggested project role (PRD Module 5)
+  priority         String            @default("Medium") // Low | Medium | High | Critical
+  status           String            @default("NotStarted") // NotStarted | InProgress | Blocked | Completed
   // Draft = AI-generated, pending approval (excluded from progress/reports/member views);
   // Published = live. Manual tasks are Published; a plan is approved to publish (§2.2).
-  approvalStatus String @default("Published") @map("approval_status")
-  estimate    String? // free-form estimated effort, e.g. "3d"
-  assigneeId  String?   @map("assignee_id")
-  assignee    User?     @relation("ProjectTaskAssignee", fields: [assigneeId], references: [id])
-  dueDate     DateTime? @map("due_date")
-  orderIndex  Int       @default(0) @map("order_index")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  approvalStatus   String            @default("Published") @map("approval_status")
+  estimate         String? // free-form estimated effort, e.g. "3d"
+  assigneeId       String?           @map("assignee_id")
+  assignee         User?             @relation("ProjectTaskAssignee", fields: [assigneeId], references: [id])
+  dueDate          DateTime?         @map("due_date")
+  orderIndex       Int               @default(0) @map("order_index")
+  // ── Phase 6.1 taxonomy (docs/15) ──
+  type             String            @default("Feature") // Feature | Bug | Chore | Spike | Improvement
+  // Human-readable key "<project.code>-<n>" referenced in commit messages (6.3). Allocated
+  // from ProjectTaskCounter on publish/manual create; Drafts carry NULL until approved.
+  taskKey          String?           @map("task_key")
+  severity         String? // Bugs only: Low | Medium | High | Critical
+  reporterId       String?           @map("reporter_id") // who filed it (QA authorship on bugs)
+  reporter         User?             @relation("ProjectTaskReporter", fields: [reporterId], references: [id])
+  parentTaskId     String?           @map("parent_task_id") // e.g. the task a bug was found while testing
+  parentTask       ProjectTask?      @relation("ProjectTaskParent", fields: [parentTaskId], references: [id])
+  childTasks       ProjectTask[]     @relation("ProjectTaskParent")
+  sourceDocumentId String?           @map("source_document_id") // BRD the plan was generated from (traceability)
+  sourceDocument   ProjectDocument?  @relation("TaskSourceDocument", fields: [sourceDocumentId], references: [id])
+  milestoneId      String?           @map("milestone_id")
+  milestone        ProjectMilestone? @relation("MilestoneTasks", fields: [milestoneId], references: [id])
+  // Touched on every task mutation (incl. commit-driven ones in 6.3); feeds the nudger's
+  // staleness check (6.4). Distinct from updatedAt only by intent — set explicitly.
+  lastActivityAt   DateTime          @default(now()) @map("last_activity_at")
+  // "Blocked" is a flag, not a status: a task is blocked while an Open Blocker links to it.
+  blockers         Blocker[]         @relation("TaskBlockers")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
 
+  @@unique([projectId, taskKey])
   @@index([tenantId, projectId])
   @@map("project_task")
+}
+
+// Per-project task-key sequence (docs/15 §6.1). Keys are claimed with a transactional
+// UPDATE … RETURNING — never derived from a row count (that races under concurrency).
+model ProjectTaskCounter {
+  tenantId  String  @map("tenant_id")
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  projectId String  @id @map("project_id")
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  next      Int     @default(1)
+
+  @@index([tenantId])
+  @@map("project_task_counter")
 }
 
 // MVP1 PRD Module 10 — Blocker Register. Distinct from Risk (a future possibility) and
 // Issue (a materialised risk): a blocker is a live impediment on a project right now.
 model Blocker {
-  id              String   @id @default(uuid())
-  tenantId        String   @map("tenant_id")
-  tenant          Tenant   @relation(fields: [tenantId], references: [id])
-  projectId       String   @map("project_id")
-  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id              String       @id @default(uuid())
+  tenantId        String       @map("tenant_id")
+  tenant          Tenant       @relation(fields: [tenantId], references: [id])
+  projectId       String       @map("project_id")
+  project         Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   description     String
-  severity        String   @default("Medium") // Low | Medium | Critical
-  status          String   @default("Open") // Open | Resolved
-  ownerId         String?  @map("owner_id")
-  owner           User?    @relation("BlockerOwner", fields: [ownerId], references: [id])
-  resolutionNotes String?  @map("resolution_notes")
-  dateRaised      DateTime @default(now()) @map("date_raised")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  severity        String       @default("Medium") // Low | Medium | Critical
+  status          String       @default("Open") // Open | Resolved
+  ownerId         String?      @map("owner_id")
+  owner           User?        @relation("BlockerOwner", fields: [ownerId], references: [id])
+  // Optional link to the task this blocker stalls (Phase 6.1 blocked-as-flag). A task is
+  // "blocked" while an Open blocker points at it. Survives task deletion (SetNull).
+  taskId          String?      @map("task_id")
+  task            ProjectTask? @relation("TaskBlockers", fields: [taskId], references: [id], onDelete: SetNull)
+  resolutionNotes String?      @map("resolution_notes")
+  dateRaised      DateTime     @default(now()) @map("date_raised")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
 
   @@index([tenantId, projectId])
   @@map("blocker")
@@ -249,22 +289,24 @@ model Blocker {
 // text/markdown body (also what Q grounds on); `fileData` holds a base64 blob for PDF
 // uploads (download). A doc can be Uploaded or AI-drafted and move through a review state.
 model ProjectDocument {
-  id          String   @id @default(uuid())
-  tenantId    String   @map("tenant_id")
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
-  projectId   String   @map("project_id")
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  title       String
-  kind        String   @default("Other") // BRD | Plan | Spec | Note | Other
-  format      String   @default("text") // text | markdown | pdf
-  content     String? // text/markdown body
-  fileData    String?  @map("file_data") // base64 (pdf uploads)
-  status      String   @default("Final") // Draft | PendingReview | Final
-  source      String   @default("Uploaded") // Uploaded | AIDrafted
-  createdById String?  @map("created_by_id")
-  createdBy   User?    @relation("DocumentAuthor", fields: [createdById], references: [id])
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id             String        @id @default(uuid())
+  tenantId       String        @map("tenant_id")
+  tenant         Tenant        @relation(fields: [tenantId], references: [id])
+  projectId      String        @map("project_id")
+  project        Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title          String
+  kind           String        @default("Other") // BRD | Plan | Spec | Note | Other
+  format         String        @default("text") // text | markdown | pdf
+  content        String? // text/markdown body
+  fileData       String?       @map("file_data") // base64 (pdf uploads)
+  status         String        @default("Final") // Draft | PendingReview | Final
+  source         String        @default("Uploaded") // Uploaded | AIDrafted
+  createdById    String?       @map("created_by_id")
+  createdBy      User?         @relation("DocumentAuthor", fields: [createdById], references: [id])
+  // Tasks whose plan was generated from this document (Phase 6.1 traceability).
+  generatedTasks ProjectTask[] @relation("TaskSourceDocument")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
 
   @@index([tenantId, projectId])
   @@map("project_document")
@@ -329,17 +371,20 @@ model ProjectIntegration {
 // PRD Module 8 — project milestones (schedule checkpoints). Powers the workspace Deadlines
 // tab; overdue = Pending with a past due date.
 model ProjectMilestone {
-  id         String    @id @default(uuid())
-  tenantId   String    @map("tenant_id")
-  tenant     Tenant    @relation(fields: [tenantId], references: [id])
-  projectId  String    @map("project_id")
-  project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id         String        @id @default(uuid())
+  tenantId   String        @map("tenant_id")
+  tenant     Tenant        @relation(fields: [tenantId], references: [id])
+  projectId  String        @map("project_id")
+  project    Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   name       String
-  dueDate    DateTime? @map("due_date")
-  status     String    @default("Pending") // Pending | Done
-  orderIndex Int       @default(0) @map("order_index")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
+  dueDate    DateTime?     @map("due_date")
+  status     String        @default("Pending") // Pending | Done
+  orderIndex Int           @default(0) @map("order_index")
+  // Tasks scheduled under this milestone (Phase 6.1). When any are linked, milestone
+  // status is DERIVED (Done ⇔ all linked non-Draft tasks Completed) — see docs/15.
+  tasks      ProjectTask[] @relation("MilestoneTasks")
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
 
   @@index([tenantId, projectId])
   @@map("project_milestone")
@@ -469,47 +514,48 @@ model Programme {
 }
 
 model Project {
-  id          String     @id @default(uuid())
-  tenantId    String     @map("tenant_id")
-  tenant      Tenant     @relation(fields: [tenantId], references: [id])
-  code        String
-  name        String
-  description String?
+  id            String     @id @default(uuid())
+  tenantId      String     @map("tenant_id")
+  tenant        Tenant     @relation(fields: [tenantId], references: [id])
+  code          String
+  name          String
+  description   String?
   // PRD Module 2 — project definition fields (all optional; back-compat).
   client        String?
   objective     String?
   mission       String?
-  businessOwner String?   @map("business_owner")
-  startDate     DateTime? @map("start_date")
-  type        String
-  portfolioId String?    @map("portfolio_id")
-  portfolio   Portfolio? @relation(fields: [portfolioId], references: [id])
-  programmeId String?    @map("programme_id")
-  programme   Programme? @relation(fields: [programmeId], references: [id])
-  priority    String
-  status      String
-  dueDate     DateTime?  @map("due_date")
-  budget      String?
+  businessOwner String?    @map("business_owner")
+  startDate     DateTime?  @map("start_date")
+  type          String
+  portfolioId   String?    @map("portfolio_id")
+  portfolio     Portfolio? @relation(fields: [portfolioId], references: [id])
+  programmeId   String?    @map("programme_id")
+  programme     Programme? @relation(fields: [programmeId], references: [id])
+  priority      String
+  status        String
+  dueDate       DateTime?  @map("due_date")
+  budget        String?
   // Legacy free-text summary (kept for back-compat). Real per-person assignment now
   // lives in ProjectMember; teams assigned via ProjectTeam (MVP1).
-  team        String?
-  leadUserId  String?    @map("lead_user_id")
-  lead        User?      @relation("ProjectLead", fields: [leadUserId], references: [id])
-  createdAt   DateTime   @default(now()) @map("created_at")
-  updatedAt   DateTime   @updatedAt @map("updated_at")
+  team          String?
+  leadUserId    String?    @map("lead_user_id")
+  lead          User?      @relation("ProjectLead", fields: [leadUserId], references: [id])
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
 
-  orgStatuses ProjectOrgStatus[]
-  risks       Risk[]
-  issues      Issue[]
-  members     ProjectMember[]
-  teams       ProjectTeam[]
-  projectTasks ProjectTask[]
-  blockers    Blocker[]
-  documents   ProjectDocument[]
+  orgStatuses   ProjectOrgStatus[]
+  risks         Risk[]
+  issues        Issue[]
+  members       ProjectMember[]
+  teams         ProjectTeam[]
+  projectTasks  ProjectTask[]
+  taskCounter   ProjectTaskCounter?
+  blockers      Blocker[]
+  documents     ProjectDocument[]
   statusUpdates ProjectStatusUpdate[]
-  integrations ProjectIntegration[]
-  milestonesV2 ProjectMilestone[]
-  joinRequests JoinRequest[]
+  integrations  ProjectIntegration[]
+  milestonesV2  ProjectMilestone[]
+  joinRequests  JoinRequest[]
 
   @@unique([tenantId, code])
   @@map("project")
@@ -1110,15 +1156,15 @@ model AutomationRun {
 // assigning whole teams (ProjectTeam). uuid ids to match the PPM neighbourhood.
 
 model Team {
-  id          String       @id @default(uuid())
-  tenantId    String       @map("tenant_id")
-  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
   name        String
   description String?
-  leadUserId  String?      @map("lead_user_id")
-  lead        User?        @relation("TeamLead", fields: [leadUserId], references: [id])
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
+  leadUserId  String?  @map("lead_user_id")
+  lead        User?    @relation("TeamLead", fields: [leadUserId], references: [id])
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   members      TeamMember[]
   projectTeams ProjectTeam[]

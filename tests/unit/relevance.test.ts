@@ -9,13 +9,14 @@ const days = (n: number) => new Date(NOW.getTime() + n * 86_400_000);
 const DATA: RelevanceData = {
   tasks: [
     { id: "t1", title: "Ship auth", status: "InProgress", dueDate: days(-3), assigneeId: "member", phase: "Development", projectId: "P1", projectCode: "RBS-01" },
-    { id: "t2", title: "Wire webhook", status: "Blocked", dueDate: null, assigneeId: "member", phase: "Development", projectId: "P1", projectCode: "RBS-01" },
-    { id: "t3", title: "UAT sign-off", status: "Blocked", dueDate: null, assigneeId: "someone", phase: "UAT", projectId: "P2", projectCode: "RBS-02" },
+    // Blocked is a flag since 6.1 — these two are blocked via the linked blockers below.
+    { id: "t2", title: "Wire webhook", status: "InProgress", dueDate: null, assigneeId: "member", phase: "Development", projectId: "P1", projectCode: "RBS-01" },
+    { id: "t3", title: "UAT sign-off", status: "InProgress", dueDate: null, assigneeId: "someone", phase: "UAT", projectId: "P2", projectCode: "RBS-02" },
     { id: "t4", title: "Later work", status: "InProgress", dueDate: days(30), assigneeId: "pm", phase: "Design", projectId: "P1", projectCode: "RBS-01" },
   ],
   blockers: [
-    { id: "b1", description: "Vendor API down", severity: "Critical", status: "Open", ownerId: "member", projectId: "P1", projectCode: "RBS-01" },
-    { id: "b2", description: "Env access blocked", severity: "Critical", status: "Open", ownerId: "someone", projectId: "P2", projectCode: "RBS-02" },
+    { id: "b1", description: "Vendor API down", severity: "Critical", status: "Open", ownerId: "member", taskId: "t2", projectId: "P1", projectCode: "RBS-01" },
+    { id: "b2", description: "Env access blocked", severity: "Critical", status: "Open", ownerId: "someone", taskId: "t3", projectId: "P2", projectCode: "RBS-02" },
   ],
   risks: [{ id: "r1", title: "Scope creep", probability: 4, impact: 4, status: "Open", projectId: "P1", projectCode: "RBS-01" }],
   issues: [{ id: "i1", title: "Data mismatch", severity: "High", status: "Open", projectId: "P2", projectCode: "RBS-02" }],

@@ -15,11 +15,35 @@ export const PROJECT_ROLES = [
   "Business Analyst",
   "Technical Lead",
   "QA Lead",
+  "QA Engineer",
   "Developer",
   "UX Designer",
   "Stakeholder",
 ] as const;
 export type ProjectRole = (typeof PROJECT_ROLES)[number];
+
+/**
+ * Phase 6.1 (DM1.15 №1) — collapse a project role into the category the delivery workflow
+ * keys off: board lenses, QA write scope, nudger escalation. Unknown/legacy free-text
+ * (e.g. old join-request roles) deliberately lands on Stakeholder — read-mostly, never a
+ * write grant it shouldn't have.
+ */
+export type ProjectRoleCategory = "PM" | "Dev" | "QA" | "Stakeholder";
+export function projectRoleCategory(role: string): ProjectRoleCategory {
+  switch (role) {
+    case "Project Manager":
+      return "PM";
+    case "Technical Lead":
+    case "Developer":
+    case "UX Designer":
+      return "Dev";
+    case "QA Lead":
+    case "QA Engineer":
+      return "QA";
+    default:
+      return "Stakeholder";
+  }
+}
 
 /**
  * PRD §5 User Roles — the four system tiers surfaced during onboarding, each mapped to an

@@ -39,7 +39,7 @@ describe("MVP1 — reports centre (period, sharing, access)", () => {
     });
     projectId = project.id;
     projectIds.push(project.id);
-    await setProjectMember(kcb, projectId, kcb.userId, { role: "Project Lead", allocationPct: 60 });
+    await setProjectMember(kcb, projectId, kcb.userId, { role: "Technical Lead", allocationPct: 60 });
 
     // Activity inside the weekly window: a completed task + a status update (both stamped now).
     await withTenant(kcb, async (tx) => {

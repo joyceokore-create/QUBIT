@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, Plus, Search } from "lucide-react";
 import { usePanel } from "@/components/panels/panel-context";
@@ -176,18 +176,33 @@ function NewProjectDialog() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ code: "", name: "", description: "", type: "Project", priority: "Medium", status: "Planning" });
+  // Every project needs a project manager (its lead) — required before create (per Joyce).
+  const [leadUserId, setLeadUserId] = useState<string>("");
+  const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/v1/users")
+      .then((r) => r.json())
+      .then((d) => setUsers(d.data ?? []))
+      .catch(() => {});
+  }, [open]);
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!leadUserId) {
+      setError("Choose a project manager — every project needs a lead.");
+      return;
+    }
     setLoading(true);
     const res = await fetch("/api/projects", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, description: form.description || null }),
+      body: JSON.stringify({ ...form, description: form.description || null, leadUserId }),
     });
     setLoading(false);
     if (!res.ok) {
@@ -197,6 +212,7 @@ function NewProjectDialog() {
     }
     setOpen(false);
     setForm({ code: "", name: "", description: "", type: "Project", priority: "Medium", status: "Planning" });
+    setLeadUserId("");
     router.refresh();
   }
 
@@ -237,6 +253,13 @@ function NewProjectDialog() {
             <Select value={form.status} onValueChange={(v) => set("status", v ?? "Planning")} items={Object.fromEntries(STATUSES.map((s) => [s, s]))}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>{STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-ink-2">Project manager (lead)</label>
+            <Select value={leadUserId || undefined} onValueChange={(v) => setLeadUserId(v ?? "")}>
+              <SelectTrigger className="w-full"><SelectValue placeholder="Choose who runs this project…" /></SelectTrigger>
+              <SelectContent>{users.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           {error && <p role="alert" className="text-sm text-status-red">{error}</p>}

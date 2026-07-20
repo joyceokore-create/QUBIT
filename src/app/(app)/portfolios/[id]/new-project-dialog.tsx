@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -40,8 +40,19 @@ export function NewProjectDialog({ portfolioId, programmes }: NewProjectDialogPr
   const [status, setStatus] = useState("Planning");
   const [programmeId, setProgrammeId] = useState<string>("none");
   const [budget, setBudget] = useState("");
+  // Every project needs a project manager (its lead) — required before create (per Joyce).
+  const [leadUserId, setLeadUserId] = useState<string>("");
+  const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/v1/users")
+      .then((r) => r.json())
+      .then((d) => setUsers(d.data ?? []))
+      .catch(() => {});
+  }, [open]);
 
   function reset() {
     setCode("");
@@ -51,12 +62,17 @@ export function NewProjectDialog({ portfolioId, programmes }: NewProjectDialogPr
     setStatus("Planning");
     setProgrammeId("none");
     setBudget("");
+    setLeadUserId("");
     setError(null);
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!leadUserId) {
+      setError("Choose a project manager — every project needs a lead.");
+      return;
+    }
     setLoading(true);
 
     const res = await fetch("/api/projects", {
@@ -72,6 +88,7 @@ export function NewProjectDialog({ portfolioId, programmes }: NewProjectDialogPr
         budget: budget || null,
         portfolioId,
         programmeId: programmeId === "none" ? null : programmeId,
+        leadUserId,
       }),
     });
     setLoading(false);
@@ -185,6 +202,22 @@ export function NewProjectDialog({ portfolioId, programmes }: NewProjectDialogPr
               </Select>
             </div>
           )}
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-ink-2">Project manager (lead)</span>
+            <Select value={leadUserId || undefined} onValueChange={(v) => setLeadUserId(v ?? "")}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Choose who runs this project…" />
+              </SelectTrigger>
+              <SelectContent>
+                {users.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="new-project-budget" className="text-sm font-medium text-ink-2">

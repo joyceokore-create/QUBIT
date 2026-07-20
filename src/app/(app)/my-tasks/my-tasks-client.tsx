@@ -13,6 +13,8 @@ interface Task {
   projectCode: string;
   status: string;
   priority: string;
+  /** Open linked blocker exists — "Blocked" is a flag since Phase 6.1, not a status. */
+  blocked: boolean;
   dueDate: string | null;
   updatedAt: string;
 }
@@ -73,10 +75,10 @@ export function MyTasksClient({
   const buckets = useMemo(() => {
     const open = tasks.filter((t) => t.status !== "Completed");
     const dueMs = (t: Task) => (t.dueDate ? new Date(t.dueDate).getTime() : null);
-    const blocked = open.filter((t) => t.status === "Blocked");
-    const overdue = open.filter((t) => t.status !== "Blocked" && dueMs(t) !== null && dueMs(t)! < now);
-    const dueThisWeek = open.filter((t) => t.status !== "Blocked" && dueMs(t) !== null && dueMs(t)! >= now && dueMs(t)! <= now + 7 * DAY);
-    const later = open.filter((t) => t.status !== "Blocked" && !overdue.includes(t) && !dueThisWeek.includes(t));
+    const blocked = open.filter((t) => t.blocked);
+    const overdue = open.filter((t) => !t.blocked && dueMs(t) !== null && dueMs(t)! < now);
+    const dueThisWeek = open.filter((t) => !t.blocked && dueMs(t) !== null && dueMs(t)! >= now && dueMs(t)! <= now + 7 * DAY);
+    const later = open.filter((t) => !t.blocked && !overdue.includes(t) && !dueThisWeek.includes(t));
     const recentlyCompleted = tasks
       .filter((t) => t.status === "Completed" && new Date(t.updatedAt).getTime() >= now - 14 * DAY)
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());

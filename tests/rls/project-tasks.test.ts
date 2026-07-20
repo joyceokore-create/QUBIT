@@ -11,6 +11,7 @@ import {
   updateTask,
   listMyTasks,
   generatePlan,
+  flagTaskBlocked,
   TaskError,
 } from "@/server/project-tasks";
 
@@ -69,7 +70,7 @@ describe("MVP1 — project tasks (M5–M7)", () => {
 
     const tasks = await listProjectTasks(kcb, projectId);
     await setTaskStatus(kcb, tasks[0].id, "Completed");
-    await setTaskStatus(kcb, tasks[1].id, "Blocked");
+    await flagTaskBlocked(kcb, tasks[1].id, { description: "Waiting on vendor sandbox" }); // blocked = flag (6.1)
 
     progress = await getProjectProgress(kcb, projectId);
     expect(progress.completed).toBe(1);

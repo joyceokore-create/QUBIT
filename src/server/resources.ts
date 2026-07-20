@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
+import { PROJECT_ROLES } from "@/lib/roles";
 
 /**
  * Resource allocation (MVP1): people assigned to projects (ProjectMember, with role
@@ -9,7 +10,9 @@ import { audit } from "@/lib/audit";
  */
 
 export const SetProjectMemberInput = z.object({
-  role: z.string().min(1),
+  // Canonical project roles only (Phase 6.1, DM1.15 №1) — the delivery workflow keys off
+  // projectRoleCategory(role), so free-text here would silently demote people to Stakeholder.
+  role: z.enum(PROJECT_ROLES),
   allocationPct: z.number().int().min(0).max(100).nullable().optional(),
 });
 export type SetProjectMemberInput = z.infer<typeof SetProjectMemberInput>;

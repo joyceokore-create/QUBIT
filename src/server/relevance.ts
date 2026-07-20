@@ -52,6 +52,8 @@ export interface RelevanceBlocker {
   severity: string;
   status: string;
   ownerId: string | null;
+  /** Task this blocker stalls (Phase 6.1 blocked-as-flag) — how "blocked tasks" are derived. */
+  taskId: string | null;
   projectId: string;
   projectCode: string | null;
 }
@@ -152,6 +154,10 @@ export function buildBriefing(
   const has = (r: string) => viewer.roles.includes(r);
   const mine = new Set(viewer.myProjectIds);
   const out: Candidate[] = [];
+  // Blocked-as-flag (Phase 6.1): a task is blocked while an Open blocker links to it.
+  const blockedTaskIds = new Set(
+    data.blockers.filter((b) => b.status === "Open" && b.taskId).map((b) => b.taskId as string),
+  );
 
   // ── Self pools — everyone (scoped to the viewer's own work) ──
   for (const task of data.tasks) {
@@ -163,7 +169,7 @@ export function buildBriefing(
           { urgency: urgencyForDate(task.dueDate, t), ownership: 3, dueTs: task.dueDate.getTime() },
         ),
       );
-    } else if (task.status === "Blocked") {
+    } else if (blockedTaskIds.has(task.id)) {
       out.push(
         candidate(
           { id: task.id, kind: "task", title: `${task.title} is blocked`, meta: `${task.projectCode} · your task`, severity: "amber", href: "/my-tasks" },
@@ -250,7 +256,7 @@ export function buildBriefing(
   // ── HeadOfQA — quality governance ──
   if (has("HeadOfQA")) {
     for (const task of data.tasks) {
-      if (task.status === "Blocked" && isQaPhase(task.phase)) {
+      if (blockedTaskIds.has(task.id) && isQaPhase(task.phase)) {
         out.push(
           candidate(
             { id: task.id, kind: "task", title: `${task.title} is blocked in ${task.phase}`, meta: `${task.projectCode} · QA`, severity: "red", href: `/projects/${task.projectId}` },
@@ -339,7 +345,7 @@ export async function getBriefing(ctx: TenantContext, limit = 3): Promise<Briefi
         }),
         tx.blocker.findMany({
           where: { status: "Open" },
-          select: { id: true, description: true, severity: true, status: true, ownerId: true, projectId: true, project: { select: { code: true } } },
+          select: { id: true, description: true, severity: true, status: true, ownerId: true, taskId: true, projectId: true, project: { select: { code: true } } },
         }),
         tx.risk.findMany({
           where: { status: { notIn: ["Closed", "Mitigated"] } },
@@ -368,7 +374,7 @@ export async function getBriefing(ctx: TenantContext, limit = 3): Promise<Briefi
 
     const relData: RelevanceData = {
       tasks: tasks.map((t) => ({ id: t.id, title: t.title, status: t.status, dueDate: t.dueDate, assigneeId: t.assigneeId, phase: t.phase, projectId: t.projectId, projectCode: t.project.code })),
-      blockers: blockers.map((b) => ({ id: b.id, description: b.description, severity: b.severity, status: b.status, ownerId: b.ownerId, projectId: b.projectId, projectCode: b.project?.code ?? null })),
+      blockers: blockers.map((b) => ({ id: b.id, description: b.description, severity: b.severity, status: b.status, ownerId: b.ownerId, taskId: b.taskId, projectId: b.projectId, projectCode: b.project?.code ?? null })),
       risks: risks.map((r) => ({ id: r.id, title: r.title, probability: r.probability, impact: r.impact, status: r.status, projectId: r.projectId, projectCode: r.project?.code ?? null })),
       issues: issues.map((i) => ({ id: i.id, title: i.title, severity: i.severity, status: i.status, projectId: i.projectId, projectCode: i.project?.code ?? null })),
       milestones: milestones.map((m) => ({ id: m.id, name: m.name, dueDate: m.dueDate, status: m.status, projectId: m.projectId, projectCode: m.project.code })),

@@ -1086,8 +1086,9 @@ async function resetTenant(slug: string) {
     await tx.projectStatusUpdate.deleteMany({});
     await tx.notification.deleteMany({});
     await tx.projectDocument.deleteMany({});
+    await tx.blocker.deleteMany({}); // before tasks — blocker.task_id references project_task
     await tx.projectTask.deleteMany({});
-    await tx.blocker.deleteMany({});
+    await tx.projectTaskCounter.deleteMany({}); // RESTRICT tenant FK — clear before tenant delete
     await tx.aiCallLog.deleteMany({});
     await tx.projectTeam.deleteMany({});
     await tx.projectMember.deleteMany({});
@@ -1310,6 +1311,61 @@ async function seedTenant(seed: TenantSeed) {
           createdAt: daysAgoToDate(i.daysAgo),
         },
       });
+    }
+
+    // ── Phase 6.1 (docs/15) — typed, keyed board tasks on each tenant's first project so
+    // the taxonomy is demo-visible: statuses spread across the five columns, one Bug, and
+    // one task flagged blocked via a linked Open blocker. Keys are pre-allocated here, so
+    // the counter row starts past them. Synthetic titles only — no PII.
+    const firstProject = seed.projects[0] ? projectIdByCode.get(seed.projects[0].code) : undefined;
+    const seedUserId = [...userIdByEmail.values()][0];
+    if (firstProject && seedUserId) {
+      const code = seed.projects[0].code;
+      const demoTasks = [
+        { title: "Confirm scope with business owner", type: "Feature", status: "Completed", phase: "Requirements" },
+        { title: "Build data-export service", type: "Feature", status: "InProgress", phase: "Development" },
+        { title: "Fix pagination on audit view", type: "Bug", severity: "High", status: "InQA", phase: "Testing" },
+        { title: "Update runbook for release", type: "Chore", status: "NotStarted", phase: "Deployment" },
+      ] as const;
+      for (let i = 0; i < demoTasks.length; i++) {
+        const t = demoTasks[i];
+        await tx.projectTask.create({
+          data: {
+            tenantId: tenant.id,
+            projectId: firstProject,
+            title: t.title,
+            type: t.type,
+            severity: "severity" in t ? t.severity : null,
+            status: t.status,
+            phase: t.phase,
+            priority: "Medium",
+            taskKey: `${code}-${i + 1}`,
+            reporterId: seedUserId,
+            assigneeId: seedUserId,
+            orderIndex: i,
+          },
+        });
+      }
+      await tx.projectTaskCounter.create({
+        data: { tenantId: tenant.id, projectId: firstProject, next: demoTasks.length + 1 },
+      });
+      const blockedTask = await tx.projectTask.findFirst({
+        where: { projectId: firstProject, status: "InProgress" },
+        select: { id: true },
+      });
+      if (blockedTask) {
+        await tx.blocker.create({
+          data: {
+            tenantId: tenant.id,
+            projectId: firstProject,
+            taskId: blockedTask.id,
+            description: "Waiting on upstream API credentials",
+            severity: "Medium",
+            status: "Open",
+            ownerId: seedUserId,
+          },
+        });
+      }
     }
 
     // ── ClickUp transformation demo (docs/clickup-transformation) — additive ──

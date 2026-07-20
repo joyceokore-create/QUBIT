@@ -40,11 +40,13 @@ interface PlanTask {
   include: boolean;
 }
 
-const STATUSES = ["NotStarted", "InProgress", "Blocked", "Completed"] as const;
+// Five statuses since Phase 6.1 (docs/15); "Blocked" is a flag on the board, not a status.
+const STATUSES = ["NotStarted", "InProgress", "InReview", "InQA", "Completed"] as const;
 const STATUS_META: Record<string, { token: string; label: string }> = {
   NotStarted: { token: "--ink4", label: "Not started" },
   InProgress: { token: "--qinfo", label: "In progress" },
-  Blocked: { token: "--bad", label: "Blocked" },
+  InReview: { token: "--warn", label: "In review" },
+  InQA: { token: "--brand", label: "In QA" },
   Completed: { token: "--ok", label: "Completed" },
 };
 

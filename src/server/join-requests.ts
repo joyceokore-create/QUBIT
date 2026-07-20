@@ -3,6 +3,8 @@ import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { can } from "@/lib/rbac";
 import { canWriteProject } from "@/lib/access";
+import { PROJECT_ROLES } from "@/lib/roles";
+import { notifyUsers } from "@/server/notifications";
 
 /**
  * Project join requests (PROMPT §2/§5/§6). Anyone may request to join a project; the project's
@@ -24,16 +26,20 @@ export class JoinRequestError extends Error {
 }
 
 export const RequestToJoinInput = z.object({
-  requestedRole: z.string().min(1).max(60).nullable().optional(),
+  // Canonical project roles only (Phase 6.1, DM1.15 №1) — legacy free-text rows are read
+  // fine (they map to Stakeholder via projectRoleCategory), but new requests are validated.
+  requestedRole: z.enum(PROJECT_ROLES).nullable().optional(),
   note: z.string().max(500).nullable().optional(),
 });
 export type RequestToJoinInput = z.infer<typeof RequestToJoinInput>;
 
 /** Anyone may request to join. Rejects if already a member; returns the existing pending
- * request if one is already open (idempotent). */
+ * request if one is already open (idempotent). Notifies the project's PM (lead + PM-role
+ * members); if the project has none, falls back to HeadOfProjects (per Joyce) — so a
+ * request never lands nowhere. */
 export async function requestToJoin(ctx: TenantContext, projectId: string, input: RequestToJoinInput) {
   return withTenant(ctx, async (tx) => {
-    const project = await tx.project.findUnique({ where: { id: projectId }, select: { id: true, leadUserId: true } });
+    const project = await tx.project.findUnique({ where: { id: projectId }, select: { id: true, name: true, leadUserId: true } });
     if (!project) throw new JoinRequestError("Project not found.", "NOT_FOUND");
     if (project.leadUserId === ctx.userId) throw new JoinRequestError("You already lead this project.", "ALREADY_MEMBER");
     const member = await tx.projectMember.findFirst({ where: { projectId, userId: ctx.userId }, select: { id: true } });
@@ -54,11 +60,38 @@ export async function requestToJoin(ctx: TenantContext, projectId: string, input
         note: input.note ?? null,
       },
     });
+
+    // Notify approvers. Recipients mirror the approval gate (canWriteProject): the lead +
+    // PM-role members; with neither, every HeadOfProjects in the tenant.
+    const pmMembers = await tx.projectMember.findMany({
+      where: { projectId, role: { in: PM_PROJECT_ROLES } },
+      select: { userId: true },
+    });
+    const recipients = new Set<string>(pmMembers.map((m) => m.userId));
+    if (project.leadUserId) recipients.add(project.leadUserId);
+    recipients.delete(ctx.userId);
+    if (recipients.size === 0) {
+      const heads = await tx.roleAssignment.findMany({ where: { role: "HeadOfProjects" }, select: { userId: true } });
+      for (const h of heads) recipients.add(h.userId);
+      recipients.delete(ctx.userId);
+    }
+    const requester = await tx.user.findUnique({ where: { id: ctx.userId }, select: { name: true } });
+    await notifyUsers(
+      tx,
+      ctx,
+      [...recipients].map((userId) => ({
+        userId,
+        kind: "join_request",
+        message: `${requester?.name ?? "Someone"} requested to join ${project.name}${jr.requestedRole ? ` as ${jr.requestedRole}` : ""}`,
+        link: "/my-tasks", // the "Awaiting my approval" queue
+      })),
+    );
+
     await audit(tx, ctx, {
       action: "create",
       entityType: "join_request",
       entityId: jr.id,
-      after: { projectId, requestedRole: jr.requestedRole },
+      after: { projectId, requestedRole: jr.requestedRole, notified: recipients.size },
     });
     return { id: jr.id, status: "Pending" as const, alreadyPending: false };
   });

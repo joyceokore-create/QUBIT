@@ -62,7 +62,9 @@ BEGIN
     -- Phase 1.5 — tenant-editable role → permission grants.
     'role_permission',
     -- Phase 5 — project join requests.
-    'join_request'
+    'join_request',
+    -- Phase 6.1 — per-project task-key sequence (docs/15).
+    'project_task_counter'
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);

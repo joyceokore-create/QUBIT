@@ -4,6 +4,7 @@ import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { hashPassword, validatePasswordPolicy, isPasswordReused, pushPasswordHistory } from "@/lib/password";
 import { ROLE_PERMISSIONS } from "@/lib/rbac";
+import { PROJECT_ROLES } from "@/lib/roles";
 
 const ROLE_KEYS = Object.keys(ROLE_PERMISSIONS) as [string, ...string[]];
 
@@ -16,7 +17,7 @@ export const CreateUserInput = z.object({
   // Optional placement at invite time — so PMs/developers land on a team + project.
   teamId: z.string().min(1).nullable().optional(),
   projectId: z.string().min(1).nullable().optional(),
-  projectRole: z.string().min(1).nullable().optional(),
+  projectRole: z.enum(PROJECT_ROLES).nullable().optional(),
 });
 export type CreateUserInput = z.infer<typeof CreateUserInput>;
 

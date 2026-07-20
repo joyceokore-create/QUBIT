@@ -69,17 +69,19 @@ export async function canWriteRiskOrBlocker(
 }
 
 /** Can the viewer write this task? Full authority for lead/PM/roles; assignee for their own;
- * HeadOfQA for status of tasks in Testing/UAT. */
+ * HeadOfQA for tasks in Testing/UAT phases, in a QA board status (InReview/InQA), or typed
+ * Bug (Phase 6.1 extension, DM1.15). */
 export async function canWriteTask(ctx: TenantContext, taskId: string): Promise<boolean> {
   if (can(ctx, "task:write")) return true; // PlatformSuperAdmin, HeadOfProjects, ProjectManager
   return withTenant(ctx, async (tx) => {
     const task = await tx.projectTask.findUnique({
       where: { id: taskId },
-      select: { assigneeId: true, phase: true, projectId: true },
+      select: { assigneeId: true, phase: true, projectId: true, status: true, type: true },
     });
     if (!task) return false;
     if (task.assigneeId === ctx.userId) return true; // assignee: status/progress/comments
-    if (ctx.roles.includes("HeadOfQA") && isQaPhase(task.phase)) return true;
+    const inQaScope = isQaPhase(task.phase) || ["InReview", "InQA"].includes(task.status) || task.type === "Bug";
+    if (ctx.roles.includes("HeadOfQA") && inQaScope) return true;
     return isProjectMemberTx(tx, ctx.userId, task.projectId); // any member of the project
   });
 }

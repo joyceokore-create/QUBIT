@@ -39,7 +39,7 @@ describe("MVP1 — Q reporting copilot", () => {
     });
     projectId = project.id;
     projectIds.push(project.id);
-    await setProjectMember(kcb, projectId, kcb.userId, { role: "Project Lead", allocationPct: 60 });
+    await setProjectMember(kcb, projectId, kcb.userId, { role: "Technical Lead", allocationPct: 60 });
   });
 
   afterAll(async () => {

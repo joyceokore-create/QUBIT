@@ -1,20 +1,28 @@
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { mockEnabled, mockPlanFromText } from "@/server/q/mock";
 import { llmChat, llmEnabled, llmModel } from "@/server/q/llm";
 
 /**
- * MVP1 PRD Modules 5–7 — executable project tasks.
+ * MVP1 PRD Modules 5–7 + Phase 6.1 (docs/15) — executable project tasks.
  *  - AI task generation from a BRD/plan (pasted text; the internal text model can't read
  *    PDFs directly, so PDF-only input falls back to the deterministic mock).
- *  - Task management (status: NotStarted | InProgress | Blocked | Completed).
+ *  - Task management. Status: NotStarted | InProgress | InReview | InQA | Completed.
+ *    "Blocked" is a FLAG, not a status — a task is blocked while an Open Blocker links to
+ *    it (flag/unflag below), so the board keeps showing WHERE work stalled.
+ *  - Task keys ("<project.code>-<n>") are claimed from ProjectTaskCounter transactionally
+ *    on publish/manual create; Drafts carry none (they'd burn numbers before approval).
  *  - Auto progress = completed ÷ total (no manual % updates).
  * All reads/writes are tenant-scoped (RLS) and mutations are audited.
  */
-export const TASK_STATUSES = ["NotStarted", "InProgress", "Blocked", "Completed"] as const;
+export const TASK_STATUSES = ["NotStarted", "InProgress", "InReview", "InQA", "Completed"] as const;
+export const TASK_TYPES = ["Feature", "Bug", "Chore", "Spike", "Improvement"] as const;
 export const TASK_PRIORITIES = ["Low", "Medium", "High", "Critical"] as const;
+export const TASK_SEVERITIES = ["Low", "Medium", "High", "Critical"] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
+export type TaskType = (typeof TASK_TYPES)[number];
 
 export class TaskError extends Error {
   constructor(
@@ -35,18 +43,30 @@ export interface ProjectTaskRow {
   priority: string;
   status: string;
   approvalStatus: string;
+  type: string;
+  taskKey: string | null;
+  severity: string | null;
   estimate: string | null;
   assigneeId: string | null;
   assigneeName: string | null;
   dueDate: Date | null;
   orderIndex: number;
+  /** Open linked Blocker, if any — the "blocked" flag (id lets the board resolve it). */
+  openBlockerId: string | null;
+  blocked: boolean;
 }
+
+const OPEN_BLOCKER_SELECT = {
+  where: { status: "Open" },
+  select: { id: true },
+  take: 1,
+} as const;
 
 export async function listProjectTasks(ctx: TenantContext, projectId: string): Promise<ProjectTaskRow[]> {
   return withTenant(ctx, async (tx) => {
     const rows = await tx.projectTask.findMany({
       where: { projectId },
-      include: { assignee: { select: { name: true } } },
+      include: { assignee: { select: { name: true } }, blockers: OPEN_BLOCKER_SELECT },
       orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }],
     });
     return rows.map((t) => ({
@@ -58,11 +78,16 @@ export async function listProjectTasks(ctx: TenantContext, projectId: string): P
       priority: t.priority,
       status: t.status,
       approvalStatus: t.approvalStatus,
+      type: t.type,
+      taskKey: t.taskKey,
+      severity: t.severity,
       estimate: t.estimate,
       assigneeId: t.assigneeId,
       assigneeName: t.assignee?.name ?? null,
       dueDate: t.dueDate,
       orderIndex: t.orderIndex,
+      openBlockerId: t.blockers[0]?.id ?? null,
+      blocked: t.blockers.length > 0,
     }));
   });
 }
@@ -75,6 +100,7 @@ export interface MyTaskRow {
   projectName: string;
   status: string;
   priority: string;
+  blocked: boolean;
   dueDate: Date | null;
   updatedAt: Date;
 }
@@ -84,20 +110,10 @@ export async function listMyTasks(ctx: TenantContext, userId: string): Promise<M
   return withTenant(ctx, async (tx) => {
     const rows = await tx.projectTask.findMany({
       where: { assigneeId: userId, approvalStatus: { not: "Draft" } },
-      include: { project: { select: { code: true, name: true } } },
+      include: { project: { select: { code: true, name: true } }, blockers: OPEN_BLOCKER_SELECT },
       orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
     });
-    return rows.map((t) => ({
-      id: t.id,
-      title: t.title,
-      projectId: t.projectId,
-      projectCode: t.project.code,
-      projectName: t.project.name,
-      status: t.status,
-      priority: t.priority,
-      dueDate: t.dueDate,
-      updatedAt: t.updatedAt,
-    }));
+    return rows.map(rowToMyTask);
   });
 }
 
@@ -112,6 +128,7 @@ function rowToMyTask(t: {
   dueDate: Date | null;
   updatedAt: Date;
   project: { code: string; name: string };
+  blockers: { id: string }[];
 }): MyTaskRow {
   return {
     id: t.id,
@@ -121,6 +138,7 @@ function rowToMyTask(t: {
     projectName: t.project.name,
     status: t.status,
     priority: t.priority,
+    blocked: t.blockers.length > 0,
     dueDate: t.dueDate,
     updatedAt: t.updatedAt,
   };
@@ -138,14 +156,15 @@ export async function listManagedTasks(ctx: TenantContext, userId: string): Prom
     if (!ids.length) return [];
     const rows = await tx.projectTask.findMany({
       where: { projectId: { in: ids }, status: { not: "Completed" }, approvalStatus: { not: "Draft" }, NOT: { assigneeId: userId } },
-      include: { project: { select: { code: true, name: true } } },
+      include: { project: { select: { code: true, name: true } }, blockers: OPEN_BLOCKER_SELECT },
       orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
     });
     return rows.map(rowToMyTask);
   });
 }
 
-/** Open tasks in a Testing / UAT / SIT phase — the HeadOfQA "in test" bucket in My Tasks (§6). */
+/** Open tasks in a Testing / UAT / SIT phase, in a QA board status (InReview/InQA), or typed
+ * Bug — the HeadOfQA "in test" bucket in My Tasks (§6, extended by Phase 6.1). */
 export async function listTasksInTestPhase(ctx: TenantContext): Promise<MyTaskRow[]> {
   return withTenant(ctx, async (tx) => {
     const rows = await tx.projectTask.findMany({
@@ -156,9 +175,11 @@ export async function listTasksInTestPhase(ctx: TenantContext): Promise<MyTaskRo
           { phase: { contains: "Test", mode: "insensitive" } },
           { phase: { contains: "UAT", mode: "insensitive" } },
           { phase: { contains: "SIT", mode: "insensitive" } },
+          { status: { in: ["InReview", "InQA"] } },
+          { type: "Bug" },
         ],
       },
-      include: { project: { select: { code: true, name: true } } },
+      include: { project: { select: { code: true, name: true } }, blockers: OPEN_BLOCKER_SELECT },
       orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
     });
     return rows.map(rowToMyTask);
@@ -173,17 +194,24 @@ export interface ProjectProgress {
   pct: number;
 }
 
-/** PRD Module 7 — progress is derived, never manually set. */
+/** PRD Module 7 — progress is derived, never manually set. "Blocked" counts tasks with an
+ * Open linked Blocker (a flag since Phase 6.1, so a blocked task keeps its column). */
 export async function getProjectProgress(ctx: TenantContext, projectId: string): Promise<ProjectProgress> {
   return withTenant(ctx, async (tx) => {
-    const rows = await tx.projectTask.findMany({ where: { projectId, approvalStatus: { not: "Draft" } }, select: { status: true } });
+    const [rows, openLinks] = await Promise.all([
+      tx.projectTask.findMany({ where: { projectId, approvalStatus: { not: "Draft" } }, select: { status: true } }),
+      tx.blocker.findMany({
+        where: { projectId, status: "Open", taskId: { not: null }, task: { approvalStatus: { not: "Draft" } } },
+        select: { taskId: true },
+      }),
+    ]);
     const total = rows.length;
     const completed = rows.filter((r) => r.status === "Completed").length;
     return {
       total,
       completed,
       inProgress: rows.filter((r) => r.status === "InProgress").length,
-      blocked: rows.filter((r) => r.status === "Blocked").length,
+      blocked: new Set(openLinks.map((b) => b.taskId)).size,
       pct: total ? Math.round((completed / total) * 100) : 0,
     };
   });
@@ -195,24 +223,56 @@ export const TaskInput = z.object({
   phase: z.string().nullable().optional(),
   ownerRole: z.string().nullable().optional(),
   priority: z.enum(TASK_PRIORITIES).optional(),
+  type: z.enum(TASK_TYPES).optional(),
+  severity: z.enum(TASK_SEVERITIES).nullable().optional(),
+  // Assign + place on creation (per Joyce): a writer picks the developer/tester and the
+  // starting column in one step instead of creating then editing.
+  status: z.enum(TASK_STATUSES).optional(),
+  assigneeId: z.string().uuid().nullable().optional(),
   estimate: z.string().nullable().optional(),
 });
 export type TaskInput = z.infer<typeof TaskInput>;
 
-/** Bulk-add tasks (PM approving an AI-generated plan, or a manual add of one). Audited. */
+/** Claim `count` sequential task keys ("<project.code>-<n>") for a project. The counter row
+ * is UPDATE-locked for the duration of the enclosing transaction, so concurrent claims
+ * serialize; the @@unique(projectId, taskKey) index is the backstop. Never count rows. */
+async function allocateTaskKeys(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  projectId: string,
+  count: number,
+): Promise<string[]> {
+  const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { code: true } });
+  await tx.$executeRaw`INSERT INTO "project_task_counter" ("tenant_id", "project_id") VALUES (${tenantId}, ${projectId}) ON CONFLICT ("project_id") DO NOTHING`;
+  const rows = await tx.$queryRaw<{ next: number }[]>`UPDATE "project_task_counter" SET "next" = "next" + ${count} WHERE "project_id" = ${projectId} RETURNING "next"`;
+  const end = rows[0]?.next;
+  if (!end) throw new TaskError("Could not allocate task keys.", "BAD_INPUT");
+  const start = end - count;
+  return Array.from({ length: count }, (_, i) => `${project.code}-${start + i}`);
+}
+
+/** Bulk-add tasks (PM approving an AI-generated plan, or a manual add of one). Published
+ * tasks get a task key immediately; Drafts get theirs on approval (§2.2). Audited. */
 export async function addTasks(
   ctx: TenantContext,
   projectId: string,
   tasks: TaskInput[],
-  opts?: { approvalStatus?: "Draft" | "Published" },
+  opts?: { approvalStatus?: "Draft" | "Published"; reporterId?: string; sourceDocumentId?: string },
 ) {
   if (tasks.length === 0) throw new TaskError("No tasks to add.", "BAD_INPUT");
   return withTenant(ctx, async (tx) => {
     await tx.project.findUniqueOrThrow({ where: { id: projectId } });
+    const assigneeIds = [...new Set(tasks.map((t) => t.assigneeId).filter((id): id is string => !!id))];
+    if (assigneeIds.length) {
+      const found = await tx.user.findMany({ where: { id: { in: assigneeIds } }, select: { id: true } });
+      if (found.length !== assigneeIds.length) throw new TaskError("Assignee not found.", "BAD_INPUT");
+    }
+    const approvalStatus = opts?.approvalStatus ?? "Published";
+    const keys = approvalStatus === "Published" ? await allocateTaskKeys(tx, ctx.tenantId, projectId, tasks.length) : [];
     const max = await tx.projectTask.aggregate({ where: { projectId }, _max: { orderIndex: true } });
     let order = (max._max.orderIndex ?? -1) + 1;
     await tx.projectTask.createMany({
-      data: tasks.map((t) => ({
+      data: tasks.map((t, i) => ({
         tenantId: ctx.tenantId,
         projectId,
         title: t.title,
@@ -220,8 +280,15 @@ export async function addTasks(
         phase: t.phase ?? null,
         ownerRole: t.ownerRole ?? null,
         priority: t.priority ?? "Medium",
+        type: t.type ?? "Feature",
+        severity: t.severity ?? null,
+        status: t.status ?? "NotStarted",
+        assigneeId: t.assigneeId ?? null,
+        taskKey: keys[i] ?? null,
+        reporterId: opts?.reporterId ?? null,
+        sourceDocumentId: opts?.sourceDocumentId ?? null,
         estimate: t.estimate ?? null,
-        approvalStatus: opts?.approvalStatus ?? "Published",
+        approvalStatus,
         orderIndex: order++,
       })),
     });
@@ -229,60 +296,83 @@ export async function addTasks(
       action: "create",
       entityType: "project_task",
       entityId: projectId,
-      after: { added: tasks.length, approvalStatus: opts?.approvalStatus ?? "Published" },
+      after: { added: tasks.length, approvalStatus },
     });
     return { added: tasks.length };
   });
 }
 
-/** Approve a project's Draft tasks → Published (§2.2). Optionally a subset by id. Audited. */
+/** Approve a project's Draft tasks → Published (§2.2). Optionally a subset by id. Each
+ * published task gets its key here (Drafts never hold one). Audited. */
 export async function publishProjectDrafts(
   ctx: TenantContext,
   projectId: string,
   taskIds?: string[],
 ): Promise<{ published: number }> {
   return withTenant(ctx, async (tx) => {
-    const res = await tx.projectTask.updateMany({
+    const drafts = await tx.projectTask.findMany({
       where: { projectId, approvalStatus: "Draft", ...(taskIds?.length ? { id: { in: taskIds } } : {}) },
-      data: { approvalStatus: "Published" },
+      select: { id: true, taskKey: true },
+      orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }],
     });
-    if (res.count > 0) {
-      await audit(tx, ctx, {
-        action: "update",
-        entityType: "project_task",
-        entityId: projectId,
-        after: { published: res.count },
+    if (drafts.length === 0) return { published: 0 };
+    const needKeys = drafts.filter((d) => !d.taskKey);
+    const keys = needKeys.length ? await allocateTaskKeys(tx, ctx.tenantId, projectId, needKeys.length) : [];
+    const keyFor = new Map(needKeys.map((d, i) => [d.id, keys[i]]));
+    const now = new Date();
+    for (const d of drafts) {
+      await tx.projectTask.update({
+        where: { id: d.id },
+        data: { approvalStatus: "Published", taskKey: keyFor.get(d.id) ?? undefined, lastActivityAt: now },
       });
     }
-    return { published: res.count };
+    await audit(tx, ctx, {
+      action: "update",
+      entityType: "project_task",
+      entityId: projectId,
+      after: { published: drafts.length },
+    });
+    return { published: drafts.length };
   });
 }
 
 export const UpdateTaskInput = z.object({
   status: z.enum(TASK_STATUSES).optional(),
+  type: z.enum(TASK_TYPES).optional(),
+  severity: z.enum(TASK_SEVERITIES).nullable().optional(),
   assigneeId: z.string().uuid().nullable().optional(),
   dueDate: z.string().datetime().nullable().optional(),
   approvalStatus: z.enum(["Draft", "Published"]).optional(),
 });
 export type UpdateTaskInput = z.infer<typeof UpdateTaskInput>;
 
-/** Update a task's status / assignee / due date (PRD M6). Audited. */
+/** Update a task's status / type / assignee / due date (PRD M6). Publishing a single Draft
+ * here also claims its task key. Every update touches lastActivityAt (nudger staleness). Audited. */
 export async function updateTask(ctx: TenantContext, taskId: string, input: UpdateTaskInput) {
   return withTenant(ctx, async (tx) => {
-    const before = await tx.projectTask.findUnique({ where: { id: taskId }, select: { status: true } });
+    const before = await tx.projectTask.findUnique({
+      where: { id: taskId },
+      select: { status: true, approvalStatus: true, taskKey: true, projectId: true },
+    });
     if (!before) throw new TaskError("Task not found.", "NOT_FOUND");
     if (input.assigneeId) {
       await tx.user.findUniqueOrThrow({ where: { id: input.assigneeId } }).catch(() => {
         throw new TaskError("Assignee not found.", "BAD_INPUT");
       });
     }
+    const publishing = input.approvalStatus === "Published" && before.approvalStatus === "Draft" && !before.taskKey;
+    const [taskKey] = publishing ? await allocateTaskKeys(tx, ctx.tenantId, before.projectId, 1) : [undefined];
     const updated = await tx.projectTask.update({
       where: { id: taskId },
       data: {
         status: input.status,
+        type: input.type,
+        severity: input.severity === undefined ? undefined : input.severity,
         assigneeId: input.assigneeId === undefined ? undefined : input.assigneeId,
         dueDate: input.dueDate === undefined ? undefined : input.dueDate ? new Date(input.dueDate) : null,
         approvalStatus: input.approvalStatus,
+        taskKey,
+        lastActivityAt: new Date(),
       },
     });
     await audit(tx, ctx, {
@@ -300,7 +390,7 @@ export async function setTaskStatus(ctx: TenantContext, taskId: string, status: 
   return withTenant(ctx, async (tx) => {
     const task = await tx.projectTask.findUnique({ where: { id: taskId }, select: { status: true } });
     if (!task) throw new TaskError("Task not found.", "NOT_FOUND");
-    const updated = await tx.projectTask.update({ where: { id: taskId }, data: { status } });
+    const updated = await tx.projectTask.update({ where: { id: taskId }, data: { status, lastActivityAt: new Date() } });
     await audit(tx, ctx, {
       action: "update",
       entityType: "project_task",
@@ -309,6 +399,66 @@ export async function setTaskStatus(ctx: TenantContext, taskId: string, status: 
       after: { status },
     });
     return updated;
+  });
+}
+
+/** Flag a task blocked: creates an Open Blocker linked to the task (a reason is required —
+ * that's what makes the flag useful to the nudger and reports). Audited. */
+export async function flagTaskBlocked(
+  ctx: TenantContext,
+  taskId: string,
+  input: { description: string; severity?: "Low" | "Medium" | "Critical" },
+) {
+  if (!input.description.trim()) throw new TaskError("A blocked reason is required.", "BAD_INPUT");
+  return withTenant(ctx, async (tx) => {
+    const task = await tx.projectTask.findUnique({
+      where: { id: taskId },
+      select: { projectId: true, blockers: { where: { status: "Open" }, select: { id: true } } },
+    });
+    if (!task) throw new TaskError("Task not found.", "NOT_FOUND");
+    if (task.blockers.length > 0) throw new TaskError("Task is already flagged blocked.", "BAD_INPUT");
+    const blocker = await tx.blocker.create({
+      data: {
+        tenantId: ctx.tenantId,
+        projectId: task.projectId,
+        taskId,
+        description: input.description.trim(),
+        severity: input.severity ?? "Medium",
+        status: "Open",
+        ownerId: ctx.userId,
+      },
+    });
+    await tx.projectTask.update({ where: { id: taskId }, data: { lastActivityAt: new Date() } });
+    await audit(tx, ctx, {
+      action: "create",
+      entityType: "blocker",
+      entityId: blocker.id,
+      after: { taskId, description: blocker.description, severity: blocker.severity },
+    });
+    return blocker;
+  });
+}
+
+/** Unflag: resolve the task's Open linked Blocker(s). Audited. */
+export async function unflagTaskBlocked(ctx: TenantContext, taskId: string, resolutionNotes?: string) {
+  return withTenant(ctx, async (tx) => {
+    const open = await tx.blocker.findMany({ where: { taskId, status: "Open" }, select: { id: true } });
+    if (open.length === 0) return { resolved: 0 };
+    await tx.blocker.updateMany({
+      where: { id: { in: open.map((b) => b.id) } },
+      data: { status: "Resolved", resolutionNotes: resolutionNotes?.trim() || "Unflagged from the board" },
+    });
+    await tx.projectTask.update({ where: { id: taskId }, data: { lastActivityAt: new Date() } });
+    for (const b of open) {
+      await audit(tx, ctx, {
+        action: "update",
+        entityType: "blocker",
+        entityId: b.id,
+        before: { status: "Open" },
+        after: { status: "Resolved", taskId },
+      });
+    }
+    return { resolved: open.length };
   });
 }
 

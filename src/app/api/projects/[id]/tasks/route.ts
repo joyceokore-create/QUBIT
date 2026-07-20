@@ -32,7 +32,10 @@ export async function POST(req: Request, { params }: Ctx) {
   }
   try {
     return NextResponse.json(
-      await addTasks(guard.ctx, id, parsed.data.tasks, { approvalStatus: parsed.data.draft ? "Draft" : "Published" }),
+      await addTasks(guard.ctx, id, parsed.data.tasks, {
+        approvalStatus: parsed.data.draft ? "Draft" : "Published",
+        reporterId: guard.ctx.userId, // who filed it (QA authorship on bugs, Phase 6.1)
+      }),
       { status: 201 },
     );
   } catch (e) {

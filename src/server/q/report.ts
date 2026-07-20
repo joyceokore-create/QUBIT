@@ -377,7 +377,8 @@ async function managerContext(ctx: TenantContext, w: Window): Promise<ReportCont
       total: tasksByStatus.reduce((n, t) => n + t._count._all, 0),
       completed: taskCount("Completed"),
       inProgress: taskCount("InProgress"),
-      blocked: taskCount("Blocked"),
+      // Blocked is a flag since Phase 6.1: tasks with an Open linked blocker.
+      blocked: new Set(openBlockers.filter((b) => b.taskId).map((b) => b.taskId)).size,
       notStarted: taskCount("NotStarted"),
     },
     openRisks: openRisks.map((r) => ({ title: r.title, probability: r.probability, impact: r.impact })),

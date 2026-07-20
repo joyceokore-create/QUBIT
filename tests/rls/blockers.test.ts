@@ -17,6 +17,9 @@ describe("MVP1 — blockers (M10) + manager/member reports (M11)", () => {
   let riverbank: TenantContext;
   let projectId: string;
   const projectIds: string[] = [];
+  // getBlockerCounts is tenant-wide and the seed ships demo blockers (Phase 6.1) —
+  // assert deltas against this baseline, not absolute counts.
+  let baseline: { open: number; resolved: number; critical: number };
 
   beforeAll(async () => {
     delete process.env.ANTHROPIC_API_KEY;
@@ -38,6 +41,7 @@ describe("MVP1 — blockers (M10) + manager/member reports (M11)", () => {
     });
     projectId = project.id;
     projectIds.push(project.id);
+    baseline = await getBlockerCounts(kcb);
   });
 
   afterAll(async () => {
@@ -57,12 +61,12 @@ describe("MVP1 — blockers (M10) + manager/member reports (M11)", () => {
     expect(list).toHaveLength(2);
 
     let counts = await getBlockerCounts(kcb);
-    expect(counts).toMatchObject({ open: 2, critical: 1 });
+    expect(counts).toMatchObject({ open: baseline.open + 2, critical: baseline.critical + 1 });
 
     const critical = list.find((b) => b.severity === "Critical")!;
     await updateBlocker(kcb, critical.id, { status: "Resolved", resolutionNotes: "Signed 14 Jul" });
     counts = await getBlockerCounts(kcb);
-    expect(counts).toMatchObject({ open: 1, resolved: 1, critical: 0 });
+    expect(counts).toMatchObject({ open: baseline.open + 1, resolved: baseline.resolved + 1, critical: baseline.critical });
   });
 
   it("keeps blockers tenant-isolated (RLS)", async () => {

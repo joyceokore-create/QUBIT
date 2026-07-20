@@ -27,6 +27,11 @@ export const CreateProjectInput = z.object({
   budget: z.string().nullable().optional(),
   portfolioId: z.string().uuid().nullable().optional(),
   programmeId: z.string().uuid().nullable().optional(),
+  // The project manager (Project.leadUserId). The create dialogs REQUIRE this (per Joyce:
+  // every project should have a PM so join requests and escalations route somewhere);
+  // optional at the schema level for API/tests back-compat. Setting it also enrols the
+  // lead as a "Project Manager" member.
+  leadUserId: z.string().uuid().nullable().optional(),
   ...ProjectDefinitionFields,
 });
 export type CreateProjectInput = z.infer<typeof CreateProjectInput>;
@@ -397,6 +402,12 @@ export async function createProject(ctx: TenantContext, input: CreateProjectInpu
       throw new ProjectError("A project with this code already exists.", "CODE_TAKEN");
     }
 
+    if (input.leadUserId) {
+      await tx.user.findUniqueOrThrow({ where: { id: input.leadUserId } }).catch(() => {
+        throw new ProjectError("Lead user not found.", "LEAD_NOT_FOUND");
+      });
+    }
+
     const project = await tx.project.create({
       data: {
         tenantId: ctx.tenantId,
@@ -410,6 +421,7 @@ export async function createProject(ctx: TenantContext, input: CreateProjectInpu
         budget: input.budget ?? null,
         portfolioId: input.portfolioId ?? null,
         programmeId: input.programmeId ?? null,
+        leadUserId: input.leadUserId ?? null,
         client: input.client ?? null,
         objective: input.objective ?? null,
         mission: input.mission ?? null,
@@ -418,11 +430,21 @@ export async function createProject(ctx: TenantContext, input: CreateProjectInpu
       },
     });
 
+    // The lead is the project's manager — enrol them as a PM member so membership-scoped
+    // checks, board lenses, and join-request notifications all see them.
+    if (input.leadUserId) {
+      await tx.projectMember.upsert({
+        where: { projectId_userId: { projectId: project.id, userId: input.leadUserId } },
+        create: { tenantId: ctx.tenantId, projectId: project.id, userId: input.leadUserId, role: "Project Manager" },
+        update: { role: "Project Manager" },
+      });
+    }
+
     await audit(tx, ctx, {
       action: "create",
       entityType: "project",
       entityId: project.id,
-      after: { code: project.code, name: project.name, status: project.status },
+      after: { code: project.code, name: project.name, status: project.status, leadUserId: project.leadUserId },
     });
 
     return project;

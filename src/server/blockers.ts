@@ -30,6 +30,8 @@ export interface BlockerRow {
   status: string;
   ownerId: string | null;
   ownerName: string | null;
+  /** Task this blocker stalls, if flagged from the board (Phase 6.1 blocked-as-flag). */
+  taskId: string | null;
   resolutionNotes: string | null;
   dateRaised: Date;
 }
@@ -69,6 +71,7 @@ export async function listBlockers(
       status: b.status,
       ownerId: b.ownerId,
       ownerName: b.owner?.name ?? null,
+      taskId: b.taskId,
       resolutionNotes: b.resolutionNotes,
       dateRaised: b.dateRaised,
     }));

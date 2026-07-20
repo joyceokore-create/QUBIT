@@ -65,16 +65,16 @@ describe("MVP1 — teams & resource allocation", () => {
   });
 
   it("allocates a person to a project (upsert) and lists their workload", async () => {
-    await setProjectMember(kcb, projectId, userA, { role: "Project Lead", allocationPct: 50 });
-    await setProjectMember(kcb, projectId, userA, { role: "Project Lead", allocationPct: 80 }); // upsert
-    await setProjectMember(kcb, projectId, userB, { role: "Analyst", allocationPct: 20 });
+    await setProjectMember(kcb, projectId, userA, { role: "Technical Lead", allocationPct: 50 });
+    await setProjectMember(kcb, projectId, userA, { role: "Technical Lead", allocationPct: 80 }); // upsert
+    await setProjectMember(kcb, projectId, userB, { role: "Business Analyst", allocationPct: 20 });
 
     const members = await listProjectMembers(kcb, projectId);
     expect(members).toHaveLength(2);
     expect(members.find((m) => m.userId === userA)?.allocationPct).toBe(80);
 
     const workload = await listUserAllocations(kcb, userA);
-    expect(workload.find((w) => w.projectId === projectId)?.role).toBe("Project Lead");
+    expect(workload.find((w) => w.projectId === projectId)?.role).toBe("Technical Lead");
 
     await removeProjectMember(kcb, projectId, userB);
     expect(await listProjectMembers(kcb, projectId)).toHaveLength(1);
