@@ -17,7 +17,9 @@ const ProjectDefinitionFields = {
 };
 
 export const CreateProjectInput = z.object({
-  code: z.string().min(1),
+  // Optional since DM1.21 — the dialogs no longer ask for a code; it's auto-generated
+  // from the name (initials, unique per tenant). Explicit codes remain valid (API/seed).
+  code: z.string().min(1).optional(),
   name: z.string().min(1),
   description: z.string().nullable().optional(),
   type: z.enum(["Project", "Programme"]),
@@ -393,10 +395,48 @@ export async function listProjects(
   });
 }
 
+/**
+ * Code base from a project name (DM1.21): initials of the first three words
+ * ("Asset Valuation System" → AVS), or the first three letters of a single-word name
+ * ("HomeQuest" → HOM). Codes prefix task keys (AVS-1), so they stay short and hyphen-free.
+ */
+export function projectCodeBase(name: string): string {
+  const words = name.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+  const base = (words.length >= 2 ? words.slice(0, 3).map((w) => w[0]).join("") : (words[0] ?? "").slice(0, 3))
+    .replace(/[^A-Z0-9]/g, "");
+  return base.length >= 2 ? base : (base + "PRJ").slice(0, 3);
+}
+
+/** First free code for the base within the tenant: AVS, then AVS2, AVS3… (RLS-scoped). */
+async function nextFreeCode(tx: Prisma.TransactionClient, base: string): Promise<string> {
+  const taken = new Set(
+    (await tx.project.findMany({ where: { code: { startsWith: base } }, select: { code: true } })).map((p) => p.code),
+  );
+  if (!taken.has(base)) return base;
+  let n = 2;
+  while (taken.has(`${base}${n}`)) n++;
+  return `${base}${n}`;
+}
+
 export async function createProject(ctx: TenantContext, input: CreateProjectInput) {
+  // Two same-named projects created concurrently can race to the same generated code and
+  // hit the tenant+code unique index — retry with a fresh suffix rather than surfacing it.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await createProjectOnce(ctx, input);
+    } catch (e) {
+      const uniqueRace =
+        !input.code && attempt < 2 && typeof e === "object" && e !== null && (e as { code?: string }).code === "P2002";
+      if (!uniqueRace) throw e;
+    }
+  }
+}
+
+async function createProjectOnce(ctx: TenantContext, input: CreateProjectInput) {
   return withTenant(ctx, async (tx) => {
+    const code = input.code ?? (await nextFreeCode(tx, projectCodeBase(input.name)));
     const existing = await tx.project.findUnique({
-      where: { tenantId_code: { tenantId: ctx.tenantId, code: input.code } },
+      where: { tenantId_code: { tenantId: ctx.tenantId, code } },
     });
     if (existing) {
       throw new ProjectError("A project with this code already exists.", "CODE_TAKEN");
@@ -411,7 +451,7 @@ export async function createProject(ctx: TenantContext, input: CreateProjectInpu
     const project = await tx.project.create({
       data: {
         tenantId: ctx.tenantId,
-        code: input.code,
+        code,
         name: input.name,
         description: input.description ?? null,
         type: input.type,

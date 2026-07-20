@@ -193,7 +193,8 @@ export function ProjectsClient({
 function NewProjectDialog() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ code: "", name: "", description: "", type: "Project", priority: "Medium", status: "Planning" });
+  // No code field — codes are auto-generated from the name, unique per tenant (DM1.21).
+  const [form, setForm] = useState({ name: "", description: "", type: "Project", priority: "Medium", status: "Planning" });
   // Every project needs a project manager (its lead) — required before create (per Joyce).
   const [leadUserId, setLeadUserId] = useState<string>("");
   const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
@@ -229,7 +230,7 @@ function NewProjectDialog() {
       return;
     }
     setOpen(false);
-    setForm({ code: "", name: "", description: "", type: "Project", priority: "Medium", status: "Planning" });
+    setForm({ name: "", description: "", type: "Project", priority: "Medium", status: "Planning" });
     setLeadUserId("");
     router.refresh();
   }
@@ -245,11 +246,16 @@ function NewProjectDialog() {
           <DialogDescription>Create a Riverbank project. Assign resources and teams after.</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-ink-2">Name</label>
+            <Input required value={form.name} onChange={(e) => set("name", e.target.value)} />
+            <p className="text-xs text-ink-3">The project code is generated from the name.</p>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-ink-2">Description</label>
+            <Input value={form.description} onChange={(e) => set("description", e.target.value)} />
+          </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-ink-2">Code</label>
-              <Input required value={form.code} onChange={(e) => set("code", e.target.value)} placeholder="RB-001" />
-            </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-ink-2">Priority</label>
               <Select value={form.priority} onValueChange={(v) => set("priority", v ?? "Medium")} items={Object.fromEntries(PRIORITIES.map((p) => [p, p]))}>
@@ -257,21 +263,13 @@ function NewProjectDialog() {
                 <SelectContent>{PRIORITIES.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-ink-2">Name</label>
-            <Input required value={form.name} onChange={(e) => set("name", e.target.value)} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-ink-2">Description</label>
-            <Input value={form.description} onChange={(e) => set("description", e.target.value)} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-ink-2">Status</label>
-            <Select value={form.status} onValueChange={(v) => set("status", v ?? "Planning")} items={Object.fromEntries(STATUSES.map((s) => [s, s]))}>
-              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-              <SelectContent>{STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-            </Select>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-ink-2">Status</label>
+              <Select value={form.status} onValueChange={(v) => set("status", v ?? "Planning")} items={Object.fromEntries(STATUSES.map((s) => [s, s]))}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>{STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-ink-2">Project manager (lead)</label>

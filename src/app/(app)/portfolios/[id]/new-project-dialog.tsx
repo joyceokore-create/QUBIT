@@ -33,7 +33,6 @@ interface NewProjectDialogProps {
 export function NewProjectDialog({ portfolioId, programmes }: NewProjectDialogProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("Medium");
@@ -55,7 +54,6 @@ export function NewProjectDialog({ portfolioId, programmes }: NewProjectDialogPr
   }, [open]);
 
   function reset() {
-    setCode("");
     setName("");
     setDescription("");
     setPriority("Medium");
@@ -79,7 +77,6 @@ export function NewProjectDialog({ portfolioId, programmes }: NewProjectDialogPr
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        code,
         name,
         description: description || null,
         type: "Project",
@@ -121,19 +118,12 @@ export function NewProjectDialog({ portfolioId, programmes }: NewProjectDialogPr
           <DialogDescription>Creates a project in this portfolio.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-          <div className="flex gap-3">
-            <div className="flex flex-1 flex-col gap-1.5">
-              <label htmlFor="new-project-code" className="text-sm font-medium text-ink-2">
-                Code
-              </label>
-              <Input id="new-project-code" required value={code} onChange={(e) => setCode(e.target.value)} />
-            </div>
-            <div className="flex flex-[2] flex-col gap-1.5">
-              <label htmlFor="new-project-name" className="text-sm font-medium text-ink-2">
-                Name
-              </label>
-              <Input id="new-project-name" required value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="new-project-name" className="text-sm font-medium text-ink-2">
+              Name
+            </label>
+            <Input id="new-project-name" required value={name} onChange={(e) => setName(e.target.value)} />
+            <p className="text-xs text-ink-3">The project code is generated from the name.</p>
           </div>
 
           <div className="flex flex-col gap-1.5">

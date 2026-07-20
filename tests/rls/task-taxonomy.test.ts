@@ -13,7 +13,7 @@ import {
   unflagTaskBlocked,
   UpdateTaskInput,
 } from "@/server/project-tasks";
-import { createProject } from "@/server/projects";
+import { createProject, projectCodeBase } from "@/server/projects";
 
 describe("Phase 6.1 — task keys, taxonomy, blocked flag", () => {
   let kcb: TenantContext;
@@ -145,6 +145,35 @@ describe("Phase 6.1 — task keys, taxonomy, blocked flag", () => {
         await tx.projectMember.deleteMany({ where: { projectId: p.id } });
         await tx.projectTaskCounter.deleteMany({ where: { projectId: p.id } });
         await tx.project.deleteMany({ where: { id: p.id } });
+      });
+    }
+  });
+
+  it("auto-generates unique project codes from the name (DM1.21)", async () => {
+    // Pure base derivation.
+    expect(projectCodeBase("Asset Valuation System")).toBe("AVS");
+    expect(projectCodeBase("HomeQuest")).toBe("HOM");
+    expect(projectCodeBase("Zed Uno")).toBe("ZU");
+    expect(projectCodeBase("x")).toBe("XPR"); // too short → padded
+
+    // Same name twice → base, then suffixed; task keys use the generated code.
+    const mk = (name: string) =>
+      createProject(kcb, { name, type: "Project", priority: "Medium", status: "Planning", leadUserId: kcb.userId });
+    const a = await mk("Quantum Ledger Fixture");
+    const b = await mk("Quantum Ledger Fixture");
+    try {
+      expect(a.code).toBe("QLF");
+      expect(b.code).toBe("QLF2");
+      await addTasks(kcb, b.id, [{ title: "First task" }]);
+      const [t] = await listProjectTasks(kcb, b.id);
+      expect(t.taskKey).toBe("QLF2-1");
+    } finally {
+      await withTenant(kcb, async (tx) => {
+        const ids = [a.id, b.id];
+        await tx.projectTask.deleteMany({ where: { projectId: { in: ids } } });
+        await tx.projectTaskCounter.deleteMany({ where: { projectId: { in: ids } } });
+        await tx.projectMember.deleteMany({ where: { projectId: { in: ids } } });
+        await tx.project.deleteMany({ where: { id: { in: ids } } });
       });
     }
   });
