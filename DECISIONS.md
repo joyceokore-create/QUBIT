@@ -344,6 +344,30 @@ No schema change. What landed:
 Verified in-browser (lens tabs + counts, triage, bug dialog, publish-gate hint) and by
 `tests/unit/board-lens.test.ts` + `tests/rls/delivery-workflow.test.ts`. 384/384 green.
 
+### DM1.20 — Work-cycle UX: deep links, Mine-everywhere, My Tasks actioning (per Joyce)
+Design discussion 2026-07-20. Joyce asked for (a) My Tasks rows opening the board, (b)
+dev/tester board differentiation with per-person focus, (c) "filter mine everywhere".
+On (b) I pushed back on HARD per-person visibility (it would reverse DM1.10's
+global-read model and break handoffs/triage); agreed shape is **a Mine FILTER the user
+controls, never a wall**. What landed:
+
+- **Deep links**: `/projects/[id]?tab=Board&task=<id>&lens=qa|dev|all`. The workspace
+  reads searchParams; the board ensures the target card is visible (switches lens off
+  Mine if needed), scrolls to it and pulses a brand ring for ~3.5s. `task_assigned` and
+  `bug_ready_for_qa` notifications now link to the exact card (`addTasks` switched to
+  `createManyAndReturn` for ids); bug notifications land on the QA lens.
+- **Mine everywhere**: board chip (default ON for Dev/QA members, OFF for PM/
+  stakeholders; QA triage strip exempt — unassigned bugs are nobody's yet); projects
+  page MINE chip (`isMine` = leads or allocated); risks table Mine chip (owner). All
+  client-side filters over the same data.
+- **My Tasks actioning**: every row + focus card gets the 5-status select and inline
+  flag-blocked (reason required); the Blocked bucket shows the blocker's reason; rows
+  and the PM/QA reference sections deep-link to the board card (QA → `lens=qa`);
+  "My week" button links to the Reports centre (auto-delivery lands in 6.4).
+- `MyTaskRow` gains `blockedReason`; seed now makes the first user the demo project's
+  lead + PM member (mirrors DM1.17 behaviour — MINE filters and member counts have
+  data to show). 385/385 tests green; verified in-browser end-to-end.
+
 ## Phase 0 — Foundation (2026-07-10)
 
 ### D0.1 — `tenantId` + RLS on every new table, including join tables
