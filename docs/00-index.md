@@ -19,6 +19,9 @@ This is the entry point. Read documents in this order.
 13. **13-glossary.md** — terms and naming conventions.
 14. **14-stakeholder-feedback-backlog.md** — raw stakeholder feedback mapped to phases;
     reference only, not scheduled work.
+15. **15-phase6-delivery-workflow-plan.md** — Phase 6 milestone plan: PM → Dev → QA
+    delivery workflow (task taxonomy, role-lens boards, GitHub commit automation,
+    nudger + scheduled reports, requirements traceability).
 
 ## Document readiness checklist
 

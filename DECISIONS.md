@@ -210,6 +210,97 @@ unapproved AI output never inflates progress or reports. Any project member appr
 the board ("Approve N drafts" → `publishProjectDrafts`, or per-task via `updateTask`), gated on
 `canContributeToProject` (consistent with DM1.11). This completes Phase 5.
 
+## Phase 6 — Delivery workflow (2026-07-20)
+
+Plan: `docs/15-phase6-delivery-workflow-plan.md` (milestones 6.1–6.5).
+
+### DM1.15 — Phase 6 open decisions resolved
+The five open decisions in docs/15 §"Open decisions", resolved with the recommended
+defaults (grounded in the actual data, which turned out friendlier than the plan assumed):
+
+1. **Project roles: no data migration.** `PROJECT_ROLES` (`src/lib/roles.ts`) is already a
+   canonical 10-role list enforced by the member-add UI, so the planned free-text→4-role
+   collapse is unnecessary. Instead add a **category mapping** `projectRoleCategory(role)`
+   → `PM | Dev | QA | Stakeholder`: Project Manager → PM; Technical Lead / Developer /
+   UX Designer → Dev; QA Lead (+ new list entry "QA Engineer") → QA; everything else,
+   including unknown free-text from old join requests, → Stakeholder. Going forward,
+   `setProjectMember` and join-request roles are validated against the list server-side.
+2. **Legacy Blocked tasks migrate to InProgress + Blocker.** The 6.1 migration converts
+   `project_task.status = 'Blocked'` → `InProgress` and creates a linked Open `Blocker`
+   ("Migrated from Blocked status", severity Medium, owner = task assignee if set). Seed
+   creates no such rows; this targets user-created rows on the deployed box (migrations
+   run at container start, so it applies on deploy).
+3. **Publish gate tightens to `canWriteProject`** (lead / PM-member / heads / SuperAdmin):
+   publishing drafts — bulk `publishProjectDrafts` or per-task `approvalStatus` change —
+   is PM-level; *generation* stays `canContributeToProject`. Amends DM1.14, which let any
+   member approve; an approval gate the whole team can open is not a gate.
+4. **Cron transport: host crontab → guarded route.** `POST /api/internal/cron` guarded by
+   a `CRON_SECRET` env token (timing-safe compare), hit by the box's crontab. No new
+   dependency; the sidecar option adds a service for no gain. (Lands in 6.4.)
+5. **Nudge thresholds: docs/15 defaults adopted**, held in one config object
+   (`src/server/nudger/config.ts` when 6.4 lands) so Head-of-Projects tuning is a
+   one-file edit.
+
+### DM1.16 — Milestone 6.1 shipped: task taxonomy, keys, status expansion, blocked-as-flag
+Migration `20260720120000_phase6_task_taxonomy`. `ProjectTask` gains
+`type` (Feature|Bug|Chore|Spike|Improvement), `taskKey`, `severity`, `reporterId`,
+`parentTaskId`, `sourceDocumentId`, `milestoneId`, `lastActivityAt`; statuses are now
+`NotStarted|InProgress|InReview|InQA|Completed`. Notable calls:
+
+- **Task keys** (`<project.code>-<n>`, unique per project) are claimed from a new
+  `project_task_counter` table via `INSERT … ON CONFLICT DO NOTHING` + `UPDATE …
+  RETURNING` inside the enclosing transaction (`allocateTaskKeys`,
+  `src/server/project-tasks.ts`) — row-lock serializes concurrent claims (tested).
+  **Drafts hold no key**; publishing (bulk, or per-task via `updateTask`) claims one, so
+  unapproved AI plans never burn numbers. `Project.code` was already unique per tenant.
+- **Blocked is a flag, not a column.** `Blocker.taskId` (SetNull on task delete) links a
+  live impediment to the task it stalls; a task is "blocked" while an Open linked blocker
+  exists. Flag/unflag via `POST/DELETE /api/tasks/[id]/block` (reason required — that's
+  what feeds the nudger and reports). The migration converted existing `status='Blocked'`
+  rows to `InProgress` + a linked Open blocker (DM1.15 №2). Progress/briefing/manager
+  report now derive "blocked" from open linked blockers.
+- **HeadOfQA task-write scope extended** (`src/lib/access.ts`): Testing/UAT/SIT phases
+  (as before) OR status InReview/InQA OR `type: Bug`.
+- **Roles**: "QA Engineer" added to `PROJECT_ROLES`; `projectRoleCategory()` maps any
+  role (incl. legacy free-text → Stakeholder) to PM|Dev|QA|Stakeholder (DM1.15 №1).
+  `setProjectMember`, join requests and admin invite now validate against the list.
+- **Board**: five columns; blocked badge + inline flag/unflag; task key + non-Feature
+  type shown in the card meta. `lastActivityAt` is touched by every task mutation
+  (feeds the 6.4 nudger).
+- **Seed** ships 4 typed, keyed demo tasks + 1 linked open blocker per tenant's first
+  project; `blockers.test.ts` counts became baseline-relative (tenant-wide counts now
+  include seed rows). New suite: `tests/rls/task-taxonomy.test.ts` (keys, concurrency,
+  draft→publish keying, blocked flag, RLS on the counter). 368/368 tests green.
+
+Still open for review: the reporter is set for ALL manually-added tasks (creator), not
+just bugs — deliberate (uniform authorship), flag if unwanted. 6.2 (role-lens boards +
+QA authoring flow) is next.
+
+### DM1.17 — Assign-on-create, join-request notifications, required project lead (per Joyce, 2026-07-20)
+Three requirements from Joyce, pulled ahead of 6.2:
+
+1. **Assign + place at creation.** `TaskInput` gains `assigneeId` + `status`; `addTasks`
+   validates assignees exist (tenant-scoped). The board's add-task composer expands when a
+   title is typed: type, assignee (project members, shown with their role), and starting
+   column. Q's generate flow is unchanged (AI tasks still land Draft/unassigned).
+2. **Join-request notifications.** `requestToJoin` now fans out `Notification` rows
+   (kind `join_request`, link `/my-tasks` — the approval queue) to the recipients that
+   mirror the approval gate: project lead + "Project Manager" members; if the project has
+   neither, **every HeadOfProjects in the tenant** (fallback so a request never lands
+   nowhere). Requester excluded. Audit row records `notified` count.
+3. **Every project gets a PM at creation.** `CreateProjectInput` accepts `leadUserId`;
+   both New-project dialogs REQUIRE choosing a "Project manager (lead)" before create
+   (user list from `/api/v1/users`). `createProject` validates the lead and **enrols them
+   as a "Project Manager" `ProjectMember`** so membership-scoped checks, lenses, and
+   notifications all see them. Kept optional at the Zod level for API/tests back-compat —
+   the enforcement point is the UI (existing tests create leadless fixtures); the
+   HeadOfProjects notification fallback covers legacy/API-created projects.
+
+Notification cleanup added to the join-request test fixture (Notification.user FK is
+RESTRICT — user deletes fail if their notifications survive). 372/372 tests green.
+Deferred (noted for 6.2): notify the requester on approve/deny; notify an assignee when
+a task is assigned to them.
+
 ## Phase 0 — Foundation (2026-07-10)
 
 ### D0.1 — `tenantId` + RLS on every new table, including join tables
