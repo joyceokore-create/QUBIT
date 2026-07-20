@@ -112,6 +112,16 @@ describe("join requests (Phase 5)", () => {
     expect(notes[0].link).toBe("/my-tasks");
   });
 
+  it("notifies the requester when their request is decided (6.2)", async () => {
+    // reqId was approved (test 3); outsiderId was denied (test 5).
+    const [approvedNotes, deniedNotes] = await Promise.all([
+      withTenant(ctx(reqId), (tx) => tx.notification.findMany({ where: { userId: reqId, kind: "join_request" } })),
+      withTenant(ctx(outsiderId), (tx) => tx.notification.findMany({ where: { userId: outsiderId, kind: "join_request" } })),
+    ]);
+    expect(approvedNotes.some((n) => n.message.includes("You joined"))).toBe(true);
+    expect(deniedNotes.some((n) => n.message.includes("declined"))).toBe(true);
+  });
+
   it("falls back to HeadOfProjects when the project has no lead or PM member", async () => {
     await requestToJoin(ctx(reqId), orphanProjectId, { requestedRole: "Developer" });
     const headNotes = await withTenant(ctx(headId), (tx) =>

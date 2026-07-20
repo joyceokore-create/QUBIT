@@ -154,7 +154,8 @@ async function loadDecidable(ctx: TenantContext, id: string) {
   return jr;
 }
 
-/** Approve: create the ProjectMember (Executive → Stakeholder) and mark the request Approved. */
+/** Approve: create the ProjectMember (Executive → Stakeholder), mark the request Approved,
+ * and tell the requester (Phase 6.2 — the outbound half of the DM1.17 notification loop). */
 export async function approveJoinRequest(ctx: TenantContext, id: string): Promise<void> {
   const jr = await loadDecidable(ctx, id);
   await withTenant(ctx, async (tx) => {
@@ -169,6 +170,15 @@ export async function approveJoinRequest(ctx: TenantContext, id: string): Promis
       where: { id },
       data: { status: "Approved", decidedById: ctx.userId, decidedAt: new Date() },
     });
+    const project = await tx.project.findUnique({ where: { id: jr.projectId }, select: { name: true } });
+    await notifyUsers(tx, ctx, [
+      {
+        userId: jr.userId,
+        kind: "join_request",
+        message: `You joined ${project?.name ?? "the project"} as ${role}`,
+        link: `/projects/${jr.projectId}`,
+      },
+    ]);
     await audit(tx, ctx, {
       action: "update",
       entityType: "join_request",
@@ -179,14 +189,23 @@ export async function approveJoinRequest(ctx: TenantContext, id: string): Promis
   });
 }
 
-/** Deny: mark the request Denied (no membership created). */
+/** Deny: mark the request Denied (no membership created) and tell the requester. */
 export async function denyJoinRequest(ctx: TenantContext, id: string): Promise<void> {
-  await loadDecidable(ctx, id);
+  const jr = await loadDecidable(ctx, id);
   await withTenant(ctx, async (tx) => {
     await tx.joinRequest.update({
       where: { id },
       data: { status: "Denied", decidedById: ctx.userId, decidedAt: new Date() },
     });
+    const project = await tx.project.findUnique({ where: { id: jr.projectId }, select: { name: true } });
+    await notifyUsers(tx, ctx, [
+      {
+        userId: jr.userId,
+        kind: "join_request",
+        message: `Your request to join ${project?.name ?? "the project"} was declined`,
+        link: `/projects/${jr.projectId}`,
+      },
+    ]);
     await audit(tx, ctx, {
       action: "update",
       entityType: "join_request",

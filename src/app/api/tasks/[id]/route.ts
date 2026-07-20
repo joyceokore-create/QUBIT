@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requirePermission, forbidden } from "@/lib/api-guard";
-import { canWriteTask } from "@/lib/access";
+import { canWriteTask, canPublishTask } from "@/lib/access";
 import { updateTask, removeTask, UpdateTaskInput, TaskError } from "@/server/project-tasks";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -15,6 +15,10 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const parsed = UpdateTaskInput.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: { code: "VALIDATION", message: "Invalid update." } }, { status: 400 });
+  }
+  // Draft↔Published is the plan-approval gate — PM-level, stricter than task-write (DM1.15 №3).
+  if (parsed.data.approvalStatus !== undefined && !(await canPublishTask(guard.ctx, id))) {
+    return forbidden("Only the project's manager (lead/PM) can publish or unpublish a task.");
   }
   try {
     await updateTask(guard.ctx, id, parsed.data);

@@ -38,6 +38,8 @@ export interface ProjectPanelJson {
   avgProgress: number;
   canEdit: boolean; // project settings / team — lead, PM, heads, SuperAdmin
   canContribute: boolean; // tasks + blockers — any project member (per Joyce)
+  canPublish?: boolean; // plan approval (Draft → Published) — PM-level (DM1.15 №3)
+  viewerCategory?: "PM" | "Dev" | "QA" | "Stakeholder"; // default board lens (6.2)
   isMember: boolean; // the viewer leads or is allocated to this project
   subsidiaries: {
     orgUnitId: string;

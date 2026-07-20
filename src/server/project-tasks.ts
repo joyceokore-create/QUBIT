@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
+import { notifyUsers } from "@/server/notifications";
 import { mockEnabled, mockPlanFromText } from "@/server/q/mock";
 import { llmChat, llmEnabled, llmModel } from "@/server/q/llm";
 
@@ -54,6 +55,8 @@ export interface ProjectTaskRow {
   /** Open linked Blocker, if any — the "blocked" flag (id lets the board resolve it). */
   openBlockerId: string | null;
   blocked: boolean;
+  /** Last mutation (any) — feeds the board's aging tint and the 6.4 nudger. */
+  lastActivityAt: Date;
 }
 
 const OPEN_BLOCKER_SELECT = {
@@ -88,6 +91,7 @@ export async function listProjectTasks(ctx: TenantContext, projectId: string): P
       orderIndex: t.orderIndex,
       openBlockerId: t.blockers[0]?.id ?? null,
       blocked: t.blockers.length > 0,
+      lastActivityAt: t.lastActivityAt,
     }));
   });
 }
@@ -229,6 +233,8 @@ export const TaskInput = z.object({
   // starting column in one step instead of creating then editing.
   status: z.enum(TASK_STATUSES).optional(),
   assigneeId: z.string().uuid().nullable().optional(),
+  // Bugs: the task the defect was found while testing (QA lens, 6.2).
+  parentTaskId: z.string().uuid().nullable().optional(),
   estimate: z.string().nullable().optional(),
 });
 export type TaskInput = z.infer<typeof TaskInput>;
@@ -261,11 +267,16 @@ export async function addTasks(
 ) {
   if (tasks.length === 0) throw new TaskError("No tasks to add.", "BAD_INPUT");
   return withTenant(ctx, async (tx) => {
-    await tx.project.findUniqueOrThrow({ where: { id: projectId } });
+    const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { id: true, name: true } });
     const assigneeIds = [...new Set(tasks.map((t) => t.assigneeId).filter((id): id is string => !!id))];
     if (assigneeIds.length) {
       const found = await tx.user.findMany({ where: { id: { in: assigneeIds } }, select: { id: true } });
       if (found.length !== assigneeIds.length) throw new TaskError("Assignee not found.", "BAD_INPUT");
+    }
+    const parentIds = [...new Set(tasks.map((t) => t.parentTaskId).filter((id): id is string => !!id))];
+    if (parentIds.length) {
+      const found = await tx.projectTask.findMany({ where: { id: { in: parentIds }, projectId }, select: { id: true } });
+      if (found.length !== parentIds.length) throw new TaskError("Parent task not found on this project.", "BAD_INPUT");
     }
     const approvalStatus = opts?.approvalStatus ?? "Published";
     const keys = approvalStatus === "Published" ? await allocateTaskKeys(tx, ctx.tenantId, projectId, tasks.length) : [];
@@ -284,6 +295,7 @@ export async function addTasks(
         severity: t.severity ?? null,
         status: t.status ?? "NotStarted",
         assigneeId: t.assigneeId ?? null,
+        parentTaskId: t.parentTaskId ?? null,
         taskKey: keys[i] ?? null,
         reporterId: opts?.reporterId ?? null,
         sourceDocumentId: opts?.sourceDocumentId ?? null,
@@ -292,6 +304,22 @@ export async function addTasks(
         orderIndex: order++,
       })),
     });
+    // Tell people work landed on them (6.2) — but never for Drafts (unapproved AI output
+    // must stay invisible, §2.2) and never the creator assigning to themselves.
+    if (approvalStatus === "Published") {
+      await notifyUsers(
+        tx,
+        ctx,
+        tasks
+          .filter((t) => t.assigneeId && t.assigneeId !== ctx.userId)
+          .map((t) => ({
+            userId: t.assigneeId as string,
+            kind: "task_assigned",
+            message: `${t.type === "Bug" ? "Bug" : "Task"} assigned to you on ${project.name}: ${t.title.slice(0, 90)}`,
+            link: `/projects/${projectId}`,
+          })),
+      );
+    }
     await audit(tx, ctx, {
       action: "create",
       entityType: "project_task",
@@ -347,12 +375,18 @@ export const UpdateTaskInput = z.object({
 export type UpdateTaskInput = z.infer<typeof UpdateTaskInput>;
 
 /** Update a task's status / type / assignee / due date (PRD M6). Publishing a single Draft
- * here also claims its task key. Every update touches lastActivityAt (nudger staleness). Audited. */
+ * here also claims its task key. Every update touches lastActivityAt (nudger staleness).
+ * Notifies (6.2): a newly-assigned person; the REPORTER when a Bug reaches InQA — QA closes
+ * bugs, developers don't self-certify. Audited. */
 export async function updateTask(ctx: TenantContext, taskId: string, input: UpdateTaskInput) {
   return withTenant(ctx, async (tx) => {
     const before = await tx.projectTask.findUnique({
       where: { id: taskId },
-      select: { status: true, approvalStatus: true, taskKey: true, projectId: true },
+      select: {
+        title: true, status: true, approvalStatus: true, taskKey: true, projectId: true,
+        assigneeId: true, type: true, reporterId: true,
+        project: { select: { name: true } },
+      },
     });
     if (!before) throw new TaskError("Task not found.", "NOT_FOUND");
     if (input.assigneeId) {
@@ -375,6 +409,28 @@ export async function updateTask(ctx: TenantContext, taskId: string, input: Upda
         lastActivityAt: new Date(),
       },
     });
+    if (updated.approvalStatus === "Published") {
+      const notes: { userId: string; kind: string; message: string; link?: string }[] = [];
+      const label = updated.taskKey ? `${updated.taskKey} ${before.title}` : before.title;
+      if (input.assigneeId && input.assigneeId !== before.assigneeId && input.assigneeId !== ctx.userId) {
+        notes.push({
+          userId: input.assigneeId,
+          kind: "task_assigned",
+          message: `${before.type === "Bug" ? "Bug" : "Task"} assigned to you on ${before.project.name}: ${label.slice(0, 90)}`,
+          link: `/projects/${before.projectId}`,
+        });
+      }
+      const reachedQa = input.status === "InQA" && before.status !== "InQA";
+      if (reachedQa && before.type === "Bug" && before.reporterId && before.reporterId !== ctx.userId) {
+        notes.push({
+          userId: before.reporterId,
+          kind: "bug_ready_for_qa",
+          message: `Your bug is ready to verify on ${before.project.name}: ${label.slice(0, 90)}`,
+          link: `/projects/${before.projectId}`,
+        });
+      }
+      await notifyUsers(tx, ctx, notes);
+    }
     await audit(tx, ctx, {
       action: "update",
       entityType: "project_task",

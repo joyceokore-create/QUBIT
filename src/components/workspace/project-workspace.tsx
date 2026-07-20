@@ -189,7 +189,14 @@ export function ProjectWorkspace({
             </aside>
           </div>
         )}
-        {tab === "Board" && <ProjectBoard projectId={data.id} canEdit={canContribute} />}
+        {tab === "Board" && (
+          <ProjectBoard
+            projectId={data.id}
+            canEdit={canContribute}
+            canPublish={data.canPublish ?? data.canEdit}
+            viewerCategory={data.viewerCategory ?? "Stakeholder"}
+          />
+        )}
         {tab === "Documents" && <DocumentsSection projectId={data.id} canEdit={canEdit} />}
         {tab === "Deadlines" && (
           <div className="flex flex-col gap-3.5">

@@ -86,6 +86,16 @@ export async function canWriteTask(ctx: TenantContext, taskId: string): Promise<
   });
 }
 
+/** Can the viewer publish (approve) this task's Draft→Published transition? Publishing is
+ * PM-level: `canWriteProject` on the task's project (DM1.15 №3). */
+export async function canPublishTask(ctx: TenantContext, taskId: string): Promise<boolean> {
+  const task = await withTenant(ctx, (tx) =>
+    tx.projectTask.findUnique({ where: { id: taskId }, select: { projectId: true } }),
+  );
+  if (!task) return false;
+  return canWriteProject(ctx, task.projectId);
+}
+
 /** Can the viewer create/write risks/tasks/blockers WITHIN this project? A management role
  * (task/risk write) OR a member of the project. Used by the create routes — the only block is
  * a project you're not part of. */

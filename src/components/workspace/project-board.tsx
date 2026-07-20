@@ -1,9 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Flag, Plus, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Flag, Plus, Sparkles, TriangleAlert } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { GenerateDialog } from "@/components/panels/project-tasks-section";
+import { BugDialog } from "@/components/workspace/bug-dialog";
+import { defaultLens, isAging, isTriageBug, lensFilter, wipOverloads, LENS_LABELS, type BoardLens } from "@/lib/board-lens";
+import type { ProjectRoleCategory } from "@/lib/roles";
 
 interface Task {
   id: string;
@@ -16,9 +19,11 @@ interface Task {
   type: string;
   taskKey: string | null;
   severity: string | null;
+  assigneeId: string | null;
   assigneeName: string | null;
   dueDate: string | null;
   blocked: boolean;
+  lastActivityAt: string;
 }
 interface Progress {
   total: number;
@@ -45,11 +50,24 @@ const COLUMNS = [
 ] as const;
 
 /** Kanban board — the project's live tracking surface. Drag a card between columns (or use
- *  the card's status menu) to update it; progress recomputes from completed/total. */
-export function ProjectBoard({ projectId, canEdit }: { projectId: string; canEdit: boolean }) {
+ *  the card's status menu) to update it; progress recomputes from completed/total.
+ *  Phase 6.2: role lenses (All / Dev / QA) filter ONE task list — never separate boards —
+ *  with a pinned Triage group for unassigned bugs on the QA lens. */
+export function ProjectBoard({
+  projectId,
+  canEdit,
+  canPublish = canEdit,
+  viewerCategory = "Stakeholder",
+}: {
+  projectId: string;
+  canEdit: boolean;
+  canPublish?: boolean;
+  viewerCategory?: ProjectRoleCategory;
+}) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [progress, setProgress] = useState<Progress>({ total: 0, completed: 0, blocked: 0, pct: 0 });
   const [genOpen, setGenOpen] = useState(false);
+  const [lens, setLens] = useState<BoardLens>(() => defaultLens(viewerCategory));
   const [members, setMembers] = useState<MemberOpt[]>([]);
   const [newTitle, setNewTitle] = useState("");
   const [newType, setNewType] = useState<string>("Feature");
@@ -127,6 +145,14 @@ export function ProjectBoard({ projectId, canEdit }: { projectId: string; canEdi
     const ok = await fetch(`/api/tasks/${id}/block`, { method: "DELETE" }).then((r) => r.ok);
     if (ok) void load();
   };
+  const assign = async (id: string, userId: string | null) => {
+    const ok = await fetch(`/api/tasks/${id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ assigneeId: userId }),
+    }).then((r) => r.ok);
+    if (ok) void load();
+  };
 
   const now = Date.now();
   const draftCount = tasks.filter((t) => t.approvalStatus === "Draft").length;
@@ -138,6 +164,17 @@ export function ProjectBoard({ projectId, canEdit }: { projectId: string; canEdi
     }).then((r) => r.ok);
     if (ok) void load();
   };
+
+  // One task list, three lenses (6.2). On the QA lens, unassigned bugs are pinned in the
+  // Triage strip instead of sitting in a column.
+  const triage = useMemo(() => (lens === "qa" ? tasks.filter(isTriageBug) : []), [lens, tasks]);
+  const visible = useMemo(
+    () => tasks.filter((t) => lensFilter(lens, t) && !(lens === "qa" && isTriageBug(t))),
+    [lens, tasks],
+  );
+  const overloads = useMemo(() => wipOverloads(tasks), [tasks]);
+  const lensCount = (l: BoardLens) => tasks.filter((t) => lensFilter(l, t)).length;
+  const bugAssignees = members.length ? members : [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -153,6 +190,14 @@ export function ProjectBoard({ projectId, canEdit }: { projectId: string; canEdi
           </div>
         </div>
         {canEdit && (
+          <BugDialog
+            projectId={projectId}
+            members={bugAssignees}
+            tasks={tasks.filter((t) => t.approvalStatus !== "Draft" && t.type !== "Bug").map((t) => ({ id: t.id, title: t.title, taskKey: t.taskKey }))}
+            onAdded={() => void load()}
+          />
+        )}
+        {canEdit && (
           <button
             type="button"
             onClick={() => setGenOpen(true)}
@@ -161,7 +206,7 @@ export function ProjectBoard({ projectId, canEdit }: { projectId: string; canEdi
             <Sparkles className="size-3.5" /> Generate from document
           </button>
         )}
-        {canEdit && draftCount > 0 && (
+        {canPublish && draftCount > 0 && (
           <button
             type="button"
             onClick={approveDrafts}
@@ -171,12 +216,88 @@ export function ProjectBoard({ projectId, canEdit }: { projectId: string; canEdi
             Approve {draftCount} draft{draftCount === 1 ? "" : "s"}
           </button>
         )}
+        {!canPublish && draftCount > 0 && (
+          <span className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ color: "var(--warn)", background: "color-mix(in oklab, var(--warn) 12%, transparent)" }}>
+            {draftCount} draft{draftCount === 1 ? "" : "s"} awaiting PM approval
+          </span>
+        )}
       </div>
+
+      {/* Lens tabs (6.2): filters over one list — never separate boards. */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {(Object.keys(LENS_LABELS) as BoardLens[]).map((l) => {
+          const active = lens === l;
+          return (
+            <button
+              key={l}
+              type="button"
+              onClick={() => setLens(l)}
+              className="rounded-full border px-3 py-1 text-[11.5px] font-semibold transition-colors"
+              style={{
+                borderColor: active ? "var(--brand)" : "var(--hair)",
+                background: active ? "color-mix(in oklab, var(--brand) 10%, transparent)" : "transparent",
+                color: active ? "var(--brand)" : "var(--ink4)",
+              }}
+            >
+              {LENS_LABELS[l]} <span className="font-mono text-[9.5px] opacity-70">{lensCount(l)}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* QA triage strip: unassigned bugs, pinned until someone owns them. */}
+      {lens === "qa" && triage.length > 0 && (
+        <div
+          className="flex flex-col gap-2 rounded-[14px] border p-3"
+          style={{ borderColor: "color-mix(in oklab, var(--bad) 40%, transparent)", background: "color-mix(in oklab, var(--bad) 5%, transparent)" }}
+        >
+          <div className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[1.5px] text-[var(--bad)]">
+            <TriangleAlert className="size-3" /> Triage — unassigned bugs
+            <span className="text-[var(--ink4)]">{triage.length}</span>
+          </div>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
+            {triage.map((t) => (
+              <div key={t.id} className="flex flex-col gap-1.5 rounded-[10px] border border-[var(--w07)] bg-[var(--qcard)] p-2.5 text-xs">
+                <span className="font-medium text-[var(--qink)]">
+                  {t.title}
+                  {t.severity && (
+                    <span
+                      className="ml-1.5 rounded-[4px] px-1.5 py-[1px] font-mono text-[8.5px] font-semibold uppercase tracking-[1px]"
+                      style={{
+                        color: t.severity === "Critical" || t.severity === "High" ? "var(--bad)" : "var(--warn)",
+                        background: `color-mix(in oklab, ${t.severity === "Critical" || t.severity === "High" ? "var(--bad)" : "var(--warn)"} 14%, transparent)`,
+                      }}
+                    >
+                      {t.severity}
+                    </span>
+                  )}
+                </span>
+                <span className="truncate text-[10.5px] text-[var(--ink4)]">{t.taskKey ?? "—"}</span>
+                {canEdit && (
+                  <Select
+                    value="none"
+                    onValueChange={(v) => v && v !== "none" && assign(t.id, v)}
+                    items={{ none: "Assign to…", ...Object.fromEntries(members.map((m) => [m.userId, `${m.name} · ${m.role}`])) }}
+                  >
+                    <SelectTrigger className="h-6 w-full text-[10.5px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Assign to…</SelectItem>
+                      {members.map((m) => (
+                        <SelectItem key={m.userId} value={m.userId}>{m.name} · {m.role}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Columns */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
         {COLUMNS.map((col) => {
-          const items = tasks.filter((t) => t.status === col.key);
+          const items = visible.filter((t) => t.status === col.key);
           return (
             <div
               key={col.key}
@@ -201,11 +322,21 @@ export function ProjectBoard({ projectId, canEdit }: { projectId: string; canEdi
               <div className="flex items-center gap-2 px-1 py-0.5 text-[11px] font-bold uppercase tracking-[0.5px]" style={{ color: `var(${col.token})` }}>
                 <span className="size-2 rounded-full" style={{ background: `var(${col.token})` }} />
                 {col.label}
+                {col.key === "InProgress" && overloads.length > 0 && (
+                  <span
+                    className="flex items-center gap-0.5 text-[var(--warn)]"
+                    title={`Over WIP limit: ${overloads.map((o) => `${o.name} (${o.count})`).join(", ")}`}
+                  >
+                    <TriangleAlert className="size-3" /> WIP
+                  </span>
+                )}
                 <span className="ml-auto text-[var(--ink5)]">{items.length}</span>
               </div>
 
               {items.map((t) => {
                 const overdue = t.dueDate && t.status !== "Completed" && new Date(t.dueDate).getTime() < now;
+                const aging = !t.blocked && isAging(t.lastActivityAt, t.status, new Date(now));
+                const sevTok = t.severity === "Critical" || t.severity === "High" ? "--bad" : "--warn";
                 return (
                   <div
                     key={t.id}
@@ -216,10 +347,15 @@ export function ProjectBoard({ projectId, canEdit }: { projectId: string; canEdi
                     }}
                     onDragEnd={() => setDragId(null)}
                     className="flex flex-col gap-1.5 rounded-[10px] border bg-[var(--qcard)] p-2.5 text-xs"
+                    title={aging ? "No activity for over 5 business days" : undefined}
                     style={{
                       cursor: canEdit ? "grab" : "default",
                       opacity: dragId === t.id ? 0.5 : 1,
-                      borderColor: t.blocked ? "color-mix(in oklab, var(--bad) 45%, transparent)" : "var(--w07)",
+                      borderColor: t.blocked
+                        ? "color-mix(in oklab, var(--bad) 45%, transparent)"
+                        : aging
+                          ? "color-mix(in oklab, var(--warn) 45%, transparent)"
+                          : "var(--w07)",
                     }}
                   >
                     <span className="font-medium text-[var(--qink)]">
@@ -240,12 +376,40 @@ export function ProjectBoard({ projectId, canEdit }: { projectId: string; canEdi
                           Blocked
                         </span>
                       )}
-                    </span>
-                    <span className="truncate text-[10.5px] text-[var(--ink4)]">
-                      {[t.taskKey, t.type !== "Feature" ? t.type : null, t.phase, t.priority, t.assigneeName].filter(Boolean).join(" · ") || "—"}
-                      {t.dueDate && (
-                        <span style={{ color: overdue ? "var(--bad)" : undefined }}> · due {new Date(t.dueDate).toLocaleDateString()}</span>
+                      {t.type === "Bug" && t.severity && (
+                        <span
+                          className="ml-1.5 rounded-[4px] px-1.5 py-[1px] font-mono text-[8.5px] font-semibold uppercase tracking-[1px]"
+                          style={{ color: `var(${sevTok})`, background: `color-mix(in oklab, var(${sevTok}) 14%, transparent)` }}
+                        >
+                          {t.severity}
+                        </span>
                       )}
+                      {aging && (
+                        <span
+                          className="ml-1.5 rounded-[4px] px-1.5 py-[1px] font-mono text-[8.5px] font-semibold uppercase tracking-[1px]"
+                          style={{ color: "var(--warn)", background: "color-mix(in oklab, var(--warn) 14%, transparent)" }}
+                        >
+                          Stale
+                        </span>
+                      )}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-[10.5px] text-[var(--ink4)]">
+                      {t.taskKey && (
+                        <button
+                          type="button"
+                          onClick={() => void navigator.clipboard?.writeText(t.taskKey as string)}
+                          title="Copy key — reference it in commit messages (e.g. “RBS-01-5 #done”)"
+                          className="rounded-[4px] bg-[var(--wash2)] px-1.5 py-[1px] font-mono text-[9.5px] tracking-[0.5px] text-[var(--ink3)] transition-colors hover:text-brand"
+                        >
+                          {t.taskKey}
+                        </button>
+                      )}
+                      <span className="min-w-0 truncate">
+                        {[t.type !== "Feature" ? t.type : null, t.phase, t.priority, t.assigneeName].filter(Boolean).join(" · ") || "—"}
+                        {t.dueDate && (
+                          <span style={{ color: overdue ? "var(--bad)" : undefined }}> · due {new Date(t.dueDate).toLocaleDateString()}</span>
+                        )}
+                      </span>
                     </span>
                     {canEdit && (
                       <Select
