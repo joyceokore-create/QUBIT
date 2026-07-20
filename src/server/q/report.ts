@@ -119,7 +119,7 @@ async function projectActivity(ctx: TenantContext, projectId: string, since: Dat
     const gte = since ? { gte: since } : undefined;
     const [tasksCompleted, statusUpdates, blockersRaised, blockersResolved, newRisks, newIssues] =
       await Promise.all([
-        tx.projectTask.count({ where: { ...base, status: "Completed", ...(gte ? { updatedAt: gte } : {}) } }),
+        tx.projectTask.count({ where: { ...base, status: "Completed", approvalStatus: { not: "Draft" }, ...(gte ? { updatedAt: gte } : {}) } }),
         tx.projectStatusUpdate.findMany({
           where: { ...base, ...(gte ? { createdAt: gte } : {}) },
           orderBy: { createdAt: "desc" },

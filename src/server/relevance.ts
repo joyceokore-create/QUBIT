@@ -334,7 +334,7 @@ export async function getBriefing(ctx: TenantContext, limit = 3): Promise<Briefi
     const [tasks, blockers, risks, issues, milestones, projects, statusAgg, led, pmMemberships, people] =
       await Promise.all([
         tx.projectTask.findMany({
-          where: { status: { not: "Completed" } },
+          where: { status: { not: "Completed" }, approvalStatus: { not: "Draft" } },
           select: { id: true, title: true, status: true, dueDate: true, assigneeId: true, phase: true, projectId: true, project: { select: { code: true } } },
         }),
         tx.blocker.findMany({

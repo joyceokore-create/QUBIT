@@ -253,6 +253,7 @@ export function GenerateDialog({ projectId, onClose, onAdded }: { projectId: str
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        draft: true, // AI-generated tasks land as Draft, pending approval on the board (§2.2)
         tasks: chosen.map((t) => ({
           title: t.title,
           description: t.description || null,

@@ -17,7 +17,7 @@ export async function GET(_req: Request, { params }: Ctx) {
   return NextResponse.json({ tasks, progress });
 }
 
-const PostBody = z.object({ tasks: z.array(TaskInput).min(1) });
+const PostBody = z.object({ tasks: z.array(TaskInput).min(1), draft: z.boolean().optional() });
 
 export async function POST(req: Request, { params }: Ctx) {
   const guard = await requirePermission("project:read");
@@ -31,7 +31,10 @@ export async function POST(req: Request, { params }: Ctx) {
     return NextResponse.json({ error: { code: "VALIDATION", message: "Invalid tasks." } }, { status: 400 });
   }
   try {
-    return NextResponse.json(await addTasks(guard.ctx, id, parsed.data.tasks), { status: 201 });
+    return NextResponse.json(
+      await addTasks(guard.ctx, id, parsed.data.tasks, { approvalStatus: parsed.data.draft ? "Draft" : "Published" }),
+      { status: 201 },
+    );
   } catch (e) {
     if (e instanceof TaskError) {
       return NextResponse.json({ error: { code: e.code, message: e.message } }, { status: 400 });

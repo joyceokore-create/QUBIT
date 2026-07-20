@@ -201,6 +201,15 @@ fills the §6 bucket). One Pending request per (project, user) is enforced in ap
 fixed `resetTenant` to clear `role_permission` before the tenant delete (`join_request` cascades
 with projects). **Still open:** the AI plan-approval flow (`ProjectTask.approvalStatus`).
 
+### DM1.14 — AI plan-approval workflow (§2.2)
+`ProjectTask.approvalStatus` (Draft | Published, default Published) + migration
+`20260718130000_task_approval_status`. AI-generated tasks (the generate-from-document flow)
+land as **Draft**; manual tasks are Published. Draft tasks are EXCLUDED from progress %,
+My Tasks / member views, the relevance briefing (`getBriefing`), and Q report activity — so
+unapproved AI output never inflates progress or reports. Any project member approves them on
+the board ("Approve N drafts" → `publishProjectDrafts`, or per-task via `updateTask`), gated on
+`canContributeToProject` (consistent with DM1.11). This completes Phase 5.
+
 ## Phase 0 — Foundation (2026-07-10)
 
 ### D0.1 — `tenantId` + RLS on every new table, including join tables

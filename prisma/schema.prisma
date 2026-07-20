@@ -208,6 +208,9 @@ model ProjectTask {
   ownerRole   String?   @map("owner_role") // suggested project role (PRD Module 5)
   priority    String    @default("Medium") // Low | Medium | High | Critical
   status      String    @default("NotStarted") // NotStarted | InProgress | Blocked | Completed
+  // Draft = AI-generated, pending approval (excluded from progress/reports/member views);
+  // Published = live. Manual tasks are Published; a plan is approved to publish (§2.2).
+  approvalStatus String @default("Published") @map("approval_status")
   estimate    String? // free-form estimated effort, e.g. "3d"
   assigneeId  String?   @map("assignee_id")
   assignee    User?     @relation("ProjectTaskAssignee", fields: [assigneeId], references: [id])

@@ -34,6 +34,7 @@ export interface ProjectTaskRow {
   ownerRole: string | null;
   priority: string;
   status: string;
+  approvalStatus: string;
   estimate: string | null;
   assigneeId: string | null;
   assigneeName: string | null;
@@ -56,6 +57,7 @@ export async function listProjectTasks(ctx: TenantContext, projectId: string): P
       ownerRole: t.ownerRole,
       priority: t.priority,
       status: t.status,
+      approvalStatus: t.approvalStatus,
       estimate: t.estimate,
       assigneeId: t.assigneeId,
       assigneeName: t.assignee?.name ?? null,
@@ -81,7 +83,7 @@ export interface MyTaskRow {
 export async function listMyTasks(ctx: TenantContext, userId: string): Promise<MyTaskRow[]> {
   return withTenant(ctx, async (tx) => {
     const rows = await tx.projectTask.findMany({
-      where: { assigneeId: userId },
+      where: { assigneeId: userId, approvalStatus: { not: "Draft" } },
       include: { project: { select: { code: true, name: true } } },
       orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
     });
@@ -135,7 +137,7 @@ export async function listManagedTasks(ctx: TenantContext, userId: string): Prom
     const ids = [...new Set([...led.map((p) => p.id), ...pm.map((m) => m.projectId)])];
     if (!ids.length) return [];
     const rows = await tx.projectTask.findMany({
-      where: { projectId: { in: ids }, status: { not: "Completed" }, NOT: { assigneeId: userId } },
+      where: { projectId: { in: ids }, status: { not: "Completed" }, approvalStatus: { not: "Draft" }, NOT: { assigneeId: userId } },
       include: { project: { select: { code: true, name: true } } },
       orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
     });
@@ -149,6 +151,7 @@ export async function listTasksInTestPhase(ctx: TenantContext): Promise<MyTaskRo
     const rows = await tx.projectTask.findMany({
       where: {
         status: { not: "Completed" },
+        approvalStatus: { not: "Draft" },
         OR: [
           { phase: { contains: "Test", mode: "insensitive" } },
           { phase: { contains: "UAT", mode: "insensitive" } },
@@ -173,7 +176,7 @@ export interface ProjectProgress {
 /** PRD Module 7 — progress is derived, never manually set. */
 export async function getProjectProgress(ctx: TenantContext, projectId: string): Promise<ProjectProgress> {
   return withTenant(ctx, async (tx) => {
-    const rows = await tx.projectTask.findMany({ where: { projectId }, select: { status: true } });
+    const rows = await tx.projectTask.findMany({ where: { projectId, approvalStatus: { not: "Draft" } }, select: { status: true } });
     const total = rows.length;
     const completed = rows.filter((r) => r.status === "Completed").length;
     return {
@@ -197,7 +200,12 @@ export const TaskInput = z.object({
 export type TaskInput = z.infer<typeof TaskInput>;
 
 /** Bulk-add tasks (PM approving an AI-generated plan, or a manual add of one). Audited. */
-export async function addTasks(ctx: TenantContext, projectId: string, tasks: TaskInput[]) {
+export async function addTasks(
+  ctx: TenantContext,
+  projectId: string,
+  tasks: TaskInput[],
+  opts?: { approvalStatus?: "Draft" | "Published" },
+) {
   if (tasks.length === 0) throw new TaskError("No tasks to add.", "BAD_INPUT");
   return withTenant(ctx, async (tx) => {
     await tx.project.findUniqueOrThrow({ where: { id: projectId } });
@@ -213,6 +221,7 @@ export async function addTasks(ctx: TenantContext, projectId: string, tasks: Tas
         ownerRole: t.ownerRole ?? null,
         priority: t.priority ?? "Medium",
         estimate: t.estimate ?? null,
+        approvalStatus: opts?.approvalStatus ?? "Published",
         orderIndex: order++,
       })),
     });
@@ -220,9 +229,32 @@ export async function addTasks(ctx: TenantContext, projectId: string, tasks: Tas
       action: "create",
       entityType: "project_task",
       entityId: projectId,
-      after: { added: tasks.length },
+      after: { added: tasks.length, approvalStatus: opts?.approvalStatus ?? "Published" },
     });
     return { added: tasks.length };
+  });
+}
+
+/** Approve a project's Draft tasks → Published (§2.2). Optionally a subset by id. Audited. */
+export async function publishProjectDrafts(
+  ctx: TenantContext,
+  projectId: string,
+  taskIds?: string[],
+): Promise<{ published: number }> {
+  return withTenant(ctx, async (tx) => {
+    const res = await tx.projectTask.updateMany({
+      where: { projectId, approvalStatus: "Draft", ...(taskIds?.length ? { id: { in: taskIds } } : {}) },
+      data: { approvalStatus: "Published" },
+    });
+    if (res.count > 0) {
+      await audit(tx, ctx, {
+        action: "update",
+        entityType: "project_task",
+        entityId: projectId,
+        after: { published: res.count },
+      });
+    }
+    return { published: res.count };
   });
 }
 
@@ -230,6 +262,7 @@ export const UpdateTaskInput = z.object({
   status: z.enum(TASK_STATUSES).optional(),
   assigneeId: z.string().uuid().nullable().optional(),
   dueDate: z.string().datetime().nullable().optional(),
+  approvalStatus: z.enum(["Draft", "Published"]).optional(),
 });
 export type UpdateTaskInput = z.infer<typeof UpdateTaskInput>;
 
@@ -249,6 +282,7 @@ export async function updateTask(ctx: TenantContext, taskId: string, input: Upda
         status: input.status,
         assigneeId: input.assigneeId === undefined ? undefined : input.assigneeId,
         dueDate: input.dueDate === undefined ? undefined : input.dueDate ? new Date(input.dueDate) : null,
+        approvalStatus: input.approvalStatus,
       },
     });
     await audit(tx, ctx, {

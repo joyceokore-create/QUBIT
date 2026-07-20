@@ -12,6 +12,7 @@ interface Task {
   ownerRole: string | null;
   priority: string;
   status: string;
+  approvalStatus: string;
   assigneeName: string | null;
   dueDate: string | null;
 }
@@ -72,6 +73,15 @@ export function ProjectBoard({ projectId, canEdit }: { projectId: string; canEdi
   };
 
   const now = Date.now();
+  const draftCount = tasks.filter((t) => t.approvalStatus === "Draft").length;
+  const approveDrafts = async () => {
+    const ok = await fetch(`/api/projects/${projectId}/tasks/publish`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    }).then((r) => r.ok);
+    if (ok) void load();
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -93,6 +103,16 @@ export function ProjectBoard({ projectId, canEdit }: { projectId: string; canEdi
             className="flex items-center gap-1.5 rounded-full bg-[color-mix(in_oklab,var(--brand)_14%,transparent)] px-3.5 py-2 text-[12px] font-semibold text-brand"
           >
             <Sparkles className="size-3.5" /> Generate from document
+          </button>
+        )}
+        {canEdit && draftCount > 0 && (
+          <button
+            type="button"
+            onClick={approveDrafts}
+            className="flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[12px] font-semibold"
+            style={{ color: "var(--ok)", background: "color-mix(in oklab, var(--ok) 14%, transparent)" }}
+          >
+            Approve {draftCount} draft{draftCount === 1 ? "" : "s"}
           </button>
         )}
       </div>
@@ -142,7 +162,17 @@ export function ProjectBoard({ projectId, canEdit }: { projectId: string; canEdi
                     className="flex flex-col gap-1.5 rounded-[10px] border border-[var(--w07)] bg-[var(--qcard)] p-2.5 text-xs"
                     style={{ cursor: canEdit ? "grab" : "default", opacity: dragId === t.id ? 0.5 : 1 }}
                   >
-                    <span className="font-medium text-[var(--qink)]">{t.title}</span>
+                    <span className="font-medium text-[var(--qink)]">
+                      {t.title}
+                      {t.approvalStatus === "Draft" && (
+                        <span
+                          className="ml-1.5 rounded-[4px] px-1.5 py-[1px] font-mono text-[8.5px] font-semibold uppercase tracking-[1px]"
+                          style={{ color: "var(--warn)", background: "color-mix(in oklab, var(--warn) 16%, transparent)" }}
+                        >
+                          Draft
+                        </span>
+                      )}
+                    </span>
                     <span className="truncate text-[10.5px] text-[var(--ink4)]">
                       {[t.phase, t.priority, t.assigneeName].filter(Boolean).join(" · ") || "—"}
                       {t.dueDate && (
