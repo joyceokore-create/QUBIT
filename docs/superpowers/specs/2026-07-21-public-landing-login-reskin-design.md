@@ -20,6 +20,23 @@ existing note in `src/app/page.tsx`. Per-tenant design languages (KCB→Lumi, Ri
 are explicitly **out of scope** for this slice; that divergence begins after login and will be
 designed separately (see "Future work").
 
+## Reference map (avoid cross-referencing the wrong folder)
+
+Focus is **UI/UX only**. Exactly two references are active for this slice; everything else is
+parked to prevent confusion (note two distinct codebases are both named "swirra").
+
+| Target in QUBIT | Active reference | Path |
+|---|---|---|
+| `/` landing | **Anchor Pario v2** (`@swirra/frontend`) | `~/Desktop/Anchor Pario v2/packages/frontend` |
+| `/login` | **Lumi AI / OneNode** | `~/Documents/Lumi AI/onenode` |
+
+**Parked — NOT used in this slice** (reserved for the later post-login, per-tenant work):
+
+| Folder | Path | Belongs to |
+|---|---|---|
+| checksmart | `~/Documents/checksmart` | Riverbank app design (future) |
+| swirra-frontend | `~/Documents/swirra/swirra-frontend` | a *different* swirra codebase — not the landing ref |
+
 ## Why this scope
 
 Landing and login run before a tenant is known, so they cannot be tenant-forked. They are a
@@ -97,6 +114,14 @@ Sections likely extracted into `src/components/marketing/*` for readability.
 - Per-tenant design languages after login (Approach B): KCB → Lumi AI look, Riverbank →
   checksmart look, resolved from a tenant design bundle. Separate spec.
 - Pilot reskin of the app shell + dashboard under that per-tenant model.
+
+## Build approach (skills)
+
+- **superpowers** orchestrates the process: brainstorming (this spec) → writing-plans →
+  executing-plans, with review checkpoints.
+- **impeccable** (frontend-design) drives the UI/UX craft at *implementation* time — visual
+  hierarchy, spacing, typography, motion, responsive behaviour, light/dark theming, a11y.
+  It is invoked when we start building each page, not during planning.
 
 ## Verification (Definition of Done)
 
