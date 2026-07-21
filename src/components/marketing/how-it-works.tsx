@@ -1,5 +1,3 @@
-import type { JSX } from "react";
-
 const STEPS = [
   { n: "1", title: "Reminds", body: "Deadline nudges, stale-invite chasers and slippage alerts arrive before things go red — never after." },
   { n: "2", title: "Organizes", body: "Q drafts your steering packs and status updates from live portfolio data — you review, not rewrite." },
@@ -7,7 +5,7 @@ const STEPS = [
   { n: "4", title: "Acts", body: "Approve, assign or escalate from the briefing — Q turns the recommendation into the next step." },
 ];
 
-export function HowItWorks(): JSX.Element {
+export function HowItWorks() {
   return (
     <section id="how" className="px-6 py-20" style={{ background: "var(--w02)" }}>
       <div className="mx-auto max-w-[1180px]">

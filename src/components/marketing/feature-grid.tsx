@@ -1,14 +1,13 @@
-import type { JSX } from "react";
 import { Bell, ListOrdered, LayoutGrid, ShieldCheck } from "lucide-react";
 
 const FEATURES = [
   { icon: Bell, tone: "var(--pbrand)", title: "A briefing, not a backlog", body: "Q opens your day with the three things that matter — ranked, explained, and one click from action." },
   { icon: ListOrdered, tone: "var(--blue)", title: "Priorities with reasons", body: "Every task ranked by deadline, dependencies and risk — and Q shows its working, so you can trust the order." },
-  { icon: LayoutGrid, tone: "var(--ok)", title: "Group to branch in two clicks", body: "Portfolio × subsidiary heatmaps, programmes, milestones and RAID — drill from group level to a single branch." },
+  { icon: LayoutGrid, tone: "var(--accent-indigo)", title: "Group to branch in two clicks", body: "Portfolio × subsidiary heatmaps, programmes, milestones and RAID — drill from group level to a single branch." },
   { icon: ShieldCheck, tone: "var(--warn)", title: "Governed by default", body: "Row-level tenant isolation, RBAC and a full audit trail — enterprise controls without the friction." },
 ];
 
-export function FeatureGrid(): JSX.Element {
+export function FeatureGrid() {
   return (
     <section id="features" className="mx-auto max-w-[1180px] px-6 py-20">
       <div className="mb-14 text-center">

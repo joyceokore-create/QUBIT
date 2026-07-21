@@ -144,6 +144,10 @@
   --warnbg: #fef3c7;
   --bad: #b91c1c;
   --badbg: #fee2e2;
+
+  /* Decorative icon accent (light) — indigo/violet, NOT a brand or RAG token.
+     Used to keep marketing icon tints visually distinct from --pbrand/--ok. */
+  --accent-indigo: #6366f1;
   --qinfo: #1d4ed8;
   --infobg: #dbeafe;
 
@@ -293,6 +297,10 @@
   --bad: #ff6f66;
   --badbg: rgba(255, 111, 102, 0.14);
   --qinfo: #6fa5ff;
+
+  /* Decorative icon accent (dark) — indigo/violet, NOT a brand or RAG token.
+     Lighter than the light-theme value so it stays legible on dark cards. */
+  --accent-indigo: #818cf8;
   --infobg: rgba(111, 165, 255, 0.14);
 
   /* Glass cards + atmosphere (QUBIT App v3 — dark) */
