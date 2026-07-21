@@ -14,7 +14,7 @@ export function SiteFooter() {
           <QubitLogo square={8} gap={2} radius={2} />
           <span className="text-[14px] font-bold tracking-[2px] text-[var(--qink)]">QUBIT</span>
         </div>
-        <div className="text-[12px] text-[var(--ink5)]">© 2026 QUBIT · Enterprise Portfolio &amp; Programme Management</div>
+        <div className="text-[12px] text-[var(--ink3)]">© 2026 QUBIT · Enterprise Portfolio &amp; Programme Management</div>
         <Link
           href="/login"
           className={`rounded-sm text-[12.5px] font-semibold text-[var(--pbrand)] hover:underline ${FOCUS_RING}`}

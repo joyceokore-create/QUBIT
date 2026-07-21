@@ -9,17 +9,37 @@ const FOCUS_RING =
 
 export function ClosingCta() {
   return (
-    <section className="bg-[var(--cta-band)] px-6 py-24">
-      {/* --cta-band is a themed token (see globals.css): light is the green→navy
-          color-mix gradient, dark is pinned to the app's own navy/green --topbar
-          stops. --pbrand itself inverts to a light mint in dark mode, which would
-          turn this into a pale block and break the white text/button contrast
-          below — same fix --topbar itself already makes. */}
-      <div className="mx-auto max-w-[820px] text-center">
-        <h2 className="mb-6 text-[36px] font-bold leading-[1.1] tracking-[-1px] text-white md:text-[52px]">
+    // Full-bleed band: the gradient lives on the section itself (edge-to-edge,
+    // no corner radius), content stays centred within a max-width.
+    // --cta-band is a GRADIENT token (globals.css), applied as a background image
+    // — the `bg-[var(--cta-band)]` utility compiles to background-color and
+    // silently drops the gradient (white text ends up on the page bg). Light =
+    // green→navy; dark is pinned to the app's navy/green --topbar stops (--pbrand
+    // inverts to a light mint in dark and would break the white-on-band contrast).
+    <section
+      className="relative overflow-hidden py-20 text-center sm:py-28"
+      style={{ backgroundImage: "var(--cta-band)" }}
+    >
+      {/* Depth: faint grid + a soft top highlight, spanning the full band. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-40 [mask-image:radial-gradient(60%_80%_at_50%_0%,black,transparent)]"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.12) 1px, transparent 1px)",
+          backgroundSize: "40px 40px",
+        }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{ backgroundImage: "radial-gradient(800px 280px at 50% -40%, rgba(255,255,255,0.20), transparent 70%)" }}
+      />
+      <div className="relative mx-auto max-w-[720px] px-6">
+        <h2 className="text-balance text-[32px] font-bold leading-[1.08] tracking-[-1px] text-white sm:text-[46px]">
           Bring Q to your portfolio.
         </h2>
-        <p className="mb-10 text-[18px] leading-[1.6] text-white/85">
+        <p className="mx-auto mt-5 max-w-[540px] text-pretty text-[16px] leading-[1.6] text-white/85 sm:text-[18px]">
           Sign in to see your entire portfolio in one command center — with a copilot that keeps it moving.
         </p>
         {/* Button surface is always white, so its label uses --cta-btn-fg (the
@@ -28,7 +48,7 @@ export function ClosingCta() {
             dark mode. */}
         <Link
           href="/login"
-          className={`group inline-flex items-center gap-2 rounded-xl bg-white px-10 py-4 text-[16px] font-bold text-[var(--cta-btn-fg)] transition-transform hover:scale-105 ${FOCUS_RING}`}
+          className={`group mt-9 inline-flex items-center gap-2 rounded-xl bg-white px-9 py-4 text-[16px] font-bold text-[var(--cta-btn-fg)] shadow-lg transition-transform hover:scale-[1.03] ${FOCUS_RING}`}
         >
           Sign in to QUBIT
           <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" aria-hidden />
