@@ -1,29 +1,24 @@
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
-import { forTenant } from "@/server/tenant-db";
-import { listProjects, type ProjectListItem } from "@/server/projects";
-import { getEscalations, getUpcomingMilestones } from "@/server/dashboard";
-import { listWorkload } from "@/server/resources";
-import { getBriefing } from "@/server/relevance";
+import { getExecDashboard, type ExecInsight } from "@/server/exec-dashboard";
 import { Forbidden } from "@/components/forbidden";
 import { LiveClock } from "@/components/command/live-clock";
-import { BriefingHero } from "@/components/dashboard/briefing-hero";
-import { gateCells, projectRank as rank, statusBarTok as barTok, statusMeta } from "@/lib/project-view";
+import { HealthRing } from "@/components/command/health-ring";
+import { statusMeta } from "@/lib/project-view";
 
-// ── QUBIT App v3 dashboard — ONE command center for everyone. The all-projects delivery
-// ledger is visible to every user (global read); the briefing hero above it is the
-// personalized overview (getBriefing(viewer) — scoped to the viewer's own projects/work).
-// Writes are gated elsewhere: creating projects is role-gated, and risks/tasks can only be
-// written in a project you're a member of.
+// ── QUBIT App v3 exec dashboard (Phase A). Everything shown is grounded in live tenant data;
+// the four data-hungry widgets (Portfolio/Risk trend, Burndown, Budget burn) and the table's
+// Confidence / AI-prediction columns are clearly-labelled "coming soon" placeholders — no
+// fabricated numbers (they need snapshot history, a money type, and a forecasting pass).
 
-function roleLabel(roles: string[]): string {
-  if (roles.includes("PlatformSuperAdmin")) return "Super Admin";
-  if (roles.includes("HeadOfProjects")) return "Head of Projects";
-  if (roles.includes("HeadOfQA")) return "Head of QA";
-  if (roles.includes("Executive")) return "Executive";
-  if (roles.includes("ProjectManager")) return "Project Manager";
-  return "Member";
+const CARD =
+  "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]";
+const SEV: Record<string, string> = { red: "--bad", amber: "--warn", info: "--qinfo", bad: "--bad", warn: "--warn", ok: "--ok" };
+
+function fmtDate(d: Date | null): string {
+  return d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short" }).toUpperCase() : "—";
 }
 
 export default async function DashboardPage() {
@@ -32,275 +27,209 @@ export default async function DashboardPage() {
   const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
   if (!can(ctx, "dashboard:read")) return <Forbidden />;
 
-  const [briefing, projects, escalations, milestones, workload, memberCounts] = await Promise.all([
-    getBriefing(ctx, 3),
-    listProjects(ctx),
-    getEscalations(ctx, 5),
-    getUpcomingMilestones(ctx, 5),
-    listWorkload(ctx),
-    forTenant(ctx, (tx) => tx.projectMember.groupBy({ by: ["projectId"], _count: { _all: true } })),
-  ]);
-
-  const countByProject = new Map(memberCounts.map((r) => [r.projectId, r._count._all]));
-  const by = (s: string) => projects.filter((p) => p.status === s).length;
-  const total = projects.length;
-  const onTrack = by("OnTrack");
-  const atRisk = by("AtRisk");
-  const overdue = by("Overdue");
-  const planning = by("Planning");
-  const completed = by("Completed");
-  const needAttention = atRisk + overdue;
-  const health = total ? Math.round(((onTrack + completed) / total) * 100) : 0;
-  const peopleAllocated = workload.filter((w) => w.projectCount > 0).length;
-  const overAllocated = workload.filter((w) => w.totalPct > 100);
-
+  const d = await getExecDashboard(ctx);
   const firstName = (session.user.name ?? "there").split(/\s+/)[0];
   const today = new Date().toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" }).toUpperCase();
+  const { health, kpis } = d;
 
-  // Delivery ledger groups (only non-empty render). Shows ALL projects to every user.
-  const toRow = (p: ProjectListItem) => {
-    const m = statusMeta(p.status);
-    return {
-      id: p.id,
-      code: p.code,
-      name: p.name,
-      sub: `${p.type} · ${p.priority} priority`,
-      pct: p.avgProgress,
-      cells: gateCells(p.avgProgress, p.status),
-      barTok: barTok(p.status),
-      statusLabel: m.label,
-      statusTok: m.tok,
-      members: countByProject.get(p.id) ?? 0,
-    };
-  };
-  const groupDefs: { label: string; tok: string; match: (s: string) => boolean }[] = [
-    { label: "Needs attention", tok: "--bad", match: (s) => s === "AtRisk" || s === "Overdue" },
-    { label: "On track", tok: "--ok", match: (s) => s === "OnTrack" || s === "Completed" },
-    { label: "Planning", tok: "--qinfo", match: (s) => s === "Planning" || s === "Cancelled" },
+  const kpiCards = [
+    { label: "Projects", value: kpis.projects, tok: "--qink", foot: `${kpis.onTrack} on track`, href: "/projects" },
+    { label: "Budget", value: kpis.budget, tok: "--qink", foot: "portfolio total", href: "/projects" },
+    { label: "Risks", value: kpis.risksOpen, tok: kpis.risksOpen ? "--warn" : "--ok", foot: "open", href: "/risks" },
+    { label: "Milestones", value: kpis.milestonesUpcoming, tok: "--qinfo", foot: `${kpis.milestonesOverdue} overdue`, href: "/projects" },
+    { label: "Velocity", value: kpis.velocity7d, tok: "--ok", foot: "done · 7d", href: "/projects" },
+    { label: "Health", value: `${kpis.healthPct}%`, tok: kpis.healthPct >= 70 ? "--ok" : "--warn", foot: `${kpis.needAttention} need attention`, href: "/projects" },
+    { label: "Resources", value: kpis.peopleAllocated, tok: kpis.overAllocated ? "--bad" : "--qink", foot: `${kpis.overAllocated} over-allocated`, href: "/people" },
   ];
-  const groups = groupDefs
-    .map((g) => ({
-      ...g,
-      rows: projects
-        .filter((p) => g.match(p.status))
-        .sort((a, b) => rank(b.status) - rank(a.status) || a.name.localeCompare(b.name))
-        .map(toRow),
-    }))
-    .filter((g) => g.rows.length > 0);
-
-  const kpis = [
-    { label: "Projects", value: total, tok: "--qink", href: "/projects" },
-    { label: "On track", value: onTrack, tok: "--ok", href: "/projects" },
-    { label: "At risk", value: atRisk, tok: "--warn", href: "/projects" },
-    { label: "Overdue", value: overdue, tok: "--bad", href: "/projects" },
-    { label: "Planning", value: planning, tok: "--qinfo", href: "/projects" },
-    { label: "People", value: peopleAllocated, tok: "--qink", href: "/people" },
-  ];
+  const trends = ["Portfolio health trend", "Burndown", "Budget burn", "Risk trend"];
 
   return (
     <div>
-      {/* Group overview strip */}
+      {/* Header strip */}
       <div className="mx-auto flex w-full max-w-[1360px] items-baseline gap-3.5 px-6 pt-[18px] [animation:rise_.5s_cubic-bezier(.22,1,.36,1)_both]">
-        <span className="font-mono text-[10.5px] font-semibold tracking-[2.4px] text-[var(--ink4)]">GROUP OVERVIEW</span>
+        <span className="font-mono text-[10.5px] font-semibold tracking-[2.4px] text-[var(--ink4)]">GROUP OVERVIEW · {session.user.tenantName?.toUpperCase()}</span>
         <span className="-translate-y-[3px] flex-1 border-b border-[var(--hair2)]" />
         <span className="font-mono text-[10.5px] tracking-[1px] text-[var(--ink4)]">{today}</span>
         <LiveClock />
         <span className="flex items-center gap-1.5 font-mono text-[10px] tracking-[1.5px] text-[var(--ok)]">
-          <span className="size-1.5 rounded-full bg-[var(--ok)] [animation:pulseGlow_2.6s_infinite]" />
-          LIVE
+          <span className="size-1.5 rounded-full bg-[var(--ok)] [animation:pulseGlow_2.6s_infinite]" /> LIVE
         </span>
       </div>
 
       <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-3.5 p-[14px_24px_90px]">
-        {/* ── Briefing hero — personalized overview via getBriefing(viewer) ── */}
-        <BriefingHero
-          firstName={firstName}
-          roleLabel={roleLabel(session.user.roles)}
-          tenantName={session.user.tenantName}
-          items={briefing}
-          health={health}
-          distribution={{ onTrack, needAttention, planning, total }}
-        />
+        {/* ── Row 1: Exec brief · Priorities · Health · Notifications ── */}
+        <section className="grid grid-cols-1 gap-3.5 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto_minmax(0,1fr)]">
+          <Panel title="AI executive brief" sub="LIVE DATA">
+            <div className="mb-1 px-4 pt-1 font-heading text-[17px] font-bold tracking-[-.4px] text-[var(--qink)]">Good day, {firstName}.</div>
+            {d.brief.map((line, i) => (
+              <div key={i} className="px-4 py-1 text-[12.5px] leading-[1.5] text-[var(--ink2)]">{line}</div>
+            ))}
+            <div className="px-4 pb-3 pt-2 font-mono text-[8.5px] uppercase tracking-[1.4px] text-[var(--ink5)]">Deterministic · ask Q for a deeper read</div>
+          </Panel>
 
-        {/* ── KPI strip ── */}
-        <section
-          className="grid grid-cols-3 overflow-hidden rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25] md:grid-cols-6 [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.1s_both]"
-          style={{ background: "var(--cardbg)" }}
-        >
-          {kpis.map((k, i) => (
-            <Link
-              key={k.label}
-              href={k.href}
-              className="p-[16px_20px] transition-colors hover:bg-[var(--wash)]"
-              style={{ borderLeft: i === 0 ? "none" : "1px solid var(--hair2)" }}
-            >
-              <div className="font-mono text-[9.5px] font-medium uppercase tracking-[1.8px] text-[var(--ink4)]">{k.label}</div>
-              <div className="mt-1.5 font-heading text-[30px] font-bold leading-none tracking-[-.8px] tabular-nums" style={{ color: `var(${k.tok})` }}>{k.value}</div>
+          <Panel title="Today's priorities" sub="FOR YOU">
+            {d.priorities.length ? (
+              d.priorities.map((p) => (
+                <Link key={`${p.kind}:${p.id}`} href={p.href} className="flex items-start gap-2.5 border-b border-[var(--hair2)] p-[9px_16px] transition-colors last:border-0 hover:bg-[var(--wash)]">
+                  <span className="mt-[5px] h-[22px] w-[3px] flex-none rounded-[2px]" style={{ background: `var(${SEV[p.severity]})` }} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[12.5px] text-[var(--ink2)]">{p.title}</span>
+                    <span className="mt-0.5 block font-mono text-[9px] uppercase tracking-[1px] text-[var(--ink4)]">{p.meta}</span>
+                  </span>
+                  <ArrowRight className="mt-1.5 size-3 flex-none text-[var(--ink5)]" />
+                </Link>
+              ))
+            ) : (
+              <Empty>All clear — nothing needs you right now.</Empty>
+            )}
+          </Panel>
+
+          <Panel title="Portfolio health" sub="RAG">
+            <div className="flex flex-col items-center gap-2.5 p-4">
+              <HealthRing score={health.pct} />
+              <div className="flex gap-3 font-mono text-[9.5px] tracking-[.6px]">
+                <span className="text-[var(--ok)]">{health.onTrack} ON</span>
+                <span className="text-[var(--warn)]">{health.needAttention} RISK</span>
+                <span className="text-[var(--qinfo)]">{health.planning} PLAN</span>
+              </div>
+            </div>
+          </Panel>
+
+          <Panel title="Notifications" sub="RECENT">
+            {d.notifications.length ? (
+              d.notifications.map((n) => (
+                <Link key={n.id} href={n.link ?? "/my-tasks"} className="block border-b border-[var(--hair2)] p-[9px_16px] transition-colors last:border-0 hover:bg-[var(--wash)]">
+                  <span className="block truncate text-[12px] text-[var(--ink2)]">{n.message}</span>
+                  <span className="mt-0.5 block font-mono text-[8.5px] uppercase tracking-[1px] text-[var(--ink4)]">{fmtDate(n.createdAt)}{n.read ? "" : " · new"}</span>
+                </Link>
+              ))
+            ) : (
+              <Empty>Nothing new.</Empty>
+            )}
+          </Panel>
+        </section>
+
+        {/* ── Row 2: KPIs ── */}
+        <section className={`grid grid-cols-2 overflow-hidden md:grid-cols-4 xl:grid-cols-7 ${CARD}`} style={{ background: "var(--cardbg)" }}>
+          {kpiCards.map((k, i) => (
+            <Link key={k.label} href={k.href} className="p-[15px_18px] transition-colors hover:bg-[var(--wash)]" style={{ borderLeft: i === 0 ? "none" : "1px solid var(--hair2)" }}>
+              <div className="font-mono text-[9px] font-medium uppercase tracking-[1.6px] text-[var(--ink4)]">{k.label}</div>
+              <div className="mt-1.5 font-heading text-[24px] font-bold leading-none tracking-[-.6px] tabular-nums" style={{ color: `var(${k.tok})` }}>{k.value}</div>
+              <div className="mt-1 text-[10px] text-[var(--ink4)]">{k.foot}</div>
             </Link>
           ))}
         </section>
 
-        {/* ── Delivery ledger (ALL projects) + rails ── */}
-        <section className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_344px]">
-          <div
-            className="overflow-hidden rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25] [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.16s_both]"
-            style={{ background: "var(--cardbg)" }}
-          >
-            <div className="flex items-center gap-3.5 border-b border-[var(--hair)] p-[14px_18px]">
-              <span className="font-heading text-[15px] font-bold tracking-[-.3px] text-[var(--qink)]">Delivery ledger</span>
-              <span className="font-mono text-[10px] tracking-[1px] text-[var(--ink4)]">{total} {total === 1 ? "PROJECT" : "PROJECTS"}</span>
-              <span className="flex-1" />
-              <span className="hidden items-center gap-2.5 font-mono text-[9px] tracking-[.8px] text-[var(--ink4)] sm:flex">
-                <Legend tok="--stD" label="PASSED" />
-                <Legend tok="--stA" label="ACTIVE" />
-                <Legend tok="--stL" label="LATE" />
-                <Legend tok="--stP" label="PENDING" />
-              </span>
-            </div>
-            {groups.length ? (
-              groups.map((g) => (
-                <div key={g.label}>
-                  <div className="flex items-center gap-2.5 border-b border-[var(--hair2)] bg-[var(--wash)] p-[7px_18px]">
-                    <span className="size-1.5 rounded-[2px]" style={{ background: `var(${g.tok})` }} />
-                    <span className="font-mono text-[9.5px] font-semibold uppercase tracking-[2px] text-[var(--ink3)]">{g.label}</span>
-                    <span className="font-mono text-[9.5px] text-[var(--ink5)]">{g.rows.length}</span>
-                  </div>
-                  {g.rows.map((r) => (
-                    <Link
-                      key={r.id}
-                      href={`/projects/${r.id}`}
-                      className="grid grid-cols-[96px_62px_minmax(0,1fr)_118px_82px_30px] items-center gap-3.5 border-b border-[var(--hair2)] p-[10px_18px] transition-[transform,background] duration-200 last:border-0 hover:translate-x-[3px] hover:bg-[var(--wash)]"
-                    >
-                      <GateStrip cells={r.cells} />
-                      <span className="font-mono text-[10.5px] tracking-[.5px] text-[var(--ink4)]">{r.code}</span>
-                      <span className="min-w-0">
-                        <span className="block truncate text-[13px] font-semibold tracking-[-.1px] text-[var(--qink)]">{r.name}</span>
-                        <span className="block truncate text-[11px] text-[var(--ink4)]">{r.sub}</span>
-                      </span>
-                      <span className="flex items-center gap-2">
-                        <span className="h-[3px] flex-1 overflow-hidden rounded-full bg-[var(--wash2)]">
-                          <span className="block h-full rounded-full" style={{ width: `${r.pct}%`, background: `var(${r.barTok})` }} />
-                        </span>
-                        <span className="w-[30px] text-right font-mono text-[10.5px] tabular-nums text-[var(--ink3)]">{r.pct}%</span>
-                      </span>
-                      <span
-                        className="justify-self-start rounded-[5px] p-[3px_7px] font-mono text-[9px] font-semibold tracking-[1px]"
-                        style={{ color: `var(${r.statusTok})`, border: `1px solid color-mix(in oklab, var(${r.statusTok}) 35%, transparent)`, background: `color-mix(in oklab, var(${r.statusTok}) 9%, transparent)` }}
-                      >
-                        {r.statusLabel}
-                      </span>
-                      <span className="text-right font-mono text-[10.5px] text-[var(--ink4)]">{r.members}</span>
-                    </Link>
-                  ))}
-                </div>
-              ))
-            ) : (
-              <div className="p-10 text-center text-[13px] text-[var(--ink4)]">No projects yet. Create one from the Projects tab.</div>
-            )}
+        {/* ── Row 3: Trends (coming soon — need snapshot history / money type) ── */}
+        <section className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
+          {trends.map((t) => <SoonCard key={t} title={t} note="Needs time-series history" />)}
+        </section>
+
+        {/* ── Row 4: Projects table (all projects) ── */}
+        <Panel title="Projects" sub={`${d.projects.length}`}>
+          <div className="grid grid-cols-[minmax(0,1fr)_92px_120px_120px_74px_88px_92px] items-center gap-3 border-b border-[var(--hair)] p-[9px_18px] font-mono text-[8.5px] uppercase tracking-[1.4px] text-[var(--ink4)]">
+            <span>Project</span><span>Health</span><span>Progress</span><span>Owner</span><span>Due</span><span>Confidence</span><span>AI predict</span>
           </div>
+          {d.projects.length ? (
+            d.projects.map((p) => {
+              const m = statusMeta(p.status);
+              return (
+                <Link key={p.id} href={`/projects/${p.id}`} className="grid grid-cols-[minmax(0,1fr)_92px_120px_120px_74px_88px_92px] items-center gap-3 border-b border-[var(--hair2)] p-[10px_18px] transition-colors last:border-0 hover:bg-[var(--wash)]">
+                  <span className="min-w-0"><span className="block truncate text-[13px] font-semibold text-[var(--qink)]">{p.name}</span><span className="font-mono text-[9.5px] text-[var(--ink4)]">{p.code}</span></span>
+                  <span className="justify-self-start rounded-[5px] p-[3px_7px] font-mono text-[9px] font-semibold tracking-[.5px]" style={{ color: `var(${m.tok})`, border: `1px solid color-mix(in oklab, var(${m.tok}) 35%, transparent)`, background: `color-mix(in oklab, var(${m.tok}) 9%, transparent)` }}>{m.label}</span>
+                  <span className="flex items-center gap-2"><span className="h-[3px] flex-1 overflow-hidden rounded-full bg-[var(--wash2)]"><span className="block h-full rounded-full" style={{ width: `${p.avgProgress}%`, background: "var(--brand)" }} /></span><span className="w-8 text-right font-mono text-[10px] tabular-nums text-[var(--ink3)]">{p.avgProgress}%</span></span>
+                  <span className="truncate text-[11.5px] text-[var(--ink3)]">{p.ownerName ?? <span className="text-[var(--warn)]">No lead</span>}</span>
+                  <span className="font-mono text-[10px] text-[var(--ink4)]">{fmtDate(p.dueDate)}</span>
+                  <span className="font-mono text-[9px] uppercase tracking-[.5px] text-[var(--ink5)]">soon</span>
+                  <span className="font-mono text-[9px] uppercase tracking-[.5px] text-[var(--ink5)]">soon</span>
+                </Link>
+              );
+            })
+          ) : (
+            <Empty>No projects yet.</Empty>
+          )}
+        </Panel>
 
-          <aside className="flex flex-col gap-3.5">
-            <Rail title="Signals" sub="RISKS & ISSUES" delay=".2s">
-              {escalations.length ? (
-                escalations.map((e) => <RailRow key={e.id} tok={e.color === "red" ? "--bad" : "--warn"} text={e.title} meta={`${e.kind.toUpperCase()} · ${e.meta}`} glow />)
-              ) : (
-                <Empty>No open risks or issues.</Empty>
-              )}
-            </Rail>
-
-            <Rail title="Milestones" sub="NEXT 30 DAYS" delay=".24s">
-              {milestones.length ? (
-                milestones.map((m) => <RailRow key={m.id} tok={m.color === "red" ? "--bad" : m.color === "amber" ? "--warn" : "--ok"} text={m.text} meta={m.meta} />)
-              ) : (
-                <Empty>No milestones scheduled.</Empty>
-              )}
-            </Rail>
-
-            <Rail title="Workload" sub="ALLOCATION" delay=".28s">
-              {peopleAllocated ? (
-                workload
-                  .filter((w) => w.projectCount > 0)
-                  .sort((a, b) => b.totalPct - a.totalPct)
-                  .slice(0, 5)
-                  .map((w) => {
-                    const over = w.totalPct > 100;
-                    return (
-                      <div key={w.userId} className="flex flex-col gap-[5px] p-[7px_16px]">
-                        <div className="flex items-center justify-between text-[12px]">
-                          <span className="truncate font-medium text-[var(--ink2)]">{w.name}</span>
-                          <span className="font-mono text-[10.5px] font-semibold tabular-nums" style={{ color: over ? "var(--bad)" : "var(--ink3)" }}>{w.totalPct}%</span>
-                        </div>
-                        <div className="h-1 overflow-hidden rounded-full bg-[var(--wash2)]">
-                          <div className="h-full rounded-full" style={{ width: `${Math.min(100, w.totalPct)}%`, background: over ? "var(--bad)" : "var(--brand)", boxShadow: `0 0 6px color-mix(in oklab, ${over ? "var(--bad)" : "var(--brand)"} 35%, transparent)` }} />
-                        </div>
-                      </div>
-                    );
-                  })
-              ) : (
-                <Empty>No allocations yet.</Empty>
-              )}
-              {overAllocated.length > 0 && (
-                <div className="px-4 pb-2.5 pt-1 font-mono text-[9px] uppercase tracking-[1.2px] text-[var(--bad)]">
-                  {overAllocated.length} over-allocated
+        {/* ── Row 5: Insights · Recommendations · Dependencies · Milestones · Risks · Capacity ── */}
+        <section className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3">
+          <Panel title="AI insights" sub="LIVE DATA"><InsightList items={d.insights} /></Panel>
+          <Panel title="Recommendations" sub="LIVE DATA"><InsightList items={d.recommendations} /></Panel>
+          <SoonCard title="Dependencies" note="Needs a task-dependency model" />
+          <Panel title="Upcoming milestones" sub="NEXT 30 DAYS">
+            {d.milestones.length ? d.milestones.map((mi) => (
+              <Row key={mi.id} tok={mi.color === "red" ? "--bad" : mi.color === "amber" ? "--warn" : "--ok"} text={mi.text} meta={mi.meta} />
+            )) : <Empty>None scheduled.</Empty>}
+          </Panel>
+          <Panel title="Top risks" sub="BY HEAT">
+            {d.topRisks.length ? d.topRisks.map((r) => (
+              <Row key={r.id} tok={r.heat >= 15 ? "--bad" : "--warn"} text={r.title} meta={`${r.projectCode ?? "—"} · heat ${r.heat}/25`} href="/risks" />
+            )) : <Empty>No open risks.</Empty>}
+          </Panel>
+          <Panel title="Team capacity" sub="ALLOCATION">
+            {d.capacity.length ? d.capacity.map((c) => {
+              const over = c.totalPct > 100;
+              return (
+                <div key={c.userId} className="flex flex-col gap-[5px] p-[7px_16px]">
+                  <div className="flex items-center justify-between text-[12px]"><span className="truncate font-medium text-[var(--ink2)]">{c.name}</span><span className="font-mono text-[10.5px] font-semibold tabular-nums" style={{ color: over ? "var(--bad)" : "var(--ink3)" }}>{c.totalPct}%</span></div>
+                  <div className="h-1 overflow-hidden rounded-full bg-[var(--wash2)]"><div className="h-full rounded-full" style={{ width: `${Math.min(100, c.totalPct)}%`, background: over ? "var(--bad)" : "var(--brand)" }} /></div>
                 </div>
-              )}
-            </Rail>
-          </aside>
+              );
+            }) : <Empty>No allocations yet.</Empty>}
+          </Panel>
         </section>
       </main>
     </div>
   );
 }
 
-function GateStrip({ cells }: { cells: string[] }) {
+function Panel({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
-    <span className="flex gap-[3px]">
-      {cells.map((tok, i) => (
-        <span key={i} className="size-2 rounded-[2px]" style={{ background: `var(${tok})` }} />
-      ))}
-    </span>
-  );
-}
-
-function Legend({ tok, label }: { tok: string; label: string }) {
-  return (
-    <span className="flex items-center gap-1">
-      <span className="size-[7px] rounded-[2px]" style={{ background: `var(${tok})` }} />
-      {label}
-    </span>
-  );
-}
-
-function Rail({ title, sub, delay, children }: { title: string; sub: string; delay: string; children: React.ReactNode }) {
-  return (
-    <div
-      className="overflow-hidden rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]"
-      style={{ background: "var(--cardbg)", animation: `rise .55s cubic-bezier(.22,1,.36,1) ${delay} both` }}
-    >
-      <div className="flex items-baseline gap-2.5 border-b border-[var(--hair)] p-[13px_16px]">
+    <div className={CARD} style={{ background: "var(--cardbg)", animation: "rise .5s cubic-bezier(.22,1,.36,1) both" }}>
+      <div className="flex items-baseline gap-2.5 border-b border-[var(--hair)] p-[12px_16px]">
         <span className="font-heading text-[13.5px] font-bold text-[var(--qink)]">{title}</span>
-        <span className="font-mono text-[9.5px] tracking-[1.2px] text-[var(--ink4)]">{sub}</span>
+        {sub && <span className="font-mono text-[9px] tracking-[1.2px] text-[var(--ink4)]">{sub}</span>}
       </div>
       <div className="flex flex-col">{children}</div>
     </div>
   );
 }
 
-function RailRow({ tok, text, meta, glow }: { tok: string; text: string; meta: string; glow?: boolean }) {
+function SoonCard({ title, note }: { title: string; note: string }) {
   return (
-    <div className="flex gap-[11px] border-b border-[var(--hair2)] p-[11px_16px] last:border-0">
-      <span
-        className="w-[3px] flex-none self-stretch rounded-[2px]"
-        style={{ background: `var(${tok})`, boxShadow: glow ? `0 0 8px color-mix(in oklab, var(${tok}) 40%, transparent)` : "none" }}
-      />
-      <span className="min-w-0">
-        <span className="block text-[12px] leading-[1.45] text-[var(--ink2)]">{text}</span>
-        <span className="mt-[3px] block font-mono text-[9px] uppercase tracking-[1.2px] text-[var(--ink4)]">{meta}</span>
-      </span>
+    <div className={`${CARD} flex flex-col`} style={{ background: "var(--cardbg)" }}>
+      <div className="flex items-baseline gap-2.5 border-b border-[var(--hair)] p-[12px_16px]">
+        <span className="font-heading text-[13.5px] font-bold text-[var(--ink3)]">{title}</span>
+        <span className="rounded-[5px] bg-[var(--wash2)] px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-[1px] text-[var(--ink4)]">Coming soon</span>
+      </div>
+      <div className="flex min-h-[90px] flex-1 items-center justify-center p-4 text-center text-[11px] text-[var(--ink5)]">{note}</div>
     </div>
   );
 }
 
+function InsightList({ items }: { items: ExecInsight[] }) {
+  return (
+    <>
+      {items.map((it, i) => (
+        <div key={i} className="flex items-start gap-2.5 border-b border-[var(--hair2)] p-[10px_16px] last:border-0">
+          <span className="mt-[5px] size-1.5 flex-none rounded-full" style={{ background: `var(${SEV[it.tone]})` }} />
+          <span className="text-[12.5px] leading-[1.45] text-[var(--ink2)]">{it.text}</span>
+        </div>
+      ))}
+    </>
+  );
+}
+
+function Row({ tok, text, meta, href }: { tok: string; text: string; meta: string; href?: string }) {
+  const inner = (
+    <>
+      <span className="w-[3px] flex-none self-stretch rounded-[2px]" style={{ background: `var(${tok})` }} />
+      <span className="min-w-0"><span className="block text-[12px] leading-[1.45] text-[var(--ink2)]">{text}</span><span className="mt-[3px] block font-mono text-[9px] uppercase tracking-[1.2px] text-[var(--ink4)]">{meta}</span></span>
+    </>
+  );
+  const cls = "flex gap-[11px] border-b border-[var(--hair2)] p-[10px_16px] last:border-0";
+  return href ? <Link href={href} className={`${cls} transition-colors hover:bg-[var(--wash)]`}>{inner}</Link> : <div className={cls}>{inner}</div>;
+}
+
 function Empty({ children }: { children: React.ReactNode }) {
-  return <div className="p-[11px_16px] text-[12px] text-[var(--ink5)]">{children}</div>;
+  return <div className="p-[12px_16px] text-[12px] text-[var(--ink5)]">{children}</div>;
 }
