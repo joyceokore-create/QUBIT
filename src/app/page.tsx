@@ -21,7 +21,7 @@ export default function LandingPage() {
     // `font-sans` re-resolves body text against the overridden --font-body here;
     // headings pick up --font-display via the global h1–h6 rule.
     <div
-      className="min-h-screen bg-[var(--qbg)] font-sans"
+      className="min-h-screen overflow-x-clip bg-[var(--qbg)] font-sans"
       style={
         {
           "--font-display": "var(--font-lufga)",

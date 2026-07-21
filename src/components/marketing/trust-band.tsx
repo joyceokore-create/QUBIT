@@ -12,7 +12,7 @@ const CONTROLS: { icon: LucideIcon; label: string; note: string }[] = [
 
 export function TrustBand() {
   return (
-    <section id="security" className="px-6 py-20 sm:py-24" style={{ background: "var(--w02)" }}>
+    <section id="security" className="scroll-mt-20 px-6 py-20 sm:py-24" style={{ background: "var(--w02)" }}>
       <div className="mx-auto max-w-[1180px]">
         <div className="grid gap-8 md:grid-cols-[minmax(0,380px)_1fr] md:items-center md:gap-12">
           <div>

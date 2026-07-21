@@ -1,11 +1,15 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { QubitLogo } from "@/components/brand/qubit-logo";
+import { BrandLogo } from "@/components/brand/brand-logo";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 
 const NAV = [
-  { href: "#features", label: "Product" },
-  { href: "#how", label: "How Q works" },
-  { href: "#security", label: "Security" },
+  { href: "#home", id: "home", label: "Home" },
+  { href: "#features", id: "features", label: "Product" },
+  { href: "#how", id: "how", label: "How Q works" },
+  { href: "#security", id: "security", label: "Security" },
 ];
 
 // Focus ring shared by every interactive element in the header — same recipe as
@@ -20,28 +24,69 @@ const FOCUS_RING =
 // Devias indigo) for brand identity, and the theme toggle stays (QUBIT ships
 // both themes — the reference is dark-only).
 export function MarketingHeader() {
+  // Scroll spy: the active item is the last section whose top has scrolled past
+  // the header line. Deterministic (no thin-band misfires) and defaults to Home
+  // at the top of the page; forces the last item once scrolled to the bottom.
+  const [active, setActive] = useState<string>(NAV[0].id);
+
+  useEffect(() => {
+    const OFFSET = 120; // sticky header height + a little breathing room
+
+    function onScroll() {
+      let current = NAV[0].id;
+      for (const n of NAV) {
+        const el = document.getElementById(n.id);
+        if (el && el.getBoundingClientRect().top <= OFFSET) current = n.id;
+      }
+      // At the very bottom, the last section may never cross the line — force it.
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) {
+        current = NAV[NAV.length - 1].id;
+      }
+      setActive(current);
+    }
+
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, []);
+
   return (
-    <header className="mx-auto flex max-w-[1180px] items-center gap-8 px-6 py-6 sm:py-7">
-      <Link href="/" className={`flex items-center gap-2.5 rounded-md ${FOCUS_RING}`}>
-        <QubitLogo square={10} gap={3} radius={3} />
-        <span className="text-[19px] font-bold tracking-[-0.2px] text-[var(--qink)]">QUBIT</span>
+    <header className="sticky top-0 z-50 border-b border-[var(--hair2)] bg-[color-mix(in_oklab,var(--qbg)_85%,transparent)] backdrop-blur-md">
+      <div className="mx-auto flex max-w-[1180px] items-center gap-8 px-6 py-4">
+      <Link href="/" className={`flex items-center rounded-md ${FOCUS_RING}`}>
+        <BrandLogo className="h-8 w-auto" />
       </Link>
 
       {/* Nav sits immediately after the logo (left-aligned), joining at md. */}
-      <nav aria-label="Primary" className="hidden items-center gap-8 md:flex">
-        {NAV.map((n) => (
-          <a
-            key={n.href}
-            href={n.href}
-            className={`rounded-sm text-[15px] font-medium text-[var(--ink35)] transition-colors hover:text-[var(--qink)] ${FOCUS_RING}`}
-          >
-            {n.label}
-          </a>
-        ))}
+      <nav aria-label="Primary" className="hidden items-center gap-8 md:ml-6 md:flex lg:ml-10">
+        {NAV.map((n) => {
+          const isActive = active === n.id;
+          return (
+            <a
+              key={n.href}
+              href={n.href}
+              aria-current={isActive ? "true" : undefined}
+              className={`group grid rounded-sm text-[15px] transition-colors ${FOCUS_RING} ${
+                isActive ? "text-[var(--pbrand)]" : "text-[var(--ink35)] hover:text-[var(--pbrand)]"
+              }`}
+            >
+              {/* Invisible bold twin reserves the bold width, so turning bold on
+                  hover / when active doesn't shift the neighbouring nav items. */}
+              <span aria-hidden className="invisible col-start-1 row-start-1 font-bold">{n.label}</span>
+              <span className={`col-start-1 row-start-1 ${isActive ? "font-bold" : "font-medium group-hover:font-bold"}`}>
+                {n.label}
+              </span>
+            </a>
+          );
+        })}
       </nav>
 
       <div className="ml-auto flex items-center gap-3 sm:gap-4">
-        <ThemeToggle />
+        <ThemeToggle variant="surface" />
         <Link
           href="/login"
           className={`hidden text-[15px] font-semibold text-[var(--ink2)] transition-colors hover:text-[var(--qink)] sm:inline-flex ${FOCUS_RING}`}
@@ -54,6 +99,7 @@ export function MarketingHeader() {
         >
           Get started
         </Link>
+      </div>
       </div>
     </header>
   );

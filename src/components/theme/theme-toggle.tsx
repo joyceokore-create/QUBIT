@@ -9,7 +9,18 @@ import { useTheme } from "next-themes";
  * neutral wash by default, brand outline on hover. Shows the Sun in dark mode
  * (tap → light) and the Moon in light mode (tap → dark).
  */
-export function ThemeToggle({ className }: { className?: string }) {
+export function ThemeToggle({
+  className,
+  variant = "topbar",
+}: {
+  className?: string;
+  /**
+   * "topbar" (default) — chip tokens tuned for the dark app topbar.
+   * "surface" — page tokens (readable on the light/dark page bg), for the
+   * marketing header where the button sits on --qbg, not the topbar gradient.
+   */
+  variant?: "topbar" | "surface";
+}) {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -19,6 +30,7 @@ export function ThemeToggle({ className }: { className?: string }) {
   useEffect(() => setMounted(true), []);
 
   const isDark = resolvedTheme === "dark";
+  const surface = variant === "surface";
 
   return (
     <button
@@ -27,10 +39,11 @@ export function ThemeToggle({ className }: { className?: string }) {
       title={mounted ? (isDark ? "Light mode" : "Dark mode") : undefined}
       onClick={() => setTheme(isDark ? "light" : "dark")}
       className={[
-        "flex size-[34px] flex-none items-center justify-center rounded-full",
-        "border border-[var(--tbchipbd)] bg-[var(--tbchipbg)] text-[var(--tbink)]",
-        "transition-colors hover:border-brand hover:text-[var(--tbinkS)]",
+        "flex size-[34px] flex-none items-center justify-center rounded-full transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
+        surface
+          ? "border border-[var(--hair)] bg-[var(--qcard)] text-[var(--ink2)] shadow-sm hover:border-[var(--pbrand)] hover:text-[var(--pbrand)]"
+          : "border border-[var(--tbchipbd)] bg-[var(--tbchipbg)] text-[var(--tbink)] hover:border-brand hover:text-[var(--tbinkS)]",
         className ?? "",
       ].join(" ")}
     >

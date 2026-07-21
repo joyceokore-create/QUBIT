@@ -12,21 +12,19 @@ const FOCUS_RING =
 // ratings or avatars.
 export function Hero() {
   return (
-    <section id="home" className="relative overflow-hidden px-6 pb-24 pt-12 text-center sm:pt-16">
+    <section id="home" className="relative scroll-mt-20 overflow-hidden px-6 pb-24 pt-12 text-center sm:pt-16">
       {/* One intentional backdrop: a brand→navy wash over a faint dotted grid.
           Reduced motion is handled globally (prefers-reduced-motion in globals.css). */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
         style={{
-          // Corner glow spread (inspired by the login page, login-form.tsx):
-          // blue top-left, green bottom-left, Riverbank-red bottom-right — all
-          // pushed to the edges. Theme-aware via --blue / --pbrand / --rbrand
-          // tokens (deep on dark, gentle on light). Green still leads.
+          // Diagonal glow (as on the login page, login-form.tsx): blue top-left,
+          // green bottom-right. Theme-aware via --blue / --pbrand tokens (deep on
+          // dark, gentle on light).
           backgroundImage: [
-            "radial-gradient(ellipse 60% 55% at 6% 10%, color-mix(in oklab, var(--blue) 22%, transparent), transparent 60%)",
-            "radial-gradient(ellipse 58% 60% at 4% 94%, color-mix(in oklab, var(--pbrand) 26%, transparent), transparent 62%)",
-            "radial-gradient(ellipse 62% 62% at 94% 86%, color-mix(in oklab, var(--rbrand) 36%, transparent), transparent 60%)",
+            "radial-gradient(ellipse 60% 55% at 6% 10%, color-mix(in oklab, var(--blue) 24%, transparent), transparent 60%)",
+            "radial-gradient(ellipse 62% 62% at 94% 86%, color-mix(in oklab, var(--pbrand) 28%, transparent), transparent 60%)",
             "radial-gradient(900px 440px at 50% -140px, color-mix(in oklab, var(--pbrand) 9%, transparent), transparent 66%)",
           ].join(", "),
         }}
@@ -109,7 +107,7 @@ export function Hero() {
             </Link>
             <a
               href="#how"
-              className={`inline-flex w-full items-center justify-center rounded-xl px-8 py-4 text-[15px] font-semibold text-[var(--ink2)] transition-colors hover:text-[var(--qink)] sm:w-auto ${FOCUS_RING}`}
+              className={`inline-flex w-full items-center justify-center rounded-xl border border-[var(--hair)] bg-[var(--qcard)] px-8 py-4 text-[15px] font-semibold text-[var(--ink2)] transition-colors hover:border-[var(--pbrand)] hover:text-[var(--qink)] sm:w-auto ${FOCUS_RING}`}
             >
               See how Q works
             </a>
