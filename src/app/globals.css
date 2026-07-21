@@ -129,6 +129,13 @@
   --tbchipbg: rgba(255, 255, 255, 0.12);
   --tbchipbd: rgba(255, 255, 255, 0.22);
   --tbbd: transparent;
+  /* Closing-CTA band (light): green→navy diagonal close, mirrors --topbar's
+     navy/green pairing so the band reads as a deliberate bookend, not a new hue.
+     --cta-btn-fg is the white button's label; --cta-ring is the focus-ring
+     offset colour, pinned to the band's dark end in both themes. */
+  --cta-band: linear-gradient(135deg, color-mix(in oklab, var(--pbrand) 90%, #0b2239), color-mix(in oklab, var(--pbrand) 60%, #0b2239));
+  --cta-btn-fg: var(--pbrand);
+  --cta-ring: #0b2239;
   --qink: #1a1512;
   --ink2: #352e28;
   --ink3: #57504a;
@@ -282,6 +289,15 @@
   --tbchipbg: rgba(255, 255, 255, 0.04);
   --tbchipbd: rgba(255, 255, 255, 0.1);
   --tbbd: rgba(255, 255, 255, 0.07);
+  /* Closing-CTA band (dark): --pbrand inverts to a light mint in dark mode (see
+     above), which would turn this band into a pale block and break the white
+     text/button contrast, so it's pinned to the app's own navy/green stops
+     instead of the token. --cta-btn-fg stays the light-theme green (button
+     surface is always white, so its label must stay dark-on-white in both
+     themes). --cta-ring matches --cta-band's dark end in both themes. */
+  --cta-band: linear-gradient(135deg, #11402e, #0b2239);
+  --cta-btn-fg: #1b7a3e;
+  --cta-ring: #0b2239;
   --qink: #f1ebe4;
   --ink2: #d8cfc6;
   --ink3: #b3a99f;
