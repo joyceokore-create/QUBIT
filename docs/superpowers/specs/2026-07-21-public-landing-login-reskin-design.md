@@ -22,8 +22,7 @@ designed separately (see "Future work").
 
 ## Reference map (avoid cross-referencing the wrong folder)
 
-Focus is **UI/UX only**. Exactly two references are active for this slice; everything else is
-parked to prevent confusion (note two distinct codebases are both named "swirra").
+Focus is **UI/UX only**. Exactly two references are active for this slice.
 
 | Target in QUBIT | Active reference | Path |
 |---|---|---|
@@ -35,7 +34,9 @@ parked to prevent confusion (note two distinct codebases are both named "swirra"
 | Folder | Path | Belongs to |
 |---|---|---|
 | checksmart | `~/Documents/checksmart` | Riverbank app design (future) |
-| swirra-frontend | `~/Documents/swirra/swirra-frontend` | a *different* swirra codebase — not the landing ref |
+
+`~/Documents/swirra/swirra-frontend` is **not a reference** and is not used anywhere in this
+project — do not consult it.
 
 ## Why this scope
 
