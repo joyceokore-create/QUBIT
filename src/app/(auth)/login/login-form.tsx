@@ -175,7 +175,7 @@ export function LoginForm({ callbackUrl }: LoginFormProps) {
 
           <div className="mt-6 mb-2.5 flex items-center gap-2.5">
             <span className="flex-1 border-b border-white/10" />
-            <span className="font-mono text-[8.5px] tracking-[1.8px] text-white/40">DEMO QUICK SIGN-IN</span>
+            <span className="font-mono text-[8.5px] tracking-[1.8px] text-white/55">DEMO QUICK SIGN-IN</span>
             <span className="flex-1 border-b border-white/10" />
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -192,7 +192,7 @@ export function LoginForm({ callbackUrl }: LoginFormProps) {
             ))}
           </div>
 
-          <div className="mt-4 text-[11px] leading-[1.5] text-white/45">
+          <div className="mt-4 text-[11px] leading-[1.5] text-white/60">
             You may be asked for a 6-digit authenticator code. Trouble signing in? Contact your administrator.
           </div>
         </div>
