@@ -1,8 +1,11 @@
 "use client";
 
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 
-type PanelState = { type: "project" | "programme"; id: string } | null;
+// Programmes still use the slide-over (they have no full page); PROJECTS now open their full
+// workspace at /projects/[id] (per Joyce) — so openProject navigates instead of opening a panel.
+type PanelState = { type: "programme"; id: string } | null;
 
 interface PanelContextValue {
   state: PanelState;
@@ -13,19 +16,24 @@ interface PanelContextValue {
 
 const PanelContext = createContext<PanelContextValue | null>(null);
 
-/** Wraps the authenticated app so any page can open the project/programme slide panel
- * without prop-drilling — the panel itself is rendered once, in the (app) layout. */
+/** Wraps the authenticated app so any page can open the programme slide panel, or navigate to a
+ * project's full workspace, without prop-drilling. The panel itself renders once in the layout. */
 export function SlidePanelStateProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const [state, setState] = useState<PanelState>(null);
 
   const value = useMemo<PanelContextValue>(
     () => ({
       state,
-      openProject: (id) => setState({ type: "project", id }),
+      // Close any open panel and go to the full project workspace.
+      openProject: (id) => {
+        setState(null);
+        router.push(`/projects/${id}`);
+      },
       openProgramme: (id) => setState({ type: "programme", id }),
       close: () => setState(null),
     }),
-    [state],
+    [state, router],
   );
 
   return <PanelContext.Provider value={value}>{children}</PanelContext.Provider>;
