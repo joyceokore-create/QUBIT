@@ -4,6 +4,7 @@ import { Hero } from "@/components/marketing/hero";
 import { FeatureGrid } from "@/components/marketing/feature-grid";
 import { HowItWorks } from "@/components/marketing/how-it-works";
 import { TrustBand } from "@/components/marketing/trust-band";
+import LandingPage from "@/app/page";
 
 describe("Hero", () => {
   it("shows the headline and a CTA that links to /login", () => {
@@ -33,5 +34,18 @@ describe("TrustBand", () => {
     render(<TrustBand />);
     expect(screen.getByText(/riverbank group/i)).toBeInTheDocument();
     expect(screen.getByText(/kcb group/i)).toBeInTheDocument();
+  });
+});
+
+describe("LandingPage", () => {
+  it("assembles sections and contains no fabricated statistics or testimonials", () => {
+    const { container } = render(<LandingPage />);
+    const text = container.textContent ?? "";
+    // Fabricated markers from the Anchor Pario reference must NOT appear.
+    for (const banned of ["$2.5B", "500+", "5K+", "98%", "Mary Kamau", "John Ochieng", "Verified Customer"]) {
+      expect(text).not.toContain(banned);
+    }
+    // Honest trust band present.
+    expect(screen.getByText(/built for riverbank group & kcb group/i)).toBeInTheDocument();
   });
 });
