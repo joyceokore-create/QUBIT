@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { Hero } from "@/components/marketing/hero";
 import { FeatureGrid } from "@/components/marketing/feature-grid";
 import { HowItWorks } from "@/components/marketing/how-it-works";
+import { TrustBand } from "@/components/marketing/trust-band";
 
 describe("Hero", () => {
   it("shows the headline and a CTA that links to /login", () => {
@@ -24,5 +25,13 @@ describe("HowItWorks", () => {
   it("renders the section heading", () => {
     render(<HowItWorks />);
     expect(screen.getByRole("heading", { name: /reminds\. organizes\. prioritizes\./i })).toBeInTheDocument();
+  });
+});
+
+describe("TrustBand", () => {
+  it("names both groups honestly and invents no statistics", () => {
+    render(<TrustBand />);
+    expect(screen.getByText(/riverbank group/i)).toBeInTheDocument();
+    expect(screen.getByText(/kcb group/i)).toBeInTheDocument();
   });
 });
