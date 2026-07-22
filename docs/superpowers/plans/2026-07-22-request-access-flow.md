@@ -766,7 +766,7 @@ export function AuthShell({ brand, children }: { brand: string; children: ReactN
         </div>
       </main>
 
-      {/* Giant faded background wordmark (Lumi motif) — behind the card, clipped to the viewport. */}
+      {/* Giant faded background wordmark — behind the card, clipped to the viewport. */}
       <div
         aria-hidden
         className="pointer-events-none fixed inset-x-0 bottom-0 z-0 flex max-h-[38vh] justify-between overflow-hidden px-4 font-black uppercase leading-none text-[var(--l-wm)]"

@@ -22,7 +22,6 @@
 | RBAC | Role-Based Access Control |
 | SoD | Segregation of Duties |
 | Audit log | Immutable record of mutations (actor, entity, before/after) |
-| LUMI | QUBIT's AI engine (later phase) |
 
 ## Status vocabulary
 
