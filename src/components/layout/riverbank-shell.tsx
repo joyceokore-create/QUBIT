@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, PanelLeftClose, PanelLeftOpen } from "lucide-react";
@@ -40,6 +40,7 @@ export function RiverbankShell({
   // Default expanded; sync the persisted preference after mount (SSR-safe).
   const [open, setOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const asideRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const saved = window.localStorage.getItem(SIDEBAR_KEY);
@@ -53,10 +54,39 @@ export function RiverbankShell({
     });
   }
 
-  // Close the mobile drawer on Escape and when the viewport grows to desktop.
+  // Mobile drawer: Escape closes, resize-to-desktop closes, and focus is trapped
+  // inside the drawer while it's open (it acts as a modal below md).
   useEffect(() => {
     if (!mobileOpen) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMobileOpen(false);
+    const aside = asideRef.current;
+    const focusables = () =>
+      aside
+        ? Array.from(
+            aside.querySelectorAll<HTMLElement>(
+              'a[href],button:not([disabled]),[tabindex]:not([tabindex="-1"])',
+            ),
+          )
+        : [];
+    focusables()[0]?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMobileOpen(false);
+        return;
+      }
+      if (e.key === "Tab" && aside) {
+        const f = focusables();
+        if (!f.length) return;
+        const first = f[0];
+        const last = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
     const onResize = () => window.innerWidth >= 768 && setMobileOpen(false);
     window.addEventListener("keydown", onKey);
     window.addEventListener("resize", onResize);
@@ -93,6 +123,7 @@ export function RiverbankShell({
 
       {/* Sidebar */}
       <aside
+        ref={asideRef}
         aria-label="Primary"
         className={[
           "fixed left-0 top-0 z-50 flex h-full flex-col text-white transition-[width,transform] duration-300 [transition-timing-function:cubic-bezier(.22,1,.36,1)]",
