@@ -19,7 +19,7 @@ const NAV = [
 const FOCUS_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--qbg)]";
 
-// Layout mirrors the DeviasKit header: logo + wordmark, then left-aligned nav
+// Layout mirrors the header: logo + wordmark, then left-aligned nav
 // beside it; on the right a text sign-in link and a solid, softly-rounded CTA.
 // Below md the nav collapses into a hamburger menu. Deviations from the reference
 // are intentional: the CTA keeps QUBIT green, and the theme toggle stays.

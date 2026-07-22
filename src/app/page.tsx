@@ -17,7 +17,7 @@ export default function LandingPage() {
   return (
     // Landing-only type: repoint the --font-display/-body indirection vars to
     // Lufga (loaded globally as --font-lufga in layout.tsx). Scoped to this
-    // wrapper, so login (Lumi) and the tenant app shells keep their own faces.
+    // wrapper, so login and the tenant app shells keep their own faces.
     // `font-sans` re-resolves body text against the overridden --font-body here;
     // headings pick up --font-display via the global h1–h6 rule.
     <div

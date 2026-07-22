@@ -6,7 +6,7 @@ import { ArrowRight, Sparkles } from "lucide-react";
 const FOCUS_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--qbg)]";
 
-// Centred masthead (DeviasKit-style): announcement pill → large two-tone
+// Centred masthead: announcement pill → large two-tone
 // headline → subcopy → primary + ghost CTAs → honest trust row. No product mock
 // card. Trust signal uses the real group names (KCB / Riverbank), not fabricated
 // ratings or avatars.
@@ -29,7 +29,7 @@ export function Hero() {
           ].join(", "),
         }}
       />
-      {/* Box grid (DeviasKit-style): large cells, kept softly faded via a radial
+      {/* Box grid: large cells, kept softly faded via a radial
           mask (as before) so the grid dissolves toward the edges/bottom. */}
       <div
         aria-hidden

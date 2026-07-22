@@ -520,7 +520,7 @@
 }
 
 /* ── LOGIN canvas (auth) — bespoke branded surface, theme-aware ───────────────
-   The sign-in screen is its own product-forward canvas (Lumi motif), not the
+   The sign-in screen is its own product-forward canvas, not the
    app shell, so it carries a scoped --l-* token set instead of the q-tokens.
    Both themes share ONE markup (login-form.tsx).
 
