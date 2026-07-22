@@ -774,8 +774,8 @@
   --font-body: var(--font-lufga);
 }
 [data-tenant="riverbank"] {
-  --font-display: var(--font-jakarta);
-  --font-body: var(--font-jakarta);
+  --font-display: var(--font-inter);
+  --font-body: var(--font-inter);
   --font-num: var(--font-inter);
 }
 
@@ -829,40 +829,40 @@
   --rbrand: #ed1c24;            /* guide keeps brand red on primary buttons */
   --onbrand: #ffffff;
 
-  /* Soft-dark elevation ramp (deeper = darker; no pure black) */
-  --qbg: #191616;
-  --qcard: #1e1a1b;
-  --card2: #131112;
-  --drawer: #231f20;
-  --menu: #231f20;
-  --elev: #231f20;
+  /* Slate near-black dark ramp (slate-950 based; deeper = darker) */
+  --qbg: #020617;
+  --qcard: #0f172a;
+  --card2: #0b1120;
+  --drawer: #1e293b;
+  --menu: #1e293b;
+  --elev: #1e293b;
 
-  --qink: #ffffff;
-  --ink2: #deddde;
-  --ink3: #a7a5a6;
-  --ink35: #a7a5a6;
-  --ink4: #706d6e;
-  --ink5: #706d6e;
-  --ink6: #4b4b4b;
+  --qink: #f1f5f9;
+  --ink2: #cbd5e1;
+  --ink3: #94a3b8;
+  --ink35: #94a3b8;
+  --ink4: #64748b;
+  --ink5: #475569;
+  --ink6: #334155;
 
   --ok: #6dd49a;  --okbg: rgba(22, 163, 74, 0.14);
   --warn: #f4b96a; --warnbg: rgba(217, 119, 6, 0.14);
   --bad: #f08080; --badbg: rgba(220, 38, 38, 0.14);
   --qinfo: #7eaaff; --infobg: rgba(37, 99, 235, 0.14);
 
-  --border: #1e1a1b;
-  --input: #231f20;
+  --border: #1e293b;
+  --input: #334155;
 
-  /* Brand-as-text on dark → 400 step (~4.8:1 on dark-700) */
+  /* Brand-as-text on dark → 400 step (AA on slate-950) */
   --accent-foreground: #f36b71;
   --sidebar-accent-foreground: #f36b71;
 
   /* Keep the dark bar subtle (cool), matching the global dark treatment */
-  --topbar: rgba(25, 22, 22, 0.72);
+  --topbar: rgba(2, 6, 23, 0.72);
 
-  /* Riverbank app-shell — deeper near-black → maroon gradient for dark mode. */
-  --rv-sidebar: linear-gradient(180deg, #050406 0%, #3a0a0d 100%);
-  --rv-topbar: linear-gradient(90deg, #050406 0%, #3a0a0d 100%);
+  /* Riverbank app-shell — slate near-black → deep maroon gradient (dark mode). */
+  --rv-sidebar: linear-gradient(180deg, #020617 0%, #0b1120 55%, #3a0a0d 100%);
+  --rv-topbar: linear-gradient(90deg, #020617 0%, #0b1120 55%, #3a0a0d 100%);
   --rv-active: #b81c22;
 }
 
