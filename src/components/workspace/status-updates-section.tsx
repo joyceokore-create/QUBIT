@@ -57,12 +57,15 @@ export function StatusUpdatesSection({ projectId, canEdit }: { projectId: string
             className="resize-none rounded-[8px] border border-ink-4 bg-background p-2.5 text-xs text-foreground outline-none focus:border-brand"
           />
           <div className="flex items-center gap-2">
-            <Select value={rag} onValueChange={(v) => v && setRag(v)}>
-              <SelectTrigger className="h-8 w-[110px] text-[11px]"><SelectValue /></SelectTrigger>
+            <Select value={rag} onValueChange={(v) => v && setRag(v)} items={{ Green: "Green", Amber: "Amber", Red: "Red" }}>
+              <SelectTrigger className="h-8 w-[120px] text-[11px]"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="Green">🟢 Green</SelectItem>
-                <SelectItem value="Amber">🟡 Amber</SelectItem>
-                <SelectItem value="Red">🔴 Red</SelectItem>
+                {(["Green", "Amber", "Red"] as const).map((r) => (
+                  <SelectItem key={r} value={r}>
+                    <span className="mr-2 inline-block size-2 flex-none rounded-full align-middle" style={{ background: `var(${RAG_TOKEN[r]})` }} />
+                    {r}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <button
