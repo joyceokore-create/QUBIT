@@ -12,9 +12,9 @@ describe("Hero", () => {
     expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
   });
 
-  it("points Get started at the request-access route", () => {
+  it("points the primary Request access CTA at the request-access route", () => {
     render(<Hero />);
-    const cta = screen.getAllByRole("link", { name: /get started/i })[0];
+    const cta = screen.getAllByRole("link", { name: /request access/i })[0];
     expect(cta).toHaveAttribute("href", "/request-access");
   });
 });
