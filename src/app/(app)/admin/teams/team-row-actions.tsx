@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, SquarePen, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -26,6 +26,7 @@ import type { TeamSummary } from "@/server/teams";
 
 export function TeamRowActions({ team, users }: { team: TeamSummary; users: AdminUserSummary[] }) {
   const router = useRouter();
+  const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -44,16 +45,18 @@ export function TeamRowActions({ team, users }: { team: TeamSummary; users: Admi
           <MoreHorizontal className="size-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <TeamFormDialog
-            users={users}
-            teamId={team.id}
-            trigger={<DropdownMenuItem onSelect={(e) => e.preventDefault()}>Edit</DropdownMenuItem>}
-          />
+          <DropdownMenuItem onSelect={() => setEditOpen(true)}>
+            <SquarePen style={{ color: "var(--blue)" }} />
+            Edit
+          </DropdownMenuItem>
           <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
+            <Trash2 />
             Delete
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <TeamFormDialog users={users} teamId={team.id} open={editOpen} onOpenChange={setEditOpen} />
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>

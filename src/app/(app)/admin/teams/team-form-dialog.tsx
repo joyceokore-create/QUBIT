@@ -19,14 +19,25 @@ import type { AdminUserSummary } from "@/server/users";
 interface TeamFormDialogProps {
   users: AdminUserSummary[];
   teamId?: string; // present → edit mode
-  trigger: ReactElement;
+  /** Optional trigger. Omit when driving the dialog with `open`/`onOpenChange`. */
+  trigger?: ReactElement;
+  /** Controlled open state (e.g. when opened from a menu) — decouples the
+   *  dialog from any dropdown so the two portals don't fight and flicker. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 /** Create/edit a team: name, description, lead, and member selection. */
-export function TeamFormDialog({ users, teamId, trigger }: TeamFormDialogProps) {
+export function TeamFormDialog({ users, teamId, trigger, open: openProp, onOpenChange }: TeamFormDialogProps) {
   const router = useRouter();
   const isEdit = Boolean(teamId);
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = openProp !== undefined;
+  const open = isControlled ? openProp : internalOpen;
+  const setOpen = (next: boolean) => {
+    if (!isControlled) setInternalOpen(next);
+    onOpenChange?.(next);
+  };
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [leadUserId, setLeadUserId] = useState("none");
@@ -100,7 +111,7 @@ export function TeamFormDialog({ users, teamId, trigger }: TeamFormDialogProps) 
         if (!next && !isEdit) reset();
       }}
     >
-      <DialogTrigger render={trigger} />
+      {trigger ? <DialogTrigger render={trigger} /> : null}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit team" : "New team"}</DialogTitle>
