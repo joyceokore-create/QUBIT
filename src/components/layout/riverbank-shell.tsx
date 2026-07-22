@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import { QubitLogo } from "@/components/brand/qubit-logo";
+import { BrandLogo } from "@/components/brand/brand-logo";
 import { NAV_ITEMS, isNavActive } from "./nav-items";
 import { TenantChip } from "./tenant-chip";
 import { UserMenu } from "./user-menu";
@@ -137,9 +137,8 @@ export function RiverbankShell({
         {/* Header: logo + collapse/close toggle */}
         <div className={`flex h-[62px] flex-shrink-0 items-center border-b border-white/10 px-4 ${labelled ? "justify-between" : "justify-center"}`}>
           {labelled && (
-            <Link href="/dashboard" className="flex items-center gap-2 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-white/70" onClick={() => setMobileOpen(false)}>
-              <QubitLogo square={9} gap={2.5} radius={2.5} color="#ffffff" />
-              <span className="font-heading rv:font-sans text-[16.5px] font-bold tracking-[2.5px]">QUBIT</span>
+            <Link href="/dashboard" className="flex items-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-white/70" onClick={() => setMobileOpen(false)}>
+              <BrandLogo variant="white" className="h-7 w-auto" />
             </Link>
           )}
           <button

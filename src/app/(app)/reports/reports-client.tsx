@@ -180,7 +180,7 @@ export function ReportsClient({
   }
 
   return (
-    <main className="mx-auto grid w-full max-w-[1120px] grid-cols-1 items-start gap-4 p-[22px_24px_90px] lg:grid-cols-[400px_minmax(0,1fr)]">
+    <main className="grid w-full grid-cols-1 items-start gap-4 p-[22px_24px_90px] lg:grid-cols-[400px_minmax(0,1fr)]">
       {/* Left column: header + builder */}
       <div className="flex flex-col gap-3.5">
         <div className="[animation:rise_.5s_cubic-bezier(.22,1,.36,1)_both]">

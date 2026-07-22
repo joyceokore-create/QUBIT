@@ -139,7 +139,7 @@ export function MyTasksClient({
   ] as const;
 
   return (
-    <main className="mx-auto flex w-full max-w-[1080px] flex-col gap-4 p-[22px_24px_90px]">
+    <main className="flex w-full flex-col gap-4 p-[22px_24px_90px]">
       <div className="flex items-end justify-between gap-4 [animation:rise_.5s_cubic-bezier(.22,1,.36,1)_both]">
         <div>
           <div className="mb-1.5 font-mono rv:font-sans text-[10px] rv:text-overline font-semibold uppercase tracking-[2.4px] text-[var(--ink4)]">

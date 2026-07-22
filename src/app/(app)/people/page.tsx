@@ -14,7 +14,7 @@ export default async function PeoplePage() {
   const people = await listWorkload(ctx);
 
   return (
-    <div className="mx-auto flex w-full max-w-[1100px] flex-1 flex-col gap-4 p-[26px]">
+    <div className="flex w-full flex-1 flex-col gap-4 p-[26px]">
       <div>
         <h1 className="font-heading text-[21px] rv:text-heading-md font-bold tracking-[-0.5px] text-foreground">People</h1>
         <p className="mt-[3px] text-xs rv:text-body-sm text-ink-3">{people.length} people · resource allocation across projects</p>
