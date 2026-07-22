@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 vi.mock("@/lib/api-guard", () => ({
   requirePermission: vi.fn(),
@@ -35,15 +35,15 @@ beforeEach(() => vi.clearAllMocks());
 describe("admin access-request routes", () => {
   it("PATCH forwards the guard's 403 when not permitted", async () => {
     const denied = { response: new Response(null, { status: 403 }) };
-    (requirePermission as unknown as vi.Mock).mockResolvedValue(denied);
+    (requirePermission as unknown as Mock).mockResolvedValue(denied);
     const res = await patch({ status: "REVIEWED" });
     expect(res.status).toBe(403);
     expect(reviewAccessRequest).not.toHaveBeenCalled();
   });
 
   it("PATCH reviews the request when permitted", async () => {
-    (requirePermission as unknown as vi.Mock).mockResolvedValue(okCtx);
-    (reviewAccessRequest as unknown as vi.Mock).mockResolvedValue({ id: "req_1", status: "REVIEWED" });
+    (requirePermission as unknown as Mock).mockResolvedValue(okCtx);
+    (reviewAccessRequest as unknown as Mock).mockResolvedValue({ id: "req_1", status: "REVIEWED" });
     const res = await patch({ status: "REVIEWED" });
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({ ok: true });
@@ -51,14 +51,14 @@ describe("admin access-request routes", () => {
   });
 
   it("PATCH rejects an invalid status with 400", async () => {
-    (requirePermission as unknown as vi.Mock).mockResolvedValue(okCtx);
+    (requirePermission as unknown as Mock).mockResolvedValue(okCtx);
     const res = await patch({ status: "BOGUS" });
     expect(res.status).toBe(400);
   });
 
   it("GET count returns the pending count", async () => {
-    (requirePermission as unknown as vi.Mock).mockResolvedValue(okCtx);
-    (countNewAccessRequests as unknown as vi.Mock).mockResolvedValue(3);
+    (requirePermission as unknown as Mock).mockResolvedValue(okCtx);
+    (countNewAccessRequests as unknown as Mock).mockResolvedValue(3);
     const res = await GET();
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({ new: 3 });
