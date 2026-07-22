@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Plus } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface FieldConfig {
   options?: { id: string; label: string }[];
@@ -121,17 +122,22 @@ export function CustomFieldsSection({ taskId, listId }: { taskId: string; listId
             placeholder="Field name"
             className="flex-1 rounded-[7px] border border-[var(--w10)] bg-[var(--card2)] px-2 py-1.5 text-[12.5px] text-[var(--qink)] outline-none"
           />
-          <select
+          <Select
             value={type}
-            onChange={(e) => setType(e.target.value)}
-            className="rounded-[7px] border border-[var(--w10)] bg-[var(--elev)] px-2 py-1.5 text-[12px] text-[var(--qink)] outline-none"
+            onValueChange={(v) => v && setType(v)}
+            items={Object.fromEntries(CREATE_TYPES.map((t) => [t, t.replace("_", " ").toLowerCase()]))}
           >
-            {CREATE_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t.replace("_", " ").toLowerCase()}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="rounded-[7px] border-[var(--w10)] bg-[var(--elev)] px-2 py-1.5 text-[12px] text-[var(--qink)]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CREATE_TYPES.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {t.replace("_", " ").toLowerCase()}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <button
             type="button"
             onClick={createField}
@@ -218,18 +224,23 @@ function FieldEditor({ field, onSave }: { field: Field; onSave: (v: unknown) => 
       );
     case "DROPDOWN":
       return (
-        <select
-          value={(v as string) ?? ""}
-          onChange={(e) => onSave(e.target.value || null)}
-          className={INPUT}
+        <Select
+          value={(v as string) || "__NONE__"}
+          onValueChange={(val) => onSave(val && val !== "__NONE__" ? val : null)}
+          items={{ __NONE__: "—", ...Object.fromEntries((field.config.options ?? []).map((o) => [o.id, o.label])) }}
         >
-          <option value="">—</option>
-          {(field.config.options ?? []).map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger className={INPUT}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__NONE__">—</SelectItem>
+            {(field.config.options ?? []).map((o) => (
+              <SelectItem key={o.id} value={o.id}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       );
     case "RATING": {
       const max = field.config.max ?? 5;

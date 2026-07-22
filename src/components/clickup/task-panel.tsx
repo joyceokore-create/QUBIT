@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTaskPanel } from "@/components/clickup/task-panel-context";
 import { statusColor } from "@/components/clickup/status-color";
 import { ChecklistsSection } from "@/components/clickup/checklists-section";
@@ -146,34 +147,46 @@ export function TaskPanel() {
             <div className="flex flex-wrap gap-3">
               <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-[.5px] text-[var(--ink4)]">
                 Status
-                <select
+                <Select
                   value={task.statusId}
-                  onChange={(e) => patch({ statusId: e.target.value })}
-                  className="min-w-[150px] rounded-[8px] border border-[var(--w10)] bg-[var(--elev)] px-3 py-2 text-[13px] font-semibold outline-none"
-                  style={{ color: statusColor(statuses.find((s) => s.id === task.statusId)?.colorToken ?? "neutral") }}
+                  onValueChange={(v) => v && patch({ statusId: v })}
+                  items={Object.fromEntries(statuses.map((s) => [s.id, s.name]))}
                 >
-                  {statuses.map((s) => (
-                    <option key={s.id} value={s.id} style={{ color: "var(--qink)" }}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger
+                    className="min-w-[150px] rounded-[8px] border-[var(--w10)] bg-[var(--elev)] px-3 text-[13px] font-semibold"
+                    style={{ color: statusColor(statuses.find((s) => s.id === task.statusId)?.colorToken ?? "neutral") }}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {statuses.map((s) => (
+                      <SelectItem key={s.id} value={s.id} style={{ color: "var(--qink)" }}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </label>
 
               <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-[.5px] text-[var(--ink4)]">
                 Priority
-                <select
-                  value={task.priority ?? ""}
-                  onChange={(e) => patch({ priority: e.target.value || null })}
-                  className="min-w-[120px] rounded-[8px] border border-[var(--w10)] bg-[var(--elev)] px-3 py-2 text-[13px] font-medium text-[var(--qink)] outline-none"
+                <Select
+                  value={task.priority ?? "NONE"}
+                  onValueChange={(v) => patch({ priority: v && v !== "NONE" ? v : null })}
+                  items={{ NONE: "None", ...Object.fromEntries(PRIORITIES.map((p) => [p, p[0] + p.slice(1).toLowerCase()])) }}
                 >
-                  <option value="">None</option>
-                  {PRIORITIES.map((p) => (
-                    <option key={p} value={p}>
-                      {p[0] + p.slice(1).toLowerCase()}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="min-w-[120px] rounded-[8px] border-[var(--w10)] bg-[var(--elev)] px-3 text-[13px] font-medium text-[var(--qink)]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NONE">None</SelectItem>
+                    {PRIORITIES.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {p[0] + p.slice(1).toLowerCase()}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </label>
 
               <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-[.5px] text-[var(--ink4)]">
@@ -386,15 +399,16 @@ function DependenciesSection({
         )}
       </ul>
       <div className="flex items-center gap-2 px-2">
-        <select
-          value={type}
-          onChange={(e) => setType(e.target.value)}
-          className="rounded-[7px] border border-[var(--w10)] bg-[var(--elev)] px-2 py-1.5 text-[12px] text-[var(--qink)] outline-none"
-        >
-          <option value="BLOCKS">Blocks</option>
-          <option value="WAITING_ON">Waiting on</option>
-          <option value="LINKED">Linked</option>
-        </select>
+        <Select value={type} onValueChange={(v) => v && setType(v)} items={{ BLOCKS: "Blocks", WAITING_ON: "Waiting on", LINKED: "Linked" }}>
+          <SelectTrigger className="rounded-[7px] border-[var(--w10)] bg-[var(--elev)] px-2 py-1.5 text-[12px] text-[var(--qink)]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="BLOCKS">Blocks</SelectItem>
+            <SelectItem value="WAITING_ON">Waiting on</SelectItem>
+            <SelectItem value="LINKED">Linked</SelectItem>
+          </SelectContent>
+        </Select>
         <input
           value={seq}
           onChange={(e) => setSeq(e.target.value.replace(/\D/g, ""))}

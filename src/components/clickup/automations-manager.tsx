@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2, Zap } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface StatusOpt {
   id: string;
@@ -18,6 +19,16 @@ interface Automation {
 }
 
 const PRIORITIES = ["URGENT", "HIGH", "NORMAL", "LOW"];
+
+const TRIGGER_TYPE_LABELS: Record<string, string> = {
+  "task.status_changed": "status changes to",
+  "task.created": "task created",
+};
+const ACTION_TYPE_LABELS: Record<string, string> = {
+  "task.set_status": "set status",
+  "task.set_priority": "set priority",
+  "task.add_comment": "add comment",
+};
 
 function triggerLabel(a: Automation, statuses: StatusOpt[]): string {
   if (a.trigger.type === "task.created") return "when a task is created";
@@ -57,6 +68,7 @@ export function AutomationsManager({
   const [actionStatus, setActionStatus] = useState(statuses[statuses.length - 1]?.id ?? "");
   const [actionPriority, setActionPriority] = useState("HIGH");
   const [actionText, setActionText] = useState("");
+  const statusItems = Object.fromEntries(statuses.map((s) => [s.id, s.name]));
 
   const create = async () => {
     if (!name.trim()) return;
@@ -154,38 +166,53 @@ export function AutomationsManager({
           />
           <div className="flex flex-wrap items-center gap-2 text-[12px] text-[var(--ink3)]">
             <span className="font-semibold uppercase tracking-[.5px] text-[var(--ink4)]">When</span>
-            <select value={triggerType} onChange={(e) => setTriggerType(e.target.value)} className={SELECT}>
-              <option value="task.status_changed">status changes to</option>
-              <option value="task.created">task created</option>
-            </select>
+            <Select value={triggerType} onValueChange={(v) => v && setTriggerType(v)} items={TRIGGER_TYPE_LABELS}>
+              <SelectTrigger className={SELECT}><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="task.status_changed">status changes to</SelectItem>
+                <SelectItem value="task.created">task created</SelectItem>
+              </SelectContent>
+            </Select>
             {triggerType === "task.status_changed" && (
-              <select value={toStatus} onChange={(e) => setToStatus(e.target.value)} className={SELECT}>
-                {statuses.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
+              <Select value={toStatus} onValueChange={(v) => v && setToStatus(v)} items={statusItems}>
+                <SelectTrigger className={SELECT}><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {statuses.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2 text-[12px] text-[var(--ink3)]">
             <span className="font-semibold uppercase tracking-[.5px] text-[var(--ink4)]">Then</span>
-            <select value={actionType} onChange={(e) => setActionType(e.target.value)} className={SELECT}>
-              <option value="task.set_status">set status</option>
-              <option value="task.set_priority">set priority</option>
-              <option value="task.add_comment">add comment</option>
-            </select>
+            <Select value={actionType} onValueChange={(v) => v && setActionType(v)} items={ACTION_TYPE_LABELS}>
+              <SelectTrigger className={SELECT}><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="task.set_status">set status</SelectItem>
+                <SelectItem value="task.set_priority">set priority</SelectItem>
+                <SelectItem value="task.add_comment">add comment</SelectItem>
+              </SelectContent>
+            </Select>
             {actionType === "task.set_status" && (
-              <select value={actionStatus} onChange={(e) => setActionStatus(e.target.value)} className={SELECT}>
-                {statuses.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
+              <Select value={actionStatus} onValueChange={(v) => v && setActionStatus(v)} items={statusItems}>
+                <SelectTrigger className={SELECT}><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {statuses.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
             {actionType === "task.set_priority" && (
-              <select value={actionPriority} onChange={(e) => setActionPriority(e.target.value)} className={SELECT}>
-                {PRIORITIES.map((p) => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
-              </select>
+              <Select value={actionPriority} onValueChange={(v) => v && setActionPriority(v)} items={Object.fromEntries(PRIORITIES.map((p) => [p, p]))}>
+                <SelectTrigger className={SELECT}><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PRIORITIES.map((p) => (
+                    <SelectItem key={p} value={p}>{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
             {actionType === "task.add_comment" && (
               <input

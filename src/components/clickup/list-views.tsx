@@ -10,6 +10,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTaskPanel } from "@/components/clickup/task-panel-context";
 import { statusColor } from "@/components/clickup/status-color";
 
@@ -317,17 +318,22 @@ function ViewBar({
           }
         />
 
-        <select
+        <Select
           value={config.filters.due}
-          onChange={(e) => setFilters({ due: e.target.value as Config["filters"]["due"] })}
-          className="rounded-[8px] border border-[var(--w10)] bg-[var(--elev)] px-2 py-1.5 text-[12px] text-[var(--qink)] outline-none"
+          onValueChange={(v) => v && setFilters({ due: v as Config["filters"]["due"] })}
+          items={{ any: "Any due", overdue: "Overdue", today: "Due today", week: "Due this week", none: "No due date" }}
         >
-          <option value="any">Any due</option>
-          <option value="overdue">Overdue</option>
-          <option value="today">Due today</option>
-          <option value="week">Due this week</option>
-          <option value="none">No due date</option>
-        </select>
+          <SelectTrigger className="rounded-[8px] border-[var(--w10)] bg-[var(--elev)] px-2 py-1.5 text-[12px] text-[var(--qink)]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="any">Any due</SelectItem>
+            <SelectItem value="overdue">Overdue</SelectItem>
+            <SelectItem value="today">Due today</SelectItem>
+            <SelectItem value="week">Due this week</SelectItem>
+            <SelectItem value="none">No due date</SelectItem>
+          </SelectContent>
+        </Select>
 
         <button
           type="button"
@@ -343,34 +349,50 @@ function ViewBar({
 
         <div className="mx-1 h-4 w-px bg-[var(--w10)]" />
 
-        <select
+        <Select
           value={config.groupBy}
-          onChange={(e) => setConfig((c) => ({ ...c, groupBy: e.target.value as GroupBy }))}
-          className="rounded-[8px] border border-[var(--w10)] bg-[var(--elev)] px-2 py-1.5 text-[12px] text-[var(--qink)] outline-none"
-          title="Group by"
+          onValueChange={(v) => v && setConfig((c) => ({ ...c, groupBy: v as GroupBy }))}
+          items={{ none: "No grouping", status: "Group: Status", priority: "Group: Priority", assignee: "Group: Assignee" }}
         >
-          <option value="none">No grouping</option>
-          <option value="status">Group: Status</option>
-          <option value="priority">Group: Priority</option>
-          <option value="assignee">Group: Assignee</option>
-        </select>
+          <SelectTrigger className="rounded-[8px] border-[var(--w10)] bg-[var(--elev)] px-2 py-1.5 text-[12px] text-[var(--qink)]" title="Group by">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">No grouping</SelectItem>
+            <SelectItem value="status">Group: Status</SelectItem>
+            <SelectItem value="priority">Group: Priority</SelectItem>
+            <SelectItem value="assignee">Group: Assignee</SelectItem>
+          </SelectContent>
+        </Select>
 
-        <select
+        <Select
           value={`${config.sort.field}:${config.sort.dir}`}
-          onChange={(e) => {
-            const [field, dir] = e.target.value.split(":") as [SortField, "asc" | "desc"];
+          onValueChange={(v) => {
+            if (!v) return;
+            const [field, dir] = v.split(":") as [SortField, "asc" | "desc"];
             setConfig((c) => ({ ...c, sort: { field, dir } }));
           }}
-          className="rounded-[8px] border border-[var(--w10)] bg-[var(--elev)] px-2 py-1.5 text-[12px] text-[var(--qink)] outline-none"
-          title="Sort"
+          items={{
+            "orderIndex:asc": "Manual order",
+            "dueDate:asc": "Due ↑",
+            "dueDate:desc": "Due ↓",
+            "priority:asc": "Priority",
+            "name:asc": "Name A–Z",
+            "createdAt:desc": "Newest",
+          }}
         >
-          <option value="orderIndex:asc">Manual order</option>
-          <option value="dueDate:asc">Due ↑</option>
-          <option value="dueDate:desc">Due ↓</option>
-          <option value="priority:asc">Priority</option>
-          <option value="name:asc">Name A–Z</option>
-          <option value="createdAt:desc">Newest</option>
-        </select>
+          <SelectTrigger className="rounded-[8px] border-[var(--w10)] bg-[var(--elev)] px-2 py-1.5 text-[12px] text-[var(--qink)]" title="Sort">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="orderIndex:asc">Manual order</SelectItem>
+            <SelectItem value="dueDate:asc">Due ↑</SelectItem>
+            <SelectItem value="dueDate:desc">Due ↓</SelectItem>
+            <SelectItem value="priority:asc">Priority</SelectItem>
+            <SelectItem value="name:asc">Name A–Z</SelectItem>
+            <SelectItem value="createdAt:desc">Newest</SelectItem>
+          </SelectContent>
+        </Select>
 
         {activeFilterCount > 0 && (
           <button

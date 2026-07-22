@@ -6,6 +6,7 @@ import { QubitLogo } from "@/components/brand/qubit-logo";
 import { Markdown } from "@/components/q/markdown";
 import { useQ } from "@/components/q/q-provider";
 import { qSuggestionChips } from "@/lib/q-chips";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type ReportType = "project" | "resource" | "portfolio" | "manager" | "member";
 interface ProjectOpt {
@@ -220,18 +221,22 @@ export function QDrawer({ canReports = false }: { canReports?: boolean }) {
               <label className="font-mono text-[9px] font-semibold uppercase tracking-[1.8px] text-[var(--ink4)]" htmlFor="q-project">
                 Choose a project
               </label>
-              <select
-                id="q-project"
+              <Select
                 value={projectId}
-                onChange={(e) => setProjectId(e.target.value)}
-                className="rounded-[10px] border border-[var(--hair)] bg-[var(--wash)] px-3 py-2 text-[13px] text-[var(--qink)] outline-none focus:border-brand"
+                onValueChange={(v) => v && setProjectId(v)}
+                items={Object.fromEntries(projects.map((p) => [p.id, `${p.name} (${p.code})`]))}
               >
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.code})
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger id="q-project" className="rounded-[10px] border-[var(--hair)] bg-[var(--wash)] px-3 py-2 text-[13px] text-[var(--qink)]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name} ({p.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <button
                 type="button"
                 disabled={!projectId}

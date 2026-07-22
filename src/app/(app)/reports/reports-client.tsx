@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Check, Copy, FileDown, Link2, Printer, Sparkles } from "lucide-react";
 import { Markdown } from "@/components/q/markdown";
 import { downloadFile, markdownToHtmlDoc, slugify } from "@/lib/report-export";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type ApiType = "project" | "resource" | "portfolio" | "manager" | "member";
 type Period = "week" | "month";
@@ -222,20 +223,20 @@ export function ReportsClient({
 
           {def.needsProject && (
             <Section label="Project">
-              <NativeSelect value={projectId} onChange={setProjectId}>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name} ({p.code})</option>
-                ))}
-              </NativeSelect>
+              <StyledSelect
+                value={projectId}
+                onChange={setProjectId}
+                items={Object.fromEntries(projects.map((p) => [p.id, `${p.name} (${p.code})`]))}
+              />
             </Section>
           )}
           {def.needsPerson && (
             <Section label="Person">
-              <NativeSelect value={personId} onChange={setPersonId}>
-                {people.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}{p.department ? ` · ${p.department}` : ""}</option>
-                ))}
-              </NativeSelect>
+              <StyledSelect
+                value={personId}
+                onChange={setPersonId}
+                items={Object.fromEntries(people.map((p) => [p.id, `${p.name}${p.department ? ` · ${p.department}` : ""}`]))}
+              />
             </Section>
           )}
 
@@ -372,15 +373,18 @@ function Section({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
-function NativeSelect({ value, onChange, children }: { value: string; onChange: (v: string) => void; children: React.ReactNode }) {
+function StyledSelect({ value, onChange, items }: { value: string; onChange: (v: string) => void; items: Record<string, string> }) {
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="rounded-[10px] border border-[var(--hair)] bg-[var(--qbg)] px-3 py-2 text-[12.5px] text-[var(--qink)] outline-none focus:border-[color-mix(in_oklab,var(--brand)_50%,transparent)]"
-    >
-      {children}
-    </select>
+    <Select value={value} onValueChange={(v) => v && onChange(v)} items={items}>
+      <SelectTrigger className="w-full rounded-[10px] border-[var(--hair)] bg-[var(--qbg)] px-3 py-2 text-[12.5px] text-[var(--qink)] focus-visible:border-[color-mix(in_oklab,var(--brand)_50%,transparent)]">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {Object.entries(items).map(([k, label]) => (
+          <SelectItem key={k} value={k}>{label}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
