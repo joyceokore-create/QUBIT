@@ -3,6 +3,13 @@ import { can } from "@/lib/rbac";
 import { listWorkload } from "@/server/resources";
 import { Forbidden } from "@/components/forbidden";
 
+// Same bespoke table treatment as the admin surfaces (Teams/Audit): elevated card
+// + grid rows, uppercase overline header, divider rows.
+const CARD =
+  "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]";
+const ROW =
+  "grid grid-cols-[minmax(0,1.4fr)_160px_minmax(0,1.8fr)_110px] items-start gap-3.5 p-[12px_18px]";
+
 // People & workload — everyone with their project allocations. Doubles as the data
 // behind the Q copilot's per-resource report (MVP1 Phase B).
 export default async function PeoplePage() {
@@ -20,58 +27,50 @@ export default async function PeoplePage() {
         <p className="mt-[3px] text-xs rv:text-body-sm text-ink-3">{people.length} people · resource allocation across projects</p>
       </div>
 
-      <div className="overflow-hidden rounded-[10px] border border-ink-4 bg-card">
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-ink-4 text-left text-[11px] rv:text-overline font-bold uppercase tracking-[.5px] text-ink-3">
-              <th className="px-4 py-2.5 font-bold">Person</th>
-              <th className="px-4 py-2.5 font-bold">Department</th>
-              <th className="px-4 py-2.5 font-bold">Projects</th>
-              <th className="px-4 py-2.5 font-bold">Allocation</th>
-            </tr>
-          </thead>
-          <tbody>
+      <div className={`overflow-hidden ${CARD}`} style={{ background: "var(--cardbg)" }}>
+        <div className="overflow-x-auto">
+          <div className="min-w-[820px]">
+            <div className={`${ROW} items-center border-b border-[var(--hair)] font-mono rv:font-sans text-[9px] rv:text-overline font-semibold uppercase tracking-[1.6px] text-[var(--ink4)]`}>
+              <span>Person</span>
+              <span>Department</span>
+              <span>Projects</span>
+              <span className="justify-self-end">Allocation</span>
+            </div>
             {people.map((p) => (
-              <tr key={p.userId} className="border-b border-[var(--w05)] align-top">
-                <td className="px-4 py-3">
-                  <div className="font-medium text-foreground">{p.name}</div>
-                  <div className="text-xs text-ink-3">{p.email}</div>
-                </td>
-                <td className="px-4 py-3 text-ink-2">{p.departmentName ?? "—"}</td>
-                <td className="px-4 py-3">
+              <div key={p.userId} className={`${ROW} border-b border-[var(--hair2)] transition-colors last:border-0 hover:bg-[var(--wash)]`}>
+                <div className="min-w-0">
+                  <div className="truncate text-[13px] rv:text-body-sm font-semibold text-[var(--qink)]">{p.name}</div>
+                  <div className="truncate text-[11px] rv:text-body-xs text-[var(--ink4)]">{p.email}</div>
+                </div>
+                <span className="text-[12px] rv:text-body-sm text-[var(--ink3)]">{p.departmentName ?? "—"}</span>
+                <div className="min-w-0">
                   {p.allocations.length === 0 ? (
-                    <span className="text-ink-3">—</span>
+                    <span className="text-[12px] text-[var(--ink4)]">—</span>
                   ) : (
                     <div className="flex flex-wrap gap-1.5">
                       {p.allocations.map((a) => (
-                        <span key={a.projectCode} className="rounded-full bg-background px-2.5 py-0.5 text-[11px] text-ink-2" title={`${a.role}${a.allocationPct != null ? ` · ${a.allocationPct}%` : ""}`}>
+                        <span key={a.projectCode} className="rounded-full bg-[var(--wash2)] px-2.5 py-0.5 text-[11px] rv:text-body-xs text-[var(--ink2)]" title={`${a.role}${a.allocationPct != null ? ` · ${a.allocationPct}%` : ""}`}>
                           {a.projectName} · {a.role}
                           {a.allocationPct != null ? ` (${a.allocationPct}%)` : ""}
                         </span>
                       ))}
                     </div>
                   )}
-                </td>
-                <td className="px-4 py-3">
-                  <span
-                    className="font-semibold"
-                    style={{ color: p.totalPct > 100 ? "var(--bad)" : "var(--ink2)" }}
-                    title={p.totalPct > 100 ? "Over-allocated" : undefined}
-                  >
-                    {p.totalPct}%
-                  </span>
-                </td>
-              </tr>
+                </div>
+                <span
+                  className="justify-self-end text-[13px] rv:text-body-sm font-semibold tabular-nums"
+                  style={{ color: p.totalPct > 100 ? "var(--bad)" : "var(--ink2)" }}
+                  title={p.totalPct > 100 ? "Over-allocated" : undefined}
+                >
+                  {p.totalPct}%
+                </span>
+              </div>
             ))}
             {people.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-ink-3">
-                  No people yet.
-                </td>
-              </tr>
+              <div className="p-8 text-center text-[12px] rv:text-body-sm text-[var(--ink5)]">No people yet.</div>
             )}
-          </tbody>
-        </table>
+          </div>
+        </div>
       </div>
     </div>
   );
