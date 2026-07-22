@@ -818,6 +818,12 @@
   /* Topbar: charcoal → red; product glyph goes white on the dark bar */
   --topbar: linear-gradient(95deg, #231f20 0%, color-mix(in oklab, var(--brand) 55%, #231f20) 62%, var(--brand) 120%);
   --tbglyph: #ffffff;
+
+  /* Riverbank app-shell (sidebar + top header): charcoal → deep red gradient,
+     white chrome. --rv-active is the nav pill (white label ≈ 5.5:1). */
+  --rv-sidebar: linear-gradient(180deg, #241f20 0%, #5c0f13 100%);
+  --rv-topbar: linear-gradient(90deg, #241f20 0%, #5c0f13 100%);
+  --rv-active: #b81c22;
 }
 .dark [data-tenant="riverbank"] {
   --rbrand: #ed1c24;            /* guide keeps brand red on primary buttons */
@@ -853,6 +859,11 @@
 
   /* Keep the dark bar subtle (cool), matching the global dark treatment */
   --topbar: rgba(25, 22, 22, 0.72);
+
+  /* Riverbank app-shell — deeper near-black → maroon gradient for dark mode. */
+  --rv-sidebar: linear-gradient(180deg, #050406 0%, #3a0a0d 100%);
+  --rv-topbar: linear-gradient(90deg, #050406 0%, #3a0a0d 100%);
+  --rv-active: #b81c22;
 }
 
 /* ══ KCB — official green/blue over existing warm-paper surfaces ══ */

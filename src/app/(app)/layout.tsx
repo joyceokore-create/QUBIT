@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { Topbar } from "@/components/layout/topbar";
+import { RiverbankShell } from "@/components/layout/riverbank-shell";
+import { prisma } from "@/lib/db";
 import { SlidePanelStateProvider } from "@/components/panels/panel-context";
 import { SlidePanel } from "@/components/panels/slide-panel";
 import { QProvider } from "@/components/q/q-provider";
@@ -32,15 +34,40 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
   const canReports = can(ctx, "reports:read");
 
+  // Riverbank uses a collapsible left-sidebar shell; every other tenant keeps the
+  // top-navigation bar. Resolve the shell's data once (mirrors what Topbar queries).
+  const isRiverbank = session.user.tenantSlug === "riverbank";
+  const canAccessAdmin = can(ctx, "admin:access");
+  const canSwitchTenant = can(ctx, "tenant:switch");
+  const tenants = isRiverbank && canSwitchTenant
+    ? await prisma.tenant.findMany({ orderBy: { name: "asc" }, select: { slug: true, name: true } })
+    : [];
+
   return (
     <div data-tenant={session.user.tenantSlug} style={brandStyle} className="app-shell relative isolate min-h-screen bg-background">
       <AmbientField />
       <QProvider userId={session.user.id} roles={session.user.roles}>
         <SlidePanelStateProvider>
-          <div className="relative z-[1]">
-            <Topbar />
-            <main className="flex min-h-[calc(100vh-62px)] flex-col">{children}</main>
-          </div>
+          {isRiverbank ? (
+            <div className="relative z-[1]">
+              <RiverbankShell
+                canAccessAdmin={canAccessAdmin}
+                canSwitchTenant={canSwitchTenant}
+                tenants={tenants}
+                tenantSlug={session.user.tenantSlug}
+                tenantName={session.user.tenantName ?? ""}
+                userName={session.user.name ?? ""}
+                userEmail={session.user.email ?? ""}
+              >
+                {children}
+              </RiverbankShell>
+            </div>
+          ) : (
+            <div className="relative z-[1]">
+              <Topbar />
+              <main className="flex min-h-[calc(100vh-62px)] flex-col">{children}</main>
+            </div>
+          )}
           <SlidePanel />
           <QDrawer canReports={canReports} />
         </SlidePanelStateProvider>
