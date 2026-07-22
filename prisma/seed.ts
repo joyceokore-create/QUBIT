@@ -1480,6 +1480,17 @@ async function main() {
   const kcb = await seedTenant(KCB_SEED);
   const riverbank = await seedTenant(RIVERBANK_SEED);
 
+  // Synthetic "Get started" requests so the admin review page isn't empty in demos.
+  // Clearly non-real placeholders only (no real PII).
+  const SEED_REQUESTS = [
+    { fullName: "Demo Requester 001", email: "req_001@example.invalid", company: "Northwind Demo Ltd", jobTitle: "Head of PMO" },
+    { fullName: "Demo Requester 002", email: "req_002@example.invalid", company: "Globex Sample Inc", jobTitle: "Programme Director" },
+  ];
+  for (const r of SEED_REQUESTS) {
+    const exists = await prisma.accessRequest.findFirst({ where: { email: r.email } });
+    if (!exists) await prisma.accessRequest.create({ data: r });
+  }
+
   console.log(`Seeded ${kcb.name} (slug: ${kcb.slug}) and ${riverbank.name} (slug: ${riverbank.slug}).`);
 }
 
