@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { BrandLogo } from "@/components/brand/brand-logo";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { AuthShell } from "../auth-shell";
 
 interface LoginFormProps {
   callbackUrl: string;
@@ -87,136 +87,92 @@ export function LoginForm({ callbackUrl }: LoginFormProps) {
 
   const resolved = org.status === "found";
   const loginBrand = resolved && org.tenantSlug === "riverbank" ? "var(--rbrand)" : "var(--pbrand)";
-  const formStyle = { "--login-brand": loginBrand } as CSSProperties & { "--login-brand": string };
 
   return (
-    <div
-      className="login-shell relative min-h-screen w-full font-sans"
-      style={{
-        // Two-glow Lumi composition on the theme's base tone. All three stops are
-        // --l-* tokens (globals.css) that flip between the bright light canvas and
-        // the near-black dark one, so this single style serves both themes.
-        background: [
-          "radial-gradient(ellipse 60% 50% at 15% 25%, var(--l-glow-navy), transparent 60%)",
-          "radial-gradient(ellipse 50% 50% at 85% 80%, var(--l-glow-brand), transparent 65%)",
-          "var(--l-bg)",
-        ].join(", "),
-        // Login-only type: Lufga, matching the landing (loaded globally as
-        // --font-lufga). Scoped to this wrapper via the font indirection vars.
-        "--font-display": "var(--font-lufga)",
-        "--font-body": "var(--font-lufga)",
-      } as CSSProperties}
-    >
-      {/* The backdrop is dark in both themes, so the toggle keeps the topbar
-          (light-on-glass) treatment regardless of the active theme. */}
-      <ThemeToggle className="absolute right-[18px] top-[18px] z-20" />
+    <AuthShell brand={loginBrand}>
+      <button
+        type="button"
+        onClick={() => router.push("/")}
+        className="mb-4 flex items-center gap-[11px] rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_55%,transparent)]"
+      >
+        {/* Full-colour lockup (red icon + navy wordmark) on the light canvas;
+            red icon + white wordmark on the dark one, so the mark stays legible. */}
+        <BrandLogo variant="color" className="h-7 w-auto dark:hidden" />
+        <BrandLogo variant="night" className="hidden h-7 w-auto dark:block" />
+      </button>
 
-      <main className="relative z-10 mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-10 sm:px-6 sm:py-12">
-        <div
-          className="rounded-2xl border border-[var(--l-card-bd)] bg-[var(--l-card-bg)] p-5 backdrop-blur-sm [animation:rise_.5s_cubic-bezier(.22,1,.36,1)_both] sm:p-6"
-          style={{
-            ...formStyle,
-            boxShadow: [
-              "var(--l-card-sh)",
-              "0 20px 70px -30px var(--l-card-glow)",
-            ].join(", "),
-          }}
-        >
+      <h1 className="mb-1 text-[22px] font-semibold tracking-[-.4px] text-[var(--l-ink)]">Sign in</h1>
+      <p className="mb-5 text-[13px] text-[var(--l-ink-2)]">Your organization is resolved from your email — no picker.</p>
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-2.5" noValidate>
+        <input id="email" type="email" autoComplete="email" required placeholder="you@company.com" className={INPUT_CLASS} value={email} onChange={(e) => setEmail(e.target.value)} />
+
+        {resolved && (
+          <div
+            className="flex items-center gap-[9px] rounded-[11px] px-[13px] py-[9px] [animation:rise_.3s_ease_both]"
+            aria-live="polite"
+            style={{ background: "color-mix(in oklab, var(--login-brand) 18%, transparent)", border: "1px solid color-mix(in oklab, var(--login-brand) 40%, transparent)" }}
+          >
+            <span className="flex size-5 items-center justify-center rounded-full bg-[var(--login-brand)] text-[9.5px] font-extrabold text-[var(--onbrand)]">
+              {org.tenantName.charAt(0).toUpperCase()}
+            </span>
+            <span className="text-[12px] text-[var(--l-ink-2)]">Signing in to <span className="font-bold text-[var(--login-brand)]">{org.tenantName}</span></span>
+          </div>
+        )}
+        {org.status === "not-found" && (
+          <p className="rounded-[11px] border border-[var(--l-hair)] bg-[var(--l-chip-bg)] px-[13px] py-[9px] text-[12px] text-[var(--l-ink-3)]" aria-live="polite">
+            No organization found for that domain.
+          </p>
+        )}
+
+        <input id="password" type="password" autoComplete="current-password" required placeholder="Password" className={INPUT_CLASS} value={password} onChange={(e) => setPassword(e.target.value)} />
+
+        {showTotp ? (
+          <input id="totpCode" inputMode="numeric" autoComplete="one-time-code" placeholder="6-digit authenticator code" className={INPUT_CLASS} value={totpCode} onChange={(e) => setTotpCode(e.target.value)} />
+        ) : (
           <button
             type="button"
-            onClick={() => router.push("/")}
-            className="mb-4 flex items-center gap-[11px] rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_55%,transparent)]"
+            onClick={() => setShowTotp(true)}
+            className="self-start rounded-sm text-[11.5px] font-semibold text-[var(--l-ink-3)] outline-none transition-colors hover:text-[var(--login-brand)] focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_55%,transparent)]"
           >
-            {/* Full-colour lockup (red icon + navy wordmark) on the light canvas;
-                red icon + white wordmark on the dark one, so the mark stays legible. */}
-            <BrandLogo variant="color" className="h-7 w-auto dark:hidden" />
-            <BrandLogo variant="night" className="hidden h-7 w-auto dark:block" />
+            Enter authenticator code
           </button>
+        )}
 
-          <h1 className="mb-1 text-[22px] font-semibold tracking-[-.4px] text-[var(--l-ink)]">Sign in</h1>
-          <p className="mb-5 text-[13px] text-[var(--l-ink-2)]">Your organization is resolved from your email — no picker.</p>
+        {error && <p role="alert" className="text-[12px] text-[var(--l-err)]">{error}</p>}
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-2.5" noValidate>
-            <input id="email" type="email" autoComplete="email" required placeholder="you@company.com" className={INPUT_CLASS} value={email} onChange={(e) => setEmail(e.target.value)} />
+        <button
+          type="submit"
+          disabled={loading}
+          className="mt-1 w-full rounded-[11px] px-[13px] py-[11px] text-[13.5px] font-bold text-[var(--onbrand)] outline-none transition-transform hover:-translate-y-[2px] focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--login-brand)] disabled:opacity-60"
+          style={{ background: "var(--login-brand)", boxShadow: "0 4px 20px color-mix(in oklab, var(--login-brand) var(--glowA), transparent)" }}
+        >
+          {loading ? "Signing in…" : "Sign in"}
+        </button>
+      </form>
 
-            {resolved && (
-              <div
-                className="flex items-center gap-[9px] rounded-[11px] px-[13px] py-[9px] [animation:rise_.3s_ease_both]"
-                aria-live="polite"
-                style={{ background: "color-mix(in oklab, var(--login-brand) 18%, transparent)", border: "1px solid color-mix(in oklab, var(--login-brand) 40%, transparent)" }}
-              >
-                <span className="flex size-5 items-center justify-center rounded-full bg-[var(--login-brand)] text-[9.5px] font-extrabold text-[var(--onbrand)]">
-                  {org.tenantName.charAt(0).toUpperCase()}
-                </span>
-                <span className="text-[12px] text-[var(--l-ink-2)]">Signing in to <span className="font-bold text-[var(--login-brand)]">{org.tenantName}</span></span>
-              </div>
-            )}
-            {org.status === "not-found" && (
-              <p className="rounded-[11px] border border-[var(--l-hair)] bg-[var(--l-chip-bg)] px-[13px] py-[9px] text-[12px] text-[var(--l-ink-3)]" aria-live="polite">
-                No organization found for that domain.
-              </p>
-            )}
-
-            <input id="password" type="password" autoComplete="current-password" required placeholder="Password" className={INPUT_CLASS} value={password} onChange={(e) => setPassword(e.target.value)} />
-
-            {showTotp ? (
-              <input id="totpCode" inputMode="numeric" autoComplete="one-time-code" placeholder="6-digit authenticator code" className={INPUT_CLASS} value={totpCode} onChange={(e) => setTotpCode(e.target.value)} />
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowTotp(true)}
-                className="self-start rounded-sm text-[11.5px] font-semibold text-[var(--l-ink-3)] outline-none transition-colors hover:text-[var(--login-brand)] focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_55%,transparent)]"
-              >
-                Enter authenticator code
-              </button>
-            )}
-
-            {error && <p role="alert" className="text-[12px] text-[var(--l-err)]">{error}</p>}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="mt-1 w-full rounded-[11px] px-[13px] py-[11px] text-[13.5px] font-bold text-[var(--onbrand)] outline-none transition-transform hover:-translate-y-[2px] focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--login-brand)] disabled:opacity-60"
-              style={{ background: "var(--login-brand)", boxShadow: "0 4px 20px color-mix(in oklab, var(--login-brand) var(--glowA), transparent)" }}
-            >
-              {loading ? "Signing in…" : "Sign in"}
-            </button>
-          </form>
-
-          <div className="mt-5 mb-2.5 flex items-center gap-2.5">
-            <span className="flex-1 border-b border-[var(--l-hair)]" />
-            <span className="font-sans text-[9px] font-semibold uppercase tracking-[1.6px] text-[var(--l-ink-3)]">Demo quick sign-in</span>
-            <span className="flex-1 border-b border-[var(--l-hair)]" />
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            {QUICK_SIGN_INS.map((d) => (
-              <button
-                key={d.name}
-                type="button"
-                onClick={() => { setEmail(d.email); setPassword(d.password); setError(null); }}
-                className="flex flex-1 items-center gap-2.5 rounded-[11px] border border-[var(--l-field-bd)] bg-[var(--l-chip-bg)] px-3 py-2.5 text-left outline-none transition-colors hover:border-[var(--login-brand)] focus-visible:border-[var(--login-brand)] focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_55%,transparent)]"
-              >
-                <span className="flex size-7 flex-none items-center justify-center rounded-full text-[12px] font-extrabold text-white" style={{ background: d.brand }}>{d.initial}</span>
-                <span className="truncate text-[13px] font-bold text-[var(--l-ink)]">{d.name}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-3.5 text-[11px] leading-[1.5] text-[var(--l-ink-3)]">
-            You may be asked for a 6-digit authenticator code. Trouble signing in? Contact your administrator.
-          </div>
-        </div>
-      </main>
-
-      {/* Giant faded background wordmark (Lumi motif) — sits behind the card (z-0 vs main's z-10) and
-          is clipped to the viewport so it never grows taller than the screen on short viewports. */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-0 flex max-h-[38vh] justify-between overflow-hidden px-4 font-black uppercase leading-none text-[var(--l-wm)]"
-        style={{ fontSize: "clamp(40px, 11vw, 200px)" }}
-      >
-        {"QUBIT".split("").map((c, i) => (<span key={i}>{c}</span>))}
+      <div className="mt-5 mb-2.5 flex items-center gap-2.5">
+        <span className="flex-1 border-b border-[var(--l-hair)]" />
+        <span className="font-sans text-[9px] font-semibold uppercase tracking-[1.6px] text-[var(--l-ink-3)]">Demo quick sign-in</span>
+        <span className="flex-1 border-b border-[var(--l-hair)]" />
       </div>
-    </div>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        {QUICK_SIGN_INS.map((d) => (
+          <button
+            key={d.name}
+            type="button"
+            onClick={() => { setEmail(d.email); setPassword(d.password); setError(null); }}
+            className="flex flex-1 items-center gap-2.5 rounded-[11px] border border-[var(--l-field-bd)] bg-[var(--l-chip-bg)] px-3 py-2.5 text-left outline-none transition-colors hover:border-[var(--login-brand)] focus-visible:border-[var(--login-brand)] focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_55%,transparent)]"
+          >
+            <span className="flex size-7 flex-none items-center justify-center rounded-full text-[12px] font-extrabold text-white" style={{ background: d.brand }}>{d.initial}</span>
+            <span className="truncate text-[13px] font-bold text-[var(--l-ink)]">{d.name}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-3.5 text-[11px] leading-[1.5] text-[var(--l-ink-3)]">
+        You may be asked for a 6-digit authenticator code. Trouble signing in? Contact your administrator.
+      </div>
+    </AuthShell>
   );
 }
