@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, FolderKanban, Wallet, TriangleAlert, Flag, Gauge, Activity, Users } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { getExecDashboard, type ExecInsight } from "@/server/exec-dashboard";
@@ -33,13 +33,13 @@ export default async function DashboardPage() {
   const { health, kpis } = d;
 
   const kpiCards = [
-    { label: "Projects", value: kpis.projects, tok: "--qink", foot: `${kpis.onTrack} on track`, href: "/projects" },
-    { label: "Budget", value: kpis.budget, tok: "--qink", foot: "portfolio total", href: "/projects" },
-    { label: "Risks", value: kpis.risksOpen, tok: kpis.risksOpen ? "--warn" : "--ok", foot: "open", href: "/risks" },
-    { label: "Milestones", value: kpis.milestonesUpcoming, tok: "--qinfo", foot: `${kpis.milestonesOverdue} overdue`, href: "/projects" },
-    { label: "Velocity", value: kpis.velocity7d, tok: "--ok", foot: "done · 7d", href: "/projects" },
-    { label: "Health", value: `${kpis.healthPct}%`, tok: kpis.healthPct >= 70 ? "--ok" : "--warn", foot: `${kpis.needAttention} need attention`, href: "/projects" },
-    { label: "Resources", value: kpis.peopleAllocated, tok: kpis.overAllocated ? "--bad" : "--qink", foot: `${kpis.overAllocated} over-allocated`, href: "/people" },
+    { label: "Projects", value: kpis.projects, tok: "--qink", foot: `${kpis.onTrack} on track`, href: "/projects", Icon: FolderKanban, meter: kpis.projects ? kpis.onTrack / kpis.projects : null },
+    { label: "Budget", value: kpis.budget, tok: "--qink", foot: "portfolio total", href: "/projects", Icon: Wallet, meter: null },
+    { label: "Risks", value: kpis.risksOpen, tok: kpis.risksOpen ? "--warn" : "--ok", foot: "open", href: "/risks", Icon: TriangleAlert, meter: null },
+    { label: "Milestones", value: kpis.milestonesUpcoming, tok: "--qink", foot: `${kpis.milestonesOverdue} overdue`, href: "/projects", Icon: Flag, meter: null },
+    { label: "Velocity", value: kpis.velocity7d, tok: "--qink", foot: "done · 7d", href: "/projects", Icon: Gauge, meter: null },
+    { label: "Health", value: `${kpis.healthPct}%`, tok: kpis.healthPct >= 70 ? "--ok" : "--warn", foot: `${kpis.needAttention} need attention`, href: "/projects", Icon: Activity, meter: kpis.healthPct / 100 },
+    { label: "Resources", value: kpis.peopleAllocated, tok: kpis.overAllocated ? "--bad" : "--qink", foot: `${kpis.overAllocated} over-allocated`, href: "/people", Icon: Users, meter: null },
   ];
   const trends = ["Portfolio health trend", "Burndown", "Budget burn", "Risk trend"];
 
@@ -109,15 +109,36 @@ export default async function DashboardPage() {
           </Panel>
         </section>
 
-        {/* ── Row 2: KPIs ── */}
-        <section className={`grid grid-cols-2 overflow-hidden md:grid-cols-4 xl:grid-cols-7 ${CARD}`} style={{ background: "var(--cardbg)" }}>
-          {kpiCards.map((k, i) => (
-            <Link key={k.label} href={k.href} className="p-[15px_18px] transition-colors hover:bg-[var(--wash)]" style={{ borderLeft: i === 0 ? "none" : "1px solid var(--hair2)" }}>
-              <div className="font-mono rv:font-sans text-[9px] rv:text-overline font-medium uppercase tracking-[1.6px] text-[var(--ink4)]">{k.label}</div>
-              <div className="mt-1.5 font-heading rv:font-data text-[24px] rv:text-data-lg font-bold leading-none tracking-[-.6px] tabular-nums" style={{ color: `var(${k.tok})` }}>{k.value}</div>
-              <div className="mt-1 text-[10px] text-[var(--ink4)]">{k.foot}</div>
-            </Link>
-          ))}
+        {/* ── Row 2: KPIs — stat tiles (icon chip · value · real ratio meter) ── */}
+        <section className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+          {kpiCards.map((k) => {
+            const Icon = k.Icon;
+            return (
+              <Link
+                key={k.label}
+                href={k.href}
+                className={`group flex flex-col gap-2 rounded-xl border border-[var(--cardbd)] p-4 shadow-[var(--cardsh)] transition-colors hover:border-[var(--brand)]`}
+                style={{ background: "var(--cardbg)" }}
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className="flex size-7 flex-none items-center justify-center rounded-lg"
+                    style={{ background: `color-mix(in oklab, var(${k.tok}) 14%, transparent)`, color: `var(${k.tok})` }}
+                  >
+                    <Icon className="size-[15px]" strokeWidth={1.9} aria-hidden />
+                  </span>
+                  <span className="font-mono rv:font-sans text-[9px] rv:text-overline font-medium uppercase tracking-[1.4px] text-[var(--ink4)]">{k.label}</span>
+                </div>
+                <div className="font-heading rv:font-data text-[24px] rv:text-data-lg font-bold leading-none tracking-[-.6px] tabular-nums" style={{ color: `var(${k.tok})` }}>{k.value}</div>
+                <div className="mt-auto text-[10px] text-[var(--ink4)]">{k.foot}</div>
+                {k.meter != null && (
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--w06)]" role="presentation">
+                    <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${Math.round(k.meter * 100)}%`, background: `var(${k.tok})` }} />
+                  </div>
+                )}
+              </Link>
+            );
+          })}
         </section>
 
         {/* ── Row 3: Trends (coming soon — need snapshot history / money type) ── */}
