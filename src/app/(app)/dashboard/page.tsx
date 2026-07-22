@@ -33,13 +33,13 @@ export default async function DashboardPage() {
   const { health, kpis } = d;
 
   const kpiCards = [
-    { label: "Projects", value: kpis.projects, tok: "--qink", foot: `${kpis.onTrack} on track`, href: "/projects", Icon: FolderKanban, meter: kpis.projects ? kpis.onTrack / kpis.projects : null },
-    { label: "Budget", value: kpis.budget, tok: "--qink", foot: "portfolio total", href: "/projects", Icon: Wallet, meter: null },
-    { label: "Risks", value: kpis.risksOpen, tok: kpis.risksOpen ? "--warn" : "--ok", foot: "open", href: "/risks", Icon: TriangleAlert, meter: null },
-    { label: "Milestones", value: kpis.milestonesUpcoming, tok: "--qink", foot: `${kpis.milestonesOverdue} overdue`, href: "/projects", Icon: Flag, meter: null },
-    { label: "Velocity", value: kpis.velocity7d, tok: "--qink", foot: "done · 7d", href: "/projects", Icon: Gauge, meter: null },
-    { label: "Health", value: `${kpis.healthPct}%`, tok: kpis.healthPct >= 70 ? "--ok" : "--warn", foot: `${kpis.needAttention} need attention`, href: "/projects", Icon: Activity, meter: kpis.healthPct / 100 },
-    { label: "Resources", value: kpis.peopleAllocated, tok: kpis.overAllocated ? "--bad" : "--qink", foot: `${kpis.overAllocated} over-allocated`, href: "/people", Icon: Users, meter: null },
+    { label: "Projects", value: kpis.projects, tok: "--qink", iconTok: "--brand", foot: `${kpis.onTrack} on track`, href: "/projects", Icon: FolderKanban, meter: kpis.projects ? kpis.onTrack / kpis.projects : null },
+    { label: "Budget", value: kpis.budget, tok: "--qink", iconTok: "--ok", foot: "portfolio total", href: "/projects", Icon: Wallet, meter: null },
+    { label: "Risks", value: kpis.risksOpen, tok: kpis.risksOpen ? "--warn" : "--ok", iconTok: "--warn", foot: "open", href: "/risks", Icon: TriangleAlert, meter: null },
+    { label: "Milestones", value: kpis.milestonesUpcoming, tok: "--qink", iconTok: "--qinfo", foot: `${kpis.milestonesOverdue} overdue`, href: "/projects", Icon: Flag, meter: null },
+    { label: "Velocity", value: kpis.velocity7d, tok: "--qink", iconTok: "--accent-indigo", foot: "done · 7d", href: "/projects", Icon: Gauge, meter: null },
+    { label: "Health", value: `${kpis.healthPct}%`, tok: kpis.healthPct >= 70 ? "--ok" : "--warn", iconTok: "--ok", foot: `${kpis.needAttention} need attention`, href: "/projects", Icon: Activity, meter: kpis.healthPct / 100 },
+    { label: "Resources", value: kpis.peopleAllocated, tok: kpis.overAllocated ? "--bad" : "--qink", iconTok: "--qinfo", foot: `${kpis.overAllocated} over-allocated`, href: "/people", Icon: Users, meter: null },
   ];
   const trends = ["Portfolio health trend", "Burndown", "Budget burn", "Risk trend"];
 
@@ -123,7 +123,7 @@ export default async function DashboardPage() {
                 <div className="flex items-center gap-2">
                   <span
                     className="flex size-7 flex-none items-center justify-center rounded-lg"
-                    style={{ background: `color-mix(in oklab, var(${k.tok}) 14%, transparent)`, color: `var(${k.tok})` }}
+                    style={{ background: `color-mix(in oklab, var(${k.iconTok}) 14%, transparent)`, color: `var(${k.iconTok})` }}
                   >
                     <Icon className="size-[15px]" strokeWidth={1.9} aria-hidden />
                   </span>
