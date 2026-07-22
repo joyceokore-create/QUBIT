@@ -788,13 +788,19 @@
   --brand: var(--rbrand);
   --onbrand: #ffffff;           /* label on red */
 
-  /* Surfaces */
-  --qbg: #ffffff;
+  /* Surfaces — Material-style: a cool-gray page so solid white cards separate
+     with real elevation (no glass/blur). */
+  --qbg: #f3f5f8;
   --qcard: #ffffff;
-  --card2: #f8f8f8;
+  --card2: #f8fafc;
   --drawer: #ffffff;
   --menu: #ffffff;
-  --elev: #f1f1f1;
+  --elev: #eef1f5;
+  /* Card treatment: solid white, hairline cool border, MUI elevation-1 shadow, no blur. */
+  --cardbg: #ffffff;
+  --cardbd: rgba(15, 23, 42, 0.08);
+  --cardsh: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.1);
+  --glassblur: 0px;
 
   /* Text ramp (charcoal → neutral) */
   --qink: #231f20;
@@ -840,6 +846,11 @@
   --drawer: #1e293b;
   --menu: #1e293b;
   --elev: #1e293b;
+  /* Solid slate cards with dark elevation, no glass/blur (Material-style). */
+  --cardbg: #0f172a;
+  --cardbd: rgba(148, 163, 184, 0.12);
+  --cardsh: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --glassblur: 0px;
 
   --qink: #f1f5f9;
   --ink2: #cbd5e1;
