@@ -5,6 +5,7 @@ import { useState, type FormEvent } from "react";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { StatusDot } from "@/components/status-dot";
 import {
   Select,
   SelectContent,
@@ -153,6 +154,7 @@ export function EditProjectDialog({ project, onUpdated }: EditProjectDialogProps
                 <SelectContent>
                   {STATUSES.map((s) => (
                     <SelectItem key={s} value={s}>
+                      <StatusDot status={s} className="mr-2" />
                       {s}
                     </SelectItem>
                   ))}

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { StatusDot } from "@/components/status-dot";
 import {
   Select,
   SelectContent,
@@ -162,6 +163,7 @@ export function NewProjectDialog({ portfolioId, programmes }: NewProjectDialogPr
                 <SelectContent>
                   {STATUSES.map((s) => (
                     <SelectItem key={s} value={s}>
+                      <StatusDot status={s} className="mr-2" />
                       {s}
                     </SelectItem>
                   ))}

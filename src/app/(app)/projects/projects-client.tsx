@@ -17,6 +17,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { gateCells, projectRank, statusBarTok, statusMeta } from "@/lib/project-view";
+import { StatusDot } from "@/components/status-dot";
 
 interface ProjectRow {
   id: string;
@@ -267,7 +268,7 @@ function NewProjectDialog() {
               <label className="text-sm font-medium text-ink-2">Status</label>
               <Select value={form.status} onValueChange={(v) => set("status", v ?? "Planning")} items={Object.fromEntries(STATUSES.map((s) => [s, s]))}>
                 <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent>{STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                <SelectContent>{STATUSES.map((s) => <SelectItem key={s} value={s}><StatusDot status={s} className="mr-2" />{s}</SelectItem>)}</SelectContent>
               </Select>
             </div>
           </div>
