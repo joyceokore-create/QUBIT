@@ -134,14 +134,15 @@ export function EditProjectDialog({ project, onUpdated }: EditProjectDialogProps
             </div>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="edit-project-obj" className="text-sm font-medium text-ink-2">Objective</label>
-            <Input id="edit-project-obj" value={objective} onChange={(e) => setObjective(e.target.value)} />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="edit-project-mission" className="text-sm font-medium text-ink-2">Mission statement</label>
-            <Input id="edit-project-mission" value={mission} onChange={(e) => setMission(e.target.value)} />
+          <div className="flex gap-3">
+            <div className="flex flex-1 flex-col gap-1.5">
+              <label htmlFor="edit-project-obj" className="text-sm font-medium text-ink-2">Objective</label>
+              <Input id="edit-project-obj" value={objective} onChange={(e) => setObjective(e.target.value)} />
+            </div>
+            <div className="flex flex-1 flex-col gap-1.5">
+              <label htmlFor="edit-project-mission" className="text-sm font-medium text-ink-2">Mission statement</label>
+              <Input id="edit-project-mission" value={mission} onChange={(e) => setMission(e.target.value)} />
+            </div>
           </div>
 
           <div className="flex gap-3">

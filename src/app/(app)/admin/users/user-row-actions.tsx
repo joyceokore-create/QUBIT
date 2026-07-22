@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MoreHorizontal } from "lucide-react";
+import { Ban, Building2, MoreHorizontal, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -71,15 +71,25 @@ export function UserRowActions({ user, currentUserId, departments, users, canMan
           <MoreHorizontal className="h-4 w-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {canManage && <DropdownMenuItem onSelect={() => setEditOpen(true)}>Edit roles</DropdownMenuItem>}
-          <DropdownMenuItem onSelect={() => setDepartmentOpen(true)}>Edit department</DropdownMenuItem>
+          {canManage && (
+            <DropdownMenuItem onSelect={() => setEditOpen(true)}>
+              <ShieldCheck style={{ color: "var(--accent-indigo)" }} />
+              Edit roles
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem onSelect={() => setDepartmentOpen(true)}>
+            <Building2 style={{ color: "var(--pbrand)" }} />
+            Edit department
+          </DropdownMenuItem>
           {canManage && (
             <DropdownMenuItem disabled={isSelf || busy} onSelect={toggleSuspend}>
+              {user.status === "ACTIVE" ? <Ban style={{ color: "var(--warn)" }} /> : <RotateCcw style={{ color: "var(--ok)" }} />}
               {user.status === "ACTIVE" ? "Suspend" : "Reactivate"}
             </DropdownMenuItem>
           )}
           {canManage && (
             <DropdownMenuItem variant="destructive" disabled={isSelf} onSelect={() => setDeleteOpen(true)}>
+              <Trash2 />
               Delete
             </DropdownMenuItem>
           )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, SquarePen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -28,7 +28,10 @@ export function IssueRowActions({ issue, users }: IssueRowActionsProps) {
           <MoreHorizontal className="h-4 w-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => setEditOpen(true)}>Edit</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setEditOpen(true)}>
+            <SquarePen style={{ color: "var(--blue)" }} />
+            Edit
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 

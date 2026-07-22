@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, Hash, MoreHorizontal, Plus } from "lucide-react";
+import { Archive, ChevronDown, ChevronRight, Hash, MoreHorizontal, Plus, SquarePen, Zap } from "lucide-react";
 import type { SpaceNode, FolderNode, ListNode } from "@/server/hierarchy";
 import {
   DropdownMenu,
@@ -118,10 +118,10 @@ function SpaceItem({
           </>
         }
         menu={[
-          { label: "Add list", onClick: addList },
-          { label: "Automations", onClick: () => router.push(`/s/${space.id}/automations`) },
-          { label: "Rename", onClick: rename },
-          { label: "Archive", onClick: archive, destructive: true },
+          { label: "Add list", onClick: addList, icon: <Plus style={{ color: "var(--pbrand)" }} /> },
+          { label: "Automations", onClick: () => router.push(`/s/${space.id}/automations`), icon: <Zap style={{ color: "var(--accent-indigo)" }} /> },
+          { label: "Rename", onClick: rename, icon: <SquarePen style={{ color: "var(--blue)" }} /> },
+          { label: "Archive", onClick: archive, destructive: true, icon: <Archive /> },
         ]}
         onAdd={addList}
       />
@@ -173,9 +173,9 @@ function FolderItem({
         hasChildren={folder.folders.length + folder.lists.length > 0}
         label={<span className="truncate text-[var(--ink2)]">{folder.name}</span>}
         menu={[
-          { label: "Add list", onClick: addList },
-          { label: "Rename", onClick: rename },
-          { label: "Archive", onClick: archive, destructive: true },
+          { label: "Add list", onClick: addList, icon: <Plus style={{ color: "var(--pbrand)" }} /> },
+          { label: "Rename", onClick: rename, icon: <SquarePen style={{ color: "var(--blue)" }} /> },
+          { label: "Archive", onClick: archive, destructive: true, icon: <Archive /> },
         ]}
         onAdd={addList}
       />
@@ -230,7 +230,7 @@ function ListLink({
           <span className="ml-auto text-[10.5px] text-[var(--ink5)]">{list.taskCount}</span>
         )}
       </Link>
-      <NodeMenu menu={[{ label: "Rename", onClick: rename }, { label: "Archive", onClick: archive, destructive: true }]} />
+      <NodeMenu menu={[{ label: "Rename", onClick: rename, icon: <SquarePen style={{ color: "var(--blue)" }} /> }, { label: "Archive", onClick: archive, destructive: true, icon: <Archive /> }]} />
     </div>
   );
 }
@@ -239,6 +239,7 @@ interface MenuItem {
   label: string;
   onClick: () => void;
   destructive?: boolean;
+  icon?: React.ReactNode;
 }
 
 function Row({
@@ -306,6 +307,7 @@ function NodeMenu({ menu }: { menu: MenuItem[] }) {
             variant={m.destructive ? "destructive" : undefined}
             onSelect={m.onClick}
           >
+            {m.icon}
             {m.label}
           </DropdownMenuItem>
         ))}

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, SquarePen, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -63,7 +63,10 @@ export function DepartmentRowActions({ department, departments, orgUnits, users 
           <MoreHorizontal className="h-4 w-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => setEditOpen(true)}>Edit</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setEditOpen(true)}>
+            <SquarePen style={{ color: "var(--blue)" }} />
+            Edit
+          </DropdownMenuItem>
           <DropdownMenuItem
             variant="destructive"
             onSelect={() => {
@@ -71,6 +74,7 @@ export function DepartmentRowActions({ department, departments, orgUnits, users 
               setDeleteOpen(true);
             }}
           >
+            <Trash2 />
             Delete
           </DropdownMenuItem>
         </DropdownMenuContent>
