@@ -3,12 +3,18 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { listTeams } from "@/server/teams";
 import { listUsers } from "@/server/users";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { Forbidden } from "@/components/forbidden";
 import { TeamFormDialog } from "./team-form-dialog";
 import { TeamRowActions } from "./team-row-actions";
+
+// Same bespoke table treatment as the other admin surfaces (audit, access-requests):
+// elevated card + grid rows with an uppercase overline header and divider rows.
+const CARD =
+  "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]";
+const ROW =
+  "grid grid-cols-[minmax(0,1.3fr)_minmax(0,1.7fr)_150px_90px_110px] items-center gap-3.5 p-[10px_18px]";
 
 export default async function AdminTeamsPage() {
   const session = await auth();
@@ -39,38 +45,32 @@ export default async function AdminTeamsPage() {
         />
       </div>
 
-      <div className="overflow-hidden rounded-[10px] border border-ink-4 bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead>Lead</TableHead>
-              <TableHead>Members</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+      <div className={`overflow-hidden ${CARD}`} style={{ background: "var(--cardbg)" }}>
+        <div className="overflow-x-auto">
+          <div className="min-w-[720px]">
+            <div className={`${ROW} border-b border-[var(--hair)] font-mono rv:font-sans text-[9px] rv:text-overline font-semibold uppercase tracking-[1.6px] text-[var(--ink4)]`}>
+              <span>Name</span>
+              <span>Description</span>
+              <span>Lead</span>
+              <span>Members</span>
+              <span className="justify-self-end">Actions</span>
+            </div>
             {teams.map((t) => (
-              <TableRow key={t.id}>
-                <TableCell className="font-medium">{t.name}</TableCell>
-                <TableCell className="text-ink-2">{t.description ?? "—"}</TableCell>
-                <TableCell className="text-ink-2">{t.leadUserName ?? "—"}</TableCell>
-                <TableCell className="text-ink-2">{t.memberCount}</TableCell>
-                <TableCell className="text-right">
+              <div key={t.id} className={`${ROW} border-b border-[var(--hair2)] transition-colors last:border-0 hover:bg-[var(--wash)]`}>
+                <span className="truncate text-[13px] rv:text-body-sm font-semibold text-[var(--qink)]">{t.name}</span>
+                <span className="truncate text-[12px] rv:text-body-sm text-[var(--ink3)]">{t.description ?? "—"}</span>
+                <span className="truncate text-[12px] rv:text-body-sm text-[var(--ink3)]">{t.leadUserName ?? "—"}</span>
+                <span className="text-[12px] rv:text-body-sm text-[var(--ink3)]">{t.memberCount}</span>
+                <span className="justify-self-end">
                   <TeamRowActions team={t} users={users} />
-                </TableCell>
-              </TableRow>
+                </span>
+              </div>
             ))}
             {teams.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center text-ink-3">
-                  No teams yet.
-                </TableCell>
-              </TableRow>
+              <div className="p-8 text-center text-[12px] rv:text-body-sm text-[var(--ink5)]">No teams yet.</div>
             )}
-          </TableBody>
-        </Table>
+          </div>
+        </div>
       </div>
     </div>
   );
