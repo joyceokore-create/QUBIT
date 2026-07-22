@@ -8,7 +8,8 @@ export type AuditAction =
   | "tenant_switch"
   | "mfa_enroll"
   | "role_grant"
-  | "role_revoke";
+  | "role_revoke"
+  | "access_request_review";
 
 export interface AuditEntry {
   action: AuditAction;
