@@ -94,7 +94,7 @@ export function MarketingHeader() {
           Sign in
         </Link>
         <Link
-          href="/login"
+          href="/request-access"
           className={`q-lift rounded-xl bg-[var(--pbrand)] px-5 py-2.5 text-[14px] font-bold text-[var(--onbrand)] ${FOCUS_RING}`}
         >
           Get started
