@@ -3,6 +3,11 @@
 -- current_setting('app.tenant_id', true) returns NULL when unset, which denies all rows —
 -- the safe default when a query runs outside withTenant().
 
+-- NOT tenant-scoped (intentional, like "tenant"): access_request captures pre-tenant
+-- intake ("Get started" lead capture), so it carries no tenant_id and is deliberately
+-- excluded from the table array below. Access is gated by RBAC (iam:manage) in the app
+-- layer, not by RLS. See docs/04-multitenancy.md.
+
 DO $$
 DECLARE
   tbl text;
