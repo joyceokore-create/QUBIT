@@ -66,10 +66,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${instrument.variable} ${archivo.variable} ${plexMono.variable} ${lufga.variable} ${jakarta.variable} ${inter.variable} antialiased`}
-      >
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${instrument.variable} ${archivo.variable} ${plexMono.variable} ${lufga.variable} ${jakarta.variable} ${inter.variable}`}
+    >
+      <body className="antialiased">
         <ThemeProvider>
           <TooltipProvider>
             {children}
