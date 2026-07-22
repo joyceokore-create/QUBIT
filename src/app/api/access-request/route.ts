@@ -9,7 +9,14 @@ import { checkRateLimit, recordFailure } from "@/lib/rate-limit";
  * Rate-limited per IP (shared in-memory limiter) and honeypot-guarded against bots.
  */
 export async function POST(req: Request) {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  // Single trusted proxy → last hop is the real client; leftmost values are client-spoofable.
+  const ip =
+    req.headers
+      .get("x-forwarded-for")
+      ?.split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .pop() || "unknown";
   const key = `access-request:${ip}`;
   if (!checkRateLimit(key).allowed) {
     return NextResponse.json(
@@ -36,9 +43,13 @@ export async function POST(req: Request) {
 
   // Honeypot filled → almost certainly a bot. Ack success, store nothing.
   if (companyUrl) {
+    // Public write endpoint: count every accepted attempt (not just failures) toward the limit.
+    recordFailure(key);
     return NextResponse.json({ ok: true }, { status: 201 });
   }
 
   await prisma.accessRequest.create({ data: { fullName, email, company, jobTitle } });
+  // Public write endpoint: count every accepted attempt (not just failures) toward the limit.
+  recordFailure(key);
   return NextResponse.json({ ok: true }, { status: 201 });
 }
