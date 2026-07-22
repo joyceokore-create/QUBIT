@@ -2,6 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { Check, X } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // "Awaiting my approval" (PROMPT §6) — pending join requests the viewer may decide (their
 // projects', plus all pending for heads/SuperAdmin). Self-hides when there's nothing to review,
@@ -18,6 +28,8 @@ interface Pending {
 export function ApprovalQueue() {
   const [items, setItems] = useState<Pending[] | null>(null);
   const [busy, setBusy] = useState<Set<string>>(new Set());
+  // Confirm before approving/denying a join request — both grant or refuse project access.
+  const [pending, setPending] = useState<{ item: Pending; action: "approve" | "deny" } | null>(null);
 
   async function load() {
     try {
@@ -47,6 +59,13 @@ export function ApprovalQueue() {
     }
   }
 
+  async function confirmPending() {
+    if (!pending) return;
+    const { item, action } = pending;
+    setPending(null);
+    await decide(item.id, action);
+  }
+
   if (!items || items.length === 0) return null;
 
   return (
@@ -71,7 +90,7 @@ export function ApprovalQueue() {
             </span>
             <button
               type="button"
-              onClick={() => decide(r.id, "approve")}
+              onClick={() => setPending({ item: r, action: "approve" })}
               disabled={busy.has(r.id)}
               className="flex items-center gap-1 rounded-full border border-[var(--hair)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ink2)] transition-colors hover:border-[var(--ok)] hover:text-[var(--ok)] disabled:opacity-50"
             >
@@ -79,7 +98,7 @@ export function ApprovalQueue() {
             </button>
             <button
               type="button"
-              onClick={() => decide(r.id, "deny")}
+              onClick={() => setPending({ item: r, action: "deny" })}
               disabled={busy.has(r.id)}
               className="flex items-center gap-1 rounded-full border border-[var(--hair)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ink4)] transition-colors hover:border-[var(--bad)] hover:text-[var(--bad)] disabled:opacity-50"
             >
@@ -88,6 +107,27 @@ export function ApprovalQueue() {
           </div>
         ))}
       </div>
+
+      <AlertDialog open={pending !== null} onOpenChange={(open) => !open && setPending(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pending?.action === "approve" ? "Approve join request?" : "Deny join request?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pending?.action === "approve"
+                ? `${pending?.item.userName} will be added to ${pending?.item.projectName}${pending?.item.requestedRole ? ` as ${pending.item.requestedRole}` : ""}.`
+                : `${pending?.item.userName}'s request to join ${pending?.item.projectName} will be declined. They can request again later.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmPending}>
+              {pending?.action === "approve" ? "Approve" : "Deny"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }

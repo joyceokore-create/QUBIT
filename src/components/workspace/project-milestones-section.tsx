@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Check, Flag, Plus, Trash2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 
 interface Milestone {
@@ -85,9 +86,16 @@ export function ProjectMilestonesSection({ projectId, canEdit }: { projectId: st
                 </span>
               )}
               {canEdit && (
-                <button type="button" onClick={() => remove(m.id)} className="flex-none text-ink-3 opacity-0 hover:text-status-red group-hover:opacity-100" aria-label="Delete milestone">
-                  <Trash2 className="size-3.5" />
-                </button>
+                <ConfirmDialog
+                  trigger={
+                    <button type="button" className="flex-none text-ink-3 opacity-0 hover:text-status-red group-hover:opacity-100" aria-label="Delete milestone">
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  }
+                  title="Delete milestone?"
+                  description={`“${m.name}” will be removed. This can’t be undone.`}
+                  onConfirm={() => remove(m.id)}
+                />
               )}
             </div>
           );

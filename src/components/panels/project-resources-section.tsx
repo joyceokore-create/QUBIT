@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Plus, X } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -103,9 +104,17 @@ export function ProjectResourcesSection({ projectId, canEdit }: { projectId: str
             </span>
             {m.allocationPct != null && <span className="text-ink-3">{m.allocationPct}%</span>}
             {canEdit && (
-              <button type="button" onClick={() => removeMember(m.userId)} className="text-ink-3 opacity-0 hover:text-status-red group-hover:opacity-100" aria-label="Remove">
-                <X className="size-3.5" />
-              </button>
+              <ConfirmDialog
+                trigger={
+                  <button type="button" className="text-ink-3 opacity-0 hover:text-status-red group-hover:opacity-100" aria-label="Remove">
+                    <X className="size-3.5" />
+                  </button>
+                }
+                title="Remove from project?"
+                description={`${m.name} will lose access to this project’s workspace.`}
+                confirmLabel="Remove"
+                onConfirm={() => removeMember(m.userId)}
+              />
             )}
           </div>
         ))}

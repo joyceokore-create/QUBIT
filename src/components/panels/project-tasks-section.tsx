@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Sparkles, Trash2, X } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -150,9 +151,16 @@ export function ProjectTasksSection({ projectId, canEdit }: { projectId: string;
                   </span>
                 )}
                 {canEdit && (
-                  <button type="button" onClick={() => remove(t.id)} className="text-ink-3 opacity-0 hover:text-status-red group-hover:opacity-100" aria-label="Remove task">
-                    <Trash2 className="size-3.5" />
-                  </button>
+                  <ConfirmDialog
+                    trigger={
+                      <button type="button" className="text-ink-3 opacity-0 hover:text-status-red group-hover:opacity-100" aria-label="Remove task">
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    }
+                    title="Delete task?"
+                    description={`“${t.title}” will be deleted. This can’t be undone.`}
+                    onConfirm={() => remove(t.id)}
+                  />
                 )}
               </div>
               {canEdit && (

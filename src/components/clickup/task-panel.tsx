@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTaskPanel } from "@/components/clickup/task-panel-context";
@@ -373,14 +374,21 @@ function DependenciesSection({
       >
         {other ? `QBT-${other.seq} · ${other.name}` : "—"}
       </button>
-      <button
-        type="button"
-        onClick={() => remove(dep.id)}
-        className="flex size-5 flex-none items-center justify-center rounded text-[var(--ink4)] opacity-0 hover:text-[var(--bad)] group-hover:opacity-100"
-        aria-label="Remove dependency"
-      >
-        <X className="size-3.5" />
-      </button>
+      <ConfirmDialog
+        trigger={
+          <button
+            type="button"
+            className="flex size-5 flex-none items-center justify-center rounded text-[var(--ink4)] opacity-0 hover:text-[var(--bad)] group-hover:opacity-100"
+            aria-label="Remove dependency"
+          >
+            <X className="size-3.5" />
+          </button>
+        }
+        title="Remove dependency?"
+        description="This dependency link will be removed."
+        confirmLabel="Remove"
+        onConfirm={() => remove(dep.id)}
+      />
     </li>
   );
 

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Check, Plus, Trash2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -84,9 +85,17 @@ export function ProjectBlockersSection({ projectId, canEdit }: { projectId: stri
                 )
               )}
               {canEdit && (
-                <button type="button" onClick={() => remove(b.id)} className="text-ink-3 opacity-0 hover:text-status-red group-hover:opacity-100" aria-label="Remove blocker">
-                  <Trash2 className="size-3.5" />
-                </button>
+                <ConfirmDialog
+                  trigger={
+                    <button type="button" className="text-ink-3 opacity-0 hover:text-status-red group-hover:opacity-100" aria-label="Remove blocker">
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  }
+                  title="Remove blocker?"
+                  description="This blocker will be removed from the project."
+                  confirmLabel="Remove"
+                  onConfirm={() => remove(b.id)}
+                />
               )}
             </div>
           );

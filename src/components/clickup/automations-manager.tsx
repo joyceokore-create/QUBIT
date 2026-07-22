@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2, Zap } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface StatusOpt {
@@ -106,7 +107,6 @@ export function AutomationsManager({
     router.refresh();
   };
   const remove = async (id: string) => {
-    if (!window.confirm("Delete automation?")) return;
     await fetch(`/api/v1/automations/${id}`, { method: "DELETE" });
     router.refresh();
   };
@@ -140,14 +140,20 @@ export function AutomationsManager({
             >
               {a.active ? "Active" : "Paused"}
             </button>
-            <button
-              type="button"
-              onClick={() => remove(a.id)}
-              className="text-[var(--ink4)] opacity-0 hover:text-[var(--bad)] group-hover:opacity-100"
-              aria-label="Delete"
-            >
-              <Trash2 className="size-4" />
-            </button>
+            <ConfirmDialog
+              trigger={
+                <button
+                  type="button"
+                  className="text-[var(--ink4)] opacity-0 hover:text-[var(--bad)] group-hover:opacity-100"
+                  aria-label="Delete"
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              }
+              title="Delete automation?"
+              description={`“${a.name}” will stop running and be removed.`}
+              onConfirm={() => remove(a.id)}
+            />
           </div>
         ))}
         {automations.length === 0 && (

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Check, Download, FileText, Plus, Sparkles, Trash2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -107,9 +108,16 @@ export function DocumentsSection({ projectId, canEdit }: { projectId: string; ca
               </button>
             )}
             {canEdit && (
-              <button type="button" onClick={() => remove(d.id)} className="flex-none text-ink-3 opacity-0 hover:text-status-red group-hover:opacity-100" aria-label="Delete document">
-                <Trash2 className="size-4" />
-              </button>
+              <ConfirmDialog
+                trigger={
+                  <button type="button" className="flex-none text-ink-3 opacity-0 hover:text-status-red group-hover:opacity-100" aria-label="Delete document">
+                    <Trash2 className="size-4" />
+                  </button>
+                }
+                title="Delete document?"
+                description={`“${d.title}” will be removed from this project. This can’t be undone.`}
+                onConfirm={() => remove(d.id)}
+              />
             )}
           </div>
         ))}

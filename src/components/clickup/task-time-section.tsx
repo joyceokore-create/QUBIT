@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Play, Square, Trash2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 interface Entry {
   id: string;
@@ -123,14 +124,20 @@ export function TaskTimeSection({ taskId, timeEstimate }: { taskId: string; time
               <span className="font-mono text-[var(--ink4)]">{new Date(e.start).toLocaleDateString()}</span>
               <span className="text-[var(--ink2)]">{e.durationMin != null ? fmtMin(e.durationMin) : "running…"}</span>
               {e.billable && <span className="text-[10px] text-[var(--ok)]">billable</span>}
-              <button
-                type="button"
-                onClick={() => remove(e.id)}
-                className="ml-auto opacity-0 hover:text-[var(--bad)] group-hover:opacity-100"
-                aria-label="Delete entry"
-              >
-                <Trash2 className="size-3.5" />
-              </button>
+              <ConfirmDialog
+                trigger={
+                  <button
+                    type="button"
+                    className="ml-auto opacity-0 hover:text-[var(--bad)] group-hover:opacity-100"
+                    aria-label="Delete entry"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                }
+                title="Delete time entry?"
+                description="This logged time will be permanently removed."
+                onConfirm={() => remove(e.id)}
+              />
             </li>
           ))}
         </ul>
