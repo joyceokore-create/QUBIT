@@ -7,9 +7,9 @@ interface ComingSoonProps {
 export function ComingSoon({ title, description, milestone }: ComingSoonProps) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-[10px] border border-ink-4 bg-card p-16 text-center">
-      <h2 className="font-heading text-lg text-foreground">{title}</h2>
-      <p className="max-w-sm text-sm text-ink-2">{description}</p>
-      <p className="text-xs text-ink-3">
+      <h2 className="font-heading text-lg rv:text-heading-sm text-foreground">{title}</h2>
+      <p className="max-w-sm text-sm rv:text-body-sm text-ink-2">{description}</p>
+      <p className="text-xs rv:text-body-xs text-ink-3">
         Lands in Milestone {milestone} — see docs/10-build-plan.md.
       </p>
     </div>

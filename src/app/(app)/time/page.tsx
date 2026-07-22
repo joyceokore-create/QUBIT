@@ -21,9 +21,9 @@ export default async function TimePage() {
   return (
     <div className="mx-auto flex max-w-[900px] flex-col gap-4 p-6">
       <div>
-        <div className="text-[10.5px] font-bold uppercase tracking-[2px] text-brand">Time</div>
-        <h1 className="text-[21px] font-bold tracking-[-.4px] text-[var(--qink)]">This week</h1>
-        <p className="mt-1 text-[12px] text-[var(--ink4)]">
+        <div className="text-[10.5px] rv:text-overline font-bold uppercase tracking-[2px] text-brand">Time</div>
+        <h1 className="text-[21px] rv:text-heading-sm font-bold tracking-[-.4px] text-[var(--qink)]">This week</h1>
+        <p className="mt-1 text-[12px] rv:text-body-sm text-[var(--ink4)]">
           {monday.toLocaleDateString()} – {new Date(nextMonday.getTime() - 86400000).toLocaleDateString()} ·{" "}
           <span className="font-semibold text-[var(--qink)]">{fmtMin(totalMin)}</span> tracked
         </p>
@@ -31,14 +31,14 @@ export default async function TimePage() {
 
       <div className="overflow-hidden rounded-[12px] border border-[var(--w07)] bg-[var(--qcard)]">
         <div className="flex items-center justify-between border-b border-[var(--w07)] px-3 py-2">
-          <span className="text-[11px] font-bold uppercase tracking-[1px] text-[var(--ink4)]">
+          <span className="text-[11px] rv:text-overline font-bold uppercase tracking-[1px] text-[var(--ink4)]">
             {rows.length} {rows.length === 1 ? "task" : "tasks"}
           </span>
           <a href={csvHref} className="text-[12px] font-semibold text-[var(--ink3)] hover:text-brand">
             Export CSV
           </a>
         </div>
-        <table className="w-full border-collapse text-[13px]">
+        <table className="w-full border-collapse text-[13px] rv:text-body-sm">
           <tbody>
             {rows.map((r) => (
               <tr key={r.taskId} className="border-b border-[var(--w05)]">
