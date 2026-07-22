@@ -29,6 +29,22 @@ const STATUS_LABELS: Record<string, string> = {
   InQA: "In QA",
   Completed: "Completed",
 };
+// Semantic dot colour per task status (matches the project task board treatment).
+const STATUS_TOK: Record<string, string> = {
+  NotStarted: "--ink4",
+  InProgress: "--qinfo",
+  InReview: "--warn",
+  InQA: "--brand",
+  Completed: "--ok",
+};
+function StatusDotItem({ value, label }: { value: string; label: string }) {
+  return (
+    <SelectItem value={value}>
+      <span className="mr-2 inline-block size-2 flex-none rounded-full align-middle" style={{ background: `var(${STATUS_TOK[value] ?? "--ink4"})` }} />
+      {label}
+    </SelectItem>
+  );
+}
 /** Deep link into the project's board with the card highlighted (work-cycle UX). */
 const boardHref = (t: Pick<Task, "projectId" | "id">, lens?: string) =>
   `/projects/${t.projectId}?tab=Board&task=${t.id}${lens ? `&lens=${lens}` : ""}`;
@@ -179,7 +195,7 @@ export function MyTasksClient({
                   <SelectTrigger className="h-7 w-[120px] text-[11px]"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {Object.entries(STATUS_LABELS).map(([k, label]) => (
-                      <SelectItem key={k} value={k}>{label}</SelectItem>
+                      <StatusDotItem key={k} value={k} label={label} />
                     ))}
                   </SelectContent>
                 </Select>
@@ -235,7 +251,7 @@ export function MyTasksClient({
                             <SelectTrigger className="h-6 w-[110px] flex-none text-[10.5px]"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               {Object.entries(STATUS_LABELS).map(([k, label]) => (
-                                <SelectItem key={k} value={k}>{label}</SelectItem>
+                                <StatusDotItem key={k} value={k} label={label} />
                               ))}
                             </SelectContent>
                           </Select>
