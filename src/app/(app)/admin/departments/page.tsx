@@ -36,7 +36,7 @@ export default async function AdminDepartmentsPage() {
             <span className="size-3.5 rounded-[4px] bg-[var(--ink4)]" />
           </span>
           <div className="text-[13px] font-semibold text-[var(--qink)]">No departments yet</div>
-          <p className="max-w-[380px] text-[12px] leading-[1.55] text-[var(--ink4)]">
+          <p className="max-w-[380px] text-[12px] rv:text-body-sm leading-[1.55] text-[var(--ink4)]">
             Real departments are entered by hand — the hierarchy is cycle-checked on every update, and the head field is
             informational (it never grants the DepartmentHead role).
           </p>
@@ -45,16 +45,16 @@ export default async function AdminDepartmentsPage() {
         <div className={`overflow-hidden [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.06s_both] ${CARD}`} style={{ background: "var(--cardbg)" }}>
           <div className="overflow-x-auto">
             <div className="min-w-[720px]">
-              <div className={`${ROW} border-b border-[var(--hair)] font-mono text-[9px] font-semibold uppercase tracking-[1.6px] text-[var(--ink4)]`}>
+              <div className={`${ROW} border-b border-[var(--hair)] font-mono rv:font-sans text-[9px] rv:text-overline font-semibold uppercase tracking-[1.6px] text-[var(--ink4)]`}>
                 <span>Name</span><span>Parent</span><span>Org unit</span><span>Head</span><span>Members</span><span className="text-right">·</span>
               </div>
               {departments.map((d) => (
                 <div key={d.id} className={`${ROW} border-b border-[var(--hair2)] transition-colors last:border-0 hover:bg-[var(--wash)]`}>
                   <span className="truncate text-[13px] font-semibold text-[var(--qink)]">{d.name}</span>
-                  <span className="truncate text-[12px] text-[var(--ink3)]">{d.parentId ? (departmentById.get(d.parentId)?.name ?? "—") : "—"}</span>
-                  <span className="truncate text-[12px] text-[var(--ink3)]">{d.orgUnitName ?? "—"}</span>
-                  <span className="truncate text-[12px] text-[var(--ink3)]">{d.headUserName ?? "—"}</span>
-                  <span className="font-mono text-[11px] text-[var(--ink4)]">{d.memberCount}</span>
+                  <span className="truncate text-[12px] rv:text-body-sm text-[var(--ink3)]">{d.parentId ? (departmentById.get(d.parentId)?.name ?? "—") : "—"}</span>
+                  <span className="truncate text-[12px] rv:text-body-sm text-[var(--ink3)]">{d.orgUnitName ?? "—"}</span>
+                  <span className="truncate text-[12px] rv:text-body-sm text-[var(--ink3)]">{d.headUserName ?? "—"}</span>
+                  <span className="font-mono rv:font-data text-[11px] rv:text-data-sm text-[var(--ink4)]">{d.memberCount}</span>
                   <span className="flex justify-end">
                     <DepartmentRowActions department={d} departments={departments} orgUnits={orgUnits} users={users} />
                   </span>

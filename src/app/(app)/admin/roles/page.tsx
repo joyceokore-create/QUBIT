@@ -34,8 +34,8 @@ export default async function AdminRolesPage() {
 
       <div className={`${CARD} p-[16px_18px] [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.1s_both]`} style={{ background: "var(--cardbg)" }}>
         <div className="mb-2.5 flex items-baseline gap-2.5">
-          <span className="font-heading text-[13.5px] font-bold text-[var(--qink)]">Permission catalogue</span>
-          <span className="font-mono text-[9.5px] tracking-[1.2px] text-[var(--ink4)]">FR-IAM-04</span>
+          <span className="font-heading text-[13.5px] rv:text-heading-xs font-bold text-[var(--qink)]">Permission catalogue</span>
+          <span className="font-mono rv:font-sans text-[9.5px] rv:text-overline tracking-[1.2px] text-[var(--ink4)]">FR-IAM-04</span>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {PERMISSION_CATALOGUE.map((p) => (

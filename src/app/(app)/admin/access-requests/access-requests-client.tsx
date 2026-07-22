@@ -45,17 +45,17 @@ export function AccessRequestsClient({ rows }: { rows: Row[] }) {
     <div className={`overflow-hidden ${CARD}`} style={{ background: "var(--cardbg)" }}>
       <div className="overflow-x-auto">
         <div className="min-w-[720px]">
-          <div className={`${ROW} border-b border-[var(--hair)] font-mono text-[9px] font-semibold uppercase tracking-[1.6px] text-[var(--ink4)]`}>
+          <div className={`${ROW} border-b border-[var(--hair)] font-mono rv:font-sans text-[9px] rv:text-overline font-semibold uppercase tracking-[1.6px] text-[var(--ink4)]`}>
             <span>When</span><span>Requester</span><span>Company</span><span>Status</span><span>Actions</span>
           </div>
           {rows.map((r) => (
             <div key={r.id} className={`${ROW} border-b border-[var(--hair2)] last:border-0 hover:bg-[var(--wash)]`}>
-              <span className="font-mono text-[10px] text-[var(--ink4)]">{format(new Date(r.createdAt), "MMM d HH:mm")}</span>
+              <span className="font-mono rv:font-data text-[10px] rv:text-data-sm text-[var(--ink4)]">{format(new Date(r.createdAt), "MMM d HH:mm")}</span>
               <span className="min-w-0">
-                <span className="block truncate text-[12px] font-medium text-[var(--ink2)]">{r.fullName}{r.jobTitle ? ` · ${r.jobTitle}` : ""}</span>
-                <span className="block truncate text-[11px] text-[var(--ink4)]">{r.email}</span>
+                <span className="block truncate text-[12px] rv:text-body-sm font-medium text-[var(--ink2)]">{r.fullName}{r.jobTitle ? ` · ${r.jobTitle}` : ""}</span>
+                <span className="block truncate text-[11px] rv:text-body-xs text-[var(--ink4)]">{r.email}</span>
               </span>
-              <span className="truncate text-[12px] text-[var(--ink3)]">{r.company}</span>
+              <span className="truncate text-[12px] rv:text-body-sm text-[var(--ink3)]">{r.company}</span>
               <span className={`justify-self-start rounded-[5px] px-2 py-[3px] text-[10px] font-semibold ${STATUS_STYLE[r.status]}`}>{r.status.toLowerCase()}</span>
               <span className="flex gap-1.5">
                 <button type="button" disabled={busy === r.id || r.status === "REVIEWED"} onClick={() => review(r.id, "REVIEWED")}
@@ -69,7 +69,7 @@ export function AccessRequestsClient({ rows }: { rows: Row[] }) {
               </span>
             </div>
           ))}
-          {rows.length === 0 && <div className="p-8 text-center text-[12px] text-[var(--ink5)]">No access requests yet.</div>}
+          {rows.length === 0 && <div className="p-8 text-center text-[12px] rv:text-body-sm text-[var(--ink5)]">No access requests yet.</div>}
         </div>
       </div>
     </div>

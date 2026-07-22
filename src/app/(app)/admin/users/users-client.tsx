@@ -82,8 +82,8 @@ export function UsersClient({
       {/* Onboarding overview — each tile filters the directory */}
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6 [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.06s_both]">
         <div className={`${CARD} p-[14px_16px]`} style={{ background: "radial-gradient(300px 120px at 50% -40%, color-mix(in oklab, var(--ok) 16%, transparent), transparent 65%), var(--cardbg)" }}>
-          <div className="font-heading text-[24px] font-bold tabular-nums text-[var(--ok)]">{counts.onboarded}</div>
-          <div className="font-mono text-[9px] uppercase tracking-[1.2px] text-[var(--ink4)]">Fully onboarded</div>
+          <div className="font-heading rv:font-data text-[24px] rv:text-data-lg font-bold tabular-nums text-[var(--ok)]">{counts.onboarded}</div>
+          <div className="font-mono rv:font-sans text-[9px] rv:text-overline uppercase tracking-[1.2px] text-[var(--ink4)]">Fully onboarded</div>
         </div>
         {tiles.map((t) => {
           const active = seg === t.key;
@@ -95,8 +95,8 @@ export function UsersClient({
               className={`${CARD} p-[14px_16px] text-left transition-colors`}
               style={{ borderColor: active ? "var(--brand)" : "var(--cardbd)", background: active ? "color-mix(in oklab, var(--brand) 8%, transparent)" : "var(--cardbg)" }}
             >
-              <div className="font-heading text-[24px] font-bold tabular-nums" style={{ color: `var(${t.token})` }}>{t.value}</div>
-              <div className="font-mono text-[9px] uppercase tracking-[1.2px] text-[var(--ink4)]">{t.label}</div>
+              <div className="font-heading rv:font-data text-[24px] rv:text-data-lg font-bold tabular-nums" style={{ color: `var(${t.token})` }}>{t.value}</div>
+              <div className="font-mono rv:font-sans text-[9px] rv:text-overline uppercase tracking-[1.2px] text-[var(--ink4)]">{t.label}</div>
             </button>
           );
         })}
@@ -106,13 +106,13 @@ export function UsersClient({
         {/* Directory */}
         <div className={`overflow-hidden ${CARD}`} style={{ background: "var(--cardbg)" }}>
           <div className="flex items-center gap-3.5 border-b border-[var(--hair)] p-[13px_18px]">
-            <span className="font-heading text-[14px] font-bold text-[var(--qink)]">Directory</span>
-            <span className="font-mono text-[10px] tracking-[1px] text-[var(--ink4)]">
+            <span className="font-heading text-[14px] rv:text-heading-xs font-bold text-[var(--qink)]">Directory</span>
+            <span className="font-mono rv:font-sans text-[10px] rv:text-overline tracking-[1px] text-[var(--ink4)]">
               {rows.length} {rows.length === 1 ? "USER" : "USERS"}{seg !== "all" ? ` · ${tiles.find((t) => t.key === seg)?.label.toUpperCase()}` : ""}
             </span>
             <span className="flex-1" />
             {seg === "all" ? (
-              <span className="hidden font-mono text-[9px] tracking-[.8px] text-[var(--ink4)] sm:inline">ONBOARDING = SIGNED IN · MFA · PLACED</span>
+              <span className="hidden font-mono rv:font-sans text-[9px] rv:text-overline tracking-[.8px] text-[var(--ink4)] sm:inline">ONBOARDING = SIGNED IN · MFA · PLACED</span>
             ) : (
               <button type="button" onClick={() => setSeg("all")} className="text-[11px] font-semibold text-brand hover:underline">Clear filter</button>
             )}
@@ -120,7 +120,7 @@ export function UsersClient({
 
           <div className="overflow-x-auto">
             <div className="min-w-[720px]">
-              <div className={`${ROW_GRID} border-b border-[var(--hair)] p-[9px_18px] font-mono text-[9px] font-semibold uppercase tracking-[1.6px] text-[var(--ink4)]`}>
+              <div className={`${ROW_GRID} border-b border-[var(--hair)] p-[9px_18px] font-mono rv:font-sans text-[9px] rv:text-overline font-semibold uppercase tracking-[1.6px] text-[var(--ink4)]`}>
                 <span>User</span><span>Roles</span><span>Onboarding</span><span>Last active</span><span />
               </div>
               {rows.map((u) => {
@@ -137,7 +137,7 @@ export function UsersClient({
                           <span className="truncate text-[13px] font-semibold text-[var(--qink)]">{u.name}</span>
                           {u.status === "SUSPENDED" && <span className="rounded px-1 py-0.5 font-mono text-[8px] font-bold uppercase tracking-[.5px]" style={{ color: "var(--bad)", background: "color-mix(in oklab, var(--bad) 14%, transparent)" }}>Susp</span>}
                         </span>
-                        <span className="block truncate text-[11px] text-[var(--ink4)]">{u.email}</span>
+                        <span className="block truncate text-[11px] rv:text-body-xs text-[var(--ink4)]">{u.email}</span>
                       </span>
                     </span>
                     <span className="flex flex-wrap gap-1">
@@ -149,9 +149,9 @@ export function UsersClient({
                       <Dot on={s.signedIn} label="Signed in" />
                       <Dot on={s.mfa} label="MFA enabled" />
                       <Dot on={s.placed} label="Placed on a team/project" />
-                      <span className="ml-1 font-mono text-[9px] text-[var(--ink5)]">{okCount}/3</span>
+                      <span className="ml-1 font-mono rv:font-data text-[9px] rv:text-data-sm text-[var(--ink5)]">{okCount}/3</span>
                     </span>
-                    <span className="font-mono text-[10px] text-[var(--ink4)]">
+                    <span className="font-mono rv:font-data text-[10px] rv:text-data-sm text-[var(--ink4)]">
                       {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : <span className="font-semibold text-[var(--warn)]">Never</span>}
                     </span>
                     <span className="flex justify-end">
@@ -160,7 +160,7 @@ export function UsersClient({
                   </div>
                 );
               })}
-              {rows.length === 0 && <div className="p-8 text-center text-[12px] text-[var(--ink5)]">No users in this segment.</div>}
+              {rows.length === 0 && <div className="p-8 text-center text-[12px] rv:text-body-sm text-[var(--ink5)]">No users in this segment.</div>}
             </div>
           </div>
         </div>
@@ -168,17 +168,17 @@ export function UsersClient({
         {/* Rail — Q admin insights */}
         <aside className="flex flex-col gap-3.5">
           <div className={`overflow-hidden ${CARD}`} style={{ background: "radial-gradient(380px 180px at 50% -60%, color-mix(in oklab, var(--brand) 16%, transparent), transparent 65%), var(--cardbg)" }}>
-            <div className="border-b border-[var(--hair)] p-[13px_16px] font-heading text-[13px] font-bold text-[var(--qink)]">Insights</div>
+            <div className="border-b border-[var(--hair)] p-[13px_16px] font-heading text-[13px] rv:text-heading-xs font-bold text-[var(--qink)]">Insights</div>
             <div className="flex flex-col">
               {insights.map((i, idx) => (
                 <div key={idx} className="flex gap-2.5 border-b border-[var(--hair2)] p-[11px_16px] last:border-0">
                   <span className="mt-[5px] size-[7px] flex-none rounded-full" style={{ background: `var(${DOT[i.color]})` }} />
-                  <span className="text-[12px] leading-[1.5] text-[var(--ink2)]">{i.text}</span>
+                  <span className="text-[12px] rv:text-body-sm leading-[1.5] text-[var(--ink2)]">{i.text}</span>
                 </div>
               ))}
             </div>
           </div>
-          <div className="rounded-[14px] border border-dashed border-[var(--hair)] p-[14px_16px] text-[11.5px] leading-[1.55] text-[var(--ink4)]">
+          <div className="rounded-[14px] border border-dashed border-[var(--hair)] p-[14px_16px] text-[11.5px] rv:text-body-xs leading-[1.55] text-[var(--ink4)]">
             A user is ready once they&apos;ve signed in, enabled MFA, and joined a team or project. Use the tiles above to
             find who&apos;s stuck, and &ldquo;New user&rdquo; to invite someone placed on day one.
           </div>

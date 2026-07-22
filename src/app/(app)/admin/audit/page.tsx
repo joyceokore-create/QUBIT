@@ -24,18 +24,18 @@ export default async function AdminAuditPage() {
       <div className={`overflow-hidden [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.06s_both] ${CARD}`} style={{ background: "var(--cardbg)" }}>
         <div className="overflow-x-auto">
           <div className="min-w-[640px]">
-            <div className={`${ROW} border-b border-[var(--hair)] font-mono text-[9px] font-semibold uppercase tracking-[1.6px] text-[var(--ink4)]`}>
+            <div className={`${ROW} border-b border-[var(--hair)] font-mono rv:font-sans text-[9px] rv:text-overline font-semibold uppercase tracking-[1.6px] text-[var(--ink4)]`}>
               <span>When</span><span>Actor</span><span>Action</span><span>Entity</span>
             </div>
             {rows.map((row) => (
               <div key={row.id} className={`${ROW} border-b border-[var(--hair2)] transition-colors last:border-0 hover:bg-[var(--wash)]`}>
-                <span className="font-mono text-[10px] text-[var(--ink4)]">{format(row.createdAt, "MMM d HH:mm")}</span>
-                <span className="truncate text-[12px] font-medium text-[var(--ink2)]">{row.actorName ?? row.actorId ?? "—"}</span>
+                <span className="font-mono rv:font-data text-[10px] rv:text-data-sm text-[var(--ink4)]">{format(row.createdAt, "MMM d HH:mm")}</span>
+                <span className="truncate text-[12px] rv:text-body-sm font-medium text-[var(--ink2)]">{row.actorName ?? row.actorId ?? "—"}</span>
                 <span className="justify-self-start rounded-[5px] bg-[var(--wash2)] px-2 py-[3px] font-mono text-[9px] font-semibold tracking-[.6px] text-[var(--ink3)]">{row.action}</span>
-                <span className="truncate font-mono text-[10px] text-[var(--ink4)]">{row.entityType}:{row.entityId}</span>
+                <span className="truncate font-mono text-[10px] rv:text-data-xs text-[var(--ink4)]">{row.entityType}:{row.entityId}</span>
               </div>
             ))}
-            {rows.length === 0 && <div className="p-8 text-center text-[12px] text-[var(--ink5)]">No audit events yet.</div>}
+            {rows.length === 0 && <div className="p-8 text-center text-[12px] rv:text-body-sm text-[var(--ink5)]">No audit events yet.</div>}
           </div>
         </div>
       </div>

@@ -24,8 +24,8 @@ export default async function AdminTeamsPage() {
 
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-heading text-[21px] font-bold tracking-[-0.5px] text-foreground">Teams</h1>
-          <p className="mt-[3px] text-xs text-ink-3">
+          <h1 className="font-heading text-[21px] rv:text-heading-sm font-bold tracking-[-0.5px] text-foreground">Teams</h1>
+          <p className="mt-[3px] text-xs rv:text-body-sm text-ink-3">
             {teams.length} cross-functional {teams.length === 1 ? "team" : "teams"}
           </p>
         </div>
