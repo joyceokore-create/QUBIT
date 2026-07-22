@@ -782,6 +782,10 @@
 /* ══ RIVERBANK — full Style Guide v1.0 re-skin (white / charcoal / red) ══ */
 [data-tenant="riverbank"] {
   --rbrand: #ed1c24;            /* → --brand (primary fill) */
+  /* Set --brand here too (not just inline on .app-shell) so portalled UI —
+     dialogs, dropdowns, tooltips, toasts rendered at the document root — inherits
+     the tenant brand when data-tenant is on <html> (see TenantScope). */
+  --brand: var(--rbrand);
   --onbrand: #ffffff;           /* label on red */
 
   /* Surfaces */
@@ -869,6 +873,7 @@
 /* ══ KCB — official green/blue over existing warm-paper surfaces ══ */
 [data-tenant="kcb"] {
   --pbrand: #84bd00;                 /* → --brand (official KCB green) */
+  --brand: var(--pbrand);            /* portalled UI inherits KCB green (see TenantScope) */
   --onbrand: #002b4d;                /* KCB navy label on green (~6.4:1) */
   --accent-foreground: #3d6b00;      /* darkened green text on warm paper (~5.5:1) */
   --sidebar-accent-foreground: #3d6b00;

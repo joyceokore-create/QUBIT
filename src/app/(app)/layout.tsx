@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { Topbar } from "@/components/layout/topbar";
 import { RiverbankShell } from "@/components/layout/riverbank-shell";
+import { TenantScope } from "@/components/layout/tenant-scope";
 import { prisma } from "@/lib/db";
 import { SlidePanelStateProvider } from "@/components/panels/panel-context";
 import { SlidePanel } from "@/components/panels/slide-panel";
@@ -45,6 +46,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div data-tenant={session.user.tenantSlug} style={brandStyle} className="app-shell relative isolate min-h-screen bg-background">
+      <TenantScope slug={session.user.tenantSlug} />
       <AmbientField />
       <QProvider userId={session.user.id} roles={session.user.roles}>
         <SlidePanelStateProvider>
