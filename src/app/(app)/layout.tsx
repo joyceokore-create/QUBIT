@@ -33,7 +33,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const canReports = can(ctx, "reports:read");
 
   return (
-    <div style={brandStyle} className="app-shell relative isolate min-h-screen bg-background">
+    <div data-tenant={session.user.tenantSlug} style={brandStyle} className="app-shell relative isolate min-h-screen bg-background">
       <AmbientField />
       <QProvider userId={session.user.id} roles={session.user.roles}>
         <SlidePanelStateProvider>

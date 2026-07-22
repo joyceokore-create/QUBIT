@@ -55,7 +55,7 @@ export function ProjectMilestonesSection({ projectId, canEdit }: { projectId: st
 
   return (
     <div className="flex flex-col gap-2.5">
-      <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground">
+      <div className="flex items-center gap-2 text-[13px] rv:text-heading-xs font-semibold text-foreground">
         <Flag className="size-4 text-brand" /> Milestones {items.length > 0 && <span className="text-ink-3">· {upcoming} upcoming</span>}
       </div>
 

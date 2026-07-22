@@ -96,9 +96,9 @@ export function ProjectWorkspace({
         <div aria-hidden className="pointer-events-none absolute inset-0" style={{ background: "radial-gradient(800px 300px at 6% -50%, color-mix(in oklab, var(--brand) 13%, transparent), transparent 62%)" }} />
         <div className="relative flex flex-wrap items-start justify-between gap-[22px]">
           <div className="min-w-0 flex-1">
-            <div className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[2.2px] text-[var(--ink4)]">{eyebrow} · {data.code}</div>
+            <div className="mb-2 font-mono rv:font-sans text-[10px] rv:text-overline font-semibold uppercase tracking-[2.2px] text-[var(--ink4)]">{eyebrow} · {data.code}</div>
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="font-heading text-[29px] font-bold tracking-[-.9px] text-[var(--qink)]">{data.name}</h1>
+              <h1 className="font-heading text-[29px] rv:text-heading-lg font-bold tracking-[-.9px] text-[var(--qink)]">{data.name}</h1>
               <span
                 className="rounded-[5px] p-[4px_8px] font-mono text-[9.5px] font-semibold tracking-[1px]"
                 style={{ color: `var(${sm.tok})`, border: `1px solid color-mix(in oklab, var(${sm.tok}) 35%, transparent)`, background: `color-mix(in oklab, var(${sm.tok}) 9%, transparent)` }}
@@ -106,13 +106,13 @@ export function ProjectWorkspace({
                 {sm.label}
               </span>
             </div>
-            {data.description && <p className="mt-[7px] max-w-[520px] text-[13px] text-[var(--ink3)]">{data.description}</p>}
+            {data.description && <p className="mt-[7px] max-w-[520px] text-[13px] rv:text-body-sm text-[var(--ink3)]">{data.description}</p>}
             <div className="mt-3.5 flex flex-wrap items-center gap-3">
               <span className="h-[5px] w-[280px] max-w-full overflow-hidden rounded-full bg-[var(--wash2)]">
                 <span className="block h-full rounded-full" style={{ width: `${pct}%`, background: `var(${barTok})` }} />
               </span>
               <span className="font-heading text-[16px] font-bold tabular-nums text-[var(--qink)]">{pct}%</span>
-              <span className="font-mono text-[9.5px] tracking-[1px] text-[var(--ink4)]">GATE PROGRESS</span>
+              <span className="font-mono rv:font-sans text-[9.5px] rv:text-overline tracking-[1px] text-[var(--ink4)]">GATE PROGRESS</span>
               {tl && (
                 <span className="flex items-center gap-1.5 rounded-full px-3 py-1 text-[11.5px] font-semibold" style={{ color: "var(--warn)", background: "color-mix(in oklab, var(--warn) 12%, transparent)" }}>
                   <Clock className="size-3.5" /> {tl}
@@ -241,7 +241,7 @@ export function ProjectWorkspace({
 function Def({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
-      <div className="font-mono text-[9px] font-semibold uppercase tracking-[1px] text-[var(--ink4)]">{label}</div>
+      <div className="font-mono rv:font-sans text-[9px] rv:text-overline font-semibold uppercase tracking-[1px] text-[var(--ink4)]">{label}</div>
       <div className="mt-0.5 text-[12.5px] text-[var(--ink2)]">{value}</div>
     </div>
   );

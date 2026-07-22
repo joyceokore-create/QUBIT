@@ -16,14 +16,14 @@ export default async function PeoplePage() {
   return (
     <div className="mx-auto flex w-full max-w-[1100px] flex-1 flex-col gap-4 p-[26px]">
       <div>
-        <h1 className="font-heading text-[21px] font-bold tracking-[-0.5px] text-foreground">People</h1>
-        <p className="mt-[3px] text-xs text-ink-3">{people.length} people · resource allocation across projects</p>
+        <h1 className="font-heading text-[21px] rv:text-heading-md font-bold tracking-[-0.5px] text-foreground">People</h1>
+        <p className="mt-[3px] text-xs rv:text-body-sm text-ink-3">{people.length} people · resource allocation across projects</p>
       </div>
 
       <div className="overflow-hidden rounded-[10px] border border-ink-4 bg-card">
         <table className="w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b border-ink-4 text-left text-[11px] font-bold uppercase tracking-[.5px] text-ink-3">
+            <tr className="border-b border-ink-4 text-left text-[11px] rv:text-overline font-bold uppercase tracking-[.5px] text-ink-3">
               <th className="px-4 py-2.5 font-bold">Person</th>
               <th className="px-4 py-2.5 font-bold">Department</th>
               <th className="px-4 py-2.5 font-bold">Projects</th>

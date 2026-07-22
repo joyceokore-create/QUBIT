@@ -47,7 +47,7 @@ export default async function DashboardPage() {
     <div>
       {/* Header strip */}
       <div className="mx-auto flex w-full max-w-[1360px] items-baseline gap-3.5 px-6 pt-[18px] [animation:rise_.5s_cubic-bezier(.22,1,.36,1)_both]">
-        <span className="font-mono text-[10.5px] font-semibold tracking-[2.4px] text-[var(--ink4)]">GROUP OVERVIEW · {session.user.tenantName?.toUpperCase()}</span>
+        <span className="font-mono rv:font-sans text-[10.5px] rv:text-overline font-semibold tracking-[2.4px] text-[var(--ink4)]">GROUP OVERVIEW · {session.user.tenantName?.toUpperCase()}</span>
         <span className="-translate-y-[3px] flex-1 border-b border-[var(--hair2)]" />
         <span className="font-mono text-[10.5px] tracking-[1px] text-[var(--ink4)]">{today}</span>
         <LiveClock />
@@ -60,9 +60,9 @@ export default async function DashboardPage() {
         {/* ── Row 1: Exec brief · Priorities · Health · Notifications ── */}
         <section className="grid grid-cols-1 gap-3.5 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto_minmax(0,1fr)]">
           <Panel title="AI executive brief" sub="LIVE DATA">
-            <div className="mb-1 px-4 pt-1 font-heading text-[17px] font-bold tracking-[-.4px] text-[var(--qink)]">Good day, {firstName}.</div>
+            <div className="mb-1 px-4 pt-1 font-heading text-[17px] rv:text-heading-md font-bold tracking-[-.4px] text-[var(--qink)]">Good day, {firstName}.</div>
             {d.brief.map((line, i) => (
-              <div key={i} className="px-4 py-1 text-[12.5px] leading-[1.5] text-[var(--ink2)]">{line}</div>
+              <div key={i} className="px-4 py-1 text-[12.5px] rv:text-body-sm leading-[1.5] text-[var(--ink2)]">{line}</div>
             ))}
             <div className="px-4 pb-3 pt-2 font-mono text-[8.5px] uppercase tracking-[1.4px] text-[var(--ink5)]">Deterministic · ask Q for a deeper read</div>
           </Panel>
@@ -113,8 +113,8 @@ export default async function DashboardPage() {
         <section className={`grid grid-cols-2 overflow-hidden md:grid-cols-4 xl:grid-cols-7 ${CARD}`} style={{ background: "var(--cardbg)" }}>
           {kpiCards.map((k, i) => (
             <Link key={k.label} href={k.href} className="p-[15px_18px] transition-colors hover:bg-[var(--wash)]" style={{ borderLeft: i === 0 ? "none" : "1px solid var(--hair2)" }}>
-              <div className="font-mono text-[9px] font-medium uppercase tracking-[1.6px] text-[var(--ink4)]">{k.label}</div>
-              <div className="mt-1.5 font-heading text-[24px] font-bold leading-none tracking-[-.6px] tabular-nums" style={{ color: `var(${k.tok})` }}>{k.value}</div>
+              <div className="font-mono rv:font-sans text-[9px] rv:text-overline font-medium uppercase tracking-[1.6px] text-[var(--ink4)]">{k.label}</div>
+              <div className="mt-1.5 font-heading rv:font-data text-[24px] rv:text-data-lg font-bold leading-none tracking-[-.6px] tabular-nums" style={{ color: `var(${k.tok})` }}>{k.value}</div>
               <div className="mt-1 text-[10px] text-[var(--ink4)]">{k.foot}</div>
             </Link>
           ))}
@@ -186,8 +186,8 @@ function Panel({ title, sub, children }: { title: string; sub?: string; children
   return (
     <div className={CARD} style={{ background: "var(--cardbg)", animation: "rise .5s cubic-bezier(.22,1,.36,1) both" }}>
       <div className="flex items-baseline gap-2.5 border-b border-[var(--hair)] p-[12px_16px]">
-        <span className="font-heading text-[13.5px] font-bold text-[var(--qink)]">{title}</span>
-        {sub && <span className="font-mono text-[9px] tracking-[1.2px] text-[var(--ink4)]">{sub}</span>}
+        <span className="font-heading text-[13.5px] rv:text-heading-xs font-bold text-[var(--qink)]">{title}</span>
+        {sub && <span className="font-mono rv:font-sans text-[9px] rv:text-overline tracking-[1.2px] text-[var(--ink4)]">{sub}</span>}
       </div>
       <div className="flex flex-col">{children}</div>
     </div>
@@ -198,7 +198,7 @@ function SoonCard({ title, note }: { title: string; note: string }) {
   return (
     <div className={`${CARD} flex flex-col`} style={{ background: "var(--cardbg)" }}>
       <div className="flex items-baseline gap-2.5 border-b border-[var(--hair)] p-[12px_16px]">
-        <span className="font-heading text-[13.5px] font-bold text-[var(--ink3)]">{title}</span>
+        <span className="font-heading text-[13.5px] rv:text-heading-xs font-bold text-[var(--ink3)]">{title}</span>
         <span className="rounded-[5px] bg-[var(--wash2)] px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-[1px] text-[var(--ink4)]">Coming soon</span>
       </div>
       <div className="flex min-h-[90px] flex-1 items-center justify-center p-4 text-center text-[11px] text-[var(--ink5)]">{note}</div>

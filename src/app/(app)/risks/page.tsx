@@ -52,10 +52,10 @@ export default async function RisksPage() {
 
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-heading text-[21px] font-bold tracking-[-0.5px] text-foreground">
+          <h1 className="font-heading text-[21px] rv:text-heading-md font-bold tracking-[-0.5px] text-foreground">
             Risks &amp; Issues
           </h1>
-          <p className="mt-[3px] text-xs text-ink-3">{risks.length} risks in this organization</p>
+          <p className="mt-[3px] text-xs rv:text-body-sm text-ink-3">{risks.length} risks in this organization</p>
         </div>
         {canCreateRisk && (
           <NewRiskDialog users={users} projects={projects.map((p) => ({ id: p.id, code: p.code, name: p.name }))} />

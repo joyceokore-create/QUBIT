@@ -30,15 +30,11 @@ export function HowItWorks() {
           </p>
         </div>
 
-        {/* Numbered stepper: connected timeline through the four steps. The line
-            runs behind the nodes (lg only); each step is its own `group` so the
+        {/* Numbered steps — left-aligned. Each step is its own `group` so the
             title still reveals its colour on hover. */}
-        <div className="relative grid grid-cols-1 gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
-          {/* Connector — sits at the node centres (size-14 → 28px = top-7),
-              inset to span first→last node (which sit at each column's centre). */}
-          <div aria-hidden className="pointer-events-none absolute left-[12.5%] right-[12.5%] top-7 hidden h-px bg-[var(--w10)] lg:block" />
+        <div className="grid grid-cols-1 gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
           {STEPS.map((s, i) => (
-            <div key={s.title} className="group relative flex flex-col items-center text-center" style={{ "--tone": s.tone } as CSSProperties}>
+            <div key={s.title} className="group relative flex flex-col items-start text-left" style={{ "--tone": s.tone } as CSSProperties}>
               <span
                 className="relative z-[1] mb-5 grid size-14 place-items-center rounded-2xl border transition-transform duration-300 ease-out group-hover:scale-110"
                 style={{ background: `color-mix(in oklab, ${s.tone} 10%, var(--qcard))`, borderColor: `color-mix(in oklab, ${s.tone} 28%, transparent)` }}

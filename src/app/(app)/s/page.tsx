@@ -10,7 +10,7 @@ export default async function SpacesIndexPage() {
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2 p-16 text-center">
-      <h1 className="font-heading text-lg text-[var(--qink)]">No spaces yet</h1>
+      <h1 className="font-heading text-lg rv:text-heading-md text-[var(--qink)]">No spaces yet</h1>
       <p className="max-w-sm text-[13px] text-[var(--ink4)]">
         Create your first space from the sidebar to start organizing work into folders, lists and
         tasks.

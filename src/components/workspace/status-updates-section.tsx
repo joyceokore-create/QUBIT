@@ -45,7 +45,7 @@ export function StatusUpdatesSection({ projectId, canEdit }: { projectId: string
 
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="text-[15px] font-bold text-[var(--qink)]">Status updates</h2>
+      <h2 className="text-[15px] rv:text-heading-xs font-bold text-[var(--qink)]">Status updates</h2>
 
       {canEdit && (
         <div className="flex flex-col gap-2 rounded-[12px] border border-[var(--w07)] bg-[var(--qcard)] p-3">

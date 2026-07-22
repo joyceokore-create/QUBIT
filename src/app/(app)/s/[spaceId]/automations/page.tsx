@@ -31,7 +31,7 @@ export default async function AutomationsPage({ params }: { params: Promise<{ sp
         <span className="font-semibold text-[var(--qink)]">Automations</span>
       </div>
 
-      <h1 className="text-[21px] font-bold tracking-[-.4px] text-[var(--qink)]">Automations</h1>
+      <h1 className="text-[21px] rv:text-heading-md font-bold tracking-[-.4px] text-[var(--qink)]">Automations</h1>
       <p className="-mt-2 text-[12px] text-[var(--ink4)]">
         Rules run when tasks in this space change — e.g. move a task to Done and auto-clear its
         priority. Actions can re-trigger rules; a loop guard stops runaway chains.

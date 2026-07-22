@@ -51,7 +51,7 @@ export default async function SubsidiaryPage({
       />
 
       <div className="rounded-[10px] border border-ink-4 bg-card p-[20px_22px]">
-        <div className="mb-4 font-heading text-lg font-bold tracking-[-0.3px] text-foreground">
+        <div className="mb-4 font-heading text-lg rv:text-heading-md font-bold tracking-[-0.3px] text-foreground">
           {subsidiary.flag ? `${subsidiary.flag} ` : ""}
           {subsidiary.name}
         </div>

@@ -184,9 +184,9 @@ export function ReportsClient({
       {/* Left column: header + builder */}
       <div className="flex flex-col gap-3.5">
         <div className="[animation:rise_.5s_cubic-bezier(.22,1,.36,1)_both]">
-          <div className="mb-1.5 font-mono text-[10px] font-semibold uppercase tracking-[2.4px] text-[var(--ink4)]">Reports centre</div>
-          <h1 className="font-heading text-[27px] font-bold tracking-[-.8px] text-[var(--qink)]">Reports</h1>
-          <p className="mt-1.5 text-[13px] text-[var(--ink3)]">
+          <div className="mb-1.5 font-mono rv:font-sans text-[10px] rv:text-overline font-semibold uppercase tracking-[2.4px] text-[var(--ink4)]">Reports centre</div>
+          <h1 className="font-heading text-[27px] rv:text-heading-lg font-bold tracking-[-.8px] text-[var(--qink)]">Reports</h1>
+          <p className="mt-1.5 text-[13px] rv:text-body-sm text-[var(--ink3)]">
             Exports are downloadable (.md / print-ready) and shareable via a tenant-scoped link.
           </p>
         </div>
@@ -319,7 +319,7 @@ export function ReportsClient({
           <div className="flex flex-col">
             <div className="flex flex-wrap items-center gap-2 border-b border-[var(--hair)] p-[12px_16px]">
               <div className="mr-auto min-w-0">
-                <div className="truncate font-heading text-[14px] font-bold text-[var(--qink)]">{report.title}</div>
+                <div className="truncate font-heading text-[14px] rv:text-heading-xs font-bold text-[var(--qink)]">{report.title}</div>
                 <div className="font-mono text-[9.5px] uppercase tracking-[1.2px] text-[var(--ink4)]">{report.periodLabel}</div>
               </div>
               <ToolButton onClick={onDownloadMd} icon={<FileDown className="size-3.5" />} label="Markdown" />
@@ -366,7 +366,7 @@ export function ReportsClient({
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
-      <label className="font-mono text-[9px] font-semibold uppercase tracking-[1.8px] text-[var(--ink4)]">{label}</label>
+      <label className="font-mono rv:font-sans text-[9px] rv:text-overline font-semibold uppercase tracking-[1.8px] text-[var(--ink4)]">{label}</label>
       {children}
     </div>
   );

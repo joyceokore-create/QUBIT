@@ -56,7 +56,7 @@ export function IntegrationsGrid({ projectId, canEdit }: { projectId: string; ca
             <span className="flex size-9 flex-none items-center justify-center rounded-[10px] bg-[var(--w06)] text-[11px] font-bold text-[var(--ink2)]">
               {c.monogram}
             </span>
-            <span className="flex-1 text-[15px] font-bold text-[var(--qink)]">{c.name}</span>
+            <span className="flex-1 text-[15px] rv:text-heading-xs font-bold text-[var(--qink)]">{c.name}</span>
             <span
               className="size-2.5 flex-none rounded-full"
               style={{ background: c.connected ? "var(--ok)" : "var(--w14)" }}

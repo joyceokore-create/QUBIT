@@ -78,10 +78,10 @@ export function ProjectsClient({
     <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-3.5 p-[22px_24px_90px]">
       <div className="flex items-end justify-between gap-5 [animation:rise_.5s_cubic-bezier(.22,1,.36,1)_both]">
         <div>
-          <div className="mb-1.5 font-mono text-[10px] font-semibold uppercase tracking-[2.4px] text-[var(--ink4)]">
+          <div className="mb-1.5 font-mono rv:font-sans text-[10px] rv:text-overline font-semibold uppercase tracking-[2.4px] text-[var(--ink4)]">
             Portfolio / {tenantName}
           </div>
-          <h1 className="font-heading text-[27px] font-bold tracking-[-.8px] text-[var(--qink)]">Projects</h1>
+          <h1 className="font-heading text-[27px] rv:text-heading-lg font-bold tracking-[-.8px] text-[var(--qink)]">Projects</h1>
         </div>
         {canCreate && <NewProjectDialog />}
       </div>
@@ -137,7 +137,7 @@ export function ProjectsClient({
         className="overflow-hidden rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25] [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.1s_both]"
         style={{ background: "var(--cardbg)" }}
       >
-        <div className={`${ROW_GRID} border-b border-[var(--hair)] p-[10px_18px] font-mono text-[9px] font-semibold uppercase tracking-[1.6px] text-[var(--ink4)]`}>
+        <div className={`${ROW_GRID} border-b border-[var(--hair)] p-[10px_18px] font-mono rv:font-sans text-[9px] rv:text-overline font-semibold uppercase tracking-[1.6px] text-[var(--ink4)]`}>
           <span>GATES</span>
           <span>CODE</span>
           <span>PROJECT</span>

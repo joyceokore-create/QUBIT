@@ -15,7 +15,7 @@ export default async function SpacePage({ params }: { params: Promise<{ spaceId:
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2 p-16 text-center">
-      <h1 className="font-heading text-lg text-[var(--qink)]">{space.name}</h1>
+      <h1 className="font-heading text-lg rv:text-heading-md text-[var(--qink)]">{space.name}</h1>
       <p className="max-w-sm text-[13px] text-[var(--ink4)]">
         This space has no lists yet. Add one from the sidebar (hover the space → ＋).
       </p>

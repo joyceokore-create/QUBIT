@@ -59,11 +59,11 @@ export default async function PortfolioDetailPage({
       <div className="rounded-[10px] border border-ink-4 bg-card p-[20px_22px]">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <div className="font-heading text-lg font-bold tracking-[-0.3px] text-foreground">
+            <div className="font-heading text-lg rv:text-heading-md font-bold tracking-[-0.3px] text-foreground">
               {portfolio.name}
             </div>
             {portfolio.description && (
-              <div className="mt-[3px] max-w-[560px] text-xs text-ink-3">{portfolio.description}</div>
+              <div className="mt-[3px] max-w-[560px] text-xs rv:text-body-sm text-ink-3">{portfolio.description}</div>
             )}
           </div>
           {canCreate && (

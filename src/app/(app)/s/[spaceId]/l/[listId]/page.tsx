@@ -62,7 +62,7 @@ export default async function ListPage({
         <span className="font-semibold text-[var(--qink)]">{list.name}</span>
       </div>
 
-      <h1 className="text-[21px] font-bold tracking-[-.4px] text-[var(--qink)]">{list.name}</h1>
+      <h1 className="text-[21px] rv:text-heading-md font-bold tracking-[-.4px] text-[var(--qink)]">{list.name}</h1>
 
       <ListViews
         listId={listId}

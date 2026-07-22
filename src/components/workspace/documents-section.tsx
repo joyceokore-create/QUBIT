@@ -67,7 +67,7 @@ export function DocumentsSection({ projectId, canEdit }: { projectId: string; ca
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-[15px] font-bold text-[var(--qink)]">Documents</h2>
+          <h2 className="text-[15px] rv:text-heading-xs font-bold text-[var(--qink)]">Documents</h2>
           <p className="text-[11.5px] text-[var(--ink4)]">BRDs, plans and specs attached to this project.</p>
         </div>
         {canEdit && (

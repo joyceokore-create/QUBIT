@@ -85,7 +85,7 @@ export function Hero() {
             Portfolio &amp; programme management, with a copilot
           </div>
 
-          <h1 className="text-balance text-[40px] font-[800] leading-[1.02] tracking-[-1.8px] text-[var(--qink)] sm:text-[52px] lg:text-[58px] xl:text-[64px]">
+          <h1 className="text-balance text-[34px] font-[800] leading-[1.05] tracking-[-1px] text-[var(--qink)] sm:text-[52px] sm:leading-[1.02] sm:tracking-[-1.8px] lg:text-[58px] xl:text-[64px]">
             Intelligent Portfolio Management{" "}
             <span className="text-[var(--pbrand)]">for the Modern Enterprise</span>
           </h1>

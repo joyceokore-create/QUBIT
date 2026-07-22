@@ -53,7 +53,7 @@ export function ApprovalQueue() {
     <section className="[animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.08s_both]">
       <div className="mb-2 flex items-center gap-2">
         <span className="size-1.5 rounded-[2px] bg-[var(--brand)]" />
-        <span className="font-mono text-[9.5px] font-semibold uppercase tracking-[2px] text-brand">Awaiting my approval</span>
+        <span className="font-mono rv:font-sans text-[9.5px] rv:text-overline font-semibold uppercase tracking-[2px] text-brand">Awaiting my approval</span>
         <span className="font-mono text-[9.5px] text-[var(--ink5)]">{items.length}</span>
       </div>
       <div className="overflow-hidden rounded-[14px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]" style={{ background: "var(--cardbg)" }}>

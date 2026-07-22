@@ -142,11 +142,11 @@ export function MyTasksClient({
     <main className="mx-auto flex w-full max-w-[1080px] flex-col gap-4 p-[22px_24px_90px]">
       <div className="flex items-end justify-between gap-4 [animation:rise_.5s_cubic-bezier(.22,1,.36,1)_both]">
         <div>
-          <div className="mb-1.5 font-mono text-[10px] font-semibold uppercase tracking-[2.4px] text-[var(--ink4)]">
+          <div className="mb-1.5 font-mono rv:font-sans text-[10px] rv:text-overline font-semibold uppercase tracking-[2.4px] text-[var(--ink4)]">
             Member view / {name}
           </div>
-          <h1 className="font-heading text-[27px] font-bold tracking-[-.8px] text-[var(--qink)]">My tasks</h1>
-          <p className="mt-1.5 text-[13px] text-[var(--ink3)]">
+          <h1 className="font-heading text-[27px] rv:text-heading-lg font-bold tracking-[-.8px] text-[var(--qink)]">My tasks</h1>
+          <p className="mt-1.5 text-[13px] rv:text-body-sm text-[var(--ink3)]">
             You have <span className="font-semibold text-[var(--qink)]">{buckets.open.length} open {buckets.open.length === 1 ? "task" : "tasks"}</span> across your projects
             {focus.length ? " — start with these." : "."}
           </p>
@@ -173,7 +173,7 @@ export function MyTasksClient({
                 <span>{f.projectCode}</span>
                 <span>{fmtDue(f.dueDate)}</span>
               </div>
-              <div className="flex-1 text-[13.5px] font-semibold leading-[1.4] tracking-[-.1px] text-[var(--qink)]">{f.title}</div>
+              <div className="flex-1 text-[13.5px] rv:text-heading-xs font-semibold leading-[1.4] tracking-[-.1px] text-[var(--qink)]">{f.title}</div>
               <div className="flex items-center gap-2.5">
                 <Select value={f.status} onValueChange={(v) => v && void setStatus(f.id, v)} items={STATUS_LABELS}>
                   <SelectTrigger className="h-7 w-[120px] text-[11px]"><SelectValue /></SelectTrigger>
@@ -202,7 +202,7 @@ export function MyTasksClient({
             <section key={b.key}>
               <div className="mb-2 flex items-center gap-2">
                 <span className="size-1.5 rounded-[2px]" style={{ background: `var(${b.tok})` }} />
-                <span className="font-mono text-[9.5px] font-semibold uppercase tracking-[2px]" style={{ color: `var(${b.tok})` }}>{b.label}</span>
+                <span className="font-mono rv:font-sans text-[9.5px] rv:text-overline font-semibold uppercase tracking-[2px]" style={{ color: `var(${b.tok})` }}>{b.label}</span>
                 <span className="font-mono text-[9.5px] text-[var(--ink5)]">{b.items.length}</span>
               </div>
               <div
@@ -345,7 +345,7 @@ function ReferenceSection({
     <section className="[animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.12s_both]">
       <div className="mb-2 flex items-center gap-2">
         <span className="size-1.5 rounded-[2px] bg-[var(--qinfo)]" />
-        <span className="font-mono text-[9.5px] font-semibold uppercase tracking-[2px] text-[var(--ink3)]">{label}</span>
+        <span className="font-mono rv:font-sans text-[9.5px] rv:text-overline font-semibold uppercase tracking-[2px] text-[var(--ink3)]">{label}</span>
         <span className="font-mono text-[9px] tracking-[1px] text-[var(--ink5)]">{sub}</span>
         <span className="font-mono text-[9.5px] text-[var(--ink5)]">{items.length}</span>
       </div>
