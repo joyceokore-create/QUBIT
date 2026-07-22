@@ -117,7 +117,7 @@ export default async function DashboardPage() {
               <Link
                 key={k.label}
                 href={k.href}
-                className={`group flex flex-col gap-2 rounded-xl border border-[var(--cardbd)] p-4 shadow-[var(--cardsh)] transition-colors hover:border-[var(--brand)]`}
+                className="flex flex-col gap-2 rounded-xl p-4 shadow-[var(--cardsh)]"
                 style={{ background: "var(--cardbg)" }}
               >
                 <div className="flex items-center gap-2">
