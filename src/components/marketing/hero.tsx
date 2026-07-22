@@ -99,10 +99,10 @@ export function Hero() {
 
           <div className="mt-8 flex flex-col items-center gap-3.5 sm:flex-row lg:items-start">
             <Link
-              href="/login"
+              href="/request-access"
               className={`q-lift group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--pbrand)] px-8 py-4 text-[15px] font-bold text-[var(--onbrand)] shadow-[0_8px_24px_color-mix(in_oklab,var(--pbrand)_28%,transparent)] sm:w-auto ${FOCUS_RING}`}
             >
-              Get started
+              Request access
               <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" aria-hidden />
             </Link>
             <a

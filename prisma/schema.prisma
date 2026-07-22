@@ -243,6 +243,7 @@ model ProjectTask {
 
   @@unique([projectId, taskKey])
   @@index([tenantId, projectId])
+  @@index([tenantId, approvalStatus])
   @@map("project_task")
 }
 
@@ -336,7 +337,7 @@ model Notification {
   tenantId  String    @map("tenant_id")
   tenant    Tenant    @relation(fields: [tenantId], references: [id])
   userId    String    @map("user_id")
-  user      User      @relation("UserNotifications", fields: [userId], references: [id])
+  user      User      @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
   kind      String // status_update | brd_review
   message   String
   link      String?
@@ -1216,4 +1217,30 @@ model ProjectTeam {
   @@id([projectId, teamId])
   @@index([tenantId])
   @@map("project_team")
+}
+
+// ── Access requests ("Get started" lead capture) ───────────────────────────
+// SYSTEM table: intentionally has NO tenant_id — a requester belongs to no tenant yet.
+// The one sanctioned exception to the tenant_id + RLS rule (see docs/04-multitenancy.md).
+// Public INSERT via the bare prisma client; reads/updates are gated by RBAC (iam:manage),
+// NOT by tenant RLS. Deliberately omitted from prisma/rls.sql's table array (RLS stays off).
+model AccessRequest {
+  id           String              @id @default(cuid())
+  fullName     String              @map("full_name")
+  email        String
+  company      String
+  jobTitle     String?             @map("job_title")
+  status       AccessRequestStatus @default(NEW)
+  reviewedById String?             @map("reviewed_by_id")
+  reviewedAt   DateTime?           @map("reviewed_at")
+  createdAt    DateTime            @default(now()) @map("created_at")
+
+  @@index([status, createdAt])
+  @@map("access_request")
+}
+
+enum AccessRequestStatus {
+  NEW
+  REVIEWED
+  DISMISSED
 }

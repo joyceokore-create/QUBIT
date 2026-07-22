@@ -7,11 +7,15 @@ import { TrustBand } from "@/components/marketing/trust-band";
 import LandingPage from "@/app/page";
 
 describe("Hero", () => {
-  it("shows the headline and a CTA that links to /login", () => {
+  it("shows the headline", () => {
     render(<Hero />);
     expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
-    const ctas = screen.getAllByRole("link").filter((a) => a.getAttribute("href") === "/login");
-    expect(ctas.length).toBeGreaterThan(0);
+  });
+
+  it("points the primary Request access CTA at the request-access route", () => {
+    render(<Hero />);
+    const cta = screen.getAllByRole("link", { name: /request access/i })[0];
+    expect(cta).toHaveAttribute("href", "/request-access");
   });
 });
 

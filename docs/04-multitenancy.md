@@ -95,6 +95,19 @@ tokens; the authenticated layout applies them as CSS variables. See `08-design-s
 - Switching writes an `audit_log` entry (`actor`, `from_tenant`, `to_tenant`, `timestamp`).
 - The switch changes the session's active `tenantId`; all subsequent queries re-scope via RLS.
 
+## Exception: `access_request` (system table)
+
+`access_request` (the "Get started" lead-capture form) is the one sanctioned exception to
+rule 1 above: it has **no `tenant_id`** and **no RLS policy**. A requester belongs to no
+tenant yet — there is nothing to scope to.
+
+- Written via a public, unauthenticated endpoint (bare `prisma.accessRequest.create()`,
+  never through `withTenant()`).
+- Read and updated only behind `can(ctx, "iam:manage")` — RBAC gates it, not RLS.
+- Deliberately omitted from the table array in `prisma/rls.sql`.
+- Carries no cross-tenant data path: it holds pre-tenant intake data only, and nothing it
+  stores is ever joined to a tenant-owned table.
+
 ## Testing isolation (mandatory)
 
 `tests/rls/` must include: seed tenant A and tenant B; authenticate as an A user; assert that

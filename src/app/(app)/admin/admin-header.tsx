@@ -1,20 +1,37 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-// Shared QUBIT App v3 admin header — eyebrow + Archivo title + chip tabs across the four
-// admin routes (Users / Roles / Audit / Departments). `action` is an optional trailing slot
-// (e.g. the New user / New department dialog trigger).
+// Shared QUBIT App v3 admin header — eyebrow + Archivo title + chip tabs across the five
+// admin routes (Users / Roles / Audit / Departments / Access requests). `action` is an
+// optional trailing slot (e.g. the New user / New department dialog trigger).
 const TABS = [
   { label: "Users", href: "/admin/users" },
   { label: "Roles", href: "/admin/roles" },
   { label: "Audit", href: "/admin/audit" },
   { label: "Departments", href: "/admin/departments" },
+  { label: "Access requests", href: "/admin/access-requests" },
 ];
 
 export function AdminHeader({ subtitle, action }: { subtitle?: string; action?: React.ReactNode }) {
   const path = usePathname();
+
+  const [newCount, setNewCount] = useState(0);
+  useEffect(() => {
+    let active = true;
+    fetch("/api/admin/access-requests/count")
+      .then((r) => (r.ok ? r.json() : { new: 0 }))
+      .then((d) => {
+        if (active) setNewCount(d.new ?? 0);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
     <div className="flex flex-col gap-3.5 [animation:rise_.5s_cubic-bezier(.22,1,.36,1)_both]">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -42,6 +59,11 @@ export function AdminHeader({ subtitle, action }: { subtitle?: string; action?: 
               }}
             >
               {t.label}
+              {t.href === "/admin/access-requests" && newCount > 0 && (
+                <span className="ml-1.5 inline-flex min-w-[16px] items-center justify-center rounded-full bg-[var(--brand)] px-1 text-[10px] font-bold leading-[16px] text-[var(--onbrand)]">
+                  {newCount}
+                </span>
+              )}
             </Link>
           );
         })}

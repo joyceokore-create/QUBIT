@@ -108,10 +108,10 @@ export function MarketingHeader() {
             Sign in
           </Link>
           <Link
-            href="/login"
+            href="/request-access"
             className={`q-lift hidden rounded-xl bg-[var(--pbrand)] px-5 py-2.5 text-[14px] font-bold text-[var(--onbrand)] md:inline-flex ${FOCUS_RING}`}
           >
-            Get started
+            Request access
           </Link>
 
           {/* Hamburger — below md only. */}
@@ -164,11 +164,11 @@ export function MarketingHeader() {
               Sign in
             </Link>
             <Link
-              href="/login"
+              href="/request-access"
               onClick={() => setMenuOpen(false)}
               className={`q-lift inline-flex items-center justify-center rounded-xl bg-[var(--pbrand)] px-5 py-3 text-[14px] font-bold text-[var(--onbrand)] ${FOCUS_RING}`}
             >
-              Get started
+              Request access
             </Link>
           </nav>
         </div>

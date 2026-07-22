@@ -14,13 +14,13 @@ describe("LoginForm (restyled)", () => {
     expect(document.querySelector("#email")).toBeTruthy();
     expect(document.querySelector("#password")).toBeTruthy();
     expect(screen.getByRole("button", { name: /enter authenticator code/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /riverbank super admin/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /kcb super admin/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /riverbank/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /kcb/i })).toBeInTheDocument();
   });
 
   it("quick sign-in fills the email field", () => {
     render(<LoginForm callbackUrl="/dashboard" />);
-    fireEvent.click(screen.getByRole("button", { name: /kcb super admin/i }));
+    fireEvent.click(screen.getByRole("button", { name: /kcb/i }));
     expect((document.querySelector("#email") as HTMLInputElement).value).toContain("@");
   });
 });
