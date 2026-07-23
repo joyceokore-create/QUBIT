@@ -29,6 +29,28 @@ export const CANONICAL_ROLES = [
 ] as const;
 export type CanonicalRole = (typeof CANONICAL_ROLES)[number];
 
+/** Human-friendly labels for the canonical roles (for profile/UI display). */
+const ROLE_LABELS: Record<CanonicalRole, string> = {
+  PlatformSuperAdmin: "Super Admin",
+  HeadOfProjects: "Head of Projects",
+  HeadOfQA: "Head of QA",
+  Executive: "Executive",
+  ProjectManager: "Project Manager",
+  Member: "Member",
+};
+
+/**
+ * The viewer's highest-ranked role as a display label. `CANONICAL_ROLES` is
+ * ordered most- to least-privileged, so the first match is the primary role.
+ * Unknown roles are humanized (camelCase → spaced); empty falls back to "Member".
+ */
+export function primaryRoleLabel(roles: string[]): string {
+  const top = CANONICAL_ROLES.find((r) => roles.includes(r));
+  if (top) return ROLE_LABELS[top];
+  const first = roles[0];
+  return first ? first.replace(/([a-z])([A-Z])/g, "$1 $2") : "Member";
+}
+
 // Global read + universal capabilities — granted to EVERY canonical role.
 const BASE: string[] = [
   // Global read (read-all world within the tenant).

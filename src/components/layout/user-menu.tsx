@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Check, LogOut, ShieldCheck } from "lucide-react";
+import { Check, ChevronDown, LogOut, ShieldCheck } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { signOutAction } from "@/lib/auth-actions";
 import {
@@ -22,6 +22,8 @@ interface TenantOption {
 interface UserMenuProps {
   name: string;
   email: string;
+  /** Display role shown beneath the name in the chip variant (e.g. "Project Manager"). */
+  role?: string;
   /**
    * When the viewer can switch tenants, the tenant switcher is folded into this
    * menu (the standalone chip is gone). Supply the tenant list + current slug.
@@ -29,6 +31,12 @@ interface UserMenuProps {
   tenants?: TenantOption[];
   canSwitchTenant?: boolean;
   currentSlug?: string;
+  /**
+   * "avatar" (default) — bare initials circle (sidebar footer, KCB topbar).
+   * "chip" — a profile pill with avatar + name + chevron, for the branded
+   *          Riverbank header where it stands in for the old tenant chip.
+   */
+  variant?: "avatar" | "chip";
 }
 
 // Each tenant carries its own brand disc colour, independent of the active theme brand.
@@ -39,21 +47,39 @@ function discColor(slug: string): string {
 export function UserMenu({
   name,
   email,
+  role,
   tenants = [],
   canSwitchTenant = false,
   currentSlug,
+  variant = "avatar",
 }: UserMenuProps) {
   const showSwitch = canSwitchTenant && tenants.length > 0;
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger
-        aria-label="Account menu"
-        className="flex size-[34px] flex-none items-center justify-center rounded-full border border-[var(--w10)] text-[11.5px] font-bold text-[var(--ink3)] transition-colors hover:border-brand"
-        style={{ background: "linear-gradient(135deg, var(--av1), var(--av2))" }}
-      >
-        {getInitials(name)}
-      </DropdownMenuTrigger>
+      {variant === "chip" ? (
+        <DropdownMenuTrigger
+          aria-label="Account menu"
+          className="flex items-center gap-2 rounded-full py-1 pl-1.5 pr-3 text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+        >
+          <span className="flex size-[34px] flex-none items-center justify-center rounded-full border border-[var(--tbchipbd)] bg-[var(--tbchipbg)] text-[11.5px] font-bold text-[var(--tbink)]">
+            {getInitials(name)}
+          </span>
+          <span className="flex min-w-0 flex-col items-start leading-tight">
+            <span className="max-w-[160px] truncate text-[13px] font-semibold">{name || "Account"}</span>
+            {role && <span className="max-w-[160px] truncate text-[11px] font-normal text-white/70">{role}</span>}
+          </span>
+          <ChevronDown className="size-[13px] flex-none opacity-70" />
+        </DropdownMenuTrigger>
+      ) : (
+        <DropdownMenuTrigger
+          aria-label="Account menu"
+          className="flex size-[34px] flex-none items-center justify-center rounded-full border border-[var(--w10)] text-[11.5px] font-bold text-[var(--ink3)] transition-colors hover:border-brand"
+          style={{ background: "linear-gradient(135deg, var(--av1), var(--av2))" }}
+        >
+          {getInitials(name)}
+        </DropdownMenuTrigger>
+      )}
       <DropdownMenuContent align="end" className="w-[250px]">
         <DropdownMenuLabel>
           <div className="flex flex-col">
@@ -87,21 +113,21 @@ export function UserMenu({
                   }}
                 >
                   <span
-                    className="flex size-6 items-center justify-center rounded-full text-[10px] font-extrabold text-[var(--onbrand)]"
+                    className="flex size-6 items-center justify-center rounded-full text-[10px] font-extrabold text-[var(--onbrand)]!"
                     style={{ background: discColor(t.slug) }}
                   >
                     {t.name.charAt(0).toUpperCase()}
                   </span>
                   <span className="flex-1">
                     <span className="block text-[13px] font-semibold text-[var(--qink)]">{t.name}</span>
-                    <span className="block text-[11px] text-[var(--ink4)]">
+                    <span className="block text-[11px] text-[var(--ink4)]!">
                       {isCurrent ? "current" : "sign in to switch"}
                     </span>
                   </span>
                   {isCurrent ? (
                     <Check className="size-3 text-brand" />
                   ) : (
-                    <LogOut className="size-3 text-[var(--ink5)]" />
+                    <LogOut className="size-3 text-[var(--ink5)]!" />
                   )}
                 </DropdownMenuItem>
               );

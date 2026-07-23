@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/rbac";
+import { can, primaryRoleLabel } from "@/lib/rbac";
 import { Topbar } from "@/components/layout/topbar";
 import { RiverbankShell } from "@/components/layout/riverbank-shell";
 import { TenantScope } from "@/components/layout/tenant-scope";
@@ -60,6 +60,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 tenantName={session.user.tenantName ?? ""}
                 userName={session.user.name ?? ""}
                 userEmail={session.user.email ?? ""}
+                userRole={primaryRoleLabel(session.user.roles)}
               >
                 {children}
               </RiverbankShell>

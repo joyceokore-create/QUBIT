@@ -106,11 +106,11 @@ export function ProjectMilestonesSection({ projectId, canEdit }: { projectId: st
       {canEdit && (
         <div className="flex items-center gap-2">
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Milestone name…" className="h-8 flex-1 text-xs" onKeyDown={(e) => e.key === "Enter" && add()} />
-          <input
+          <Input
             type="date"
             value={due}
             onChange={(e) => setDue(e.target.value)}
-            className="h-8 rounded-[6px] border border-ink-4 bg-background px-2 text-[11px] text-ink-2 outline-none focus:border-brand"
+            className="h-8 w-auto text-xs"
           />
           <button type="button" onClick={add} className="flex items-center gap-1 rounded-[8px] bg-[color-mix(in_oklab,var(--brand)_14%,transparent)] px-3 py-1.5 text-xs font-semibold text-brand">
             <Plus className="size-3.5" /> Add

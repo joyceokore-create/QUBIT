@@ -41,7 +41,6 @@ export default async function DashboardPage() {
     { label: "Health", value: `${kpis.healthPct}%`, tok: kpis.healthPct >= 70 ? "--ok" : "--warn", iconTok: "--ok", foot: `${kpis.needAttention} need attention`, href: "/projects", Icon: Activity, meter: kpis.healthPct / 100 },
     { label: "Resources", value: kpis.peopleAllocated, tok: kpis.overAllocated ? "--bad" : "--qink", iconTok: "--qinfo", foot: `${kpis.overAllocated} over-allocated`, href: "/people", Icon: Users, meter: null },
   ];
-  const trends = ["Portfolio health trend", "Burndown", "Budget burn", "Risk trend"];
 
   return (
     <div>
@@ -141,12 +140,7 @@ export default async function DashboardPage() {
           })}
         </section>
 
-        {/* ── Row 3: Trends (coming soon — need snapshot history / money type) ── */}
-        <section className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
-          {trends.map((t) => <SoonCard key={t} title={t} note="Needs time-series history" />)}
-        </section>
-
-        {/* ── Row 4: Projects table (all projects) ── */}
+        {/* ── Row 3: Projects table (all projects) ── */}
         <Panel title="Projects" sub={`${d.projects.length}`}>
           <div className="grid grid-cols-[minmax(0,1fr)_92px_120px_120px_74px_88px_92px] items-center gap-3 border-b border-[var(--hair)] p-[9px_18px] font-mono text-[8.5px] uppercase tracking-[1.4px] text-[var(--ink4)]">
             <span>Project</span><span>Health</span><span>Progress</span><span>Owner</span><span>Due</span><span>Confidence</span><span>AI predict</span>

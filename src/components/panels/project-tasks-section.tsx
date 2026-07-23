@@ -186,11 +186,11 @@ export function ProjectTasksSection({ projectId, canEdit }: { projectId: string;
                       {members.map((mem) => <SelectItem key={mem.userId} value={mem.userId}>{mem.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <input
+                  <Input
                     type="date"
                     value={t.dueDate ? t.dueDate.slice(0, 10) : ""}
                     onChange={(e) => patch(t.id, { dueDate: e.target.value ? new Date(e.target.value).toISOString() : null })}
-                    className="h-7 rounded-[6px] border border-ink-4 bg-background px-2 text-[11px] text-ink-2 outline-none focus:border-brand"
+                    className="h-7 w-auto text-[11px]"
                   />
                 </div>
               )}

@@ -21,6 +21,7 @@ interface RiverbankShellProps {
   tenantName: string;
   userName: string;
   userEmail: string;
+  userRole: string;
   children: React.ReactNode;
 }
 
@@ -34,6 +35,7 @@ export function RiverbankShell({
   tenantName,
   userName,
   userEmail,
+  userRole,
   children,
 }: RiverbankShellProps) {
   const pathname = usePathname();
@@ -226,8 +228,10 @@ export function RiverbankShell({
             <NotificationBell />
             <ThemeToggle />
             <UserMenu
+              variant="chip"
               name={userName}
               email={userEmail}
+              role={userRole}
               tenants={tenants}
               canSwitchTenant={canSwitchTenant}
               currentSlug={tenantSlug}
