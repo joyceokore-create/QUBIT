@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Menu, X, PanelLeftClose, PanelLeftOpen, LogOut } from "lucide-react";
 import { BrandLogo } from "@/components/brand/brand-logo";
+import { signOutAction } from "@/lib/auth-actions";
 import { NAV_ITEMS, isNavActive } from "./nav-items";
 import { TenantChip } from "./tenant-chip";
 import { UserMenu } from "./user-menu";
@@ -175,6 +176,21 @@ export function RiverbankShell({
               </Link>
             );
           })}
+
+          {/* Sign out — separated from the nav (and the Admin item) by a little space + divider */}
+          <form action={signOutAction} className="mt-3 border-t border-white/10 pt-3">
+            <button
+              type="submit"
+              title={labelled ? undefined : "Sign out"}
+              className={[
+                "flex w-full items-center rounded-lg text-white/80 transition-colors outline-none hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/70",
+                labelled ? "gap-3 px-3 py-2.5" : "mx-auto h-11 w-11 justify-center",
+              ].join(" ")}
+            >
+              <LogOut className="size-[18px] flex-shrink-0" strokeWidth={1.75} aria-hidden />
+              {labelled && <span className="flex-1 text-left text-[13.5px] rv:text-body-sm font-medium">Sign out</span>}
+            </button>
+          </form>
         </nav>
 
         {/* User footer */}
