@@ -225,7 +225,6 @@ export function RiverbankShell({
             <TimerWidget />
             <NotificationBell />
             <ThemeToggle />
-            <AskQButton />
             <UserMenu
               name={userName}
               email={userEmail}
@@ -233,6 +232,7 @@ export function RiverbankShell({
               canSwitchTenant={canSwitchTenant}
               currentSlug={tenantSlug}
             />
+            <AskQButton />
           </div>
         </header>
 
