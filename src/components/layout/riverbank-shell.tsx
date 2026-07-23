@@ -7,7 +7,6 @@ import { Menu, X, PanelLeftClose, PanelLeftOpen, LogOut } from "lucide-react";
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { signOutAction } from "@/lib/auth-actions";
 import { NAV_ITEMS, isNavActive } from "./nav-items";
-import { TenantChip } from "./tenant-chip";
 import { UserMenu } from "./user-menu";
 import { AskQButton } from "./ask-q-button";
 import { NotificationBell } from "./notification-bell";
@@ -98,9 +97,6 @@ export function RiverbankShell({
   }, [mobileOpen]);
 
   const items = NAV_ITEMS.filter((n) => n.perm !== "admin:access" || canAccessAdmin);
-  const pageTitle =
-    items.find((n) => isNavActive(pathname, n.href))?.label ??
-    (pathname.split("/").filter(Boolean)[0]?.replace(/-/g, " ") ?? "Dashboard");
   // Labels show when expanded on desktop, or always inside the mobile drawer.
   const labelled = open || mobileOpen;
 
@@ -223,14 +219,20 @@ export function RiverbankShell({
             <Menu className="size-5" />
           </button>
           <h1 className="min-w-0 flex-1 truncate font-heading rv:text-heading-sm text-[17px] font-bold tracking-[-.3px]">
-            {pageTitle}
+            {tenantName}
           </h1>
           <div className="flex items-center gap-1.5">
             <TimerWidget />
             <NotificationBell />
             <ThemeToggle />
-            <TenantChip currentSlug={tenantSlug} currentName={tenantName} canSwitch={canSwitchTenant} tenants={tenants} />
             <AskQButton />
+            <UserMenu
+              name={userName}
+              email={userEmail}
+              tenants={tenants}
+              canSwitchTenant={canSwitchTenant}
+              currentSlug={tenantSlug}
+            />
           </div>
         </header>
 
