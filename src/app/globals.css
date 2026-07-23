@@ -447,9 +447,9 @@
   --ink2: #d8cfc6;
   --ink3: #b3a99f;
   --ink35: #9c948b;
-  --ink4: #847b72;
-  --ink5: #5c554e;
-  --ink6: #3d3833;
+  --ink4: #978d82;
+  --ink5: #83796f;
+  --ink6: #5f574e;
 
   --ok: #3ecf8e;
   --okbg: rgba(62, 207, 142, 0.12);
@@ -835,6 +835,11 @@
   --rv-topbar: linear-gradient(90deg, #241f20 0%, #5c0f13 100%);
   --rv-active: #b81c22;
 }
+/* Compound selector (.dark[data-tenant]) covers the case where BOTH classes sit
+   on the same element (they're both on <html>); the descendant form covers a
+   nested [data-tenant] app-shell. Without the compound form, <html>/<body> fall
+   back to the LIGHT tenant surfaces in dark mode (near-white --qbg). */
+.dark[data-tenant="riverbank"],
 .dark [data-tenant="riverbank"] {
   --rbrand: #ed1c24;            /* guide keeps brand red on primary buttons */
   --onbrand: #ffffff;
@@ -856,9 +861,9 @@
   --ink2: #cbd5e1;
   --ink3: #94a3b8;
   --ink35: #94a3b8;
-  --ink4: #64748b;
-  --ink5: #475569;
-  --ink6: #334155;
+  --ink4: #8b99ae;
+  --ink5: #74839a;
+  --ink6: #566578;
 
   --ok: #6dd49a;  --okbg: rgba(22, 163, 74, 0.14);
   --warn: #f4b96a; --warnbg: rgba(217, 119, 6, 0.14);
@@ -891,6 +896,7 @@
   /* Topbar: navy → green (official) */
   --topbar: linear-gradient(95deg, #002b4d 0%, color-mix(in oklab, var(--brand) 55%, #002b4d) 62%, var(--brand) 120%);
 }
+.dark[data-tenant="kcb"],
 .dark [data-tenant="kcb"] {
   --pbrand: #84bd00;
   --onbrand: #002b4d;
