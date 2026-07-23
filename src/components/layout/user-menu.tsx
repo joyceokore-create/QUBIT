@@ -42,7 +42,12 @@ export function UserMenu({ name, email }: UserMenuProps) {
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <form action={signOutAction} className="w-full">
-          <DropdownMenuItem variant="destructive" render={<button type="submit" className="w-full" />}>
+          <DropdownMenuItem
+            variant="destructive"
+            nativeButton
+            closeOnClick={false}
+            render={<button type="submit" className="w-full" />}
+          >
             <LogOut />
             Sign out
           </DropdownMenuItem>
