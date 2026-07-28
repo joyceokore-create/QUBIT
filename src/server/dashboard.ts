@@ -1,5 +1,5 @@
 import { withTenant, type TenantContext } from "@/lib/tenant";
-import { ragCounts, worstStatus } from "@/server/health";
+import { projectRag, ragCounts, worstStatus } from "@/server/health";
 
 // ── Derived-value helpers (docs/09-ui-spec.md "Derived values") ──────────────
 // These mirror docs/design-reference-exec-dashboard.html's own helpers (avgPct, sc(),
@@ -326,23 +326,19 @@ export async function getUpcomingMilestones(
   ctx: TenantContext,
   limit = 8,
 ): Promise<UpcomingMilestone[]> {
+  // ProjectMilestone since the M1 merge — subsidiary context lives in the name.
+  // "Late" is derived: still Pending with a past due date.
+  const now = new Date();
   const milestones = await withTenant(ctx, (tx) =>
-    tx.milestone.findMany({
-      where: { dueDate: { not: null } },
+    tx.projectMilestone.findMany({
+      where: { dueDate: { not: null }, status: { not: "Done" } },
       orderBy: { dueDate: "asc" },
       take: limit,
       select: {
         id: true,
         name: true,
-        state: true,
         dueDate: true,
-        parent: {
-          select: {
-            status: true,
-            project: { select: { name: true } },
-            orgUnit: { select: { name: true, flag: true } },
-          },
-        },
+        project: { select: { name: true, status: true } },
       },
     }),
   );
@@ -350,23 +346,14 @@ export async function getUpcomingMilestones(
   return milestones
     .filter((m) => m.dueDate)
     .map((m) => {
-      const late = m.state === "late";
-      const parentStatus = m.parent.status;
-      const color: "green" | "amber" | "red" = late
-        ? "red"
-        : parentStatus === "Overdue"
-          ? "red"
-          : parentStatus === "AtRisk"
-            ? "amber"
-            : "green";
+      const rag = projectRag(m.project.status);
+      const color: "green" | "amber" | "red" =
+        m.dueDate! < now || rag === "Red" ? "red" : rag === "Amber" ? "amber" : "green";
       const label = color === "red" ? "Overdue" : color === "amber" ? "At risk" : "On track";
 
       return {
         id: m.id,
-        text: `${m.parent.project.name} — ${m.parent.orgUnit.flag ?? ""} ${m.parent.orgUnit.name} ${m.name}`.replace(
-          /\s+/g,
-          " ",
-        ).trim(),
+        text: `${m.project.name} — ${m.name}`.replace(/\s+/g, " ").trim(),
         meta: `${formatShortDate(m.dueDate!)} · ${label}`,
         color,
       };

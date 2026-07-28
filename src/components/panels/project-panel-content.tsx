@@ -3,8 +3,6 @@ import { StatusPill } from "@/components/dashboard/status-pill";
 import { cn } from "@/lib/utils";
 import {
   StatTile,
-  MilestoneChip,
-  MilestoneBlock,
   statusTextClass,
   statusBarClass,
   formatDate,
@@ -48,7 +46,6 @@ export interface ProjectPanelJson {
     flag: string | null;
     progress: number;
     status: string;
-    milestones: { name: string; state: string; sequence: number }[];
   }[];
 }
 
@@ -58,10 +55,6 @@ interface ProjectPanelContentProps {
 }
 
 export function ProjectPanelContent({ data, onUpdated }: ProjectPanelContentProps) {
-  const allMilestoneNames = [
-    ...new Set(data.subsidiaries.flatMap((s) => s.milestones.map((m) => m.name))),
-  ];
-
   return (
     <div className="flex h-full flex-col overflow-y-auto">
       <SheetHeader className="sticky top-0 z-10 gap-0.5 border-b border-background bg-white p-[22px_26px_18px]">
@@ -130,8 +123,9 @@ export function ProjectPanelContent({ data, onUpdated }: ProjectPanelContentProp
 
         <AskQAbout type="project" targetId={data.id} label="Ask Q about this project" />
 
+        {/* Milestones live in the workspace Deadlines tab since the M1 model merge —
+            subsidiary context is carried in each milestone's name. */}
         {data.subsidiaries.length > 0 && (
-        <>
         <div>
           <div className="mb-2.5 text-[13px] font-semibold text-foreground">Progress by Subsidiary</div>
           <div className="flex flex-col gap-2">
@@ -148,62 +142,16 @@ export function ProjectPanelContent({ data, onUpdated }: ProjectPanelContentProp
                     </span>
                   </div>
                 </div>
-                <div className="mb-[7px] h-[7px] overflow-hidden rounded-full bg-ink-4">
+                <div className="h-[7px] overflow-hidden rounded-full bg-ink-4">
                   <div
                     className={cn("h-full rounded-full transition-[width]", statusBarClass(sub.status))}
                     style={{ width: `${sub.progress}%` }}
                   />
                 </div>
-                <div className="flex flex-wrap gap-1">
-                  {sub.milestones.map((m) => (
-                    <MilestoneChip key={m.sequence} name={m.name} state={m.state} />
-                  ))}
-                </div>
               </div>
             ))}
           </div>
         </div>
-
-        <div>
-          <div className="mb-2.5 text-[13px] font-semibold text-foreground">Milestone Matrix</div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[420px] border-collapse">
-              <thead>
-                <tr>
-                  <th className="w-[120px] bg-background px-[9px] py-1.5 text-left text-[9px] font-semibold tracking-[0.7px] text-ink-3 uppercase">
-                    Subsidiary
-                  </th>
-                  {allMilestoneNames.map((name) => (
-                    <th
-                      key={name}
-                      className="bg-background px-[9px] py-1.5 text-center text-[9px] font-semibold tracking-[0.7px] whitespace-nowrap text-ink-3 uppercase"
-                    >
-                      {name}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.subsidiaries.map((sub) => (
-                  <tr key={sub.orgUnitId} className="border-b border-background">
-                    <td className="py-1 pl-[9px] text-[11px] font-medium whitespace-nowrap text-ink-2">
-                      {sub.flag} {sub.name}
-                    </td>
-                    {allMilestoneNames.map((name) => {
-                      const milestone = sub.milestones.find((m) => m.name === name);
-                      return (
-                        <td key={name} className="p-[4px_5px]">
-                          <MilestoneBlock state={milestone?.state ?? null} />
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        </>
         )}
       </div>
     </div>

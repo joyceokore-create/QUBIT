@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
+import { emitDomainEvent } from "@/server/events";
 
 /**
  * MVP1 PRD Module 10 — Blocker Register. A blocker is a live impediment on a project:
@@ -101,6 +102,12 @@ export async function createBlocker(ctx: TenantContext, projectId: string, input
       entityId: blocker.id,
       after: { severity: blocker.severity, description: blocker.description },
     });
+    await emitDomainEvent(tx, ctx, {
+      type: "blocker.opened",
+      entityType: "blocker",
+      entityId: blocker.id,
+      payload: { projectId, severity: blocker.severity },
+    });
     return blocker;
   });
 }
@@ -126,6 +133,14 @@ export async function updateBlocker(ctx: TenantContext, blockerId: string, input
       before: { status: before.status, severity: before.severity },
       after: { status: after.status, severity: after.severity },
     });
+    if (after.status !== before.status && (after.status === "Resolved" || after.status === "Open")) {
+      await emitDomainEvent(tx, ctx, {
+        type: after.status === "Resolved" ? "blocker.resolved" : "blocker.opened",
+        entityType: "blocker",
+        entityId: blockerId,
+        payload: { projectId: after.projectId, severity: after.severity },
+      });
+    }
     return after;
   });
 }

@@ -21,7 +21,6 @@ BEGIN
     'programme',
     'project',
     'project_org_status',
-    'milestone',
     'risk',
     'issue',
     'audit_log',
@@ -70,9 +69,12 @@ BEGIN
     'join_request',
     -- Phase 6.1 — per-project task-key sequence (docs/15).
     'project_task_counter',
-    -- Revamp M0 — domain-event outbox (docs/16-revamp-plan.md §10). job_run is
-    -- deliberately NOT tenant-scoped (dispatcher-level observability, like access_request).
-    'domain_event'
+    -- Revamp M0/M1 — domain-event outbox + nightly snapshots (docs/16-revamp-plan.md §10).
+    -- job_run is deliberately NOT tenant-scoped (dispatcher observability, like
+    -- access_request). The legacy 'milestone' table merged into project_milestone in M1.
+    'domain_event',
+    'project_snapshot',
+    'portfolio_snapshot'
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);

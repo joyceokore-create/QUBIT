@@ -39,7 +39,7 @@ export interface PortfolioHealth {
   pct: number;
 }
 
-/** Portfolio rollup — the exec-dashboard grouping, canonicalised. */
+/** Portfolio rollup — the dashboard grouping, canonicalised. */
 export function portfolioHealth(statuses: string[]): PortfolioHealth {
   const by = (s: string) => statuses.filter((x) => x === s).length;
   const onTrack = by("OnTrack") + by("Completed");

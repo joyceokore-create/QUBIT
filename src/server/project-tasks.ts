@@ -436,6 +436,14 @@ export async function updateTask(ctx: TenantContext, taskId: string, input: Upda
           ],
         });
       }
+      if (updated.status === "Completed" && before.status !== "Completed") {
+        await emitDomainEvent(tx, ctx, {
+          type: "task.completed",
+          entityType: "project_task",
+          entityId: taskId,
+          payload: { projectId: before.projectId },
+        });
+      }
       const reachedQa = input.status === "InQA" && before.status !== "InQA";
       if (reachedQa && before.type === "Bug" && before.reporterId && before.reporterId !== ctx.userId) {
         await emitDomainEvent(tx, ctx, {
@@ -467,7 +475,10 @@ export async function updateTask(ctx: TenantContext, taskId: string, input: Upda
 
 export async function setTaskStatus(ctx: TenantContext, taskId: string, status: TaskStatus) {
   return withTenant(ctx, async (tx) => {
-    const task = await tx.projectTask.findUnique({ where: { id: taskId }, select: { status: true } });
+    const task = await tx.projectTask.findUnique({
+      where: { id: taskId },
+      select: { status: true, projectId: true, approvalStatus: true },
+    });
     if (!task) throw new TaskError("Task not found.", "NOT_FOUND");
     const updated = await tx.projectTask.update({ where: { id: taskId }, data: { status, lastActivityAt: new Date() } });
     await audit(tx, ctx, {
@@ -477,6 +488,14 @@ export async function setTaskStatus(ctx: TenantContext, taskId: string, status: 
       before: { status: task.status },
       after: { status },
     });
+    if (status === "Completed" && task.status !== "Completed" && task.approvalStatus === "Published") {
+      await emitDomainEvent(tx, ctx, {
+        type: "task.completed",
+        entityType: "project_task",
+        entityId: taskId,
+        payload: { projectId: task.projectId },
+      });
+    }
     return updated;
   });
 }
@@ -514,6 +533,12 @@ export async function flagTaskBlocked(
       entityId: blocker.id,
       after: { taskId, description: blocker.description, severity: blocker.severity },
     });
+    await emitDomainEvent(tx, ctx, {
+      type: "blocker.opened",
+      entityType: "blocker",
+      entityId: blocker.id,
+      payload: { projectId: task.projectId, taskId, severity: blocker.severity },
+    });
     return blocker;
   });
 }
@@ -521,7 +546,7 @@ export async function flagTaskBlocked(
 /** Unflag: resolve the task's Open linked Blocker(s). Audited. */
 export async function unflagTaskBlocked(ctx: TenantContext, taskId: string, resolutionNotes?: string) {
   return withTenant(ctx, async (tx) => {
-    const open = await tx.blocker.findMany({ where: { taskId, status: "Open" }, select: { id: true } });
+    const open = await tx.blocker.findMany({ where: { taskId, status: "Open" }, select: { id: true, projectId: true } });
     if (open.length === 0) return { resolved: 0 };
     await tx.blocker.updateMany({
       where: { id: { in: open.map((b) => b.id) } },
@@ -535,6 +560,12 @@ export async function unflagTaskBlocked(ctx: TenantContext, taskId: string, reso
         entityId: b.id,
         before: { status: "Open" },
         after: { status: "Resolved", taskId },
+      });
+      await emitDomainEvent(tx, ctx, {
+        type: "blocker.resolved",
+        entityType: "blocker",
+        entityId: b.id,
+        payload: { projectId: b.projectId, taskId },
       });
     }
     return { resolved: open.length };

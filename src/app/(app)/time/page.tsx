@@ -53,7 +53,7 @@ export default async function TimePage() {
             {rows.length === 0 && (
               <tr>
                 <td className="px-3 py-8 text-center text-[12px] text-[var(--ink5)]">
-                  No time tracked this week. Start a timer from any task.
+                  No time tracked this week. Time capture returns with the M6 absence &amp; capacity milestone.
                 </td>
               </tr>
             )}

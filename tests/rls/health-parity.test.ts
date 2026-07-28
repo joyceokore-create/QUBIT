@@ -5,7 +5,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import type { TenantContext } from "@/lib/tenant";
-import { getExecDashboard } from "@/server/exec-dashboard";
+import { getDashboardV2 } from "@/server/dashboard-v2";
 import { generateReport } from "@/server/q/report";
 import { needsAttention } from "@/server/health";
 import { ensureUsers, cleanupFixtureUsers } from "./_users";
@@ -38,7 +38,7 @@ describe("health parity — dashboard vs Q", () => {
 
   it("agrees on totals and the exact needs-attention set for every project, both tenants", async () => {
     for (const t of tenants) {
-      const dashboard = await getExecDashboard(t.ctx);
+      const dashboard = await getDashboardV2(t.ctx);
       const report = await generateReport(t.ctx, { type: "portfolio", tenantName: t.name });
       const data = report.data as {
         totals: { projects: number; onTrack: number; atRisk: number; overdue: number; completed: number };
@@ -49,7 +49,7 @@ describe("health parity — dashboard vs Q", () => {
       expect(data.totals.projects).toBe(dashboard.health.total);
       expect(data.totals.onTrack + data.totals.completed).toBe(dashboard.health.onTrack);
       expect(data.totals.atRisk + data.totals.overdue).toBe(dashboard.health.needAttention);
-      expect(dashboard.kpis.needAttention).toBe(data.needsAttention.length);
+      expect(dashboard.health.needAttention).toBe(data.needsAttention.length);
 
       // 100% of projects: the two surfaces flag exactly the same set.
       const dashboardFlagged = dashboard.projects

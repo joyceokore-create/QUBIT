@@ -32,7 +32,6 @@ model Tenant {
   programmes       Programme[]
   projects         Project[]
   projectOrgStatus ProjectOrgStatus[]
-  milestones       Milestone[]
   risks            Risk[]
   issues           Issue[]
   auditLogs        AuditLog[]
@@ -78,8 +77,10 @@ model Tenant {
   rolePermissions     RolePermission[]
   joinRequests        JoinRequest[]
 
-  // ── Revamp M0 backbone (docs/16-revamp-plan.md §10) ──
-  domainEvents DomainEvent[]
+  // ── Revamp M0/M1 backbone (docs/16-revamp-plan.md §10) ──
+  domainEvents       DomainEvent[]
+  projectSnapshots   ProjectSnapshot[]
+  portfolioSnapshots PortfolioSnapshot[]
 
   @@map("tenant")
 }
@@ -114,6 +115,8 @@ model User {
   deletedAt              DateTime?   @map("deleted_at")
   lastLoginAt            DateTime?   @map("last_login_at") // null = invited but never signed in
   mustChangePassword     Boolean     @default(false) @map("must_change_password") // invited users reset on first sign-in
+  // Dashboard v2 delta feed (M1): lower bound of "what changed since I last looked".
+  lastDashboardSeenAt    DateTime?   @map("last_dashboard_seen_at")
   departmentId           String?     @map("department_id")
   department             Department? @relation("UserDepartment", fields: [departmentId], references: [id])
   // Who this user reports to. Self-relation — see docs/05-data-model.md. Longer manager
@@ -560,6 +563,7 @@ model Project {
   integrations  ProjectIntegration[]
   milestonesV2  ProjectMilestone[]
   joinRequests  JoinRequest[]
+  snapshots     ProjectSnapshot[]
 
   @@unique([tenantId, code])
   @@map("project")
@@ -578,27 +582,14 @@ model ProjectOrgStatus {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  milestones Milestone[]
-
   @@unique([projectId, orgUnitId])
   @@map("project_org_status")
 }
 
-model Milestone {
-  id                 String           @id @default(uuid())
-  tenantId           String           @map("tenant_id")
-  tenant             Tenant           @relation(fields: [tenantId], references: [id])
-  projectOrgStatusId String           @map("project_org_status_id")
-  parent             ProjectOrgStatus @relation(fields: [projectOrgStatusId], references: [id])
-  name               String
-  sequence           Int
-  state              String
-  dueDate            DateTime?        @map("due_date")
-  createdAt          DateTime         @default(now()) @map("created_at")
-  updatedAt          DateTime         @updatedAt @map("updated_at")
-
-  @@map("milestone")
-}
+// The legacy per-subsidiary `Milestone` model merged into `ProjectMilestone` in M1
+// (docs/16-revamp-plan.md §2 — one concept, one model). Migration
+// 20260728150000_m1_snapshots_milestone_merge copied the rows (org-unit context baked
+// into the name) and dropped the table.
 
 model Risk {
   id          String   @id @default(uuid())
@@ -1290,4 +1281,51 @@ model JobRun {
 
   @@index([job, startedAt])
   @@map("job_run")
+}
+
+// Nightly per-project snapshot (M1, docs/16-revamp-plan.md §10): one row per project per
+// day, written by the "nightly-snapshot" job. Feeds trends, the delta feed, check-in
+// drafts (M2), and burnup. Unique (tenant, project, day) makes the job idempotent.
+model ProjectSnapshot {
+  id             String   @id @default(cuid())
+  tenantId       String   @map("tenant_id")
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  projectId      String   @map("project_id")
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  day            DateTime @db.Date
+  status         String // project delivery status that day
+  rag            String // Green | Amber | Red — projectRag(status), baked for cheap trend reads
+  progress       Int
+  tasksOpen      Int      @map("tasks_open")
+  tasksCompleted Int      @map("tasks_completed")
+  tasksOverdue   Int      @map("tasks_overdue")
+  blockersOpen   Int      @map("blockers_open")
+  risksOpen      Int      @map("risks_open")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([tenantId, projectId, day])
+  @@index([tenantId, day])
+  @@map("project_snapshot")
+}
+
+// Nightly portfolio rollup (M1): the dashboard's three KPIs over time — On-track %,
+// overdue tasks, capacity pressure. Raw people counts are stored so the pressure
+// definition can evolve without rewriting history.
+model PortfolioSnapshot {
+  id                  String   @id @default(cuid())
+  tenantId            String   @map("tenant_id")
+  tenant              Tenant   @relation(fields: [tenantId], references: [id])
+  day                 DateTime @db.Date
+  projects            Int
+  onTrack             Int      @map("on_track")
+  needAttention       Int      @map("need_attention")
+  planning            Int
+  onTrackPct          Int      @map("on_track_pct")
+  tasksOverdue        Int      @map("tasks_overdue")
+  peopleAllocated     Int      @map("people_allocated")
+  peopleOverAllocated Int      @map("people_over_allocated")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  @@unique([tenantId, day])
+  @@map("portfolio_snapshot")
 }

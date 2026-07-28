@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { withTenant } from "@/lib/tenant";
+import { nightlySnapshot } from "@/server/jobs/nightly-snapshot";
 import type { JobDefinition, JobRunResult } from "@/server/jobs/types";
 
 /**
@@ -10,8 +11,8 @@ import type { JobDefinition, JobRunResult } from "@/server/jobs/types";
  * double execution. Tenant data access happens ONLY inside withTenant per tenant — DM1.18.
  */
 
-// M0 ships the runtime with one read-only job proving the tenant loop under RLS.
-// Real jobs (nightly snapshots M1, Friday check-ins M2, nudger M3, digests M5) register here.
+// heartbeat is the read-only loop probe from M0; real jobs register alongside it
+// (nightly snapshots M1; Friday check-ins M2, nudger M3, digests M5 to come).
 const heartbeat: JobDefinition = {
   name: "heartbeat",
   async run(tx) {
@@ -20,7 +21,9 @@ const heartbeat: JobDefinition = {
   },
 };
 
-const REGISTRY = new Map<string, JobDefinition>([[heartbeat.name, heartbeat]]);
+const REGISTRY = new Map<string, JobDefinition>(
+  [heartbeat, nightlySnapshot].map((job) => [job.name, job]),
+);
 
 export function getJob(name: string): JobDefinition | undefined {
   return REGISTRY.get(name);

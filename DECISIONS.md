@@ -492,3 +492,49 @@ Verified: lint + typecheck + 375/375 tests green (49 files; 11 ClickUp suites re
 4 added: health unit, health-parity, domain-events, jobs+cron). In-browser on both
 tenants (KCB green topbar / Riverbank red shell): culled dashboard, SSE connect, live
 bell refetch on `pg_notify`, report/dashboard attention-set parity.
+
+## Revamp M1 — Dashboard v2 (2026-07-28)
+
+### DM1.23 — M1 executed: snapshots, delta feed, milestone merge, ten-second dashboard
+Plan: `docs/16-revamp-plan.md` §3/§12 (M1). Approved calls from review: org-unit context
+baked into migrated milestone names; legacy `milestone` table dropped in M1 (not M9);
+KCB-only synthetic sparkline history (Riverbank stays honestly empty until real nights).
+
+- **Milestone merge** (`20260728150000_m1_snapshots_milestone_merge`): legacy
+  per-subsidiary `Milestone` (via ProjectOrgStatus) → `ProjectMilestone`, ids preserved
+  (re-run = no-op), names prefixed "🇰🇪 KCB Kenya UAT", state mapping done→Done else
+  Pending ("late" is now DERIVED: Pending + past due). **The copy runs in a DM1.18
+  tenant-loop DO block** — verified live: 197 KCB rows copied, then `DROP TABLE
+  milestone`. Consequence: the slide-in panel lost its per-subsidiary Milestone Matrix
+  (subsidiary progress bars stay); milestones live in the workspace Deadlines tab.
+  `getUpcomingMilestones` repointed; relevance already read ProjectMilestone.
+- **Snapshots**: `ProjectSnapshot` (unique tenant+project+day) + `PortfolioSnapshot`
+  (unique tenant+day), RLS+FORCE. `nightly-snapshot` job upserts (idempotent re-runs),
+  numbers come from the health engine, machine-actor audit row per tenant per night.
+  Crontab line documented in docs/deployment.md (23:55 EAT).
+- **Delta feed**: `User.lastDashboardSeenAt` (guarded update — a stale session for a
+  reseeded user degrades, never 500s; floor window 24h so refreshes don't blank it;
+  marker advances at most hourly). Pure `summarizeDeltas` over outbox events; new event
+  instrumentation: `blocker.opened/resolved` (create/update/flag/unflag),
+  `task.completed` (updateTask + setTaskStatus, Published only),
+  `project.status_changed` (from/to). Project-scoped deltas whose project no longer
+  resolves are DROPPED (deleted-project noise), status lines collapse to the last
+  transition, and only RAG-boundary crossings surface (Planning→OnTrack is silent).
+- **Dashboard v2** (`src/server/dashboard-v2.ts`, exec-dashboard.ts deleted): Needs
+  attention (relevance, top 5) / Since you last looked / 3 KPIs (On-track %, Overdue
+  tasks, Capacity pressure = people over-allocated) with server-rendered SVG sparklines
+  (honest "trend after 2+ nightly snapshots" under 2 points) + health ring + heatmap
+  drill-down (KCB; cells carry pct + OK/AR/OD text tags — never colour-only) or a
+  per-portfolio rollup list when a tenant has ≤1 org unit (hidden entirely for
+  Riverbank's 0 portfolios). Role composition per DM1.10: `Executive` role sees At-risk
+  first with Today collapsed (<details>); everyone else Today first. Projects table,
+  milestones/risks/capacity panels, notifications panel, and the budget KPI left the
+  dashboard (kill list M1 — `parseBudget` survives only for the legacy /api/dashboard/
+  summary route). Risks + Time restored to nav.
+- **Parity contract**: `QReportResult.data` + `DashboardV2.projects` keep the
+  dashboard-vs-Q health-parity test exact under the v2 shapes.
+
+Verified: lint/typecheck/build green, 387/387 tests (51 files; new: snapshots RLS,
+delta unit). In-browser both tenants: KCB (green, topbar) heatmap + real 14-day
+sparklines + merged milestone names in the briefing; Riverbank (red, shell) honest
+empty trends/delta, /time + /risks nav, stale timer copy fixed.

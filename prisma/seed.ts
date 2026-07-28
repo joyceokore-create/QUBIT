@@ -6,6 +6,7 @@
 import { prisma } from "../src/lib/db";
 import { withTenant } from "../src/lib/tenant";
 import { hashPassword } from "../src/lib/password";
+import { portfolioHealth } from "../src/server/health";
 
 // LOCAL DEV / DEMO ONLY — every seeded user shares this password so any of them can be
 // used to test role-based views. Never reused for real accounts or non-local environments.
@@ -1079,6 +1080,9 @@ async function resetTenant(slug: string) {
     // ClickUp transformation tables (leaf → root; the tenant FK is RESTRICT so these
     // must be cleared before the tenant delete below).
     // MVP1 workspace + copilot tables (must clear before the tenant delete — tenant FK is RESTRICT).
+    await tx.projectSnapshot.deleteMany({});
+    await tx.portfolioSnapshot.deleteMany({});
+    await tx.domainEvent.deleteMany({});
     await tx.projectMilestone.deleteMany({});
     await tx.projectIntegration.deleteMany({});
     await tx.projectStatusUpdate.deleteMany({});
@@ -1114,7 +1118,6 @@ async function resetTenant(slug: string) {
     await tx.folder.deleteMany({});
     await tx.space.deleteMany({});
 
-    await tx.milestone.deleteMany({});
     await tx.projectOrgStatus.deleteMany({});
     await tx.issue.deleteMany({});
     await tx.risk.deleteMany({});
@@ -1152,11 +1155,13 @@ async function seedTenant(seed: TenantSeed) {
 
   await withTenant({ tenantId: tenant.id, userId: "seed-script" }, async (tx) => {
     const orgUnitIdByCode = new Map<string, string>();
+    const orgUnitLabelByCode = new Map<string, string>();
     for (const ou of seed.orgUnits) {
       const created = await tx.orgUnit.create({
         data: { tenantId: tenant.id, code: ou.code, name: ou.name, flag: ou.flag },
       });
       orgUnitIdByCode.set(ou.code, created.id);
+      orgUnitLabelByCode.set(ou.code, [ou.flag, ou.name].filter(Boolean).join(" "));
     }
 
     const demoPasswordHash = await hashPassword(DEMO_PASSWORD);
@@ -1252,7 +1257,7 @@ async function seedTenant(seed: TenantSeed) {
       for (const [orgCode, sub] of Object.entries(proj.subs)) {
         const orgUnitId = orgUnitIdByCode.get(orgCode);
         if (!orgUnitId) continue;
-        const pos = await tx.projectOrgStatus.create({
+        await tx.projectOrgStatus.create({
           data: {
             tenantId: tenant.id,
             projectId: created.id,
@@ -1261,15 +1266,17 @@ async function seedTenant(seed: TenantSeed) {
             status: mapStatus(sub.status),
           },
         });
+        // Milestones live on ProjectMilestone since the M1 merge; the subsidiary context
+        // is baked into the name, mirroring the 20260728150000 migration's mapping.
         for (let i = 0; i < sub.ms.length; i++) {
           const dueDate = sub.msDue?.[i];
-          await tx.milestone.create({
+          await tx.projectMilestone.create({
             data: {
               tenantId: tenant.id,
-              projectOrgStatusId: pos.id,
-              name: sub.ms[i],
-              sequence: i,
-              state: sub.msSt[i],
+              projectId: created.id,
+              name: [orgUnitLabelByCode.get(orgCode), sub.ms[i]].filter(Boolean).join(" "),
+              status: sub.msSt[i] === "done" ? "Done" : "Pending",
+              orderIndex: i,
               dueDate: dueDate ? new Date(dueDate) : null,
             },
           });
@@ -1373,6 +1380,46 @@ async function seedTenant(seed: TenantSeed) {
       }
     }
 
+    // ── Demo sparkline history — SYNTHETIC tenant (KCB) ONLY ──────────────────
+    // 14 days of PortfolioSnapshot so the dashboard's KPI sparklines have a demo trend.
+    // Riverbank (the real tenant) gets NO fabricated history: its sparklines stay in the
+    // honest empty state until the nightly-snapshot job accrues real nights.
+    if (seed.slug === "kcb") {
+      const statuses = (await tx.project.findMany({ select: { status: true } })).map((p) => p.status);
+      const current = portfolioHealth(statuses);
+      const now = new Date();
+      const tasksOverdue = await tx.projectTask.count({
+        where: { dueDate: { lt: now }, status: { not: "Completed" }, approvalStatus: { not: "Draft" } },
+      });
+      const allocations = await tx.projectMember.groupBy({
+        by: ["userId"],
+        _sum: { allocationPct: true },
+      });
+      const peopleAllocated = allocations.length;
+      const peopleOverAllocated = allocations.filter((a) => (a._sum.allocationPct ?? 0) > 100).length;
+
+      for (let daysAgo = 13; daysAgo >= 0; daysAgo--) {
+        const d = new Date(now.getTime() - daysAgo * 86_400_000);
+        const day = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+        // Deterministic mild trend toward today's real values.
+        const onTrack = Math.max(0, current.onTrack - Math.ceil(daysAgo / 4));
+        const needAttention = current.needAttention + (current.onTrack - onTrack);
+        await tx.portfolioSnapshot.create({
+          data: {
+            tenantId: tenant.id,
+            day,
+            projects: current.total,
+            onTrack,
+            needAttention,
+            planning: current.planning,
+            onTrackPct: current.total ? Math.round((onTrack / current.total) * 100) : 0,
+            tasksOverdue: tasksOverdue + Math.ceil(daysAgo / 3),
+            peopleAllocated,
+            peopleOverAllocated,
+          },
+        });
+      }
+    }
   });
 
   return tenant;

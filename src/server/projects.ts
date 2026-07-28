@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { avgProgress } from "@/server/dashboard";
+import { emitDomainEvent } from "@/server/events";
 import { ragCounts } from "@/server/health";
 
 const PROJECT_STATUSES = ["Planning", "OnTrack", "AtRisk", "Overdue", "Completed", "Cancelled"] as const;
@@ -251,7 +252,6 @@ export interface ProjectSubsidiaryDetail {
   flag: string | null;
   progress: number;
   status: string;
-  milestones: { name: string; state: string; sequence: number }[];
 }
 
 export interface ProjectPanelData {
@@ -291,7 +291,6 @@ export async function getProjectPanelData(
         orgStatuses: {
           include: {
             orgUnit: { select: { id: true, code: true, name: true, flag: true } },
-            milestones: { orderBy: { sequence: "asc" } },
           },
         },
       },
@@ -325,7 +324,6 @@ export async function getProjectPanelData(
         flag: os.orgUnit.flag,
         progress: os.progress,
         status: os.status,
-        milestones: os.milestones.map((m) => ({ name: m.name, state: m.state, sequence: m.sequence })),
       })),
     };
   });
@@ -547,6 +545,16 @@ export async function updateProject(
         leadUserId: after.leadUserId,
       },
     });
+
+    if (after.status !== before.status) {
+      // Feeds the dashboard delta feed ("X slipped to At Risk" / "recovered to On Track").
+      await emitDomainEvent(tx, ctx, {
+        type: "project.status_changed",
+        entityType: "project",
+        entityId: projectId,
+        payload: { from: before.status, to: after.status },
+      });
+    }
 
     return after;
   });

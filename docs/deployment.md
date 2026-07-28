@@ -132,3 +132,20 @@ the schema (or run migrations as an owner). Everything else is unchanged.
 > Note: the image is built without Docker available in CI here — build it once in your
 > pipeline (`docker compose build`) and run the quality gates (`pnpm typecheck && pnpm lint
 > && pnpm test`) before publishing.
+
+## Scheduled jobs (M1+)
+
+The app exposes `POST /api/internal/cron` (guarded by `CRON_SECRET`, DM1.15 №4). The
+box's crontab drives it — one line per job. Nightly snapshots (KPI sparklines, delta
+feed, M2 check-in drafts) run at 23:55 East Africa Time:
+
+```cron
+55 23 * * * curl -sS -X POST https://q.fikrawork.com/api/internal/cron \
+  -H "Authorization: Bearer $CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"job":"nightly-snapshot"}' >> /home/osbui/applications/qubit/cron.log 2>&1
+```
+
+The default idempotency key is `<job>:<UTC date>`, so a re-delivered hit within the same
+day is a recorded no-op (`status: "Skipped"`). Set `CRON_SECRET` in the box's
+`.env.production` and export it in the crontab environment.
