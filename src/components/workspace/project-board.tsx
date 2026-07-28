@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Flag, Plus, Sparkles, TriangleAlert } from "lucide-react";
+import { Flag, MessageSquare, Plus, Sparkles, TriangleAlert } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ConversationDrawer } from "@/components/conversation/conversation-drawer";
 import { GenerateDialog } from "@/components/panels/project-tasks-section";
 import { BugDialog } from "@/components/workspace/bug-dialog";
 import { defaultLens, isAging, isTriageBug, lensFilter, wipOverloads, LENS_LABELS, type BoardLens } from "@/lib/board-lens";
@@ -79,6 +80,7 @@ export function ProjectBoard({
   // "Mine" filter (per Joyce: filtering of mine everywhere). Focus by default for makers,
   // whole board by default for PM/stakeholders. A filter the user controls — never a wall.
   const [mine, setMine] = useState<boolean>(() => !!viewerId && (viewerCategory === "Dev" || viewerCategory === "QA"));
+  const [discussTask, setDiscussTask] = useState<{ id: string; title: string } | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [members, setMembers] = useState<MemberOpt[]>([]);
   const [newTitle, setNewTitle] = useState("");
@@ -218,6 +220,15 @@ export function ProjectBoard({
 
   return (
     <div className="flex flex-col gap-4">
+      <ConversationDrawer
+        open={!!discussTask}
+        onOpenChange={(o) => !o && setDiscussTask(null)}
+        title={discussTask?.title ?? ""}
+        entityType="project_task"
+        entityId={discussTask?.id ?? null}
+        viewerId={viewerId ?? ""}
+        canPromote={canPublish}
+      />
       {/* Header: progress + actions */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-[220px] flex-1">
@@ -467,6 +478,15 @@ export function ProjectBoard({
                           {t.taskKey}
                         </button>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => setDiscussTask({ id: t.id, title: t.taskKey ?? t.title })}
+                        title="Discuss this task"
+                        aria-label="Discuss this task"
+                        className="rounded-[4px] p-0.5 text-[var(--ink4)] transition-colors hover:text-brand"
+                      >
+                        <MessageSquare className="size-3" />
+                      </button>
                       <span className="min-w-0 truncate">
                         {[t.type !== "Feature" ? t.type : null, t.phase, t.priority, t.assigneeName].filter(Boolean).join(" · ") || "—"}
                         {t.dueDate && (

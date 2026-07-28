@@ -617,3 +617,41 @@ Verified: lint/typecheck/build green, 419/419 tests (56 files; new: nudger unit 
 nudger RLS loop). Live in-browser on KCB: cron-triggered nudger created an escalated
 nudge for a 4d-overdue task → led the strip as "NUDGE · ESCALATED" → bell notification
 → snooze hid it for the viewer while the underlying fact still surfaced via relevance.
+
+## Revamp M4 — Conversation (2026-07-28)
+
+### DM1.26 — M4 executed: comments, @mentions, promote-to-Decision, activity feed
+Plan: `docs/16-revamp-plan.md` §4/§12 (M4). Conversation attached to work — not chat
+(Teams owns that); the Teams deep-link escape hatch stays parked for the Graph API phase.
+
+- **Model**: `WorkComment` — polymorphic on entity (`project | project_task | risk |
+  project_document`), **named `work_comment` because the dead ClickUp `comment` table
+  survives until the M9 drop** (rename can be considered then). One-level threads:
+  replies attach to the ROOT (a reply-to-a-reply re-parents to the root); `projectId`
+  is DERIVED from the entity server-side at post time, never client-supplied (null only
+  for register-level risks). `mentions` stores ids validated against the tenant — bad
+  ids are dropped, never stored. `Decision` — what/why/who/when + `sourceCommentId`
+  provenance, linked both ways. Both RLS+FORCE.
+- **Permissions**: ANY authenticated tenant user may comment (global read, DM1.3 — an
+  exec asking a question on a task is the point of the feature). Delete is
+  author-or-PM (moderation via `canWriteProject`). **Promote-to-Decision is PM-level**
+  — a decision log the whole team can write is a suggestion box, not a record. Promoting
+  twice is refused; register-level risk comments (no project) can't promote.
+- **Notifications** ride the M0 outbox (`comment.posted`): mentioned users (kind
+  `mention`) + the thread's root author on replies (kind `comment_reply`), never the
+  poster; deep links land on the exact surface (board card for tasks). Email joins in M5.
+- **Activity feed** (`src/server/activity-feed.ts`): a pure projection of the
+  domain-event outbox — nothing recorded separately, so it can never disagree with what
+  happened. Machine actors (`job:*`) render as "QUBIT". Mounted on the workspace aside
+  with the Decisions register.
+- **UI**: one `CommentsSection` everywhere + a `ConversationDrawer` (Sheet) for
+  entities without pages — mounted on the project Overview (inline), board cards
+  (MessageSquare → drawer), risk rows, and document rows. Composer has an @mention
+  picker (chips + inline @Name highlighting); promote opens a dialog prefilled from
+  the comment.
+
+Verified: lint/typecheck/build green, 430/430 tests (58 files; new: conversation RLS
+end-to-end + activity-feed unit). Live in-browser on KCB: mention-comment → threaded
+reply → promote — thread renders with a DECISION chip, the Decisions card shows
+what/why/who/when, the Activity card narrates all three events, and the mentioned
+user's notification landed.

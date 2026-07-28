@@ -85,6 +85,8 @@ model Tenant {
   reportSubscriptions ReportSubscription[]
   nudges              Nudge[]
   nudgeSnoozes        NudgeSnooze[]
+  workComments        WorkComment[]
+  decisions           Decision[]
 
   @@map("tenant")
 }
@@ -160,6 +162,8 @@ model User {
   checkInsConfirmed    CheckIn[]             @relation("CheckInConfirmer")
   reportSubscriptions  ReportSubscription[]  @relation("ReportSubscriptions")
   nudgeSnoozes         NudgeSnooze[]         @relation("UserNudgeSnoozes")
+  workComments         WorkComment[]         @relation("WorkCommentAuthor")
+  decisionsMade        Decision[]            @relation("DecisionDecider")
 
   @@unique([tenantId, email])
   @@map("user")
@@ -573,6 +577,8 @@ model Project {
   snapshots     ProjectSnapshot[]
   checkIns      CheckIn[]
   nudges        Nudge[]
+  workComments  WorkComment[]
+  decisions     Decision[]
 
   @@unique([tenantId, code])
   @@map("project")
@@ -1424,4 +1430,54 @@ model NudgeSnooze {
 
   @@unique([tenantId, userId, entityId, signal])
   @@map("nudge_snooze")
+}
+
+// Conversation (M4, docs/16-revamp-plan.md §4): threaded comments with @mentions,
+// polymorphic on the work itself — tasks, projects, risks, documents. Named
+// work_comment because the dead ClickUp `comment` table survives until the M9 drop.
+model WorkComment {
+  id         String        @id @default(cuid())
+  tenantId   String        @map("tenant_id")
+  tenant     Tenant        @relation(fields: [tenantId], references: [id])
+  entityType String        @map("entity_type") // project | project_task | risk | project_document
+  entityId   String        @map("entity_id")
+  // Denormalised from the entity at post time — feeds, links, and the promote gate
+  // all need the project without a polymorphic join. Null only for register-level risks.
+  projectId  String?       @map("project_id")
+  project    Project?      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parentId   String?       @map("parent_id") // one-level threads: replies point at the root
+  parent     WorkComment?  @relation("CommentThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies    WorkComment[] @relation("CommentThread")
+  authorId   String        @map("author_id")
+  author     User          @relation("WorkCommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  body       String
+  mentions   String[]      @default([]) // user ids resolved and validated at post time
+  decisionId String?       @map("decision_id") // set when promoted (provenance both ways)
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+
+  @@index([tenantId, entityType, entityId, createdAt])
+  @@index([tenantId, projectId])
+  @@map("work_comment")
+}
+
+// The missing "D" in RAID (§4): a decision log entry — what, why, who, when — usually
+// promoted from a comment thread's outcome so decisions stop dying in Teams threads.
+model Decision {
+  id              String   @id @default(cuid())
+  tenantId        String   @map("tenant_id")
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  projectId       String   @map("project_id")
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title           String // what was decided
+  rationale       String? // why
+  decidedById     String?  @map("decided_by_id")
+  decidedBy       User?    @relation("DecisionDecider", fields: [decidedById], references: [id])
+  decidedAt       DateTime @default(now()) @map("decided_at")
+  sourceCommentId String?  @map("source_comment_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId, projectId, decidedAt])
+  @@map("decision")
 }

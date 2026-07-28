@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { HeatPill } from "@/components/raid/heat-pill";
 import { RiskStatusPill } from "@/components/raid/risk-status-pill";
+import { MessageSquare } from "lucide-react";
+import { ConversationDrawer } from "@/components/conversation/conversation-drawer";
 import { RiskRowActions } from "@/components/raid/risk-row-actions";
 import { RISK_STATUSES, type RiskListItem } from "@/server/risks";
 import type { AdminUserSummary } from "@/server/users";
@@ -28,6 +30,7 @@ export function RiskTable({ risks, users, canUpdate, viewerId }: RiskTableProps)
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [mineOnly, setMineOnly] = useState(false);
   const [query, setQuery] = useState("");
+  const [discussRisk, setDiscussRisk] = useState<{ id: string; title: string } | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -41,6 +44,15 @@ export function RiskTable({ risks, users, canUpdate, viewerId }: RiskTableProps)
 
   return (
     <div className="overflow-hidden rounded-[10px] border border-ink-4 bg-white">
+      <ConversationDrawer
+        open={!!discussRisk}
+        onOpenChange={(o) => !o && setDiscussRisk(null)}
+        title={discussRisk?.title ?? ""}
+        entityType="risk"
+        entityId={discussRisk?.id ?? null}
+        viewerId={viewerId ?? ""}
+        canPromote={false}
+      />
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-background p-3">
         <div className="flex flex-wrap gap-1.5">
           {FILTER_CHIPS.map((chip) => (
@@ -104,7 +116,18 @@ export function RiskTable({ risks, users, canUpdate, viewerId }: RiskTableProps)
               </TableCell>
               {canUpdate && (
                 <TableCell className="text-right">
-                  <RiskRowActions risk={risk} users={users} />
+                  <span className="inline-flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setDiscussRisk({ id: risk.id, title: risk.title })}
+                      title="Discuss this risk"
+                      aria-label="Discuss this risk"
+                      className="rounded p-1 text-ink-3 transition-colors hover:text-brand"
+                    >
+                      <MessageSquare className="size-3.5" />
+                    </button>
+                    <RiskRowActions risk={risk} users={users} />
+                  </span>
                 </TableCell>
               )}
             </TableRow>

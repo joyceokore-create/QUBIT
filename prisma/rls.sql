@@ -80,7 +80,10 @@ BEGIN
     'report_subscription',
     -- Revamp M3 — the nudger.
     'nudge',
-    'nudge_snooze'
+    'nudge_snooze',
+    -- Revamp M4 — conversation attached to work.
+    'work_comment',
+    'decision'
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);

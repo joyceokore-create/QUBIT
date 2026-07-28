@@ -14,6 +14,9 @@ import { DocumentsSection } from "@/components/workspace/documents-section";
 import { StatusUpdatesSection } from "@/components/workspace/status-updates-section";
 import { IntegrationsGrid } from "@/components/workspace/integrations-grid";
 import { AskQAbout } from "@/components/q/ask-q-about";
+import { ActivityCard } from "@/components/conversation/activity-card";
+import { CommentsSection } from "@/components/conversation/comments-section";
+import { DecisionsCard } from "@/components/conversation/decisions-card";
 import { CheckInCard } from "@/components/workspace/checkin-card";
 import { RequestToJoinButton } from "@/components/workspace/request-to-join-button";
 import { statusMeta } from "@/lib/project-view";
@@ -184,6 +187,7 @@ export function ProjectWorkspace({
             <div className="flex flex-col gap-3.5">
               <CheckInCard projectId={data.id} />
               <StatusUpdatesSection projectId={data.id} canEdit={canEdit} />
+              <CommentsSection entityType="project" entityId={data.id} viewerId={viewerId ?? ""} canPromote={canEdit} />
             </div>
             <aside className="flex flex-col gap-3.5">
               {data.description && (
@@ -191,6 +195,12 @@ export function ProjectWorkspace({
                   {data.description}
                 </div>
               )}
+              <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
+                <DecisionsCard projectId={data.id} />
+              </div>
+              <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
+                <ActivityCard projectId={data.id} />
+              </div>
               <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
                 <div className="grid grid-cols-1 gap-3">
                   {data.businessOwner && <Def label="Business Owner" value={data.businessOwner} />}
@@ -214,7 +224,7 @@ export function ProjectWorkspace({
             initialLens={initialLens}
           />
         )}
-        {tab === "Documents" && <DocumentsSection projectId={data.id} canEdit={canEdit} />}
+        {tab === "Documents" && <DocumentsSection projectId={data.id} canEdit={canEdit} viewerId={viewerId ?? ""} />}
         {tab === "Deadlines" && (
           <div className="flex flex-col gap-3.5">
             <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>

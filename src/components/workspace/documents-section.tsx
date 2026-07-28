@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, Download, FileText, Plus, Sparkles, Trash2 } from "lucide-react";
+import { Check, Download, FileText, MessageSquare, Plus, Sparkles, Trash2 } from "lucide-react";
+import { ConversationDrawer } from "@/components/conversation/conversation-drawer";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,7 +29,16 @@ interface DocDetail extends Doc {
 const KINDS = ["BRD", "Plan", "Spec", "Note", "Other"] as const;
 const STATUS_TOKEN: Record<string, string> = { Draft: "--ink4", PendingReview: "--warn", Final: "--ok" };
 
-export function DocumentsSection({ projectId, canEdit }: { projectId: string; canEdit: boolean }) {
+export function DocumentsSection({
+  projectId,
+  canEdit,
+  viewerId = "",
+}: {
+  projectId: string;
+  canEdit: boolean;
+  viewerId?: string;
+}) {
+  const [discussDoc, setDiscussDoc] = useState<{ id: string; title: string } | null>(null);
   const [docs, setDocs] = useState<Doc[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [view, setView] = useState<DocDetail | null>(null);
@@ -66,6 +76,15 @@ export function DocumentsSection({ projectId, canEdit }: { projectId: string; ca
 
   return (
     <div className="flex flex-col gap-3">
+      <ConversationDrawer
+        open={!!discussDoc}
+        onOpenChange={(o) => !o && setDiscussDoc(null)}
+        title={discussDoc?.title ?? ""}
+        entityType="project_document"
+        entityId={discussDoc?.id ?? null}
+        viewerId={viewerId}
+        canPromote={canEdit}
+      />
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-[15px] rv:text-heading-xs font-bold text-[var(--qink)]">Documents</h2>
@@ -102,6 +121,15 @@ export function DocumentsSection({ projectId, canEdit }: { projectId: string; ca
             >
               {d.status === "PendingReview" ? "Pending review" : d.status}
             </span>
+            <button
+              type="button"
+              onClick={() => setDiscussDoc({ id: d.id, title: d.title })}
+              title="Discuss this document"
+              aria-label="Discuss this document"
+              className="flex-none rounded p-1 text-[var(--ink4)] transition-colors hover:text-brand"
+            >
+              <MessageSquare className="size-3.5" />
+            </button>
             {canEdit && d.status === "PendingReview" && (
               <button type="button" onClick={() => approve(d.id)} className="flex flex-none items-center gap-1 rounded-full border border-[var(--w10)] px-2.5 py-1 text-[10.5px] font-semibold text-ink-3 hover:border-[var(--ok)] hover:text-[var(--ok)]">
                 <Check className="size-3.5" /> Approve
