@@ -702,3 +702,33 @@ personas RLS incl. the both-directions permission invariant and the §9 two-pers
 acceptance). Live on both tenants: KCB exec preset with real +11/−2 WoW deltas and the
 subsidiary axis; persona switch to PM (persisted `last_persona`); Riverbank department
 axis + honest trend-accrues states.
+
+## Role dashboards M1b — developer + PM presets (2026-07-28)
+
+### DM1.28 — note: reserved earlier for the Implementor category; that ships M1c. This
+### entry records M1b calls under the same number's section for continuity.
+- **Developer preset (§4)**: `rankFocus` picks ONE task — most-overdue > due-soonest >
+  awaiting-review > freshest — and BLOCKED tasks are never the focus (not actionable by
+  the assignee; they live in the Blocked bucket with the blocker's reason inline).
+  The focus reason is always displayed ("3d overdue — clear it first"), never an
+  unexplained pick. Buckets from the existing My Tasks queries; /my-tasks stays as the
+  full page. Boards deep-link with `?lens=dev`.
+- **PM preset (§3)**: hero = this week's check-in ritual state + aged blockers + drafts;
+  project cards carry RAG (health engine) + Δ vs last-week snapshot, progress with a
+  "vs portfolio avg" chip, next milestone, open-blocker count, and an UNCONFIRMED badge;
+  scope toggle mine/all is a server-rendered filter (`?scope=`), never a wall (DM1.20).
+  Action queue = join requests + draft approvals + >3d blockers + tasks slipping within
+  7 days, all deep-linked to where they're fixed. Team load = listWorkload filtered to
+  MY projects' members (leave badges join at M6).
+- **First-login checklists (§1.3)** ship for developer/pm (qa/implementor texts ready
+  for M1c): pure UI nudges dismissed via localStorage — per-browser is accepted for a
+  welcome card; nothing is state of record. Executives get none (§1.3).
+- Registry grew the §3/§4 widget lists; the shell routes executive/developer/pm to
+  dedicated presets, qa/implementor to the interim layout until M1c.
+
+Verified: lint/typecheck/build green, 451/451 tests (62 files; new: rankFocus unit +
+presets RLS covering focus/buckets, card flags, action queue, mine-vs-all, and team-load
+scoping). Live on KCB: PM view (checklist, "1 of 1 unconfirmed — due Friday", AMBER card
+with +21% vs avg and UNCONFIRMED badge, mine→all toggle showing all 15) and a seeded
+demo developer landing on the §4 view (focus hero with Start deep link, overdue bucket,
+dev-lens boards).

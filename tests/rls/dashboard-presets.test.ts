@@ -1,0 +1,135 @@
+// M1b presets (docs/17 §3/§4): the developer preset answers "what do I work on right
+// now?" from the viewer's own tasks; the PM preset scopes to led/managed projects by
+// default (a filter, never a wall — DM1.20) and queues what's stuck on the PM.
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { prisma } from "@/lib/db";
+import { withTenant, type TenantContext } from "@/lib/tenant";
+import { getDevDashboard } from "@/server/dashboard-dev";
+import { getPmDashboard } from "@/server/dashboard-pm";
+import { ensureUsers, cleanupFixtureUsers } from "./_users";
+
+const day = 86_400_000;
+
+describe("M1b dashboard presets", () => {
+  let kcbId: string;
+  let pmId: string;
+  let devId: string;
+  let projectId: string;
+  let overdueTaskId: string;
+  let devCtx: TenantContext;
+  let pmCtx: TenantContext;
+
+  beforeAll(async () => {
+    const kcb = await prisma.tenant.findUnique({ where: { slug: "kcb" } });
+    if (!kcb) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    kcbId = kcb.id;
+    const [pm, dev] = await ensureUsers(kcbId, 2);
+    pmId = pm.id;
+    devId = dev.id;
+    pmCtx = { tenantId: kcbId, userId: pmId, roles: ["Member"] };
+    devCtx = { tenantId: kcbId, userId: devId, roles: ["Member"] };
+
+    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+      const now = Date.now();
+      const project = await tx.project.create({
+        data: {
+          tenantId: kcbId,
+          code: `PRE${now % 100000}`,
+          name: "Preset Fixture",
+          type: "Project",
+          priority: "High",
+          status: "AtRisk",
+          leadUserId: pmId,
+        },
+      });
+      projectId = project.id;
+      await tx.projectMember.create({ data: { tenantId: kcbId, projectId, userId: devId, role: "Developer" } });
+
+      const overdue = await tx.projectTask.create({
+        data: { tenantId: kcbId, projectId, title: "Fix export race", status: "InProgress", approvalStatus: "Published", assigneeId: devId, dueDate: new Date(now - 3 * day), lastActivityAt: new Date(now) },
+      });
+      overdueTaskId = overdue.id;
+      const blockedTask = await tx.projectTask.create({
+        data: { tenantId: kcbId, projectId, title: "Blocked migration", status: "InProgress", approvalStatus: "Published", assigneeId: devId, dueDate: new Date(now - 6 * day), lastActivityAt: new Date(now) },
+      });
+      await tx.blocker.create({
+        data: { tenantId: kcbId, projectId, taskId: blockedTask.id, description: "Waiting on DBA window", severity: "Medium", status: "Open", createdAt: new Date(now - 4 * day) },
+      });
+      await tx.projectTask.create({
+        data: { tenantId: kcbId, projectId, title: "Ship burndown widget", status: "Completed", approvalStatus: "Published", assigneeId: devId, lastActivityAt: new Date(now), updatedAt: new Date(now) },
+      });
+      await tx.projectTask.create({
+        data: { tenantId: kcbId, projectId, title: "AI draft idea", status: "NotStarted", approvalStatus: "Draft", createdAt: new Date(now - 3 * day) },
+      });
+      await tx.projectMilestone.create({
+        data: { tenantId: kcbId, projectId, name: "Pilot go-live", status: "Pending", dueDate: new Date(now + 10 * day) },
+      });
+    });
+  });
+
+  afterAll(async () => {
+    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+      await tx.project.deleteMany({ where: { id: projectId } }); // tasks/members/milestones cascade
+    });
+    await cleanupFixtureUsers(kcbId);
+    await prisma.$disconnect();
+  });
+
+  it("developer: focus is the overdue unblocked task, buckets split correctly", async () => {
+    const d = await getDevDashboard(devCtx);
+    expect(d.focus?.id).toBe(overdueTaskId); // the blocked one is MORE overdue but not actionable
+    expect(d.focusReason).toContain("overdue");
+    expect(d.buckets.overdue.map((t) => t.title)).toContain("Fix export race");
+    expect(d.buckets.blocked).toHaveLength(1);
+    expect(d.buckets.blocked[0].blockedReason).toBe("Waiting on DBA window");
+    expect(d.doneThisWeek.map((t) => t.title)).toContain("Ship burndown widget");
+    expect(d.boards.find((b) => b.projectId === projectId)?.openMine).toBe(2);
+  });
+
+  it("PM: cards flag unconfirmed check-ins, count blockers, and carry vs-avg + next milestone", async () => {
+    const d = await getPmDashboard(pmCtx);
+    const card = d.cards.find((c) => c.id === projectId)!;
+    expect(card.isMine).toBe(true);
+    expect(card.rag).toBe("Amber"); // AtRisk via the one health engine
+    expect(card.unconfirmed).toBe(true); // no check-in confirmed this week
+    expect(card.openBlockers).toBe(1);
+    expect(card.nextMilestone?.name).toBe("Pilot go-live");
+    expect(card.vsAvg).toBe(card.progress - d.portfolioAvgProgress);
+  });
+
+  it("PM: the action queue holds what's stuck on ME — drafts, aged blocker, slipping tasks", async () => {
+    const d = await getPmDashboard(pmCtx);
+    const kinds = d.actionQueue.map((r) => r.kind);
+    expect(kinds).toContain("drafts");
+    expect(kinds).toContain("blocker");
+    expect(kinds).toContain("slipping");
+    const blockerRow = d.actionQueue.find((r) => r.kind === "blocker")!;
+    expect(blockerRow.title).toContain("Waiting on DBA window");
+  });
+
+  it("PM: scope is a default filter, never a wall (DM1.20)", async () => {
+    const d = await getPmDashboard(pmCtx);
+    const mineCount = d.cards.filter((c) => c.isMine).length;
+    expect(mineCount).toBeGreaterThanOrEqual(1);
+    expect(d.cards.length).toBeGreaterThan(mineCount); // seeded projects visible on the ALL side
+    expect(d.myProjectCount).toBe(mineCount);
+  });
+
+  it("PM: team load lists only members of MY projects", async () => {
+    const d = await getPmDashboard(pmCtx);
+    expect(d.teamLoad.map((m) => m.userId)).toContain(devId);
+    // The seeded demo lead runs their own project — not on the fixture PM's team.
+    const otherLeads = d.teamLoad.filter((m) => m.userId !== devId && m.userId !== pmId);
+    for (const member of otherLeads) {
+      // every listed member must share at least one of MY projects
+      expect([devId, pmId]).toContain(member.userId);
+    }
+  });
+
+  it("developer data is tenant-scoped and personal", async () => {
+    const stranger = { tenantId: kcbId, userId: "00000000-0000-0000-0000-000000000000", roles: ["Member"] };
+    const d = await getDevDashboard(stranger);
+    expect(d.focus).toBeNull();
+    expect(d.buckets.overdue).toHaveLength(0);
+  });
+});

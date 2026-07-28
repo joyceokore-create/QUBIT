@@ -4,12 +4,15 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { isUserGroup } from "@/lib/personas";
 import { getDashboardV2 } from "@/server/dashboard-v2";
+import { getDevDashboard } from "@/server/dashboard-dev";
 import { getExecutiveDashboard } from "@/server/dashboard-exec";
+import { getPmDashboard } from "@/server/dashboard-pm";
 import { Forbidden } from "@/components/forbidden";
 import { LiveClock } from "@/components/command/live-clock";
 import { PersonaSwitcher } from "@/components/dashboard/persona-switcher";
+import { DeveloperPreset } from "@/components/dashboard/presets/developer";
 import { ExecutivePreset } from "@/components/dashboard/presets/executive";
-import { BUILT_PRESETS } from "@/components/dashboard/presets/registry";
+import { PmPreset } from "@/components/dashboard/presets/pm";
 import { AtRiskSection, ChangedSection, TodaySection } from "@/components/dashboard/presets/v2-sections";
 
 // ── The dashboard shell (docs/17 §0): ONE route, one shell, per-persona composition.
@@ -18,20 +21,24 @@ import { AtRiskSection, ChangedSection, TodaySection } from "@/components/dashbo
 // developer/PM in M1b, QA/implementor in M1c) render the interim v2 sections — a real
 // dashboard, never a placeholder.
 
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ persona?: string }> }) {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ persona?: string; scope?: string }>;
+}) {
   const session = await auth();
   if (!session?.user) return null;
   const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
   if (!can(ctx, "dashboard:read")) return <Forbidden />;
 
-  const { persona: requested } = await searchParams;
+  const { persona: requested, scope: requestedScope } = await searchParams;
   const personas = session.user.personas;
   const persona =
     isUserGroup(requested) && personas.includes(requested) ? requested : session.user.activePersona;
+  const scope: "mine" | "all" = requestedScope === "all" ? "all" : "mine";
 
   const today = new Date().toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" }).toUpperCase();
   const firstName = (session.user.name ?? "there").split(/\s+/)[0];
-  const hasBuiltPreset = persona in BUILT_PRESETS;
 
   return (
     <div>
@@ -53,8 +60,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       </div>
 
       <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-3.5 p-[14px_24px_90px]">
-        {hasBuiltPreset && persona === "executive" ? (
+        {persona === "executive" ? (
           <ExecutivePreset d={await getExecutiveDashboard(ctx)} firstName={firstName} />
+        ) : persona === "developer" ? (
+          <DeveloperPreset d={await getDevDashboard(ctx)} userId={ctx.userId} />
+        ) : persona === "pm" ? (
+          <PmPreset d={await getPmDashboard(ctx)} userId={ctx.userId} scope={scope} />
         ) : (
           <InterimPreset ctx={ctx} />
         )}
