@@ -5,10 +5,10 @@ import type { CSSProperties } from "react";
 // Each step carries its own theme-aware tint (all ≥4.5:1 as title text on the
 // card in both themes): amber → blue → green → red.
 const STEPS: { icon: LucideIcon; tone: string; title: string; body: string }[] = [
-  { icon: Bell, tone: "var(--warn)", title: "Reminds", body: "Deadline nudges, stale-invite chasers and slippage alerts arrive before things go red — never after." },
+  { icon: Bell, tone: "var(--warn)", title: "Reminds", body: "The moment work lands on you — an assignment, a QA handoff, an approval waiting — QUBIT tells you, in-app and instantly." },
   { icon: ClipboardList, tone: "var(--qinfo)", title: "Organizes", body: "Q drafts your steering packs and status updates from live portfolio data — you review, not rewrite." },
-  { icon: ListOrdered, tone: "var(--pbrand)", title: "Prioritizes", body: "Your task list is re-ranked as dependencies shift — with a “why” behind every position." },
-  { icon: Zap, tone: "var(--bad)", title: "Acts", body: "Approve, assign or escalate from the briefing — Q turns the recommendation into the next step." },
+  { icon: ListOrdered, tone: "var(--pbrand)", title: "Prioritizes", body: "Your daily briefing is ranked from live delivery signals — blockers, due dates, and stalled work float to the top." },
+  { icon: Zap, tone: "var(--bad)", title: "Acts", body: "Jump from any priority straight to the exact card — approve drafts, assign work, or flag a blocker in one click." },
 ];
 
 export function HowItWorks() {
@@ -25,8 +25,8 @@ export function HowItWorks() {
             <span className="cursor-default transition-colors duration-200 hover:text-[var(--pbrand)]">Prioritizes.</span>
           </h2>
           <p className="mt-4 max-w-[520px] text-pretty text-[15px] leading-[1.6] text-[var(--ink35)] md:text-[16px]">
-            From the first nudge to the final action, Q runs the loop for you — so every day opens with
-            what matters, why it matters, and what to do next.
+            From the first reminder to the final action, Q runs the loop for you — so every day opens
+            with what matters, why it matters, and what to do next.
           </p>
         </div>
 

@@ -1,8 +1,10 @@
 import { withTenant, type TenantContext } from "@/lib/tenant";
+import { ragCounts, worstStatus } from "@/server/health";
 
 // ── Derived-value helpers (docs/09-ui-spec.md "Derived values") ──────────────
 // These mirror docs/design-reference-exec-dashboard.html's own helpers (avgPct, sc(),
 // ragCountsForList) exactly, so the numbers this milestone produces match the reference.
+// RAG classification lives in src/server/health.ts (M0 — one health engine).
 
 export type RagStatus = "OnTrack" | "AtRisk" | "Overdue" | "Planning";
 
@@ -31,22 +33,6 @@ export function avgProgress(project: { orgStatuses: { progress: number }[] }): n
   if (project.orgStatuses.length === 0) return 0;
   const sum = project.orgStatuses.reduce((acc, s) => acc + s.progress, 0);
   return Math.round(sum / project.orgStatuses.length);
-}
-
-/** Heatmap/portfolio-card status classification: worst of {Overdue, At Risk, On Track}
- * present — Planning items fall through to "OnTrack", matching the reference exactly. */
-export function worstStatus(statuses: string[]): "OnTrack" | "AtRisk" | "Overdue" {
-  if (statuses.includes("Overdue")) return "Overdue";
-  if (statuses.includes("AtRisk")) return "AtRisk";
-  return "OnTrack";
-}
-
-export function ragCounts(items: { status: string }[]) {
-  return {
-    onTrack: items.filter((i) => i.status === "OnTrack").length,
-    atRisk: items.filter((i) => i.status === "AtRisk").length,
-    overdue: items.filter((i) => i.status === "Overdue").length,
-  };
 }
 
 /** Parses display-string budgets like "KES 2.8B" / "KES 830M" into a number of KES.

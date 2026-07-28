@@ -2,7 +2,8 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
-import { avgProgress, ragCounts } from "@/server/dashboard";
+import { avgProgress } from "@/server/dashboard";
+import { ragCounts } from "@/server/health";
 
 const PROJECT_STATUSES = ["Planning", "OnTrack", "AtRisk", "Overdue", "Completed", "Cancelled"] as const;
 const PROJECT_PRIORITIES = ["Low", "Medium", "High", "Critical"] as const;

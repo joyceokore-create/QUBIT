@@ -12,7 +12,11 @@ export interface NotificationRow {
   createdAt: Date;
 }
 
-/** Fan out notifications inside an existing transaction (poster is excluded by caller). */
+/**
+ * Fan out notifications inside an existing transaction (poster is excluded by caller).
+ * Consumer-level primitive: called by the domain-event outbox (src/server/events.ts).
+ * Feature code should emitDomainEvent, never call this directly.
+ */
 export async function notifyUsers(
   tx: Prisma.TransactionClient,
   ctx: Pick<TenantContext, "tenantId">,

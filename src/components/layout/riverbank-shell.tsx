@@ -11,7 +11,6 @@ import { UserMenu } from "./user-menu";
 import { AskQButton } from "./ask-q-button";
 import { NotificationBell } from "./notification-bell";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
-import { TimerWidget } from "@/components/clickup/timer-widget";
 
 interface RiverbankShellProps {
   canAccessAdmin: boolean;
@@ -224,7 +223,6 @@ export function RiverbankShell({
             {tenantName}
           </h1>
           <div className="flex items-center gap-1.5">
-            <TimerWidget />
             <NotificationBell />
             <ThemeToggle />
             <UserMenu

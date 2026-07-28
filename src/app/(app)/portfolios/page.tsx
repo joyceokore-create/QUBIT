@@ -1,15 +1,8 @@
-import { ComingSoon } from "@/components/coming-soon";
+import { redirect } from "next/navigation";
 
-// Placeholder so the topbar's "Portfolios" pill resolves. The portfolio card
-// grid + slide panel land in Phase 6 of the design handoff.
+// The portfolio index was a "coming soon" placeholder — culled in M0
+// (docs/16-revamp-plan.md §2). Portfolio drill-downs live at /portfolios/[id];
+// the delivery ledger is /projects.
 export default function PortfoliosPage() {
-  return (
-    <div className="flex flex-1 flex-col p-[26px]">
-      <ComingSoon
-        title="Portfolios"
-        description="A card grid of every portfolio with a slide-in drill-down is on its way."
-        milestone={6}
-      />
-    </div>
-  );
+  redirect("/projects");
 }

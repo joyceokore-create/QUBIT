@@ -16,7 +16,7 @@ export default async function TimePage() {
   const nextMonday = new Date(monday.getTime() + 7 * 24 * 60 * 60 * 1000);
   const { rows, totalMin } = await timeReport(ctx, { from: monday, to: nextMonday, userId: ctx.userId });
 
-  const csvHref = `/api/v1/time/report?from=${monday.toISOString()}&to=${nextMonday.toISOString()}&userId=${ctx.userId}&format=csv`;
+  const csvHref = `/api/time/report?from=${monday.toISOString()}&to=${nextMonday.toISOString()}&userId=${ctx.userId}&format=csv`;
 
   return (
     <div className="mx-auto flex max-w-[900px] flex-col gap-4 p-6">

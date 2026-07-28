@@ -1,15 +1,15 @@
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { getDashboardSummary, getUpcomingMilestones, avgProgress, type UpcomingMilestone } from "@/server/dashboard";
+import { portfolioHealth } from "@/server/health";
 import { getBriefing, type BriefingItem } from "@/server/relevance";
 import { listWorkload } from "@/server/resources";
 import { listRisks } from "@/server/risks";
 import { listNotifications, type NotificationRow } from "@/server/notifications";
 
-// Data for the Phase A exec dashboard (PROMPT-personalized-dashboards + Joyce's layout). Every
-// number is grounded in live tenant data — the aspirational bits (budget burn, confidence, AI
-// prediction, trend history) are NOT here and render as "coming soon" placeholders in the UI,
-// so nothing shown is fabricated. The exec brief + insights are DETERMINISTIC summaries of the
-// same data (no per-load LLM); interactive AI stays in the Q drawer.
+// Data for the exec dashboard. Every number is grounded in live tenant data. The
+// deterministic string generators that rendered as "AI executive brief" / "AI insights" /
+// "Recommendations" were cut in M0 (docs/16-revamp-plan.md §2) — interactive AI stays in
+// the Q drawer, where it is real, gated, and logged.
 
 export interface ExecKpis {
   projects: number;
@@ -35,11 +35,6 @@ export interface ExecProjectRow {
   dueDate: Date | null;
 }
 
-export interface ExecInsight {
-  tone: "bad" | "warn" | "ok";
-  text: string;
-}
-
 export interface ExecTopRisk {
   id: string;
   title: string;
@@ -54,7 +49,6 @@ export interface ExecCapacity {
 }
 
 export interface ExecDashboard {
-  brief: string[];
   priorities: BriefingItem[];
   health: { onTrack: number; needAttention: number; planning: number; total: number; pct: number };
   notifications: NotificationRow[];
@@ -63,8 +57,6 @@ export interface ExecDashboard {
   milestones: UpcomingMilestone[];
   topRisks: ExecTopRisk[];
   capacity: ExecCapacity[];
-  insights: ExecInsight[];
-  recommendations: ExecInsight[];
 }
 
 export async function getExecDashboard(ctx: TenantContext): Promise<ExecDashboard> {
@@ -100,12 +92,10 @@ export async function getExecDashboard(ctx: TenantContext): Promise<ExecDashboar
     }),
   ]);
 
-  const by = (s: string) => live.projects.filter((p) => p.status === s).length;
-  const onTrack = by("OnTrack") + by("Completed");
-  const needAttention = by("AtRisk") + by("Overdue");
-  const planning = by("Planning") + by("Cancelled");
-  const total = live.projects.length;
-  const healthPct = total ? Math.round((onTrack / total) * 100) : 0;
+  // One health engine (M0): the same classification Q and every report use.
+  const { total, onTrack, needAttention, planning, pct: healthPct } = portfolioHealth(
+    live.projects.map((p) => p.status),
+  );
 
   const openRisks = risks.filter((r) => r.status !== "Closed" && r.status !== "Mitigated");
   const overAllocated = workload.filter((w) => w.totalPct > 100);
@@ -146,32 +136,7 @@ export async function getExecDashboard(ctx: TenantContext): Promise<ExecDashboar
     budget: summary.totalBudget,
   };
 
-  // Deterministic exec brief — grounded one-liners, no LLM.
-  const brief = [
-    `${total} ${total === 1 ? "project" : "projects"} in flight · ${healthPct}% portfolio health.`,
-    needAttention > 0
-      ? `${needAttention} ${needAttention === 1 ? "project needs" : "projects need"} attention (${by("Overdue")} overdue, ${by("AtRisk")} at risk).`
-      : `Everything is tracking cleanly — nothing at risk or overdue.`,
-    `${kpis.velocity7d} ${kpis.velocity7d === 1 ? "task" : "tasks"} completed in the last 7 days.`,
-  ];
-
-  // Deterministic insights + recommendations from live signals.
-  const insights: ExecInsight[] = [];
-  if (by("Overdue")) insights.push({ tone: "bad", text: `${by("Overdue")} project(s) overdue.` });
-  if (kpis.milestonesOverdue) insights.push({ tone: "bad", text: `${kpis.milestonesOverdue} milestone(s) past due.` });
-  if (openRisks.length) insights.push({ tone: "warn", text: `${openRisks.length} open risk(s); highest heat ${topRisks[0]?.heat ?? 0}/25.` });
-  if (overAllocated.length) insights.push({ tone: "warn", text: `${overAllocated.length} person(s) over-allocated (>100%).` });
-  if (insights.length === 0) insights.push({ tone: "ok", text: "No red flags across the portfolio right now." });
-
-  const leadless = projects.filter((p) => !p.ownerName).length;
-  const recommendations: ExecInsight[] = [];
-  if (leadless) recommendations.push({ tone: "warn", text: `Assign a lead to ${leadless} project(s) with none.` });
-  if (overAllocated.length) recommendations.push({ tone: "warn", text: `Rebalance ${overAllocated[0]?.name}'s ${overAllocated[0]?.totalPct}% allocation.` });
-  if (kpis.milestonesOverdue) recommendations.push({ tone: "bad", text: `Re-baseline the ${kpis.milestonesOverdue} overdue milestone(s).` });
-  if (recommendations.length === 0) recommendations.push({ tone: "ok", text: "No actions needed — keep the cadence." });
-
   return {
-    brief,
     priorities,
     health: { onTrack, needAttention, planning, total, pct: healthPct },
     notifications,
@@ -180,7 +145,5 @@ export async function getExecDashboard(ctx: TenantContext): Promise<ExecDashboar
     milestones,
     topRisks,
     capacity,
-    insights,
-    recommendations,
   };
 }

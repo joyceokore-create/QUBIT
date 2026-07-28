@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
-import { notifyUsers } from "@/server/notifications";
+import { emitDomainEvent } from "@/server/events";
 import { mockEnabled, mockPlanFromText } from "@/server/q/mock";
 import { llmChat, llmEnabled, llmModel } from "@/server/q/llm";
 
@@ -312,18 +312,22 @@ export async function addTasks(
     // must stay invisible, §2.2) and never the creator assigning to themselves. Links
     // deep-link to the highlighted card (work-cycle UX).
     if (approvalStatus === "Published") {
-      await notifyUsers(
-        tx,
-        ctx,
-        created
-          .filter((t) => t.assigneeId && t.assigneeId !== ctx.userId)
-          .map((t) => ({
-            userId: t.assigneeId as string,
-            kind: "task_assigned",
-            message: `${t.type === "Bug" ? "Bug" : "Task"} assigned to you on ${project.name}: ${t.title.slice(0, 90)}`,
-            link: `/projects/${projectId}?tab=Board&task=${t.id}`,
-          })),
-      );
+      for (const t of created.filter((t) => t.assigneeId && t.assigneeId !== ctx.userId)) {
+        await emitDomainEvent(tx, ctx, {
+          type: "task.assigned",
+          entityType: "project_task",
+          entityId: t.id,
+          payload: { projectId, assigneeId: t.assigneeId },
+          notify: [
+            {
+              userId: t.assigneeId as string,
+              kind: "task_assigned",
+              message: `${t.type === "Bug" ? "Bug" : "Task"} assigned to you on ${project.name}: ${t.title.slice(0, 90)}`,
+              link: `/projects/${projectId}?tab=Board&task=${t.id}`,
+            },
+          ],
+        });
+      }
     }
     await audit(tx, ctx, {
       action: "create",
@@ -415,26 +419,40 @@ export async function updateTask(ctx: TenantContext, taskId: string, input: Upda
       },
     });
     if (updated.approvalStatus === "Published") {
-      const notes: { userId: string; kind: string; message: string; link?: string }[] = [];
       const label = updated.taskKey ? `${updated.taskKey} ${before.title}` : before.title;
       if (input.assigneeId && input.assigneeId !== before.assigneeId && input.assigneeId !== ctx.userId) {
-        notes.push({
-          userId: input.assigneeId,
-          kind: "task_assigned",
-          message: `${before.type === "Bug" ? "Bug" : "Task"} assigned to you on ${before.project.name}: ${label.slice(0, 90)}`,
-          link: `/projects/${before.projectId}?tab=Board&task=${taskId}`,
+        await emitDomainEvent(tx, ctx, {
+          type: "task.assigned",
+          entityType: "project_task",
+          entityId: taskId,
+          payload: { projectId: before.projectId, assigneeId: input.assigneeId },
+          notify: [
+            {
+              userId: input.assigneeId,
+              kind: "task_assigned",
+              message: `${before.type === "Bug" ? "Bug" : "Task"} assigned to you on ${before.project.name}: ${label.slice(0, 90)}`,
+              link: `/projects/${before.projectId}?tab=Board&task=${taskId}`,
+            },
+          ],
         });
       }
       const reachedQa = input.status === "InQA" && before.status !== "InQA";
       if (reachedQa && before.type === "Bug" && before.reporterId && before.reporterId !== ctx.userId) {
-        notes.push({
-          userId: before.reporterId,
-          kind: "bug_ready_for_qa",
-          message: `Your bug is ready to verify on ${before.project.name}: ${label.slice(0, 90)}`,
-          link: `/projects/${before.projectId}?tab=Board&task=${taskId}&lens=qa`,
+        await emitDomainEvent(tx, ctx, {
+          type: "task.ready_for_qa",
+          entityType: "project_task",
+          entityId: taskId,
+          payload: { projectId: before.projectId, reporterId: before.reporterId },
+          notify: [
+            {
+              userId: before.reporterId,
+              kind: "bug_ready_for_qa",
+              message: `Your bug is ready to verify on ${before.project.name}: ${label.slice(0, 90)}`,
+              link: `/projects/${before.projectId}?tab=Board&task=${taskId}&lens=qa`,
+            },
+          ],
         });
       }
-      await notifyUsers(tx, ctx, notes);
     }
     await audit(tx, ctx, {
       action: "update",

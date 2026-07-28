@@ -11,7 +11,6 @@ import { UserMenu } from "@/components/layout/user-menu";
 import { AskQButton } from "@/components/layout/ask-q-button";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { NotificationBell } from "@/components/layout/notification-bell";
-import { TimerWidget } from "@/components/clickup/timer-widget";
 
 // Sticky 62px app-shell topbar (design_handoff screen 1). Replaces the sidebar
 // for the reimagined screens: brand logo, nav pills, theme toggle, tenant
@@ -62,7 +61,6 @@ export async function Topbar() {
 
       <NavPills canAccessAdmin={canAccessAdmin} />
 
-      <TimerWidget />
       <NotificationBell />
       <ThemeToggle />
       <TenantChip

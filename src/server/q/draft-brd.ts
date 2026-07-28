@@ -6,7 +6,7 @@ import { listProjectTasks } from "@/server/project-tasks";
 import { listRisks } from "@/server/risks";
 import { listBlockers } from "@/server/blockers";
 import { createDocument } from "@/server/documents";
-import { notifyUsers } from "@/server/notifications";
+import { emitDomainEvent } from "@/server/events";
 
 /**
  * Q drafts a Business Requirements Document from what QUBIT already knows about a project
@@ -139,14 +139,20 @@ export async function draftBrd(
   await withTenant(ctx, async (tx) => {
     const proj = await tx.project.findUnique({ where: { id: projectId }, select: { leadUserId: true, name: true } });
     if (proj?.leadUserId && proj.leadUserId !== ctx.userId) {
-      await notifyUsers(tx, ctx, [
-        {
-          userId: proj.leadUserId,
-          kind: "brd_review",
-          message: `Q drafted a BRD for ${proj.name} — pending your review`,
-          link: `/projects/${projectId}`,
-        },
-      ]);
+      await emitDomainEvent(tx, ctx, {
+        type: "document.brd_drafted",
+        entityType: "project_document",
+        entityId: doc.id,
+        payload: { projectId, usedAi },
+        notify: [
+          {
+            userId: proj.leadUserId,
+            kind: "brd_review",
+            message: `Q drafted a BRD for ${proj.name} — pending your review`,
+            link: `/projects/${projectId}`,
+          },
+        ],
+      });
     }
   }).catch(() => {});
 

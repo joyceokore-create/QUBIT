@@ -1,6 +1,7 @@
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { llmChat, llmEnabled, llmModel } from "@/server/q/llm";
 import { getEscalations, getUpcomingMilestones } from "@/server/dashboard";
+import { needsAttention } from "@/server/health";
 import { listProjects, getProjectPanelData } from "@/server/projects";
 import { listProjectMembers, listProjectTeams, listWorkload } from "@/server/resources";
 import { listRisks } from "@/server/risks";
@@ -67,6 +68,10 @@ export interface QReportResult {
   markdown: string;
   usedAi: boolean;
   model: string;
+  /** The grounded data the report was generated from — the report's source of truth.
+   * Exposed so other surfaces (health-parity test; M2 check-in drafts) can compare
+   * against it, never re-derive it. */
+  data: unknown;
 }
 
 interface ReportContext {
@@ -319,8 +324,10 @@ async function portfolioContext(ctx: TenantContext, w: Window): Promise<ReportCo
   ]);
 
   const byStatus = (s: string) => projects.filter((p) => p.status === s).length;
+  // One health engine (M0): the dashboard's "needs attention" and Q's must agree
+  // for 100% of projects (tests/rls/health-parity.test.ts).
   const attention = projects
-    .filter((p) => p.status === "AtRisk" || p.status === "Overdue")
+    .filter((p) => needsAttention(p.status))
     .map((p) => ({ code: p.code, name: p.name, status: p.status, avgProgress: p.avgProgress }));
 
   const data = {
@@ -515,7 +522,7 @@ export async function generateReport(
   // Provider unconfigured → deterministic report from the same grounded data.
   if (!llmEnabled()) {
     await logCall(ctx, { purpose: built.purpose, usedAi: false, inputTokens: 0, outputTokens: 0, latencyMs: 0 });
-    return { title: built.title, periodLabel: w.label, markdown: built.fallback, usedAi: false, model: llmModel() };
+    return { title: built.title, periodLabel: w.label, markdown: built.fallback, usedAi: false, model: llmModel(), data: built.data };
   }
 
   const start = Date.now();
@@ -551,6 +558,7 @@ export async function generateReport(
       markdown: markdown || built.fallback,
       usedAi: markdown.length > 0,
       model: llmModel(),
+      data: built.data,
     };
   } catch {
     // Any provider error (auth, rate limit, network, timeout) degrades gracefully to the
@@ -562,6 +570,6 @@ export async function generateReport(
       outputTokens: 0,
       latencyMs: Date.now() - start,
     });
-    return { title: built.title, periodLabel: w.label, markdown: built.fallback, usedAi: false, model: llmModel() };
+    return { title: built.title, periodLabel: w.label, markdown: built.fallback, usedAi: false, model: llmModel(), data: built.data };
   }
 }

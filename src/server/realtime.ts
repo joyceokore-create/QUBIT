@@ -5,7 +5,7 @@ import { Client } from "pg";
 /**
  * Realtime via Postgres LISTEN/NOTIFY (docs/clickup-transformation/02-architecture.md).
  * Mutations emit an event on the `qubit_events` channel inside their tenant
- * transaction; the SSE route (`/api/v1/events`) subscribes and fans out to
+ * transaction; the SSE route (`/api/events`) subscribes and fans out to
  * connected clients, filtered by tenant. Never poll — automations/UI react to events.
  */
 

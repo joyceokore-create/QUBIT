@@ -69,7 +69,10 @@ BEGIN
     -- Phase 5 — project join requests.
     'join_request',
     -- Phase 6.1 — per-project task-key sequence (docs/15).
-    'project_task_counter'
+    'project_task_counter',
+    -- Revamp M0 — domain-event outbox (docs/16-revamp-plan.md §10). job_run is
+    -- deliberately NOT tenant-scoped (dispatcher-level observability, like access_request).
+    'domain_event'
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);

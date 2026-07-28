@@ -461,7 +461,7 @@ export function ProjectBoard({
                         <button
                           type="button"
                           onClick={() => void navigator.clipboard?.writeText(t.taskKey as string)}
-                          title="Copy key — reference it in commit messages (e.g. “RBS-01-5 #done”)"
+                          title="Copy task key"
                           className="rounded-[4px] bg-[var(--wash2)] px-1.5 py-[1px] font-mono text-[9.5px] tracking-[0.5px] text-[var(--ink3)] transition-colors hover:text-brand"
                         >
                           {t.taskKey}

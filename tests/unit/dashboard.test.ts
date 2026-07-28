@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  avgProgress,
-  formatBudget,
-  parseBudget,
-  ragCounts,
-  worstStatus,
-} from "@/server/dashboard";
+import { avgProgress, formatBudget, parseBudget } from "@/server/dashboard";
+import { ragCounts, worstStatus } from "@/server/health";
 
 describe("avgProgress", () => {
   it("averages a project's subsidiary progress values", () => {

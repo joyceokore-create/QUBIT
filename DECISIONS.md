@@ -444,3 +444,51 @@ only — `.env.example` still documents the default `qubit` URL.
 Note the `task` table-name collision between the two efforts is deferred, not
 gone: if the qubit-ui "My Tasks" feature and this transformation ever share one
 database, that feature's `task`/`reminder` tables must be renamed. Flag at merge.
+
+## Revamp M0 — The Cull + backbone (2026-07-28)
+
+### DM1.22 — M0 executed; three scope calls approved by Joyce in-session
+Plan: `docs/16-revamp-plan.md` §2/§10/§12 (M0). The ClickUp shadow stack is gone from
+code (51 `/api/v1` routes, the `/s` surface, 12 components, 17 server modules, pg-boss,
+11 test suites, the seed's demo tree); **the ~25 ClickUp Prisma models stay in
+schema.prisma so no migration can drop tables before the M9 data check.** Fake-AI panels
+(brief/insights/recommendations), Confidence/AI-predict columns, the Dependencies
+SoonCard, and unbuilt-loop marketing copy were cut or reworded. Approved calls:
+
+1. **`JobRun` is a global infra table** (no tenant_id/RLS — like `tenant`/
+   `access_request`): the cron dispatcher runs outside tenant context and must record a
+   run even when one tenant's loop fails; per-tenant outcomes live in `detail` jsonb.
+   `DomainEvent` is tenant-scoped + FORCE RLS. Deviates deliberately from plan §13's
+   "every new table gets tenant_id".
+2. **`/time` survives trimmed**: read-only report page + `timeReport()` + relocated
+   `/api/time/report` CSV. Timer UI/routes died with the ClickUp task panel; `TimeEntry`
+   model stays until the M6 retarget to `ProjectTask` (its ClickUp-fixture RLS test was
+   deleted; coverage returns in M6).
+3. **`/portfolios` + `/standalone` index placeholders → `redirect("/projects")`**;
+   `coming-soon.tsx` and the orphaned `/tasks` placeholder page deleted.
+
+Backbone shape (M1+ builds on this):
+- **Outbox**: `emitDomainEvent(tx, ctx, {type, entityType, entityId, payload, notify[]})`
+  (src/server/events.ts) — called INSIDE the mutation's transaction. Consumers: durable
+  `domain_event` row → `notifyUsers` fan-out → `pg_notify` (the domain event type, plus a
+  named `notification.created` SSE event the bell subscribes to). All six former
+  `notifyUsers` call sites (join-requests ×3, project-tasks ×2, q/draft-brd) now emit
+  events; `notifyUsers` is consumer-only.
+- **Jobs**: registry + `runJob(name, idempotencyKey)` (src/server/jobs) — JobRun row,
+  unique-key dedupe (re-delivered cron hit = recorded no-op), tenant loop under
+  `withTenant` per DM1.18. Transport: `POST /api/internal/cron`, `CRON_SECRET`
+  timing-safe (DM1.15 №4). M0 ships a read-only `heartbeat` job proving the loop.
+- **Health**: `src/server/health.ts` is the ONE engine (projectRag / needsAttention /
+  ragRank / portfolioHealth / worstStatus / ragCounts). Exec dashboard, Q live report,
+  Q mock, projects/subsidiaries all call it; `tests/rls/health-parity.test.ts` asserts
+  dashboard set === Q set for 100% of projects. `QReportResult` gained `data` (the
+  grounded source) to make that comparison possible — M2 check-in drafts will reuse it.
+- **Relocated live routes**: `/api/users`, `/api/events` (SSE), `/api/time/report`.
+  Bell is SSE-driven (EventSource, no 60s poll). Flags: `FEATURE_SPACES` /
+  `FEATURE_EMAIL` / `FEATURE_COMMIT_AUTOMATION` (src/lib/flags.ts, default off) +
+  `CRON_SECRET` documented in `.env.example`.
+
+Verified: lint + typecheck + 375/375 tests green (49 files; 11 ClickUp suites removed,
+4 added: health unit, health-parity, domain-events, jobs+cron). In-browser on both
+tenants (KCB green topbar / Riverbank red shell): culled dashboard, SSE connect, live
+bell refetch on `pg_notify`, report/dashboard attention-set parity.

@@ -52,7 +52,7 @@ export function ProjectResourcesSection({ projectId, canEdit }: { projectId: str
   useEffect(() => {
     void load();
     if (canEdit) {
-      fetch("/api/v1/users").then((r) => r.json()).then((d) => setUsers(d.data ?? [])).catch(() => {});
+      fetch("/api/users").then((r) => r.json()).then((d) => setUsers(d.data ?? [])).catch(() => {});
       fetch("/api/teams").then((r) => r.json()).then((d) => setTeams((d.data ?? []).map((t: { id: string; name: string }) => ({ id: t.id, name: t.name })))).catch(() => {});
     }
   }, [load, canEdit]);

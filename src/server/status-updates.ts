@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
-import { notifyUsers } from "@/server/notifications";
+import { emitDomainEvent } from "@/server/events";
 
 /**
  * Project status updates. Posting one notifies the project's managers and testers (PRD:
@@ -73,16 +73,18 @@ export async function postStatusUpdate(ctx: TenantContext, projectId: string, in
     recipients.delete(ctx.userId); // don't notify the poster
 
     const ragTag = update.rag === "Green" ? "🟢" : update.rag === "Amber" ? "🟡" : "🔴";
-    await notifyUsers(
-      tx,
-      ctx,
-      [...recipients].map((userId) => ({
+    await emitDomainEvent(tx, ctx, {
+      type: "status_update.posted",
+      entityType: "project_status_update",
+      entityId: update.id,
+      payload: { projectId, rag: update.rag },
+      notify: [...recipients].map((userId) => ({
         userId,
         kind: "status_update",
         message: `${ragTag} Status update on ${project.name}: ${input.body.slice(0, 90)}`,
         link: `/projects/${projectId}`,
       })),
-    );
+    });
 
     await audit(tx, ctx, {
       action: "create",

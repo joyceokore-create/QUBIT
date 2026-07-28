@@ -78,6 +78,9 @@ model Tenant {
   rolePermissions     RolePermission[]
   joinRequests        JoinRequest[]
 
+  // ── Revamp M0 backbone (docs/16-revamp-plan.md §10) ──
+  domainEvents DomainEvent[]
+
   @@map("tenant")
 }
 
@@ -1243,4 +1246,48 @@ enum AccessRequestStatus {
   NEW
   REVIEWED
   DISMISSED
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Revamp M0 backbone (docs/16-revamp-plan.md §10) — jobs runtime + domain-event
+// outbox. Decision log: DECISIONS.md.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Domain-event outbox. Written INSIDE the mutation's transaction so the event is a
+// durable fact exactly when the mutation commits; consumers (notifications + SSE now;
+// activity/delta feeds and digests later) react to it. actorId mirrors AuditLog: a
+// nullable plain string, so machine actors ("nudger", "scheduler") fit without a User row.
+model DomainEvent {
+  id         String   @id @default(cuid())
+  tenantId   String   @map("tenant_id")
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  type       String // dot-namespaced past-tense fact, e.g. "task.assigned"
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  actorId    String?  @map("actor_id")
+  payload    Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, entityType, entityId])
+  @@map("domain_event")
+}
+
+// Cron job observability. Deliberately NOT tenant-scoped (like `tenant` and
+// `access_request`): the dispatcher runs outside any tenant context and must record a
+// run even when a single tenant's loop fails. Per-tenant outcomes live in `detail`;
+// tenant-owned DATA a job writes still goes through set_config('app.tenant_id') — DM1.18.
+// The unique idempotency key makes re-delivered cron hits no-ops.
+model JobRun {
+  id             String    @id @default(cuid())
+  job            String
+  idempotencyKey String    @unique @map("idempotency_key")
+  status         String    @default("Running") // Running | Succeeded | Failed
+  startedAt      DateTime  @default(now()) @map("started_at")
+  finishedAt     DateTime? @map("finished_at")
+  error          String?
+  detail         Json      @default("{}")
+
+  @@index([job, startedAt])
+  @@map("job_run")
 }

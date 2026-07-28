@@ -1,6 +1,7 @@
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { reportableUserIds } from "@/lib/access";
 import { listProjects, getProjectPanelData, type ProjectListItem } from "@/server/projects";
+import { needsAttention, ragRank } from "@/server/health";
 import { listProjectMembers, listWorkload, type WorkloadRow } from "@/server/resources";
 import { listBlockers } from "@/server/blockers";
 import { listRisks } from "@/server/risks";
@@ -360,7 +361,7 @@ export async function mockChat(
       return wrap(top ? `**${top.name}** has the most work — ${top.totalPct}% across ${top.allocations.length} project(s).` : "No workload data.", ["list_workload"]);
     }
     const projects = await listProjects(ctx, {});
-    const rank = (p: ProjectListItem) => (p.status === "Overdue" ? 3 : p.status === "AtRisk" ? 2 : 0) * 1000 + (100 - p.avgProgress);
+    const rank = (p: ProjectListItem) => ragRank(p.status) * 1000 + (100 - p.avgProgress);
     const worst = [...projects].sort((a, b) => rank(b) - rank(a))[0];
     return wrap(worst ? `**${worst.name} (${worst.code})** looks most at risk — ${worst.status}, ${worst.avgProgress}% progress.` : "No projects.", ["list_projects"]);
   }
@@ -375,7 +376,7 @@ export async function mockChat(
     return wrap(open.length ? `**Open blockers (${open.length})**\n${open.map((b) => `- **${b.severity}:** ${b.description}${b.projectCode ? ` (${b.projectCode})` : ""}`).join("\n")}` : "No open blockers.", ["list_blockers"]);
   }
   if (/at risk|overdue|slipping|behind|needs attention/.test(q)) {
-    const att = (await listProjects(ctx, {})).filter((p) => p.status === "AtRisk" || p.status === "Overdue");
+    const att = (await listProjects(ctx, {})).filter((p) => needsAttention(p.status));
     return wrap(att.length ? `**Needs attention (${att.length})**\n${att.map((p) => `- ${p.name} (${p.code}) — ${p.status}, ${p.avgProgress}%`).join("\n")}` : "Nothing is at risk or overdue.", ["list_projects"]);
   }
   if (/\brisk/.test(q)) {

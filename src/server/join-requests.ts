@@ -4,7 +4,7 @@ import { audit } from "@/lib/audit";
 import { can } from "@/lib/rbac";
 import { canWriteProject } from "@/lib/access";
 import { PROJECT_ROLES } from "@/lib/roles";
-import { notifyUsers } from "@/server/notifications";
+import { emitDomainEvent } from "@/server/events";
 
 /**
  * Project join requests (PROMPT §2/§5/§6). Anyone may request to join a project; the project's
@@ -76,16 +76,18 @@ export async function requestToJoin(ctx: TenantContext, projectId: string, input
       recipients.delete(ctx.userId);
     }
     const requester = await tx.user.findUnique({ where: { id: ctx.userId }, select: { name: true } });
-    await notifyUsers(
-      tx,
-      ctx,
-      [...recipients].map((userId) => ({
+    await emitDomainEvent(tx, ctx, {
+      type: "join_request.created",
+      entityType: "join_request",
+      entityId: jr.id,
+      payload: { projectId, requestedRole: jr.requestedRole },
+      notify: [...recipients].map((userId) => ({
         userId,
         kind: "join_request",
         message: `${requester?.name ?? "Someone"} requested to join ${project.name}${jr.requestedRole ? ` as ${jr.requestedRole}` : ""}`,
         link: "/my-tasks", // the "Awaiting my approval" queue
       })),
-    );
+    });
 
     await audit(tx, ctx, {
       action: "create",
@@ -171,14 +173,20 @@ export async function approveJoinRequest(ctx: TenantContext, id: string): Promis
       data: { status: "Approved", decidedById: ctx.userId, decidedAt: new Date() },
     });
     const project = await tx.project.findUnique({ where: { id: jr.projectId }, select: { name: true } });
-    await notifyUsers(tx, ctx, [
-      {
-        userId: jr.userId,
-        kind: "join_request",
-        message: `You joined ${project?.name ?? "the project"} as ${role}`,
-        link: `/projects/${jr.projectId}`,
-      },
-    ]);
+    await emitDomainEvent(tx, ctx, {
+      type: "join_request.approved",
+      entityType: "join_request",
+      entityId: id,
+      payload: { projectId: jr.projectId, role },
+      notify: [
+        {
+          userId: jr.userId,
+          kind: "join_request",
+          message: `You joined ${project?.name ?? "the project"} as ${role}`,
+          link: `/projects/${jr.projectId}`,
+        },
+      ],
+    });
     await audit(tx, ctx, {
       action: "update",
       entityType: "join_request",
@@ -198,14 +206,20 @@ export async function denyJoinRequest(ctx: TenantContext, id: string): Promise<v
       data: { status: "Denied", decidedById: ctx.userId, decidedAt: new Date() },
     });
     const project = await tx.project.findUnique({ where: { id: jr.projectId }, select: { name: true } });
-    await notifyUsers(tx, ctx, [
-      {
-        userId: jr.userId,
-        kind: "join_request",
-        message: `Your request to join ${project?.name ?? "the project"} was declined`,
-        link: `/projects/${jr.projectId}`,
-      },
-    ]);
+    await emitDomainEvent(tx, ctx, {
+      type: "join_request.denied",
+      entityType: "join_request",
+      entityId: id,
+      payload: { projectId: jr.projectId },
+      notify: [
+        {
+          userId: jr.userId,
+          kind: "join_request",
+          message: `Your request to join ${project?.name ?? "the project"} was declined`,
+          link: `/projects/${jr.projectId}`,
+        },
+      ],
+    });
     await audit(tx, ctx, {
       action: "update",
       entityType: "join_request",

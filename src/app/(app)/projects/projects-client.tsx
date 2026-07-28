@@ -205,7 +205,7 @@ function NewProjectDialog() {
 
   useEffect(() => {
     if (!open) return;
-    fetch("/api/v1/users")
+    fetch("/api/users")
       .then((r) => r.json())
       .then((d) => setUsers(d.data ?? []))
       .catch(() => {});

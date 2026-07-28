@@ -3,11 +3,9 @@
 // smaller synthetic set for demonstrating tenant isolation. No real PII — every email is
 // @example.invalid and every name is fictional.
 
-import type { Prisma, StatusType } from "@prisma/client";
 import { prisma } from "../src/lib/db";
 import { withTenant } from "../src/lib/tenant";
 import { hashPassword } from "../src/lib/password";
-import { ORDER_STEP } from "../src/server/ordering";
 
 // LOCAL DEV / DEMO ONLY — every seeded user shares this password so any of them can be
 // used to test role-based views. Never reused for real accounts or non-local environments.
@@ -1375,102 +1373,9 @@ async function seedTenant(seed: TenantSeed) {
       }
     }
 
-    // ── ClickUp transformation demo (docs/clickup-transformation) — additive ──
-    // A minimal Space → Folder → List → tasks tree per tenant so GET /hierarchy
-    // returns a real tree and Phase 1 has something to render.
-    const creatorId = [...userIdByEmail.values()][0];
-    if (creatorId) {
-      await seedClickupDemo(tx, tenant.id, creatorId);
-    }
   });
 
   return tenant;
-}
-
-// Status set per the migration guide's mapping (docs/.../07-migration-guide.md).
-// colorToken values are semantic token keys (never raw hex).
-const DEMO_STATUSES: { name: string; colorToken: string; type: StatusType }[] = [
-  { name: "Planning", colorToken: "info", type: "OPEN" },
-  { name: "In Progress", colorToken: "brand", type: "ACTIVE" },
-  { name: "At Risk", colorToken: "warn", type: "ACTIVE" },
-  { name: "Blocked", colorToken: "bad", type: "ACTIVE" },
-  { name: "Done", colorToken: "ok", type: "DONE" },
-  { name: "Cancelled", colorToken: "neutral", type: "CLOSED" },
-];
-
-async function seedClickupDemo(tx: Prisma.TransactionClient, tenantId: string, creatorId: string) {
-  const space = await tx.space.create({
-    data: {
-      tenantId,
-      name: "Delivery",
-      icon: "🚀",
-      color: "brand",
-      orderIndex: ORDER_STEP,
-      settings: { dependencies: true, timeTracking: true, customFields: true },
-    },
-  });
-
-  const statusGroup = await tx.statusGroup.create({
-    data: { tenantId, spaceId: space.id, name: "Default" },
-  });
-  const statusIdByName = new Map<string, string>();
-  for (let i = 0; i < DEMO_STATUSES.length; i++) {
-    const s = DEMO_STATUSES[i];
-    const created = await tx.status.create({
-      data: {
-        tenantId,
-        statusGroupId: statusGroup.id,
-        name: s.name,
-        colorToken: s.colorToken,
-        type: s.type,
-        orderIndex: ORDER_STEP * (i + 1),
-      },
-    });
-    statusIdByName.set(s.name, created.id);
-  }
-
-  const folder = await tx.folder.create({
-    data: { tenantId, spaceId: space.id, name: "2026 Programmes", orderIndex: ORDER_STEP },
-  });
-
-  // Folderless list (inherits the space's status group) + a list inside the folder.
-  const quickWins = await tx.list.create({
-    data: { tenantId, spaceId: space.id, name: "Quick Wins", orderIndex: ORDER_STEP },
-  });
-  const coreBanking = await tx.list.create({
-    data: {
-      tenantId,
-      spaceId: space.id,
-      folderId: folder.id,
-      name: "Core Banking Rollout",
-      statusGroupId: statusGroup.id,
-      orderIndex: ORDER_STEP,
-    },
-  });
-
-  const demoTasks: { list: string; name: string; status: string; milestone?: boolean }[] = [
-    { list: quickWins.id, name: "Draft steering pack template", status: "In Progress" },
-    { list: quickWins.id, name: "Confirm reporting cadence", status: "Planning" },
-    { list: coreBanking.id, name: "Vendor selection sign-off", status: "At Risk" },
-    { list: coreBanking.id, name: "Migrate pilot branch", status: "Blocked" },
-    { list: coreBanking.id, name: "Phase 1 go-live", status: "Planning", milestone: true },
-  ];
-  let seq = 1;
-  for (let i = 0; i < demoTasks.length; i++) {
-    const t = demoTasks[i];
-    await tx.task.create({
-      data: {
-        tenantId,
-        listId: t.list,
-        name: t.name,
-        statusId: statusIdByName.get(t.status)!,
-        isMilestone: t.milestone ?? false,
-        orderIndex: ORDER_STEP * (i + 1),
-        createdById: creatorId,
-        seq: seq++,
-      },
-    });
-  }
 }
 
 async function main() {

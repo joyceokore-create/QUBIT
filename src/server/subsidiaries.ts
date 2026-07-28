@@ -1,5 +1,5 @@
 import { withTenant, type TenantContext } from "@/lib/tenant";
-import { ragCounts } from "@/server/dashboard";
+import { ragCounts } from "@/server/health";
 
 export interface SubsidiaryProjectRow {
   id: string;

@@ -2,16 +2,15 @@ import Link from "next/link";
 import { ArrowRight, FolderKanban, Wallet, TriangleAlert, Flag, Gauge, Activity, Users } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
-import { getExecDashboard, type ExecInsight } from "@/server/exec-dashboard";
+import { getExecDashboard } from "@/server/exec-dashboard";
 import { Forbidden } from "@/components/forbidden";
 import { LiveClock } from "@/components/command/live-clock";
 import { HealthRing } from "@/components/command/health-ring";
 import { statusMeta } from "@/lib/project-view";
 
-// ── QUBIT App v3 exec dashboard (Phase A). Everything shown is grounded in live tenant data;
-// the four data-hungry widgets (Portfolio/Risk trend, Burndown, Budget burn) and the table's
-// Confidence / AI-prediction columns are clearly-labelled "coming soon" placeholders — no
-// fabricated numbers (they need snapshot history, a money type, and a forecasting pass).
+// ── Exec dashboard. Everything shown is grounded in live tenant data — no placeholder
+// columns, no "coming soon" panels, and nothing labelled AI that isn't (M0 cull,
+// docs/16-revamp-plan.md §2). The ten-second Today/Changed/At-risk redesign lands in M1.
 
 const CARD =
   "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]";
@@ -28,7 +27,6 @@ export default async function DashboardPage() {
   if (!can(ctx, "dashboard:read")) return <Forbidden />;
 
   const d = await getExecDashboard(ctx);
-  const firstName = (session.user.name ?? "there").split(/\s+/)[0];
   const today = new Date().toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" }).toUpperCase();
   const { health, kpis } = d;
 
@@ -56,16 +54,8 @@ export default async function DashboardPage() {
       </div>
 
       <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-3.5 p-[14px_24px_90px]">
-        {/* ── Row 1: Exec brief · Priorities · Health · Notifications ── */}
-        <section className="grid grid-cols-1 gap-3.5 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto_minmax(0,1fr)]">
-          <Panel title="AI executive brief" sub="LIVE DATA">
-            <div className="mb-1 px-4 pt-1 font-heading text-[17px] rv:text-heading-md font-bold tracking-[-.4px] text-[var(--qink)]">Good day, {firstName}.</div>
-            {d.brief.map((line, i) => (
-              <div key={i} className="px-4 py-1 text-[12.5px] rv:text-body-sm leading-[1.5] text-[var(--ink2)]">{line}</div>
-            ))}
-            <div className="px-4 pb-3 pt-2 font-mono text-[8.5px] uppercase tracking-[1.4px] text-[var(--ink5)]">Deterministic · ask Q for a deeper read</div>
-          </Panel>
-
+        {/* ── Row 1: Priorities · Health · Notifications ── */}
+        <section className="grid grid-cols-1 gap-3.5 lg:grid-cols-[minmax(0,1.4fr)_auto_minmax(0,1fr)]">
           <Panel title="Today's priorities" sub="FOR YOU">
             {d.priorities.length ? (
               d.priorities.map((p) => (
@@ -142,21 +132,19 @@ export default async function DashboardPage() {
 
         {/* ── Row 3: Projects table (all projects) ── */}
         <Panel title="Projects" sub={`${d.projects.length}`}>
-          <div className="grid grid-cols-[minmax(0,1fr)_92px_120px_120px_74px_88px_92px] items-center gap-3 border-b border-[var(--hair)] p-[9px_18px] font-mono text-[8.5px] uppercase tracking-[1.4px] text-[var(--ink4)]">
-            <span>Project</span><span>Health</span><span>Progress</span><span>Owner</span><span>Due</span><span>Confidence</span><span>AI predict</span>
+          <div className="grid grid-cols-[minmax(0,1fr)_92px_120px_120px_74px] items-center gap-3 border-b border-[var(--hair)] p-[9px_18px] font-mono text-[8.5px] uppercase tracking-[1.4px] text-[var(--ink4)]">
+            <span>Project</span><span>Health</span><span>Progress</span><span>Owner</span><span>Due</span>
           </div>
           {d.projects.length ? (
             d.projects.map((p) => {
               const m = statusMeta(p.status);
               return (
-                <Link key={p.id} href={`/projects/${p.id}`} className="grid grid-cols-[minmax(0,1fr)_92px_120px_120px_74px_88px_92px] items-center gap-3 border-b border-[var(--hair2)] p-[10px_18px] transition-colors last:border-0 hover:bg-[var(--wash)]">
+                <Link key={p.id} href={`/projects/${p.id}`} className="grid grid-cols-[minmax(0,1fr)_92px_120px_120px_74px] items-center gap-3 border-b border-[var(--hair2)] p-[10px_18px] transition-colors last:border-0 hover:bg-[var(--wash)]">
                   <span className="min-w-0"><span className="block truncate text-[13px] font-semibold text-[var(--qink)]">{p.name}</span><span className="font-mono text-[9.5px] text-[var(--ink4)]">{p.code}</span></span>
                   <span className="justify-self-start rounded-[5px] p-[3px_7px] font-mono text-[9px] font-semibold tracking-[.5px]" style={{ color: `var(${m.tok})`, border: `1px solid color-mix(in oklab, var(${m.tok}) 35%, transparent)`, background: `color-mix(in oklab, var(${m.tok}) 9%, transparent)` }}>{m.label}</span>
                   <span className="flex items-center gap-2"><span className="h-[3px] flex-1 overflow-hidden rounded-full bg-[var(--wash2)]"><span className="block h-full rounded-full" style={{ width: `${p.avgProgress}%`, background: "var(--brand)" }} /></span><span className="w-8 text-right font-mono text-[10px] tabular-nums text-[var(--ink3)]">{p.avgProgress}%</span></span>
                   <span className="truncate text-[11.5px] text-[var(--ink3)]">{p.ownerName ?? <span className="text-[var(--warn)]">No lead</span>}</span>
                   <span className="font-mono text-[10px] text-[var(--ink4)]">{fmtDate(p.dueDate)}</span>
-                  <span className="font-mono text-[9px] uppercase tracking-[.5px] text-[var(--ink5)]">soon</span>
-                  <span className="font-mono text-[9px] uppercase tracking-[.5px] text-[var(--ink5)]">soon</span>
                 </Link>
               );
             })
@@ -165,11 +153,8 @@ export default async function DashboardPage() {
           )}
         </Panel>
 
-        {/* ── Row 5: Insights · Recommendations · Dependencies · Milestones · Risks · Capacity ── */}
+        {/* ── Row 4: Milestones · Risks · Capacity ── */}
         <section className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3">
-          <Panel title="AI insights" sub="LIVE DATA"><InsightList items={d.insights} /></Panel>
-          <Panel title="Recommendations" sub="LIVE DATA"><InsightList items={d.recommendations} /></Panel>
-          <SoonCard title="Dependencies" note="Needs a task-dependency model" />
           <Panel title="Upcoming milestones" sub="NEXT 30 DAYS">
             {d.milestones.length ? d.milestones.map((mi) => (
               <Row key={mi.id} tok={mi.color === "red" ? "--bad" : mi.color === "amber" ? "--warn" : "--ok"} text={mi.text} meta={mi.meta} />
@@ -206,31 +191,6 @@ function Panel({ title, sub, children }: { title: string; sub?: string; children
       </div>
       <div className="flex flex-col">{children}</div>
     </div>
-  );
-}
-
-function SoonCard({ title, note }: { title: string; note: string }) {
-  return (
-    <div className={`${CARD} flex flex-col`} style={{ background: "var(--cardbg)" }}>
-      <div className="flex items-baseline gap-2.5 border-b border-[var(--hair)] p-[12px_16px]">
-        <span className="font-heading text-[13.5px] rv:text-heading-xs font-bold text-[var(--ink3)]">{title}</span>
-        <span className="rounded-[5px] bg-[var(--wash2)] px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-[1px] text-[var(--ink4)]">Coming soon</span>
-      </div>
-      <div className="flex min-h-[90px] flex-1 items-center justify-center p-4 text-center text-[11px] text-[var(--ink5)]">{note}</div>
-    </div>
-  );
-}
-
-function InsightList({ items }: { items: ExecInsight[] }) {
-  return (
-    <>
-      {items.map((it, i) => (
-        <div key={i} className="flex items-start gap-2.5 border-b border-[var(--hair2)] p-[10px_16px] last:border-0">
-          <span className="mt-[5px] size-1.5 flex-none rounded-full" style={{ background: `var(${SEV[it.tone]})` }} />
-          <span className="text-[12.5px] leading-[1.45] text-[var(--ink2)]">{it.text}</span>
-        </div>
-      ))}
-    </>
   );
 }
 

@@ -35,8 +35,17 @@ export function NotificationBell() {
 
   useEffect(() => {
     void load();
-    const t = setInterval(load, 60_000); // light poll
-    return () => clearInterval(t);
+    // Live via SSE (M0 — no polling): the outbox emits "notification.created" on the
+    // tenant stream whenever a mutation fans out notifications. EventSource reconnects
+    // itself on drops (server sends a retry hint), and each reconnect replays load().
+    const es = new EventSource("/api/events");
+    const onNotify = () => void load();
+    es.addEventListener("notification.created", onNotify);
+    es.onopen = onNotify;
+    return () => {
+      es.removeEventListener("notification.created", onNotify);
+      es.close();
+    };
   }, []);
 
   async function markAll() {
