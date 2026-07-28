@@ -655,3 +655,50 @@ end-to-end + activity-feed unit). Live in-browser on KCB: mention-comment → th
 reply → promote — thread renders with a DECISION chip, the Decisions card shows
 what/why/who/when, the Activity card narrates all three events, and the mentioned
 user's notification landed.
+
+## Role dashboards M1a — shell, personas, executive preset (2026-07-28)
+
+### DM1.27 — docs/17 §0 adopted: composition, not forks (DM1.10 amended, not reversed)
+Note: docs/17 asks for this entry as "DM1.22" and the Implementor category as "DM1.23";
+both numbers were already taken by revamp milestones — recorded here as DM1.27, with
+DM1.28 reserved for the Implementor category when M1c ships it.
+
+- **One route, one shell, presets by persona.** `/dashboard` renders the preset for the
+  session's resolved persona; a validated `?persona=` override powers the header
+  switcher (multi-group users only). Widget registry + preset lists in
+  `src/components/dashboard/presets/registry.ts`; the executive preset is the first
+  consumer. Developer/PM (M1b) and QA/Implementor (M1c) personas render the proven v2
+  three-questions layout in the interim — a real dashboard, never a placeholder (§9).
+- **Personas are presentation, never permission** (§1): effective groups = DECLARED
+  (`User.userGroups` + `primaryGroup`, set at invite/admin, audited) ∪ DERIVED
+  (`projectRoleCategory` over memberships, `executive` for oversight roles, `pm` for
+  leads), resolved at login and baked into the session (DM1.7 lifecycle). Landing =
+  last-used (`User.lastPersona`, persisted via POST /api/me/persona) > primary >
+  fixed priority. A pure stakeholder falls back to the developer (task-first) view.
+  Tested both directions: granting/stripping groups changes zero permissions.
+- **Executive preset per §2**: hero with decision count + priorities strip; compact
+  health score + 8-week sparkline + "why?" disclosure grounded in engine counts (the
+  ring is gone — the trend is the information); EXACTLY 4 KPIs with WoW deltas from
+  snapshots (On-track %, At risk, Open escalations — new `portfolio_snapshot.
+  escalations_open` column fed nightly — and Capacity pressure); decision queue
+  (escalated nudges + unconfirmed check-ins + pending AI-draft approvals; stage gates
+  join at M8, no placeholder rows); single-encoding heatmap cells (RAG + Δ arrow vs
+  last week from ProjectSnapshots; count/progress on hover).
+- **Heatmap axis by org-unit count** (§2 fix): Portfolio × Subsidiary for KCB;
+  **Portfolio × Department for Riverbank, derived from the project LEAD's department**
+  with an honest "Unassigned" bucket — projects have no department link of their own
+  (a `Project.departmentId` can supersede this if wanted). Verified live on both.
+- **Admin onboarding (§1.3)**: invite wizard gains declared-group chips + primary +
+  a live "Will land on: X dashboard" preview computed by the SAME resolver login uses;
+  /admin/users row actions gain a groups dialog showing declared (editable) vs derived
+  (read-only, dashed) chips. Group edits share the invite gate (`users:invite` —
+  SuperAdmin + heads), not the SuperAdmin-only roles gate: changing a landing page is
+  not changing authority. All changes audited.
+- Parity extended: the exec preset is a third surface asserted equal to dashboard-v2
+  and Q in tests/rls/health-parity.
+
+Verified: lint/typecheck/build green, 442/442 tests (60 files; new: personas unit +
+personas RLS incl. the both-directions permission invariant and the §9 two-personas
+acceptance). Live on both tenants: KCB exec preset with real +11/−2 WoW deltas and the
+subsidiary axis; persona switch to PM (persisted `last_persona`); Riverbank department
+axis + honest trend-accrues states.

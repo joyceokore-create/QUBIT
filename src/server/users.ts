@@ -4,7 +4,8 @@ import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { hashPassword, validatePasswordPolicy, isPasswordReused, pushPasswordHistory } from "@/lib/password";
 import { ROLE_PERMISSIONS } from "@/lib/rbac";
-import { PROJECT_ROLES } from "@/lib/roles";
+import { derivedGroups, USER_GROUPS } from "@/lib/personas";
+import { PROJECT_ROLES, projectRoleCategory } from "@/lib/roles";
 
 const ROLE_KEYS = Object.keys(ROLE_PERMISSIONS) as [string, ...string[]];
 
@@ -18,6 +19,9 @@ export const CreateUserInput = z.object({
   teamId: z.string().min(1).nullable().optional(),
   projectId: z.string().min(1).nullable().optional(),
   projectRole: z.enum(PROJECT_ROLES).nullable().optional(),
+  // Declared dashboard groups (docs/17 §1.3) — presentation, never permission.
+  userGroups: z.array(z.enum(USER_GROUPS)).max(5).optional(),
+  primaryGroup: z.enum(USER_GROUPS).nullable().optional(),
 });
 export type CreateUserInput = z.infer<typeof CreateUserInput>;
 
@@ -25,6 +29,12 @@ export const UpdateRolesInput = z.object({
   roles: z.array(z.enum(ROLE_KEYS)).min(1),
 });
 export type UpdateRolesInput = z.infer<typeof UpdateRolesInput>;
+
+export const SetUserGroupsInput = z.object({
+  userGroups: z.array(z.enum(USER_GROUPS)).max(5),
+  primaryGroup: z.enum(USER_GROUPS).nullable(),
+});
+export type SetUserGroupsInput = z.infer<typeof SetUserGroupsInput>;
 
 /** Thrown for admin-user-management failures the API layer should surface as 400s. */
 export class UserAdminError extends Error {
@@ -50,6 +60,11 @@ export interface AdminUserSummary {
   mfaEnabled: boolean;
   teamCount: number;
   projectCount: number;
+  /** Declared dashboard groups (admin-editable) vs derived (from live memberships) —
+   * shown visually distinct in /admin/users per docs/17 §1.3. */
+  userGroups: string[];
+  primaryGroup: string | null;
+  derivedGroups: string[];
 }
 
 export async function listUsers(
@@ -63,6 +78,8 @@ export async function listUsers(
         roles: true,
         department: { select: { name: true } },
         manager: { select: { name: true } },
+        projectAllocations: { select: { role: true } },
+        projectsLed: { select: { id: true }, take: 1 },
         _count: { select: { teamMemberships: true, projectAllocations: true } },
       },
       orderBy: { name: "asc" },
@@ -82,7 +99,33 @@ export async function listUsers(
       mfaEnabled: u.mfaSecret !== null,
       teamCount: u._count.teamMemberships,
       projectCount: u._count.projectAllocations,
+      userGroups: u.userGroups,
+      primaryGroup: u.primaryGroup,
+      derivedGroups: derivedGroups({
+        membershipCategories: u.projectAllocations.map((m) => projectRoleCategory(m.role)),
+        tenantRoles: u.roles.map((r) => r.role),
+        leadsProjects: u.projectsLed.length > 0,
+      }),
     }));
+  });
+}
+
+/** Edit DECLARED dashboard groups (docs/17 §1.3) — presentation only; RBAC untouched. */
+export async function setUserGroups(ctx: TenantContext, userId: string, input: SetUserGroupsInput) {
+  // A primary outside the declared set would silently vanish at resolution — fold it in.
+  const userGroups = input.primaryGroup && !input.userGroups.includes(input.primaryGroup)
+    ? [...input.userGroups, input.primaryGroup]
+    : input.userGroups;
+  return withTenant(ctx, async (tx) => {
+    const user = await tx.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!user) throw new UserAdminError("User not found.", "NOT_FOUND");
+    await tx.user.update({ where: { id: userId }, data: { userGroups, primaryGroup: input.primaryGroup } });
+    await audit(tx, ctx, {
+      action: "update",
+      entityType: "user",
+      entityId: userId,
+      after: { userGroups, primaryGroup: input.primaryGroup },
+    });
   });
 }
 
@@ -130,6 +173,13 @@ export async function createUser(ctx: TenantContext, input: CreateUserInput) {
       if (!dept) throw new UserAdminError("Selected org unit was not found.", "DEPT_NOT_FOUND");
     }
 
+    // Declared groups (docs/17 §1.3): the day-one landing when memberships don't exist
+    // yet. A primary outside the declared set is folded in rather than lost.
+    const declaredGroups =
+      input.primaryGroup && !(input.userGroups ?? []).includes(input.primaryGroup)
+        ? [...(input.userGroups ?? []), input.primaryGroup]
+        : (input.userGroups ?? []);
+
     const user = await tx.user.create({
       data: {
         tenantId: ctx.tenantId,
@@ -138,6 +188,8 @@ export async function createUser(ctx: TenantContext, input: CreateUserInput) {
         status: "ACTIVE",
         passwordHash,
         departmentId: input.departmentId ?? null,
+        userGroups: declaredGroups,
+        primaryGroup: input.primaryGroup ?? null,
         mustChangePassword: true, // invited with a temp password — reset on first sign-in
       },
     });
@@ -170,7 +222,7 @@ export async function createUser(ctx: TenantContext, input: CreateUserInput) {
       action: "create",
       entityType: "user",
       entityId: user.id,
-      after: { name: user.name, email: user.email, roles: input.roles },
+      after: { name: user.name, email: user.email, roles: input.roles, userGroups: declaredGroups, primaryGroup: input.primaryGroup ?? undefined },
     });
 
     return user;

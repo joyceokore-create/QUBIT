@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, Building2, MoreHorizontal, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
+import { Ban, Building2, LayoutDashboard, MoreHorizontal, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -21,6 +21,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { EditRolesDialog } from "./edit-roles-dialog";
+import { EditGroupsDialog } from "./edit-groups-dialog";
 import { EditDepartmentDialog } from "./edit-department-dialog";
 import type { AdminUserSummary } from "@/server/users";
 import type { DepartmentSummary } from "@/server/departments";
@@ -37,6 +38,7 @@ interface UserRowActionsProps {
 export function UserRowActions({ user, currentUserId, departments, users, canManage }: UserRowActionsProps) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
+  const [groupsOpen, setGroupsOpen] = useState(false);
   const [departmentOpen, setDepartmentOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -81,6 +83,10 @@ export function UserRowActions({ user, currentUserId, departments, users, canMan
             <Building2 style={{ color: "var(--pbrand)" }} />
             Edit department
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setGroupsOpen(true)}>
+            <LayoutDashboard style={{ color: "var(--qinfo)" }} />
+            Dashboard groups
+          </DropdownMenuItem>
           {canManage && (
             <DropdownMenuItem disabled={isSelf || busy} onSelect={toggleSuspend}>
               {user.status === "ACTIVE" ? <Ban style={{ color: "var(--warn)" }} /> : <RotateCcw style={{ color: "var(--ok)" }} />}
@@ -97,6 +103,7 @@ export function UserRowActions({ user, currentUserId, departments, users, canMan
       </DropdownMenu>
 
       <EditRolesDialog user={user} open={editOpen} onOpenChange={setEditOpen} />
+      <EditGroupsDialog user={user} open={groupsOpen} onOpenChange={setGroupsOpen} />
       <EditDepartmentDialog
         user={user}
         departments={departments}

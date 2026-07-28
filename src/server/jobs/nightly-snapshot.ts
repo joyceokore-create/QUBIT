@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { audit } from "@/lib/audit";
+import { isoWeekId } from "@/lib/iso-week";
 import { avgProgress } from "@/server/dashboard";
 import { portfolioHealth, projectRag } from "@/server/health";
 import type { JobDefinition } from "@/server/jobs/types";
@@ -22,7 +23,7 @@ export const nightlySnapshot: JobDefinition = {
     const now = new Date();
     const day = utcDay(now);
 
-    const [projects, taskAgg, blockerAgg, riskAgg, overdueAgg, allocations] = await Promise.all([
+    const [projects, taskAgg, blockerAgg, riskAgg, overdueAgg, allocations, escalationsOpen] = await Promise.all([
       tx.project.findMany({
         select: { id: true, status: true, orgStatuses: { select: { progress: true } } },
       }),
@@ -43,6 +44,8 @@ export const nightlySnapshot: JobDefinition = {
         _count: { _all: true },
       }),
       tx.projectMember.groupBy({ by: ["userId"], _sum: { allocationPct: true } }),
+      // docs/17 §2: the exec "Open escalations" KPI trend — this week's escalated nudges.
+      tx.nudge.count({ where: { isoWeek: isoWeekId(now), escalationLevel: { gte: 1 } } }),
     ]);
 
     const openByProject = new Map<string, number>();
@@ -84,6 +87,7 @@ export const nightlySnapshot: JobDefinition = {
       tasksOverdue,
       peopleAllocated: allocations.length,
       peopleOverAllocated: allocations.filter((a) => (a._sum.allocationPct ?? 0) > 100).length,
+      escalationsOpen,
     };
     await tx.portfolioSnapshot.upsert({
       where: { tenantId_day: { tenantId: tenant.id, day } },

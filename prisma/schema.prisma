@@ -123,6 +123,12 @@ model User {
   mustChangePassword     Boolean     @default(false) @map("must_change_password") // invited users reset on first sign-in
   // Dashboard v2 delta feed (M1): lower bound of "what changed since I last looked".
   lastDashboardSeenAt    DateTime?   @map("last_dashboard_seen_at")
+  // Role dashboards (docs/17 §1): DECLARED groups set at invite time; effective groups =
+  // declared ∪ derived-from-memberships, resolved at login (src/lib/personas.ts).
+  // Presentation only — groups never grant or remove permissions.
+  userGroups             String[]    @default([]) @map("user_groups")
+  primaryGroup           String?     @map("primary_group") // executive | pm | developer | qa | implementor
+  lastPersona            String?     @map("last_persona") // switcher persistence: last-used wins next login
   departmentId           String?     @map("department_id")
   department             Department? @relation("UserDepartment", fields: [departmentId], references: [id])
   // Who this user reports to. Self-relation — see docs/05-data-model.md. Longer manager
@@ -1339,6 +1345,8 @@ model PortfolioSnapshot {
   tasksOverdue        Int      @map("tasks_overdue")
   peopleAllocated     Int      @map("people_allocated")
   peopleOverAllocated Int      @map("people_over_allocated")
+  // docs/17 §2: active escalated nudges (level ≥ 1) that day — the 4th exec KPI's trend.
+  escalationsOpen     Int      @default(0) @map("escalations_open")
   createdAt           DateTime @default(now()) @map("created_at")
 
   @@unique([tenantId, day])

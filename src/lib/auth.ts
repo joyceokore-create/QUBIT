@@ -7,6 +7,8 @@ import { resolveTenantByEmailDomain } from "@/lib/tenant-domain";
 import { verifyPassword } from "@/lib/password";
 import { decryptMfaSecret, verifyTotp } from "@/lib/mfa";
 import { checkRateLimit, recordFailure, resetRateLimit } from "@/lib/rate-limit";
+import { derivedGroups, effectiveGroups, landingPersona } from "@/lib/personas";
+import { projectRoleCategory } from "@/lib/roles";
 import { resolvePermissionsForRoles } from "@/server/role-permissions";
 
 const CredentialsSchema = z.object({
@@ -46,7 +48,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const user = await withTenant({ tenantId: tenant.id, userId: "auth" }, (tx) =>
           tx.user.findUnique({
             where: { tenantId_email: { tenantId: tenant.id, email: normalizedEmail } },
-            include: { roles: true },
+            include: {
+              roles: true,
+              // Persona derivation (docs/17 §1.1): membership roles + whether they lead.
+              projectAllocations: { select: { role: true } },
+              projectsLed: { select: { id: true }, take: 1 },
+            },
           }),
         );
 
@@ -79,6 +86,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           resolvePermissionsForRoles(tx, tenant.id, roles),
         );
 
+        // Dashboard personas (docs/17 §1) — presentation only, same lifecycle as
+        // permissions: effective groups = declared ∪ derived, landing = last > primary > priority.
+        const personas = effectiveGroups(
+          user.userGroups,
+          derivedGroups({
+            membershipCategories: user.projectAllocations.map((m) => projectRoleCategory(m.role)),
+            tenantRoles: roles,
+            leadsProjects: user.projectsLed.length > 0,
+          }),
+        );
+        const activePersona = landingPersona(personas, user.primaryGroup, user.lastPersona);
+
         // Record last sign-in (onboarding tracking) — best-effort, never blocks login.
         await withTenant({ tenantId: tenant.id, userId: user.id }, (tx) =>
           tx.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }),
@@ -93,6 +112,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           tenantName: tenant.name,
           roles,
           permissions,
+          personas,
+          activePersona,
           brandColor: tenant.brandColor,
           brandLight: tenant.brandLight,
           mustChangePassword: user.mustChangePassword,
