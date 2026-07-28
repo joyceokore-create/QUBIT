@@ -538,3 +538,47 @@ Verified: lint/typecheck/build green, 387/387 tests (51 files; new: snapshots RL
 delta unit). In-browser both tenants: KCB (green, topbar) heatmap + real 14-day
 sparklines + merged milestone names in the briefing; Riverbank (red, shell) honest
 empty trends/delta, /time + /risks nav, stale timer copy fixed.
+
+## Revamp M2 — The weekly loop (2026-07-28)
+
+### DM1.24 — M2 executed: Friday check-ins, weekly report, subscriptions
+Plan: `docs/16-revamp-plan.md` §7/§12 (M2). The status-reporting inversion: the system
+drafts, the lead confirms — nobody retypes what QUBIT already knows.
+
+- **Model**: `CheckIn` (unique tenant+project+isoWeek; Draft|Confirmed; computedRag from
+  the health engine; `draft` jsonb holds the week's facts + rendered bullet lines;
+  narrative; ragOverride + reason + `overrideExpiresAt`) and `ReportSubscription`
+  (unique tenant+user+kind, "weekly_report"). Both RLS+FORCE, isolation-tested. ISO week
+  helpers in `src/lib/iso-week.ts` (Mon-UTC windows, unit-tested year boundaries).
+- **Drafting** (`src/server/checkins.ts`): facts from the M0 outbox (task.completed /
+  blocker.opened / blocker.resolved counts via JSON-path filters), milestone movement
+  (done this week; slipped = came due this week and not Done), overdue tasks now, and
+  progress delta vs the last pre-week snapshot. `buildDraftLines` is pure. GET serves an
+  EPHEMERAL computed draft when no row exists (the card never waits for Friday); the
+  Friday job persists rows.
+- **Confirm**: PM-level (`canWriteProject`, consistent with DM1.15 №3), narrative
+  REQUIRED (the human line is the point), override needs a reason ≥5 chars and expires
+  in exactly 7 days; `effectiveRag` honours overrides only while confirmed+unexpired
+  (all pure-tested). Facts are recomputed at confirm time so the lead signs what the
+  report shows. Audited + `checkin.confirmed` outbox event. An override equal to the
+  computed RAG is silently dropped (not an override).
+- **Jobs**: `friday-checkin-drafts` (08:00 Fri — persists drafts, never clobbers a
+  confirmed row, notifies lead + PM members, kind `checkin_ready`) and `friday-report`
+  (16:00 Fri — SharedReport type "weekly", `createdById: null` for the machine actor,
+  one per tenant per ISO week even across differing idempotency keys). Report sections:
+  portfolio health + WoW deltas from PortfolioSnapshots, per-project check-ins sorted
+  red-first (confirmed = lead's narrative + override chip; else "⚠️ unconfirmed —
+  computed status shown"), milestones due in the next 7 days. Subscribers notified with
+  the share link; defaults seeded for Executive/HeadOfProjects/HeadOfQA/SuperAdmin
+  role-holders (per-user matrix lands M5). Crontab lines in docs/deployment.md.
+- **UI**: `CheckInCard` leads the workspace Overview tab — computed chip always shown,
+  override renders as a second "LEAD OVERRIDE" chip beside it (never replacing the
+  computed truth), confirm disabled until narrative (and reason when overriding).
+  Non-PMs see "awaiting the lead's confirmation".
+- **Flake fixed during gating**: the fixture lead is also the seeded demo project's
+  lead, so `checkin_ready` assertions must target the fixture project's link, not
+  `findFirst` order. Root-caused (not retried away) and pinned in the test.
+
+Verified: lint/typecheck/build green, 406/406 tests (54 files; new: iso-week, checkins
+unit, M2 loop RLS). Live in-browser: confirmed a real check-in with a Green override on
+CBS Phase 1 (KCB) through the API + card — both chips, reason, 4 Aug expiry rendered.

@@ -77,10 +77,12 @@ model Tenant {
   rolePermissions     RolePermission[]
   joinRequests        JoinRequest[]
 
-  // ── Revamp M0/M1 backbone (docs/16-revamp-plan.md §10) ──
-  domainEvents       DomainEvent[]
-  projectSnapshots   ProjectSnapshot[]
-  portfolioSnapshots PortfolioSnapshot[]
+  // ── Revamp M0–M2 backbone (docs/16-revamp-plan.md §10) ──
+  domainEvents        DomainEvent[]
+  projectSnapshots    ProjectSnapshot[]
+  portfolioSnapshots  PortfolioSnapshot[]
+  checkIns            CheckIn[]
+  reportSubscriptions ReportSubscription[]
 
   @@map("tenant")
 }
@@ -153,6 +155,8 @@ model User {
   sharedReports        SharedReport[]        @relation("SharedReportAuthor")
   joinRequests         JoinRequest[]         @relation("JoinRequestUser")
   joinRequestsDecided  JoinRequest[]         @relation("JoinRequestDecider")
+  checkInsConfirmed    CheckIn[]             @relation("CheckInConfirmer")
+  reportSubscriptions  ReportSubscription[]  @relation("ReportSubscriptions")
 
   @@unique([tenantId, email])
   @@map("user")
@@ -564,6 +568,7 @@ model Project {
   milestonesV2  ProjectMilestone[]
   joinRequests  JoinRequest[]
   snapshots     ProjectSnapshot[]
+  checkIns      CheckIn[]
 
   @@unique([tenantId, code])
   @@map("project")
@@ -1328,4 +1333,48 @@ model PortfolioSnapshot {
 
   @@unique([tenantId, day])
   @@map("portfolio_snapshot")
+}
+
+// Friday check-in (M2, docs/16-revamp-plan.md §7): the system drafts the weekly status
+// from events + snapshots; the lead reviews, edits one narrative line, and confirms in
+// under two minutes. The confirmed check-in IS the weekly report's project line. A RAG
+// override needs a reason and expires after 7 days so overrides can't rot.
+model CheckIn {
+  id                String    @id @default(cuid())
+  tenantId          String    @map("tenant_id")
+  tenant            Tenant    @relation(fields: [tenantId], references: [id])
+  projectId         String    @map("project_id")
+  project           Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  isoWeek           String    @map("iso_week") // "2026-W31"
+  status            String    @default("Draft") // Draft | Confirmed
+  computedRag       String    @map("computed_rag") // health-engine RAG at draft/confirm time
+  draft             Json      @default("{}") // drafted facts + lines (see CheckInDraft in src/server/checkins.ts)
+  narrative         String?
+  ragOverride       String?   @map("rag_override") // Green | Amber | Red
+  overrideReason    String?   @map("override_reason")
+  overrideExpiresAt DateTime? @map("override_expires_at")
+  confirmedById     String?   @map("confirmed_by_id")
+  confirmedBy       User?     @relation("CheckInConfirmer", fields: [confirmedById], references: [id])
+  confirmedAt       DateTime? @map("confirmed_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@unique([tenantId, projectId, isoWeek])
+  @@index([tenantId, isoWeek])
+  @@map("check_in")
+}
+
+// Who receives the Friday report (M2). `kind` leaves room for the M5 preference matrix;
+// defaults are seeded for role-holders and manageable per-user later.
+model ReportSubscription {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  userId    String   @map("user_id")
+  user      User     @relation("ReportSubscriptions", fields: [userId], references: [id], onDelete: Cascade)
+  kind      String   @default("weekly_report")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([tenantId, userId, kind])
+  @@map("report_subscription")
 }

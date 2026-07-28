@@ -1080,6 +1080,8 @@ async function resetTenant(slug: string) {
     // ClickUp transformation tables (leaf → root; the tenant FK is RESTRICT so these
     // must be cleared before the tenant delete below).
     // MVP1 workspace + copilot tables (must clear before the tenant delete — tenant FK is RESTRICT).
+    await tx.checkIn.deleteMany({});
+    await tx.reportSubscription.deleteMany({});
     await tx.projectSnapshot.deleteMany({});
     await tx.portfolioSnapshot.deleteMany({});
     await tx.domainEvent.deleteMany({});
@@ -1180,6 +1182,13 @@ async function seedTenant(seed: TenantSeed) {
       for (const role of u.roles) {
         await tx.roleAssignment.create({
           data: { tenantId: tenant.id, userId: created.id, role },
+        });
+      }
+      // M2 default: oversight roles receive the Friday report. Per-user preferences
+      // arrive with the M5 matrix; leads are notified per-project by the check-in job.
+      if (u.roles.some((r) => ["Executive", "HeadOfProjects", "HeadOfQA", "PlatformSuperAdmin"].includes(r))) {
+        await tx.reportSubscription.create({
+          data: { tenantId: tenant.id, userId: created.id, kind: "weekly_report" },
         });
       }
     }

@@ -149,3 +149,15 @@ feed, M2 check-in drafts) run at 23:55 East Africa Time:
 The default idempotency key is `<job>:<UTC date>`, so a re-delivered hit within the same
 day is a recorded no-op (`status: "Skipped"`). Set `CRON_SECRET` in the box's
 `.env.production` and export it in the crontab environment.
+
+The M2 weekly loop adds two Friday jobs — drafts in the morning, the report in the
+afternoon (after leads have had the day to confirm):
+
+```cron
+0 8 * * 5 curl -sS -X POST https://q.fikrawork.com/api/internal/cron \
+  -H "Authorization: Bearer $CRON_SECRET" -H "Content-Type: application/json" \
+  -d '{"job":"friday-checkin-drafts"}' >> /home/osbui/applications/qubit/cron.log 2>&1
+0 16 * * 5 curl -sS -X POST https://q.fikrawork.com/api/internal/cron \
+  -H "Authorization: Bearer $CRON_SECRET" -H "Content-Type: application/json" \
+  -d '{"job":"friday-report"}' >> /home/osbui/applications/qubit/cron.log 2>&1
+```

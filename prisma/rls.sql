@@ -74,7 +74,10 @@ BEGIN
     -- access_request). The legacy 'milestone' table merged into project_milestone in M1.
     'domain_event',
     'project_snapshot',
-    'portfolio_snapshot'
+    'portfolio_snapshot',
+    -- Revamp M2 — the weekly loop.
+    'check_in',
+    'report_subscription'
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);

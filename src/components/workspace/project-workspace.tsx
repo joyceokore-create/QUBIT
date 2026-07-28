@@ -14,6 +14,7 @@ import { DocumentsSection } from "@/components/workspace/documents-section";
 import { StatusUpdatesSection } from "@/components/workspace/status-updates-section";
 import { IntegrationsGrid } from "@/components/workspace/integrations-grid";
 import { AskQAbout } from "@/components/q/ask-q-about";
+import { CheckInCard } from "@/components/workspace/checkin-card";
 import { RequestToJoinButton } from "@/components/workspace/request-to-join-button";
 import { statusMeta } from "@/lib/project-view";
 import type { ProjectPanelJson } from "@/components/panels/project-panel-content";
@@ -180,7 +181,10 @@ export function ProjectWorkspace({
       <div className="[animation:rise_.5s_cubic-bezier(.22,1,.36,1)_.1s_both]">
         {tab === "Overview" && (
           <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-[1fr_360px]">
-            <StatusUpdatesSection projectId={data.id} canEdit={canEdit} />
+            <div className="flex flex-col gap-3.5">
+              <CheckInCard projectId={data.id} />
+              <StatusUpdatesSection projectId={data.id} canEdit={canEdit} />
+            </div>
             <aside className="flex flex-col gap-3.5">
               {data.description && (
                 <div className={`${CARD} p-4 text-[13px] leading-relaxed text-[var(--ink2)]`} style={{ background: "var(--cardbg)" }}>
