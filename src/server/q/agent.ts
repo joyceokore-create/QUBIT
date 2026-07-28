@@ -6,6 +6,7 @@ import { listBlockers } from "@/server/blockers";
 import { listRisks } from "@/server/risks";
 import { listWorkload } from "@/server/resources";
 import { listDocuments, getDocument } from "@/server/documents";
+import { listNudges } from "@/server/nudger";
 import { listStatusUpdates } from "@/server/status-updates";
 import { getIntegrationSummary } from "@/server/connectors";
 import { mockEnabled, mockChat } from "@/server/q/mock";
@@ -51,6 +52,7 @@ const TOOLS: LlmTool[] = [
   tool("list_workload", "List people and their project allocations + over-allocation across the tenant."),
   tool("read_documents", "List and read a project's attached documents (BRD, plans) — text excerpts.", PROJECT_ID, ["projectId"]),
   tool("list_status_updates", "List a project's recent status updates (RAG + body).", PROJECT_ID, ["projectId"]),
+  tool("list_nudges", "Active nudges this week — what the system is chasing: overdue/stale tasks, old blockers, unassigned critical bugs, at-risk milestones, unconfirmed check-ins. Omit projectId for the whole portfolio.", PROJECT_ID),
   tool("github_status", "Live GitHub signals for a project if connected: last commit, open PRs, fixed vs not-yet-fixed issues.", PROJECT_ID, ["projectId"]),
 ];
 
@@ -72,6 +74,7 @@ function handlers(ctx: TenantContext): Record<string, (input: Record<string, unk
       (await listBlockers(ctx, i.projectId ? { projectId: pid(i) } : {})).map((b) => ({ description: b.description, severity: b.severity, status: b.status, project: b.projectCode })),
     list_risks: async (i) =>
       (await listRisks(ctx, i.projectId ? { projectId: pid(i) } : {})).map((r) => ({ title: r.title, probability: r.probability, impact: r.impact, status: r.status, project: r.projectCode })),
+    list_nudges: async (i) => listNudges(ctx, i.projectId ? pid(i) : undefined),
     list_workload: async () => {
       // §7: person-level workload is access-scoped at the TOOL layer. Executives / heads /
       // SuperAdmin see everyone; a PM sees their project members; a Member sees only themselves.

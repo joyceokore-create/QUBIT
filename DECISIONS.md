@@ -582,3 +582,38 @@ drafts, the lead confirms — nobody retypes what QUBIT already knows.
 Verified: lint/typecheck/build green, 406/406 tests (54 files; new: iso-week, checkins
 unit, M2 loop RLS). Live in-browser: confirmed a real check-in with a Green override on
 CBS Phase 1 (KCB) through the API + card — both chips, reason, 4 Aug expiry rendered.
+
+## Revamp M3 — Nudger & escalation (2026-07-28)
+
+### DM1.25 — M3 executed: the 6.4 signal matrix, weekly dedupe, escalation, snooze
+Plan: `docs/16-revamp-plan.md` §12 (M3); matrix + thresholds from docs/15 §6.4 as
+adopted in DM1.15 №5 (`src/server/nudger/config.ts` — one-file tuning).
+
+- **Model**: `Nudge` — one row per fact per week, `dedupe_key = entityId:signal:isoWeek`
+  unique per tenant, `escalation_level` (0 owner · 1 PM · 2 head) and `recipient_ids[]`
+  resolved at write time. `NudgeSnooze` — per (user, entity, signal) with `until`:
+  snooze silences one person; the nudge keeps chasing everyone else. Both RLS+FORCE.
+- **Signals** (weekday-morning `nudger` job): task due ≤48h/overdue (assignee; PM at
+  >2d overdue), stale InProgress/InReview >5 business days (assignee; PM at 10 — the
+  matrix names no PM timing, 2× threshold chosen), open blocker >3d (owner, PM fallback;
+  **at 7d PM + HeadOfProjects together** — the matrix's lone timed escalation), AI
+  drafts pending >48h (PM), High/Critical bug unassigned >24h (PM + HeadOfQA),
+  milestone due <7d with open linked tasks (PM; surfaces to execs via the report).
+  `checkin-chase` (Monday 10:00) nudges PMs about LAST week's unconfirmed check-ins.
+- **Semantics**: creation computes the level directly (a 5d-overdue task first seen
+  today starts at level 1); a worsening fact escalates IN PLACE — level bump, recipients
+  widened, only the newly-pulled-in people pinged ("Escalated: …"), never a duplicate
+  row or a re-ping. Recipients resolve as lead + "Project Manager" members + role-held
+  heads. Notifications ride the M0 outbox (kind "nudge"); machine actor audits each run.
+- **Surfaces**: needs-attention strip merges the viewer's active nudges ABOVE relevance
+  items (deduped by entity, cap 5, escalated = red "NUDGE · ESCALATED"); per-row snooze
+  button → `POST /api/nudges/[id]/snooze` (1–30 days, default 7, recipient-only);
+  friday-report gains an "## Escalations" section (level ≥1 + at-risk milestones — the
+  matrix's "Executive weekly digest" target); Q gets `list_nudges` (agent tool +
+  mock intent) so "what's being chased on X?" is grounded.
+- Crontab lines documented in docs/deployment.md (weekdays 07:30; Monday 10:00).
+
+Verified: lint/typecheck/build green, 419/419 tests (56 files; new: nudger unit +
+nudger RLS loop). Live in-browser on KCB: cron-triggered nudger created an escalated
+nudge for a 4d-overdue task → led the strip as "NUDGE · ESCALATED" → bell notification
+→ snooze hid it for the viewer while the underlying fact still surfaced via relevance.

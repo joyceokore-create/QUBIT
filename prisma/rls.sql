@@ -77,7 +77,10 @@ BEGIN
     'portfolio_snapshot',
     -- Revamp M2 — the weekly loop.
     'check_in',
-    'report_subscription'
+    'report_subscription',
+    -- Revamp M3 — the nudger.
+    'nudge',
+    'nudge_snooze'
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);

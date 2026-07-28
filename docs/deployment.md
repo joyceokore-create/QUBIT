@@ -150,6 +150,18 @@ The default idempotency key is `<job>:<UTC date>`, so a re-delivered hit within 
 day is a recorded no-op (`status: "Skipped"`). Set `CRON_SECRET` in the box's
 `.env.production` and export it in the crontab environment.
 
+The M3 nudger runs weekday mornings, and Monday 10:00 chases last week's unconfirmed
+check-ins (§7 honest-by-default):
+
+```cron
+30 7 * * 1-5 curl -sS -X POST https://q.fikrawork.com/api/internal/cron \
+  -H "Authorization: Bearer $CRON_SECRET" -H "Content-Type: application/json" \
+  -d '{"job":"nudger"}' >> /home/osbui/applications/qubit/cron.log 2>&1
+0 10 * * 1 curl -sS -X POST https://q.fikrawork.com/api/internal/cron \
+  -H "Authorization: Bearer $CRON_SECRET" -H "Content-Type: application/json" \
+  -d '{"job":"checkin-chase"}' >> /home/osbui/applications/qubit/cron.log 2>&1
+```
+
 The M2 weekly loop adds two Friday jobs — drafts in the morning, the report in the
 afternoon (after leads have had the day to confirm):
 

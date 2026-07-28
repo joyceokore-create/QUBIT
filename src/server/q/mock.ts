@@ -2,6 +2,7 @@ import { withTenant, type TenantContext } from "@/lib/tenant";
 import { reportableUserIds } from "@/lib/access";
 import { listProjects, getProjectPanelData, type ProjectListItem } from "@/server/projects";
 import { needsAttention, ragRank } from "@/server/health";
+import { listNudges } from "@/server/nudger";
 import { listProjectMembers, listWorkload, type WorkloadRow } from "@/server/resources";
 import { listBlockers } from "@/server/blockers";
 import { listRisks } from "@/server/risks";
@@ -374,6 +375,18 @@ export async function mockChat(
   if (/blocker|blocked|impediment/.test(q)) {
     const open = (await listBlockers(ctx, {})).filter((b) => b.status === "Open");
     return wrap(open.length ? `**Open blockers (${open.length})**\n${open.map((b) => `- **${b.severity}:** ${b.description}${b.projectCode ? ` (${b.projectCode})` : ""}`).join("\n")}` : "No open blockers.", ["list_blockers"]);
+  }
+  if (/nudge|chas(e|ing)/.test(q)) {
+    const nudges = await listNudges(ctx);
+    return wrap(
+      nudges.length
+        ? `**Active nudges this week (${nudges.length})**\n${nudges
+            .slice(0, 10)
+            .map((n) => `- ${n.escalationLevel > 0 ? "⚠️ " : ""}${n.message}`)
+            .join("\n")}`
+        : "The nudger has nothing open this week — nobody is being chased.",
+      ["list_nudges"],
+    );
   }
   if (/at risk|overdue|slipping|behind|needs attention/.test(q)) {
     const att = (await listProjects(ctx, {})).filter((p) => needsAttention(p.status));

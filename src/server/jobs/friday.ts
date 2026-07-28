@@ -88,7 +88,7 @@ export const fridayReport: JobDefinition = {
     const already = await tx.sharedReport.findFirst({ where: { type: "weekly", title }, select: { id: true } });
     if (already) return { isoWeek, skipped: "report already published" };
 
-    const [projects, checkIns, snapshots, milestonesAhead] = await Promise.all([
+    const [projects, checkIns, snapshots, milestonesAhead, escalations] = await Promise.all([
       tx.project.findMany({
         where: { status: ACTIVE_STATUSES },
         select: { id: true, code: true, name: true, status: true },
@@ -104,6 +104,14 @@ export const fridayReport: JobDefinition = {
         select: { name: true, dueDate: true, project: { select: { name: true } } },
         orderBy: { dueDate: "asc" },
         take: 10,
+      }),
+      // The exec digest section (M3): escalated nudges + at-risk milestones this week —
+      // the matrix's "Executive weekly digest" escalation target lands here.
+      tx.nudge.findMany({
+        where: { isoWeek, OR: [{ escalationLevel: { gte: 1 } }, { signal: "milestone_at_risk" }] },
+        orderBy: [{ escalationLevel: "desc" }, { sentAt: "asc" }],
+        take: 8,
+        select: { message: true, escalationLevel: true },
       }),
     ]);
 
@@ -144,6 +152,12 @@ export const fridayReport: JobDefinition = {
         ? `- On-track ${latest.onTrackPct}%${delta((s) => s.onTrackPct)} · overdue tasks ${latest.tasksOverdue}${delta((s) => s.tasksOverdue)} · over-allocated ${latest.peopleOverAllocated}${delta((s) => s.peopleOverAllocated)}`
         : `- _No snapshot history yet — trends appear once nightly snapshots accrue._`,
       `- Check-ins confirmed: **${confirmedCount} of ${projects.length}**`,
+      `\n## Escalations`,
+      escalations.length
+        ? escalations
+            .map((e) => `- ${e.escalationLevel >= 2 ? "🔴" : e.escalationLevel === 1 ? "🟠" : "🟡"} ${e.message}`)
+            .join("\n")
+        : "_Nothing escalated this week._",
       `\n## Project check-ins`,
       sorted.length ? sorted.join("\n") : "_No active projects._",
       `\n## Due in the next 7 days`,

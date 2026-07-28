@@ -8,6 +8,7 @@ import { LiveClock } from "@/components/command/live-clock";
 import { HealthRing } from "@/components/command/health-ring";
 import { Sparkline } from "@/components/dashboard/sparkline";
 import { PortfolioHeatmap } from "@/components/dashboard/portfolio-heatmap";
+import { NeedsAttentionList } from "@/components/dashboard/needs-attention";
 
 // ── Dashboard v2 (M1, docs/16-revamp-plan.md §3). Three questions in ten seconds:
 // what needs me, what changed, what's at risk. Full tables live on their own pages
@@ -71,20 +72,7 @@ export default async function DashboardPage() {
 function TodaySection({ d, collapsed }: { d: DashboardV2; collapsed: boolean }) {
   const body = (
     <Panel title="Needs attention" sub="TOP 5 · FOR YOU">
-      {d.priorities.length ? (
-        d.priorities.map((p) => (
-          <Link key={`${p.kind}:${p.id}`} href={p.href} className="flex items-start gap-2.5 border-b border-[var(--hair2)] p-[9px_16px] transition-colors last:border-0 hover:bg-[var(--wash)]">
-            <span className="mt-[5px] h-[22px] w-[3px] flex-none rounded-[2px]" style={{ background: `var(${SEV[p.severity]})` }} />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[12.5px] text-[var(--ink2)]">{p.title}</span>
-              <span className="mt-0.5 block font-mono text-[9px] uppercase tracking-[1px] text-[var(--ink4)]">{p.meta}</span>
-            </span>
-            <ArrowRight className="mt-1.5 size-3 flex-none text-[var(--ink5)]" />
-          </Link>
-        ))
-      ) : (
-        <Empty>All clear — nothing needs you right now.</Empty>
-      )}
+      <NeedsAttentionList items={d.priorities} nudges={d.nudges.map((n) => ({ id: n.id, entityId: n.entityId }))} />
     </Panel>
   );
 

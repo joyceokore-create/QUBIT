@@ -2,6 +2,7 @@ import { withTenant, type TenantContext } from "@/lib/tenant";
 import { getHeatmap, type HeatmapData } from "@/server/dashboard";
 import { getDeltaFeed, type DeltaFeed } from "@/server/delta";
 import { portfolioHealth, ragCounts, type PortfolioHealth } from "@/server/health";
+import { listMyNudges, type MyNudge } from "@/server/nudger";
 import { getBriefing, type BriefingItem } from "@/server/relevance";
 
 /**
@@ -27,8 +28,10 @@ export interface PortfolioHealthRow {
 }
 
 export interface DashboardV2 {
-  /** Max 5, ranked by the relevance engine. */
+  /** Max 5 — active nudges first, then relevance-ranked items (M3). */
   priorities: BriefingItem[];
+  /** The viewer's active nudges — lets the strip offer per-item snooze (M3). */
+  nudges: MyNudge[];
   health: PortfolioHealth;
   /** Every project's code+status — the health-parity contract with Q. */
   projects: { id: string; code: string; name: string; status: string }[];
@@ -47,10 +50,25 @@ export interface DashboardV2 {
 
 const SPARK_DAYS = 14;
 
+/** Active nudges outrank relevance guesses — the nudger KNOWS these need the viewer. */
+export function mergeNudgesIntoPriorities(nudges: MyNudge[], briefing: BriefingItem[], limit = 5): BriefingItem[] {
+  const nudgeItems: BriefingItem[] = nudges.map((n) => ({
+    id: n.entityId,
+    kind: "nudge",
+    title: n.message,
+    meta: n.escalationLevel > 0 ? "NUDGE · ESCALATED" : "NUDGE",
+    severity: n.escalationLevel > 0 ? "red" : "amber",
+    href: n.link ?? "/my-tasks",
+  }));
+  const nudgedEntities = new Set(nudgeItems.map((n) => n.id));
+  return [...nudgeItems, ...briefing.filter((b) => !nudgedEntities.has(b.id))].slice(0, limit);
+}
+
 export async function getDashboardV2(ctx: TenantContext): Promise<DashboardV2> {
   const now = new Date();
-  const [priorities, delta, live] = await Promise.all([
+  const [briefing, nudges, delta, live] = await Promise.all([
     getBriefing(ctx, 5),
+    listMyNudges(ctx, now),
     getDeltaFeed(ctx),
     withTenant(ctx, async (tx) => {
       const [projects, overdueTasks, allocations, snapshots, orgUnitCount, portfolios] = await Promise.all([
@@ -90,7 +108,8 @@ export async function getDashboardV2(ctx: TenantContext): Promise<DashboardV2> {
       });
 
   return {
-    priorities,
+    priorities: mergeNudgesIntoPriorities(nudges, briefing),
+    nudges,
     health,
     projects: live.projects.map(({ id, code, name, status }) => ({ id, code, name, status })),
     kpis: {

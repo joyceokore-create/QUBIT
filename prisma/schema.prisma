@@ -83,6 +83,8 @@ model Tenant {
   portfolioSnapshots  PortfolioSnapshot[]
   checkIns            CheckIn[]
   reportSubscriptions ReportSubscription[]
+  nudges              Nudge[]
+  nudgeSnoozes        NudgeSnooze[]
 
   @@map("tenant")
 }
@@ -157,6 +159,7 @@ model User {
   joinRequestsDecided  JoinRequest[]         @relation("JoinRequestDecider")
   checkInsConfirmed    CheckIn[]             @relation("CheckInConfirmer")
   reportSubscriptions  ReportSubscription[]  @relation("ReportSubscriptions")
+  nudgeSnoozes         NudgeSnooze[]         @relation("UserNudgeSnoozes")
 
   @@unique([tenantId, email])
   @@map("user")
@@ -569,6 +572,7 @@ model Project {
   joinRequests  JoinRequest[]
   snapshots     ProjectSnapshot[]
   checkIns      CheckIn[]
+  nudges        Nudge[]
 
   @@unique([tenantId, code])
   @@map("project")
@@ -1377,4 +1381,47 @@ model ReportSubscription {
 
   @@unique([tenantId, userId, kind])
   @@map("report_subscription")
+}
+
+// Nudger (M3, docs/15 §6.4 matrix + docs/16 §12). One row per fact per week —
+// dedupe_key = `entityId:signal:isoWeek` — so nobody is re-pinged daily for the same
+// thing; escalation bumps escalation_level (and widens recipients), never duplicates.
+model Nudge {
+  id              String   @id @default(cuid())
+  tenantId        String   @map("tenant_id")
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  dedupeKey       String   @map("dedupe_key")
+  signal          String // task_due | task_stale | blocker_open | drafts_pending | bug_unassigned | milestone_at_risk | checkin_unconfirmed
+  entityType      String   @map("entity_type")
+  entityId        String   @map("entity_id")
+  projectId       String?  @map("project_id")
+  project         Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  isoWeek         String   @map("iso_week")
+  message         String
+  link            String?
+  escalationLevel Int      @default(0) @map("escalation_level") // 0 = owner · 1 = PM · 2 = head
+  recipientIds    String[] @default([]) @map("recipient_ids")
+  sentAt          DateTime @default(now()) @map("sent_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, dedupeKey])
+  @@index([tenantId, isoWeek])
+  @@map("nudge")
+}
+
+// Per-user snooze (M3): "stop chasing ME about THIS" — scoped to (entity, signal) so a
+// snoozed blocker stays quiet for that person while everything else keeps nudging.
+model NudgeSnooze {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  userId    String   @map("user_id")
+  user      User     @relation("UserNudgeSnoozes", fields: [userId], references: [id], onDelete: Cascade)
+  entityId  String   @map("entity_id")
+  signal    String
+  until     DateTime
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([tenantId, userId, entityId, signal])
+  @@map("nudge_snooze")
 }

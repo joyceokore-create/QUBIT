@@ -16,7 +16,7 @@ import { withTenant, type TenantContext } from "@/lib/tenant";
  */
 
 export type BriefingSeverity = "red" | "amber" | "info";
-export type BriefingKind = "task" | "blocker" | "risk" | "issue" | "milestone" | "project" | "workload";
+export type BriefingKind = "task" | "blocker" | "risk" | "issue" | "milestone" | "project" | "workload" | "nudge";
 
 export interface BriefingItem {
   /** Stable per (kind,id) — used for dedupe and as the React key. */

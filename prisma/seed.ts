@@ -1080,6 +1080,8 @@ async function resetTenant(slug: string) {
     // ClickUp transformation tables (leaf → root; the tenant FK is RESTRICT so these
     // must be cleared before the tenant delete below).
     // MVP1 workspace + copilot tables (must clear before the tenant delete — tenant FK is RESTRICT).
+    await tx.nudge.deleteMany({});
+    await tx.nudgeSnooze.deleteMany({});
     await tx.checkIn.deleteMany({});
     await tx.reportSubscription.deleteMany({});
     await tx.projectSnapshot.deleteMany({});
