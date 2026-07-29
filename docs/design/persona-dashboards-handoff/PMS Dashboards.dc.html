@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--brand:#ed1c24;--onbrand:#fff;--qbg:#f3f5f8;--qcard:#fff;--card2:#f8fafc;--elev:#eef1f5;--cardbg:#fff;--cardbd:rgba(15,23,42,.08);--cardsh:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.1);--qink:#231f20;--ink2:#2b2b2b;--ink3:#4b4b4b;--ink4:#6b6b6b;--ink5:#9f9f9f;--ok:#16a34a;--okbg:#dcf1e4;--warn:#d97706;--warnbg:#f9ebda;--bad:#dc2626;--badbg:#fadede;--qinfo:#2563eb;--infobg:#dee8fc;--hair:rgba(32,26,20,.1);--hair2:rgba(32,26,20,.06);--wash:rgba(32,26,20,.04);--wash2:rgba(32,26,20,.065);--w07:rgba(17,27,21,.13);--alink:#c9181f;--rv-sidebar:linear-gradient(180deg,#241f20 0%,#5c0f13 100%);--rv-topbar:linear-gradient(90deg,#241f20 0%,#5c0f13 100%);--rv-active:#b81c22}
+.dark{--qbg:#020617;--qcard:#0f172a;--card2:#0b1120;--elev:#1e293b;--cardbg:#0f172a;--cardbd:rgba(148,163,184,.12);--cardsh:0 1px 2px rgba(0,0,0,.4),0 1px 3px rgba(0,0,0,.3);--qink:#f1f5f9;--ink2:#cbd5e1;--ink3:#94a3b8;--ink4:#8b99ae;--ink5:#74839a;--ok:#6dd49a;--okbg:rgba(22,163,74,.14);--warn:#f4b96a;--warnbg:rgba(217,119,6,.14);--bad:#f08080;--badbg:rgba(220,38,38,.14);--qinfo:#7eaaff;--infobg:rgba(37,99,235,.14);--hair:rgba(255,255,255,.13);--hair2:rgba(255,255,255,.08);--wash:rgba(255,255,255,.035);--wash2:rgba(255,255,255,.06);--w07:rgba(255,255,255,.07);--alink:#f36b71;--rv-sidebar:linear-gradient(180deg,#020617 0%,#0b1120 55%,#3a0a0d 100%);--rv-topbar:linear-gradient(90deg,#020617 0%,#0b1120 55%,#3a0a0d 100%);color-scheme:dark}
+body{margin:0;background:#f3f5f8}
+a{color:var(--alink);text-decoration:none}a:hover{color:var(--alink);text-decoration:underline}
+summary{list-style:none}summary::-webkit-details-marker{display:none}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes pulseGlow{0%,100%{box-shadow:0 0 0 0 color-mix(in oklab,var(--ok) 30%,transparent)}50%{box-shadow:0 0 0 7px transparent}}
+</style>
+</helmet>
+<div class="{{ rootClass }}" style="min-height:100vh;background:var(--qbg);font-family:'Inter',system-ui,sans-serif;font-size:13.5px;line-height:1.5;color:var(--ink2);display:flex;align-items:stretch">
+
+  <aside style="flex:none;width:{{ sbW }}px;transition:width .3s cubic-bezier(.22,1,.36,1);background:var(--rv-sidebar);color:#fff;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;overflow:hidden;z-index:40">
+    <div style="display:flex;align-items:center;justify-content:space-between;height:62px;flex:none;border-bottom:1px solid rgba(255,255,255,.1);padding:0 16px">
+      <sc-if value="{{ navOpen }}" hint-placeholder-val="{{ true }}"><img src="assets/qubit_main_white.svg" alt="QUBIT" style="height:26px;width:auto"></sc-if>
+      <button onClick="{{ toggleNav }}" title="Collapse sidebar" style="background:none;border:0;color:rgba(255,255,255,.8);cursor:pointer;padding:6px;border-radius:8px;display:flex"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h18v16H3zM9 4v16"></path></svg></button>
+    </div>
+    <nav style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:6px">
+      <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="9">
+        <span title="{{ n.label }}" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;{{ n.s }}">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="{{ n.d }}"></path></svg>
+          <sc-if value="{{ navOpen }}" hint-placeholder-val="{{ true }}"><span style="font-size:13.5px;font-weight:500;white-space:nowrap">{{ n.label }}</span></sc-if>
+        </span>
+      </sc-for>
+    </nav>
+    <div style="flex:none;padding:0 12px 6px">
+      <span style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;color:rgba(255,255,255,.8)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path></svg>
+        <sc-if value="{{ navOpen }}" hint-placeholder-val="{{ true }}"><span style="font-size:13.5px;font-weight:500;white-space:nowrap">Sign out</span></sc-if>
+      </span>
+    </div>
+    <div style="flex:none;border-top:1px solid rgba(255,255,255,.1);padding:12px;display:flex;align-items:center;gap:10px">
+      <span style="flex:none;width:32px;height:32px;border-radius:99px;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">JO</span>
+      <sc-if value="{{ navOpen }}" hint-placeholder-val="{{ true }}">
+        <span style="min-width:0"><span style="display:block;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Joyce Okore</span><span style="display:block;font-size:11px;color:rgba(255,255,255,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">joyce.okore@riverbank.solutions</span></span>
+      </sc-if>
+    </div>
+  </aside>
+
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+    <header style="position:sticky;top:0;z-index:30;height:62px;flex:none;display:flex;align-items:center;gap:12px;padding:0 24px;color:#fff;background:var(--rv-topbar);box-shadow:0 1px 2px rgba(0,0,0,.15)">
+      <h1 style="margin:0;flex:1;min-width:0;font-size:17px;font-weight:700;letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Riverbank Group</h1>
+      <button title="Notifications" style="position:relative;background:none;border:0;color:rgba(255,255,255,.85);cursor:pointer;padding:7px;border-radius:8px;display:flex"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg><span style="position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:99px;background:#ed1c24;border:1.5px solid #241f20"></span></button>
+      <button onClick="{{ toggleTheme }}" title="Toggle theme" style="background:none;border:0;color:rgba(255,255,255,.85);cursor:pointer;padding:6px 8px;border-radius:8px;font-size:14px;line-height:1">{{ themeGlyph }}</button>
+      <span style="display:flex;align-items:center;gap:9px;padding:5px 12px 5px 6px;border-radius:99px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);cursor:pointer">
+        <span style="width:26px;height:26px;border-radius:99px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700">JO</span>
+        <span><span style="display:block;font-size:12px;font-weight:600;line-height:1.2">Joyce Okore</span><span style="display:block;font-size:9px;font-weight:600;letter-spacing:.8px;color:rgba(255,255,255,.6)">HEAD OF PROJECTS</span></span>
+      </span>
+      <button style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);color:#fff;cursor:pointer;padding:7px 14px;border-radius:99px;font-family:'Inter',sans-serif;font-size:12px;font-weight:700">✦ Ask Q</button>
+    </header>
+
+    <main style="flex:1">
+      <div style="max-width:1360px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:18px 24px 0">
+        <span style="font-size:10.5px;font-weight:700;letter-spacing:2.2px;text-transform:uppercase;color:var(--ink4)">{{ personaLabel }} VIEW · RIVERBANK GROUP</span>
+        <span role="tablist" style="display:flex;align-items:center;gap:4px;border:1px solid var(--w07);background:var(--wash);border-radius:99px;padding:2px">
+          <sc-for list="{{ personaTabs }}" as="p" hint-placeholder-count="5">
+            <button role="tab" onClick="{{ p.go }}" style="border:0;cursor:pointer;border-radius:99px;padding:5px 11px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9.5px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;{{ p.s }}">{{ p.label }}</button>
+          </sc-for>
+        </span>
+        <span style="display:flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9.5px;font-weight:700;letter-spacing:.8px;color:var(--ink4);cursor:pointer">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v16a2 2 0 0 0 2 2h16M7 16v-4M12 16V7M17 16v-8"></path></svg> REPORTS</span>
+        <span style="flex:1;border-bottom:1px solid var(--hair2);transform:translateY(-1px)"></span>
+        <span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:1px;color:var(--ink4)">WED 29 JUL 2026</span>
+        <span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:1px;color:var(--ink3)">{{ clock }}</span>
+        <span style="display:flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10px;letter-spacing:1.5px;color:var(--ok)"><span style="width:6px;height:6px;border-radius:99px;background:var(--ok);animation:pulseGlow 2.6s infinite"></span> LIVE</span>
+      </div>
+
+      <div style="max-width:1360px;margin:0 auto;display:flex;flex-direction:column;gap:14px;padding:14px 24px 90px">
+
+        <sc-if value="{{ isExec }}" hint-placeholder-val="{{ true }}">
+          <div data-screen-label="Executive dashboard" style="display:flex;flex-direction:column;gap:14px;animation:rise .5s cubic-bezier(.22,1,.36,1) both">
+            <section style="display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:14px">
+              <div style="background:var(--cardbg);border:1px solid var(--cardbd);border-radius:16px;box-shadow:var(--cardsh);overflow:hidden">
+                <div style="display:flex;align-items:baseline;gap:10px;padding:12px 16px;border-bottom:1px solid var(--hair)"><span style="font-size:15px;font-weight:700;letter-spacing:-.2px;color:var(--qink)">Good day, Joyce</span><span style="font-size:10.5px;font-weight:700;letter-spacing:1.1px;text-transform:uppercase;color:var(--ink4)">3 DECISIONS WAITING</span></div>
+                <sc-for list="{{ attention }}" as="a" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:flex-start;gap:11px;padding:9px 16px;border-bottom:1px solid var(--hair2);cursor:pointer">
+                    <span style="flex:none;width:3px;height:22px;border-radius:2px;margin-top:4px;{{ a.s }}"></span>
+                    <span style="min-width:0;flex:1"><span style="display:block;font-size:12.5px;color:var(--ink2)">{{ a.t }}</span><span style="display:block;margin-top:2px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--ink4)">{{ a.meta }}</span></span>
+                    <span style="color:var(--ink5);font-size:12px;margin-top:4px">→</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="background:var(--cardbg);border:1px solid var(--cardbd);border-radius:16px;box-shadow:var(--cardsh);padding:16px;display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;align-items:center;gap:8px"><span style="font-size:10.5px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--ink4)">Portfolio health</span>
+                  <details style="position:relative;margin-left:auto">
+                    <summary style="cursor:pointer;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--ink4)">? why?</summary>
+                    <div style="position:absolute;right:0;z-index:20;margin-top:4px;width:230px;border-radius:10px;border:1px solid var(--w07);background:var(--qcard);padding:12px;font-size:11px;line-height:1.6;color:var(--ink2);box-shadow:var(--cardsh)">Score = on-track ÷ total (14 of 23).<br>• 6 need attention<br>• 4 overdue tasks<br>• 1 open escalation<br>• 3 in planning</div>
+                  </details>
+                </div>
+                <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px">
+                  <span style="font-size:34px;font-weight:700;line-height:1;letter-spacing:-1px;font-variant-numeric:tabular-nums;color:var(--warn)">62</span>
+                  <svg width="110" height="30" viewBox="0 0 110 30"><polyline points="0,25 16,23 32,24 48,20 64,17 80,15 96,12 110,9" fill="none" stroke="var(--warn)" stroke-width="1.5"></polyline><circle cx="110" cy="9" r="2" fill="var(--warn)"></circle></svg>
+                </div>
+                <span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;font-weight:700;color:var(--ok)">↗ +4 WOW</span>
+              </div>
+            </section>
+            <section style="background:var(--cardbg);border:1px solid var(--cardbd);border-radius:16px;box-shadow:var(--cardsh);overflow:hidden">
+              <div style="display:flex;align-items:baseline;gap:10px;padding:12px 16px;border-bottom:1px solid var(--hair)"><span style="font-size:15px;font-weight:700;letter-spacing:-.2px;color:var(--qink)">Decision queue</span><span style="font-size:10.5px;font-weight:700;letter-spacing:1.1px;text-transform:uppercase;color:var(--ink4)">3 OPEN</span></div>
+              <sc-for list="{{ decisions }}" as="d" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:12px;padding:9px 16px;border-bottom:1px solid var(--hair2);cursor:pointer">
+                  <span style="flex:none;width:86px;text-align:center;border-radius:5px;padding:2px 6px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;font-weight:700;letter-spacing:.6px;{{ d.ks }}">{{ d.kind }}</span>
+                  <span style="min-width:0;flex:1;font-size:12.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.t }}</span>
+                  <span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9.5px;color:var(--ink4);max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.proj }}</span>
+                  <span style="flex:none;width:34px;text-align:right;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9.5px;font-variant-numeric:tabular-nums;color:var(--ink4)">{{ d.age }}</span>
+                  <span style="color:var(--ink5);font-size:12px">→</span>
+                </div>
+              </sc-for>
+            </section>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isPm }}" hint-placeholder-val="{{ false }}">
+          <div data-screen-label="PM dashboard" style="background:var(--cardbg);border:1px solid var(--cardbd);border-radius:16px;box-shadow:var(--cardsh);padding:16px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 20px;animation:rise .5s cubic-bezier(.22,1,.36,1) both">
+            <span style="font-size:13.5px;font-weight:700;color:var(--qink)">2 of 5 check-ins unconfirmed — due Friday</span>
+            <span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--bad)">⛊ 1 blocker &gt;3d</span>
+            <span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--qinfo)">4 drafts awaiting approval</span>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isDev }}" hint-placeholder-val="{{ false }}">
+          <div data-screen-label="Developer dashboard" style="display:flex;flex-direction:column;gap:14px;animation:rise .5s cubic-bezier(.22,1,.36,1) both">
+            <div style="background:var(--cardbg);border:1px solid var(--cardbd);border-radius:16px;box-shadow:var(--cardsh);padding:20px;display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;align-items:center;gap:8px"><span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--alink)">Work on this now</span><span style="border-radius:5px;background:var(--wash2);padding:2px 6px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--ink4)">3d overdue — clear it first</span></div>
+              <p style="margin:0;font-size:19px;font-weight:700;line-height:1.25;letter-spacing:-.3px;color:var(--qink)">Fix pagination on audit view</p>
+              <p style="margin:0;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--ink4)">P001 · CBS Phase 1 · In progress · due 26 Jul</p>
+              <button style="margin-top:4px;width:fit-content;display:flex;align-items:center;gap:8px;border:0;cursor:pointer;border-radius:9px;background:var(--brand);color:#fff;padding:8px 16px;font-family:'Inter',sans-serif;font-size:12.5px;font-weight:700">▶ Start — open the card</button>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">
+              <sc-for list="{{ buckets }}" as="b" hint-placeholder-count="4">
+                <details open="{{ b.open }}" style="background:var(--cardbg);border:1px solid var(--cardbd);border-radius:16px;box-shadow:var(--cardsh);overflow:hidden">
+                  <summary style="display:flex;align-items:center;gap:8px;padding:12px 16px;cursor:pointer">
+                    <span style="font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;{{ b.ns }}">{{ b.n }}</span>
+                    <span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;font-weight:500;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink4)">{{ b.label }}</span>
+                    <span style="margin-left:auto;color:var(--ink5);font-size:11px">▸</span>
+                  </summary>
+                  <div style="border-top:1px solid var(--hair2)">
+                    <sc-if value="{{ b.empty }}" hint-placeholder-val="{{ false }}"><div style="padding:12px 16px;font-size:12px;color:var(--ink5)">Nothing here.</div></sc-if>
+                    <sc-for list="{{ b.rows }}" as="t" hint-placeholder-count="1">
+                      <div style="display:flex;flex-direction:column;gap:2px;padding:8px 16px;border-bottom:1px solid var(--hair2);cursor:pointer">
+                        <span style="font-size:12px;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ t.t }}</span>
+                        <span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;{{ t.ms }}">{{ t.meta }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </details>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isQa }}" hint-placeholder-val="{{ false }}">
+          <div data-screen-label="QA dashboard" style="display:flex;flex-direction:column;gap:14px;animation:rise .5s cubic-bezier(.22,1,.36,1) both">
+            <div style="background:var(--cardbg);border:1px solid var(--cardbd);border-radius:16px;box-shadow:var(--cardsh);padding:16px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 20px">
+              <span style="font-size:13.5px;font-weight:700;color:var(--qink)">7 items ready for you to test</span>
+              <span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--bad)">⚠ 2 critical bugs unassigned</span>
+              <span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--warn)">3 aging &gt;5d</span>
+            </div>
+            <section style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:14px;align-items:start">
+              <div style="background:var(--cardbg);border:1px solid var(--cardbd);border-radius:16px;box-shadow:var(--cardsh);overflow:hidden">
+                <div style="display:flex;align-items:baseline;gap:10px;padding:12px 16px;border-bottom:1px solid var(--hair)"><span style="font-size:15px;font-weight:700;letter-spacing:-.2px;color:var(--qink)">Test queue</span><span style="font-size:10.5px;font-weight:700;letter-spacing:1.1px;text-transform:uppercase;color:var(--ink4)">7 IN QA · GROUPED BY PROJECT</span></div>
+                <div style="background:color-mix(in oklab, var(--bad) 6%, transparent);border-bottom:1px solid var(--hair)">
+                  <div style="padding:8px 16px 2px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--bad)">Triage first — 2 critical bugs unassigned</div>
+                  <sc-for list="{{ triage }}" as="t" hint-placeholder-count="2">
+                    <div style="display:flex;align-items:center;gap:12px;padding:7px 16px">
+                      <span style="flex:none;border-radius:5px;padding:2px 6px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;font-weight:700;color:var(--bad);border:1px solid color-mix(in oklab, var(--bad) 35%, transparent);background:color-mix(in oklab, var(--bad) 9%, transparent)">CRIT</span>
+                      <span style="min-width:0;flex:1;font-size:12.5px;color:var(--ink2)">{{ t.t }}</span>
+                      <span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;color:var(--ink4)">{{ t.proj }}</span>
+                      <button style="flex:none;border:1px solid var(--w07);background:none;cursor:pointer;border-radius:6px;padding:3px 10px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;font-weight:700;letter-spacing:.6px;color:var(--qink)">ASSIGN</button>
+                    </div>
+                  </sc-for>
+                </div>
+                <sc-for list="{{ qaGroups }}" as="g" hint-placeholder-count="3">
+                  <div>
+                    <div style="display:flex;align-items:baseline;gap:8px;background:var(--wash);padding:7px 16px;border-bottom:1px solid var(--hair)">
+                      <span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9.5px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--qink)">{{ g.proj }}</span>
+                      <span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;font-variant-numeric:tabular-nums;color:var(--ink4)">{{ g.n }}</span>
+                    </div>
+                    <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="2">
+                      <div style="display:flex;align-items:center;gap:12px;padding:9px 16px;border-bottom:1px solid var(--hair2);cursor:pointer;{{ r.bg }}">
+                        <span title="days in QA" style="flex:none;width:40px;text-align:center;border-radius:5px;padding:2px 4px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;font-weight:700;font-variant-numeric:tabular-nums;{{ r.as }}">{{ r.age }}</span>
+                        <span style="min-width:0;flex:1;font-size:12.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.t }}</span>
+                        <span style="flex:none;border-radius:5px;padding:2px 6px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;font-weight:600;letter-spacing:.6px;color:var(--ink4);background:var(--wash2)">{{ r.type }}</span>
+                        <span style="color:var(--ink5);font-size:12px">→</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-for>
+                <div style="padding:8px 16px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--ink5)">Aging &gt;5d rows are tinted + labelled · verify moves the item to Done — completion belongs to QA</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:14px">
+                <div style="background:var(--cardbg);border:1px solid var(--cardbd);border-radius:16px;box-shadow:var(--cardsh);overflow:hidden">
+                  <div style="display:flex;align-items:baseline;gap:10px;padding:12px 16px;border-bottom:1px solid var(--hair)"><span style="font-size:15px;font-weight:700;letter-spacing:-.2px;color:var(--qink)">Bugs I raised</span><span style="font-size:10.5px;font-weight:700;letter-spacing:1.1px;text-transform:uppercase;color:var(--ink4)">4 OPEN · REPORTER: ME</span></div>
+                  <sc-for list="{{ bugsRaised }}" as="b" hint-placeholder-count="4">
+                    <div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--hair2);cursor:pointer">
+                      <span style="flex:none;width:38px;text-align:center;border-radius:5px;padding:2px 4px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;font-weight:700;{{ b.ss }}">{{ b.sev }}</span>
+                      <span style="min-width:0;flex:1"><span style="display:block;font-size:12.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ b.t }}</span><span style="display:block;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--ink4)">{{ b.proj }}</span></span>
+                      <sc-if value="{{ b.reopened }}" hint-placeholder-val="{{ false }}"><span style="flex:none;border-radius:5px;padding:2px 6px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;font-weight:700;color:var(--bad);background:var(--badbg)">⟳ REOPENED</span></sc-if>
+                      <span style="flex:none;border-radius:5px;padding:2px 6px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;font-weight:600;{{ b.sts }}">{{ b.st }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="background:var(--cardbg);border:1px solid var(--cardbd);border-radius:16px;box-shadow:var(--cardsh);overflow:hidden">
+                  <div style="display:flex;align-items:baseline;gap:10px;padding:12px 16px;border-bottom:1px solid var(--hair)"><span style="font-size:15px;font-weight:700;letter-spacing:-.2px;color:var(--qink)">Project quality</span><span style="font-size:10.5px;font-weight:700;letter-spacing:1.1px;text-transform:uppercase;color:var(--ink4)">MY PROJECTS</span></div>
+                  <sc-for list="{{ quality }}" as="q" hint-placeholder-count="3">
+                    <div style="padding:10px 16px;border-bottom:1px solid var(--hair2)">
+                      <div style="display:flex;align-items:baseline;gap:10px"><span style="min-width:0;flex:1;font-size:12.5px;font-weight:600;color:var(--qink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ q.proj }}</span><span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;color:var(--ink4)">{{ q.counts }}</span><span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;font-weight:700;{{ q.rs }}">{{ q.reopen }} REOPEN</span></div>
+                      <div style="display:flex;height:5px;border-radius:99px;overflow:hidden;background:var(--wash2);margin-top:6px">
+                        <sc-for list="{{ q.segs }}" as="s" hint-placeholder-count="3"><span style="{{ s.s }}"></span></sc-for>
+                      </div>
+                      <div style="margin-top:5px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--ink5)">Requirement coverage joins after M8 · <a href="#" style="font-size:8.5px">open risks →</a></div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </section>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isImpl }}" hint-placeholder-val="{{ false }}">
+          <div data-screen-label="Implementor dashboard" style="display:flex;flex-direction:column;gap:14px;animation:rise .5s cubic-bezier(.22,1,.36,1) both">
+            <section style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;align-items:stretch">
+              <div style="background:var(--cardbg);border:1px solid var(--cardbd);border-radius:16px;box-shadow:var(--cardsh);padding:20px;display:flex;flex-direction:column;gap:8px">
+                <span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--alink)">Next go-live</span>
+                <p style="margin:0;font-size:22px;font-weight:700;line-height:1.2;letter-spacing:-.4px;color:var(--qink)">ZED Card — Rwanda</p>
+                <p style="margin:0;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:var(--ink3)">Fri 7 Aug · in 9 days · <span style="color:var(--warn);font-weight:700">Amber</span></p>
+                <p style="margin:4px 0 0;font-size:12px;color:var(--ink3)">3 of 8 gate items still open. Telco integration is the critical path — RNDPS API documentation outstanding 6 days.</p>
+              </div>
+              <div style="background:var(--cardbg);border:1px solid var(--cardbd);border-radius:16px;box-shadow:var(--cardsh);overflow:hidden">
+                <div style="display:flex;align-items:baseline;gap:10px;padding:12px 16px;border-bottom:1px solid var(--hair)"><span style="font-size:15px;font-weight:700;letter-spacing:-.2px;color:var(--qink)">Open gate items</span><span style="font-size:10.5px;font-weight:700;letter-spacing:1.1px;text-transform:uppercase;color:var(--ink4)">3 OF 8</span></div>
+                <sc-for list="{{ gates }}" as="g" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--hair2)">
+                    <span style="min-width:0;flex:1;font-size:12.5px;color:var(--ink2)">{{ g.t }}</span>
+                    <span style="flex:none;border-radius:5px;padding:2px 6px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;font-weight:700;{{ g.ss }}">{{ g.st }}</span>
+                  </div>
+                </sc-for>
+                <div style="padding:8px 16px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--ink5)">Gate checklists ship with M8 — interim: milestones tagged UAT / pilot</div>
+              </div>
+            </section>
+            <section style="display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:14px;align-items:start">
+              <div style="background:var(--cardbg);border:1px solid var(--cardbd);border-radius:16px;box-shadow:var(--cardsh);overflow:hidden">
+                <div style="display:flex;align-items:baseline;gap:10px;padding:12px 16px;border-bottom:1px solid var(--hair)"><span style="font-size:15px;font-weight:700;letter-spacing:-.2px;color:var(--qink)">Pilot &amp; UAT projects</span><span style="font-size:10.5px;font-weight:700;letter-spacing:1.1px;text-transform:uppercase;color:var(--ink4)">4 IN FLIGHT</span></div>
+                <sc-for list="{{ pilots }}" as="p" hint-placeholder-count="4">
+                  <div style="display:grid;grid-template-columns:minmax(0,1.3fr) 56px 118px 64px 62px;gap:10px;align-items:center;padding:9px 16px;border-bottom:1px solid var(--hair2);cursor:pointer">
+                    <span style="min-width:0"><span style="display:block;font-size:12.5px;font-weight:600;color:var(--qink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.name }}</span><span style="display:block;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--ink4)">{{ p.code }}</span></span>
+                    <span style="justify-self:start;border-radius:5px;padding:2px 6px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;font-weight:700;{{ p.ss }}">{{ p.stage }}</span>
+                    <span style="display:flex;align-items:center;gap:5px" title="gate items done"><span style="display:flex;gap:2px"><sc-for list="{{ p.gates }}" as="c" hint-placeholder-count="8"><span style="width:9px;height:9px;border-radius:2px;{{ c.s }}"></span></sc-for></span><span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;font-variant-numeric:tabular-nums;color:var(--ink3)">{{ p.gd }}</span></span>
+                    <span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9.5px;font-variant-numeric:tabular-nums;color:var(--ink3)">{{ p.date }}</span>
+                    <span style="display:inline-flex;align-items:center;gap:4px;border-radius:5px;padding:2px 6px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;font-weight:600;{{ p.rs }}">● {{ p.rag }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="background:var(--cardbg);border:1px solid var(--cardbd);border-radius:16px;box-shadow:var(--cardsh);overflow:hidden">
+                <div style="display:flex;align-items:baseline;gap:10px;padding:12px 16px;border-bottom:1px solid var(--hair)"><span style="font-size:15px;font-weight:700;letter-spacing:-.2px;color:var(--qink)">Rollout issues</span><span style="font-size:10.5px;font-weight:700;letter-spacing:1.1px;text-transform:uppercase;color:var(--ink4)">3 OPEN</span></div>
+                <sc-for list="{{ implIssues }}" as="i" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--hair2);cursor:pointer">
+                    <span style="flex:none;width:38px;text-align:center;border-radius:5px;padding:2px 4px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;font-weight:700;{{ i.ss }}">{{ i.sev }}</span>
+                    <span style="min-width:0;flex:1"><span style="display:block;font-size:12.5px;color:var(--ink2)">{{ i.t }}</span><span style="display:block;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--ink4)">{{ i.meta }}</span></span>
+                    <span style="flex:none;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9.5px;color:var(--ink4)">{{ i.age }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </section>
+            <section style="display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:14px;align-items:start">
+              <div style="background:var(--cardbg);border:1px solid var(--cardbd);border-radius:16px;box-shadow:var(--cardsh);overflow:hidden">
+                <div style="display:flex;align-items:baseline;gap:10px;padding:12px 16px;border-bottom:1px solid var(--hair)"><span style="font-size:15px;font-weight:700;letter-spacing:-.2px;color:var(--qink)">Go-live calendar</span><span style="font-size:10.5px;font-weight:700;letter-spacing:1.1px;text-transform:uppercase;color:var(--ink4)">NEXT 30 DAYS · 29 JUL – 27 AUG</span></div>
+                <div style="padding:12px 16px">
+                  <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px">
+                    <sc-for list="{{ calHead }}" as="h" hint-placeholder-count="7"><span style="text-align:center;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;color:var(--ink5)">{{ h }}</span></sc-for>
+                    <sc-for list="{{ calDays }}" as="c" hint-placeholder-count="14"><span title="{{ c.ti }}" style="height:34px;border-radius:8px;padding:3px 5px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;font-variant-numeric:tabular-nums;{{ c.s }}">{{ c.d }}<sc-if value="{{ c.ev }}" hint-placeholder-val="{{ false }}"><span style="display:block;width:6px;height:6px;border-radius:99px;background:var(--brand);margin:3px auto 0"></span></sc-if></span></sc-for>
+                  </div>
+                  <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
+                    <sc-for list="{{ calEvents }}" as="e" hint-placeholder-count="3">
+                      <div style="display:flex;align-items:center;gap:9px"><span style="flex:none;width:6px;height:6px;border-radius:99px;background:var(--brand)"></span><span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9.5px;font-variant-numeric:tabular-nums;color:var(--ink4);width:52px">{{ e.date }}</span><span style="font-size:12px;color:var(--ink2)">{{ e.t }}</span></div>
+                    </sc-for>
+                    <div style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--ink5)">Beyond window: CBS Phase 1 × Kenya · 2 Sep</div>
+                  </div>
+                </div>
+              </div>
+              <div style="background:var(--cardbg);border:1px solid var(--cardbd);border-radius:16px;box-shadow:var(--cardsh);overflow:hidden">
+                <div style="display:flex;align-items:baseline;gap:10px;padding:12px 16px;border-bottom:1px solid var(--hair)"><span style="font-size:15px;font-weight:700;letter-spacing:-.2px;color:var(--qink)">Handover docs</span><span style="font-size:10.5px;font-weight:700;letter-spacing:1.1px;text-transform:uppercase;color:var(--ink4)">2 PENDING APPROVAL</span></div>
+                <sc-for list="{{ handover }}" as="h" hint-placeholder-count="2">
+                  <div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--hair2);cursor:pointer">
+                    <span style="min-width:0;flex:1"><span style="display:block;font-size:12.5px;color:var(--ink2)">{{ h.t }}</span><span style="display:block;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--ink4)">{{ h.proj }}</span></span>
+                    <span style="flex:none;border-radius:5px;padding:2px 6px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;font-weight:700;color:var(--warn);background:var(--warnbg)">{{ h.who }}</span>
+                    <span style="flex:none;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9.5px;color:var(--ink4)">{{ h.age }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </section>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ hasScopeToggle }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:-6px">
+            <span style="display:flex;align-items:center;gap:4px;border:1px solid var(--w07);background:var(--wash);border-radius:99px;padding:2px">
+              <sc-for list="{{ scopeTabs }}" as="s" hint-placeholder-count="2">
+                <button onClick="{{ s.go }}" style="border:0;cursor:pointer;border-radius:99px;padding:5px 11px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9.5px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;{{ s.s }}">{{ s.label }}</button>
+              </sc-for>
+            </span>
+          </div>
+        </sc-if>
+
+        <section style="display:flex;flex-direction:column;gap:10px" data-screen-label="Portfolio sections">
+          <sc-for list="{{ sections }}" as="sec" hint-placeholder-count="2">
+            <details open="{{ sec.open }}" style="background:var(--cardbg);border:1px solid var(--cardbd);border-radius:16px;box-shadow:var(--cardsh);overflow:hidden;animation:rise .5s cubic-bezier(.22,1,.36,1) both">
+              <summary style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:11px 16px;cursor:pointer">
+                <span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10px;color:var(--ink5)">▸</span>
+                <span style="font-size:14px;font-weight:700;letter-spacing:-.2px;color:var(--qink)">{{ sec.name }}</span>
+                <span style="display:inline-flex;align-items:center;gap:6px;border-radius:6px;padding:2px 7px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;font-weight:700;{{ sec.rs }}"><span style="width:6px;height:6px;border-radius:99px;{{ sec.rd }}"></span>{{ sec.rag }}</span>
+                <span title="{{ sec.dti }}" style="font-size:11px;font-weight:700;{{ sec.ds }}">{{ sec.delta }}</span>
+                <span style="margin-left:auto;display:flex;align-items:center;gap:14px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--ink4)">{{ sec.meta }}</span>
+              </summary>
+              <div style="border-top:1px solid var(--hair)">
+                <sc-if value="{{ sec.isPipe }}" hint-placeholder-val="{{ true }}">
+                  <sc-for list="{{ sec.groups }}" as="g" hint-placeholder-count="2">
+                    <div>
+                      <div style="display:flex;align-items:baseline;gap:8px;background:var(--wash);padding:7px 16px;border-bottom:1px solid var(--hair)">
+                        <span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9.5px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--qink)">{{ g.stage }}</span>
+                        <span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;font-variant-numeric:tabular-nums;color:var(--ink4)">{{ g.n }}</span>
+                        <span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--ink5)">{{ g.blurb }}</span>
+                      </div>
+                      <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="3">
+                        <div style="display:grid;grid-template-columns:minmax(0,1.2fr) 60px 96px minmax(0,1.4fr) auto;gap:12px;align-items:center;padding:9px 16px;border-bottom:1px solid var(--hair2);cursor:pointer">
+                          <span style="min-width:0"><span style="display:block;font-size:12.5px;font-weight:600;color:var(--qink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.name }}</span><span style="display:block;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--ink4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.code }}</span></span>
+                          <span style="justify-self:start;border-radius:5px;border:1px solid;padding:2px 6px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;{{ r.prS }}">{{ r.pr }}</span>
+                          <span style="display:flex;align-items:center;gap:6px"><span style="display:block;height:3px;width:36px;background:var(--wash2);border-radius:99px;overflow:hidden"><span style="display:block;height:100%;width:{{ r.pw }};background:var(--brand);border-radius:99px"></span></span><span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9.5px;font-variant-numeric:tabular-nums;color:var(--ink3)">{{ r.prog }}%</span></span>
+                          <span style="min-width:0;font-size:11px;font-style:italic;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.note }}</span>
+                          <span style="display:flex;flex:none;align-items:center;gap:4px">
+                            <sc-for list="{{ r.chips }}" as="c" hint-placeholder-count="5"><span title="{{ c.ti }}" style="display:inline-flex;align-items:center;gap:4px;border-radius:5px;padding:2px 6px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;font-weight:600;font-variant-numeric:tabular-nums;{{ c.s }}">{{ c.t }}</span></sc-for>
+                            <span style="color:var(--ink5);font-size:12px;margin-left:4px">→</span>
+                          </span>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-for>
+                </sc-if>
+                <sc-if value="{{ sec.isHeat }}" hint-placeholder-val="{{ false }}">
+                  <div style="padding:12px 16px">
+                    <div style="display:grid;grid-template-columns:130px repeat(6,minmax(0,1fr));gap:4px;align-items:center">
+                      <span></span>
+                      <sc-for list="{{ heatCols }}" as="m" hint-placeholder-count="6"><span style="text-align:center;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;letter-spacing:.8px;color:var(--ink4)">{{ m }}</span></sc-for>
+                      <sc-for list="{{ sec.heat }}" as="hr" hint-placeholder-count="4">
+                        <span style="font-size:12px;font-weight:600;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ hr.name }}</span>
+                        <sc-for list="{{ hr.cells }}" as="c" hint-placeholder-count="6"><span title="{{ c.ti }}" style="border-radius:6px;padding:5px 4px;text-align:center;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9.5px;font-weight:700;{{ c.s }}">{{ c.t }}</span></sc-for>
+                      </sc-for>
+                    </div>
+                    <sc-if value="{{ sec.hasBlockers }}" hint-placeholder-val="{{ false }}">
+                      <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
+                        <span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink4)">Top blockers</span>
+                        <sc-for list="{{ sec.blockers }}" as="b" hint-placeholder-count="2">
+                          <div style="display:flex;align-items:center;gap:9px"><span style="flex:none;width:3px;height:16px;border-radius:2px;{{ b.s }}"></span><span style="min-width:0;flex:1;font-size:11.5px;color:var(--ink2)">{{ b.t }}</span><span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;color:var(--ink4)">{{ b.age }}</span></div>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                    <div style="margin-top:9px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--ink5)">{{ sec.legend }}</div>
+                  </div>
+                </sc-if>
+              </div>
+            </details>
+          </sc-for>
+        </section>
+
+        <sc-if value="{{ isExec }}" hint-placeholder-val="{{ true }}">
+          <section style="background:var(--cardbg);border:1px solid var(--cardbd);border-radius:16px;box-shadow:var(--cardsh);overflow:hidden">
+            <div style="display:flex;align-items:baseline;gap:10px;padding:12px 16px;border-bottom:1px solid var(--hair)"><span style="font-size:15px;font-weight:700;letter-spacing:-.2px;color:var(--qink)">Since you last looked</span><span style="font-size:10.5px;font-weight:700;letter-spacing:1.1px;text-transform:uppercase;color:var(--ink4)">FROM 27 JUL</span></div>
+            <sc-for list="{{ delta }}" as="d" hint-placeholder-count="3">
+              <div style="display:flex;align-items:flex-start;gap:11px;padding:9px 16px;border-bottom:1px solid var(--hair2)">
+                <span style="flex:none;width:3px;align-self:stretch;border-radius:2px;{{ d.s }}"></span>
+                <span style="min-width:0;flex:1;font-size:12.5px;line-height:1.5;color:var(--ink2)">{{ d.t }}</span>
+              </div>
+            </sc-for>
+          </section>
+        </sc-if>
+
+        <sc-if value="{{ isPm }}" hint-placeholder-val="{{ false }}">
+          <section style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:14px;align-items:start">
+            <div style="background:var(--cardbg);border:1px solid var(--cardbd);border-radius:16px;box-shadow:var(--cardsh);overflow:hidden">
+              <div style="display:flex;align-items:baseline;gap:10px;padding:12px 16px;border-bottom:1px solid var(--hair)"><span style="font-size:15px;font-weight:700;letter-spacing:-.2px;color:var(--qink)">Action queue</span><span style="font-size:10.5px;font-weight:700;letter-spacing:1.1px;text-transform:uppercase;color:var(--ink4)">4 STUCK ON YOU</span></div>
+              <sc-for list="{{ pmQueue }}" as="q" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:12px;padding:9px 16px;border-bottom:1px solid var(--hair2);cursor:pointer">
+                  <span style="flex:none;width:72px;text-align:center;border-radius:5px;padding:2px 6px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;font-weight:700;letter-spacing:.6px;{{ q.ks }}">{{ q.kind }}</span>
+                  <span style="min-width:0;flex:1;font-size:12.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ q.t }}</span>
+                  <span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;color:var(--ink4);max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ q.proj }}</span>
+                  <span style="flex:none;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;color:var(--ink4)">{{ q.age }}</span>
+                  <span style="color:var(--ink5);font-size:12px">→</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="background:var(--cardbg);border:1px solid var(--cardbd);border-radius:16px;box-shadow:var(--cardsh);overflow:hidden">
+              <div style="display:flex;align-items:baseline;gap:10px;padding:12px 16px;border-bottom:1px solid var(--hair)"><span style="font-size:15px;font-weight:700;letter-spacing:-.2px;color:var(--qink)">Team load</span><span style="font-size:10.5px;font-weight:700;letter-spacing:1.1px;text-transform:uppercase;color:var(--ink4)">MY PROJECT MEMBERS</span></div>
+              <sc-for list="{{ teamLoad }}" as="m" hint-placeholder-count="4">
+                <div style="display:flex;flex-direction:column;gap:4px;padding:8px 16px">
+                  <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px"><span style="font-size:12px;font-weight:500;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ m.name }}</span><span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10px;font-weight:700;font-variant-numeric:tabular-nums;{{ m.ps }}">{{ m.pct }}</span></div>
+                  <div style="height:4px;border-radius:99px;overflow:hidden;background:var(--wash2)"><span style="display:block;height:100%;border-radius:99px;{{ m.bs }}"></span></div>
+                </div>
+              </sc-for>
+              <div style="padding:8px 16px 12px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--ink5)">Leave badges join with M6</div>
+            </div>
+          </section>
+        </sc-if>
+
+        <sc-if value="{{ isDev }}" hint-placeholder-val="{{ false }}">
+          <section style="background:var(--cardbg);border:1px solid var(--cardbd);border-radius:16px;box-shadow:var(--cardsh);overflow:hidden">
+            <div style="display:flex;align-items:baseline;gap:10px;padding:12px 16px;border-bottom:1px solid var(--hair)"><span style="font-size:15px;font-weight:700;letter-spacing:-.2px;color:var(--qink)">Done this week</span><span style="font-size:10.5px;font-weight:700;letter-spacing:1.1px;text-transform:uppercase;color:var(--ink4)">MOMENTUM · FEEDS YOUR WEEKLY REPORT</span></div>
+            <sc-for list="{{ doneWeek }}" as="t" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--hair2)">
+                <span style="flex:none;color:var(--ok);font-size:13px">✓</span>
+                <span style="min-width:0;flex:1;font-size:12px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.t }}</span>
+                <span style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;color:var(--ink4)">{{ t.code }}</span>
+              </div>
+            </sc-for>
+          </section>
+        </sc-if>
+
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;defaultPersona&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;executive&quot;,&quot;pm&quot;,&quot;developer&quot;,&quot;qa&quot;,&quot;implementor&quot;],&quot;default&quot;:&quot;implementor&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Preset&quot;},&quot;defaultTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Preset&quot;},&quot;sidebarCollapsed&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Preset&quot;}}">
+class Component extends DCLogic {
+  state = {
+    persona: this.props.defaultPersona ?? "executive",
+    dark: (this.props.defaultTheme ?? "light") === "dark",
+    scope: "mine",
+    navOpen: !(this.props.sidebarCollapsed ?? false),
+    clock: "--:--:--",
+  };
+
+  componentDidMount() {
+    this._t = setInterval(() => {
+      const s = new Date().toLocaleTimeString("en-GB", { hour12: false, timeZone: "Africa/Nairobi" });
+      this.setState({ clock: s + " EAT" });
+    }, 1000);
+  }
+  componentWillUnmount() { clearInterval(this._t); }
+
+  renderVals() {
+    const st = this.state;
+    const cm = (tok, p = 10) => `color-mix(in oklab, var(${tok}) ${p}%, transparent)`;
+    const chipS = (t) => `color:var(${t});background:${cm(t)}`;
+    const pillS = (t) => `color:var(${t});border:1px solid ${cm(t, 35)};background:${cm(t, 9)}`;
+    const PRI = { High: "--bad", Strat: "--qinfo", New: "--ok", Med: "--warn", Low: "--ink4", Paused: "--ink5" };
+    const RAG = { Green: "--ok", Amber: "--warn", Red: "--bad" };
+
+    // chips: [risks, milesUp, milesOd, velocity, health, resources]
+    const R = (id, name, code, pr, prog, note, ch, mine) => {
+      const [r, mu, mo, v, h, res] = ch;
+      return {
+        id, name, code, pr, prog, pw: prog + "%",
+        prS: `color:var(${PRI[pr]});border-color:${cm(PRI[pr], 35)}`,
+        note: note || "—", mine: mine || [],
+        chips: [
+          { t: "⛊ " + r, s: chipS(r ? "--warn" : "--ink4"), ti: r + " open risk(s)" },
+          { t: mo ? `⚑ ${mu}/${mo}!` : "⚑ " + mu, s: chipS(mo ? "--bad" : "--ink4"), ti: `${mu} milestone(s) upcoming · ${mo} overdue` },
+          { t: "⏱ " + v, s: chipS("--qinfo"), ti: v + " task(s) completed in 7d" },
+          { t: "● " + h, s: chipS(RAG[h]), ti: "Health: " + h + " (computed)" },
+          { t: "☺ " + res, s: chipS("--ink4"), ti: res + " allocated member(s)" },
+        ],
+      };
+    };
+
+    const aiGroups = [
+      { stage: "Approved", blurb: "in delivery", rows: [
+        R("P010", "Checksmart", "P010 · AI CHEQUE CLEARING", "High", 80, "Pilot deployment — 2 branches live", [1, 2, 0, 9, "Green", 4], ["pm", "qa", "impl"]),
+        R("P001", "CBS Phase 1 — Kenya & Uganda", "P001 · CORE BANKING REPLACEMENT", "Strat", 59, "UAT slip contained to Kenya; recovery plan holds the go-live date.", [1, 0, 1, 3, "Amber", 4], ["pm", "developer", "qa", "impl"]),
+        R("P004", "Mobile Banking 2.0 (Mobi)", "P004", "High", 72, "check-in unconfirmed this week", [0, 2, 0, 8, "Green", 6], ["pm", "developer", "qa"]),
+        R("P011", "Keza", "P011 · CONVERSATIONAL BANKING", "High", 10, "BRD finalization with FBP", [0, 1, 0, 2, "Green", 3], []),
+        R("P007", "Agency Onboarding Revamp", "P007", "Med", 44, "KYC vendor contract in legal review", [1, 1, 0, 4, "Amber", 5], ["pm"]),
+        R("P009", "Data Lake Foundation", "P009", "Low", 31, "Ingestion for cards data underway", [0, 1, 0, 5, "Green", 4], ["developer"]),
+      ]},
+      { stage: "Evaluating", blurb: "business case under review", rows: [
+        R("P012", "Lumi", "P012 · SME LENDING SCORING", "High", 8, "FBP financial model in review", [0, 1, 0, 1, "Green", 2], []),
+        R("P013", "SmartCollect", "P013", "Med", 12, "Business case drafting", [1, 0, 0, 1, "Amber", 2], []),
+        R("P014", "Q-Score Credit Engine", "P014", "New", 5, "Vendor shortlist — 3 candidates", [0, 0, 0, 0, "Green", 1], []),
+      ]},
+      { stage: "Exploring", blurb: "ideas being shaped", rows: [
+        R("P015", "One-View", "P015 · UNIFIED TELLER DESKTOP", "New", 33, "Prototype in progress", [0, 0, 0, 2, "Green", 2], []),
+        R("P016", "Branch IoT Telemetry", "P016", "Low", 9, "Feasibility notes with Ops", [0, 0, 0, 0, "Green", 1], []),
+        R("P017", "Voice Banking Pilot", "P017", "New", 4, "Discovery interviews scheduled", [0, 0, 0, 1, "Green", 1], []),
+      ]},
+    ];
+
+    const H = (tok, t, ti) => ({ t, s: `color:var(${tok});background:${cm(tok, 13)}`, ti: ti || "" });
+    const HE = () => ({ t: "—", s: "color:var(--ink5);background:var(--wash)", ti: "not started" });
+    const zedHeat = [
+      { name: "All ZED (derived %)", cells: [H("--ok", "98"), H("--ok", "77"), H("--warn", "62"), H("--warn", "47"), H("--bad", "25"), H("--bad", "21")].map((c) => ({ ...c, ti: "derived from checkpoint matrix — click for breakdown" })) },
+      { name: "Card", cells: [H("--ok", "● →"), H("--bad", "● ↗", "worsened vs last week"), H("--bad", "● →"), H("--warn", "● ↘", "improved vs last week"), H("--bad", "● →"), H("--bad", "● →")] },
+      { name: "Teller / Agency", cells: [H("--ok", "● →"), H("--ok", "● →"), H("--warn", "● ↘", "improved vs last week"), H("--warn", "● →"), H("--bad", "● →"), H("--bad", "● →")] },
+      { name: "Payroll", cells: [H("--ok", "● →"), H("--warn", "● →"), H("--warn", "● ↗", "worsened vs last week"), HE(), H("--warn", "● →"), HE()] },
+      { name: "GL Core", cells: [H("--ok", "● →"), H("--ok", "● →"), H("--ok", "● →"), H("--warn", "● →"), H("--warn", "● →"), H("--warn", "● →")] },
+    ];
+    const swipeHeat = [
+      { name: "POS", cells: [H("--ok", "LIVE"), H("--ok", "LIVE"), H("--ok", "LIVE"), H("--warn", "TEST"), H("--ok", "LIVE"), H("--ok", "LIVE")] },
+      { name: "USSD", cells: [H("--ok", "LIVE"), H("--warn", "TEST"), H("--warn", "TEST"), HE(), H("--warn", "TEST"), H("--warn", "TEST")] },
+      { name: "Agent Portal", cells: [H("--ok", "LIVE"), H("--warn", "TEST"), H("--ok", "LIVE"), H("--warn", "TEST"), H("--warn", "TEST"), H("--warn", "TEST")] },
+      { name: "Mobile App", cells: [H("--warn", "TEST"), H("--warn", "TEST"), H("--warn", "TEST"), HE(), H("--warn", "TEST"), H("--warn", "TEST")] },
+    ];
+
+    const SEC = (o) => ({
+      isPipe: false, isHeat: false, hasBlockers: false, blockers: [], groups: [], heat: [],
+      rs: pillS(RAG[o.ragTok] || "--ink4"), rd: `background:var(${RAG[o.ragTok] || "--ink4"})`,
+      legend: "", ...o,
+    });
+    const allSections = [
+      SEC({ name: "AI Initiatives", rag: "AMBER", ragTok: "Amber", delta: "↗", ds: "color:var(--bad)", dti: "worsened vs last week", open: true, isPipe: true, groups: aiGroups, meta: "12 PROJECTS · 41% · 3 BLOCKED · JOYCE OKORE" }),
+      SEC({ name: "ZED ERP", rag: "AMBER", ragTok: "Amber", delta: "→", ds: "color:var(--ink5)", dti: "unchanged vs last week", open: true, isHeat: true, heat: zedHeat, meta: "4 MODULES × 6 MARKETS · 54.6% · 5 BLOCKED · SAM KARIUKI", hasBlockers: true, blockers: [
+        { t: "Rwanda — awaiting RNDPS API documentation (telco integration)", age: "6D", s: "background:var(--bad)" },
+        { t: "Burundi — bank integration certification environment down", age: "3D", s: "background:var(--warn)" },
+      ], legend: "Cell = RAG + Δ vs last week · counts & progress on hover · click a cell → checkpoint matrix + market blockers" }),
+      SEC({ name: "Swipe Agent Banking", rag: "GREEN", ragTok: "Green", delta: "↘", ds: "color:var(--ok)", dti: "improved vs last week", open: false, isHeat: true, heat: swipeHeat, meta: "4 CHANNEL PROJECTS × 6 MARKETS · TERRY WANJIRU", legend: "POS · USSD · Agent Portal · Mobile App are projects in the portfolio · label + tint, never colour-only" }),
+      SEC({ name: "Unassigned", rag: "—", ragTok: null, delta: "", ds: "", dti: "", open: false, isPipe: true, meta: "1 PROJECT · RENDERS LAST, ONLY WHEN NON-EMPTY", groups: [
+        { stage: "Approved", blurb: "in delivery", n: "1", rows: [R("P020", "Office 365 Migration", "P020", "Low", 15, "Awaiting portfolio assignment", [0, 0, 0, 1, "Green", 2], [])] },
+      ]}),
+    ];
+    allSections.forEach((s) => s.groups.forEach((g) => { g.n = String(g.rows.length); }));
+
+    const mineFor = (p) => {
+      const key = p === "developer" ? "developer" : p === "implementor" ? "impl" : p;
+      const groups = aiGroups
+        .map((g) => ({ ...g, rows: g.rows.filter((r) => r.mine.includes(key)) }))
+        .filter((g) => g.rows.length);
+      groups.forEach((g) => { g.n = String(g.rows.length); });
+      const n = groups.reduce((a, g) => a + g.rows.length, 0);
+      return [SEC({ name: "AI Initiatives", rag: "AMBER", ragTok: "Amber", delta: "↗", ds: "color:var(--bad)", dti: "worsened vs last week", open: true, isPipe: true, groups, meta: `${n} OF 12 · MY PROJECTS` })];
+    };
+
+    const persona = st.persona;
+    const showAll = persona === "executive" || st.scope === "all";
+    const sections = showAll ? allSections : mineFor(persona);
+
+    const personas = [["executive", "Executive"], ["pm", "PM"], ["developer", "Developer"], ["qa", "QA"], ["implementor", "Implementor"]];
+    const personaTabs = personas.map(([k, label]) => ({
+      k, label,
+      s: k === persona ? "background:var(--brand);color:#fff" : "background:none;color:var(--ink4)",
+      go: () => this.setState({ persona: k }),
+    }));
+    const scopeTabs = [["mine", "My projects"], ["all", "All"]].map(([k, label]) => ({
+      label,
+      s: k === st.scope ? "background:var(--brand);color:#fff" : "background:none;color:var(--ink4)",
+      go: () => this.setState({ scope: k }),
+    }));
+
+    const nav = [
+      ["Dashboard", "M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z", true],
+      ["My Board", "M3 17l2 2 4-4M3 7l2 2 4-4M13 6h8M13 12h8M13 18h8", false],
+      ["Projects", "M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2ZM8 10v4M12 10v2M16 10v6", false],
+      ["Risks", "m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3M12 9v4M12 17h.01", false],
+      ["Time", "M12 6v6l4 2M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20", false],
+      ["Teams", "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0", false],
+      ["People", "M3 4h18v16H3zM17 17a3 3 0 0 0-3-3h-4a3 3 0 0 0-3 3M14.5 8.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0", false],
+      ["Reports", "M3 3v16a2 2 0 0 0 2 2h16M7 16v-4M12 16V7M17 16v-8", false],
+      ["Admin", "M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z", false],
+    ];
+    const navItems = nav.map(([label, d, active]) => ({
+      label, d,
+      s: active ? "background:var(--rv-active);color:#fff;font-weight:600" : "color:rgba(255,255,255,.8)",
+    }));
+
+    // Executive data
+    const attention = [
+      { t: "ZED Card — Rwanda blocked: awaiting RNDPS API documentation", meta: "BLOCKER · 6D · ZED ERP", s: "background:var(--bad)" },
+      { t: "CBS Phase 1 UAT exit slipping — recovery plan holds the go-live date", meta: "SLIPPING · P001 · AI INITIATIVES", s: "background:var(--warn)" },
+      { t: "Swipe Mobile App — Tanzania moves to pilot on Friday", meta: "STAGE MOVE · SWIPE AGENT BANKING", s: "background:var(--qinfo)" },
+    ];
+    const decisions = [
+      { kind: "ESCALATION", ks: pillS("--bad"), t: "P001-14 is 5d overdue on CBS Phase 1", proj: "CBS PHASE 1", age: "2D" },
+      { kind: "CHECK-IN", ks: pillS("--warn"), t: "ZED Card × Rwanda check-in unconfirmed — computed status ships in the Friday report", proj: "ZED ERP", age: "3D" },
+      { kind: "APPROVAL", ks: pillS("--qinfo"), t: "4 AI drafts awaiting approval", proj: "AI INITIATIVES", age: "1D" },
+    ];
+    const delta = [
+      { t: "Checksmart moved Evaluating → Approved — pilot deployment begins in 2 branches", s: "background:var(--ok)" },
+      { t: "ZED Uganda slipped Amber → Red — telco integration blocked, checkpoint matrix updated", s: "background:var(--bad)" },
+      { t: "4 AI draft plans submitted for approval by Amina Wekesa", s: "background:var(--qinfo)" },
+    ];
+
+    // PM data
+    const pmQueue = [
+      { kind: "BLOCKER", ks: pillS("--bad"), t: "CBS: UAT environment credentials expired — infra ticket open", proj: "CBS PHASE 1", age: "4D" },
+      { kind: "APPROVAL", ks: pillS("--qinfo"), t: "Draft delivery plan — Agency Onboarding Revamp", proj: "P007", age: "1D" },
+      { kind: "JOIN", ks: pillS("--qinfo"), t: "Brian Otieno requests to join Mobile Banking 2.0", proj: "P004", age: "2D" },
+      { kind: "SLIPPING", ks: pillS("--warn"), t: "Mobi: biometric login regression task slipping this week", proj: "P004", age: "TODAY" },
+    ];
+    const teamLoad = [
+      ["Amina Wekesa", 80], ["Brian Otieno", 110], ["Terry Njeri", 95], ["Wanjiru Kamau", 60],
+    ].map(([name, p]) => ({
+      name,
+      pct: p + "%" + (p > 100 ? " · OVER" : ""),
+      ps: p > 100 ? "color:var(--bad)" : "color:var(--ink3)",
+      bs: `width:${Math.min(100, p)}%;background:${p > 100 ? "var(--bad)" : "var(--brand)"}`,
+    }));
+
+    // Developer data
+    const bkt = (n, label, tok, open, rows, empty) => ({
+      n, label, open, empty: !!empty, rows: rows || [],
+      ns: `color:var(${n ? tok : "--ink4"})`,
+    });
+    const buckets = [
+      bkt(1, "Overdue", "--bad", true, [{ t: "Fix pagination on audit view", meta: "P001 · DUE 26 JUL", ms: "color:var(--bad)" }]),
+      bkt(3, "Due this week", "--warn", false, [
+        { t: "Build data-export service e2e", meta: "P001 · DUE 31 JUL", ms: "color:var(--ink4)" },
+        { t: "Push notification opt-out endpoint", meta: "P004 · DUE 1 AUG", ms: "color:var(--ink4)" },
+        { t: "Ingestion job retry logic", meta: "P009 · DUE 2 AUG", ms: "color:var(--ink4)" },
+      ]),
+      bkt(0, "In review", "--qinfo", false, [], true),
+      bkt(1, "Blocked", "--bad", false, [{ t: "Data-export service — integration test", meta: "P001 · ⛊ WAITING ON UPSTREAM API CREDENTIALS", ms: "color:var(--bad)" }]),
+    ];
+    const doneWeek = [
+      { t: "Confirm scope with business owner", code: "P001" },
+      { t: "Rate-limit middleware for public API", code: "P004" },
+    ];
+
+    // QA data
+    const ageS = (d) => (d > 5 ? chipS("--bad") : d >= 3 ? chipS("--warn") : "color:var(--ink4);background:var(--wash2)");
+    const QR = (t, type, d) => ({
+      t, type, age: d + "D", as: ageS(d),
+      bg: d > 5 ? `background:${cm("--warn", 5)}` : "",
+    });
+    const qaGroups = [
+      { proj: "CBS Phase 1", n: "3", rows: [QR("Data-export service — e2e pass", "TEST", 2), QR("Audit view pagination fix — verify", "BUG", 6), QR("FX rate rounding on statements", "TEST", 1)] },
+      { proj: "Mobile Banking 2.0", n: "2", rows: [QR("Biometric login — regression pass", "TEST", 7), QR("Push notification opt-out", "TEST", 3)] },
+      { proj: "ZED Card × Rwanda", n: "2", rows: [QR("Card issuance happy path", "TEST", 5), QR("Limits configuration validation", "TEST", 2)] },
+    ];
+    const triage = [
+      { t: "PIN reset loop locks customer account", proj: "ZED CARD" },
+      { t: "Transfer amount rounds up on weak connectivity", proj: "MOBI" },
+    ];
+    const sevS = { CRIT: pillS("--bad"), HIGH: chipS("--bad"), MED: chipS("--warn"), LOW: chipS("--ink4") };
+    const bugsRaised = [
+      { t: "PIN reset loop locks customer account", proj: "ZED CARD · RAISED 2D AGO", sev: "CRIT", ss: sevS.CRIT, st: "WITH QA", sts: chipS("--qinfo"), reopened: false },
+      { t: "Audit view pagination duplicates rows", proj: "CBS PHASE 1 · RAISED 8D AGO", sev: "HIGH", ss: sevS.HIGH, st: "IN PROGRESS", sts: chipS("--qinfo"), reopened: true },
+      { t: "Statement PDF clips long account names", proj: "CBS PHASE 1 · RAISED 4D AGO", sev: "MED", ss: sevS.MED, st: "TO DO", sts: "color:var(--ink4);background:var(--wash2)", reopened: false },
+      { t: "Agent float alert fires twice", proj: "MOBI · RAISED 1D AGO", sev: "MED", ss: sevS.MED, st: "IN PROGRESS", sts: chipS("--qinfo"), reopened: false },
+    ];
+    const qual = (proj, c, h, m, reopen) => {
+      const tot = c + h + m || 1;
+      const seg = (n, col) => ({ s: `width:${(n / tot) * 100}%;background:var(${col})` });
+      return {
+        proj, counts: `${c}C · ${h}H · ${m}M`, reopen: reopen + "%",
+        rs: reopen > 10 ? "color:var(--warn)" : "color:var(--ink4)",
+        segs: [seg(c, "--bad"), seg(h, "--warn"), seg(m, "--qinfo")],
+      };
+    };
+    const quality = [qual("CBS Phase 1", 1, 2, 4, 11), qual("Mobile Banking 2.0", 1, 1, 2, 8), qual("ZED Card × Rwanda", 0, 2, 3, 15)];
+
+    // Implementor data
+    const gates = [
+      { t: "Telco integration — RNDPS API", st: "✗ OPEN · LATE", ss: chipS("--bad") },
+      { t: "Testing sign-off (QA)", st: "✗ OPEN", ss: chipS("--warn") },
+      { t: "Go-to-market pack", st: "◐ IN REVIEW", ss: chipS("--warn") },
+    ];
+    const gcell = (f) => ({ s: f === 1 ? "background:var(--ok)" : f === 2 ? "background:var(--bad)" : "background:var(--wash2)" });
+    const pilots = [
+      { name: "ZED Card × Rwanda", code: "ZED ERP · UAT EXIT PENDING", stage: "UAT", ss: chipS("--qinfo"), gates: [1, 1, 1, 1, 1, 2, 0, 0].map(gcell), gd: "5/8", date: "7 AUG", rag: "Amber", rs: chipS("--warn") },
+      { name: "Swipe Mobile App × Tanzania", code: "SWIPE · PILOT FRI", stage: "PILOT", ss: chipS("--ok"), gates: [1, 1, 1, 1, 1, 1, 1, 0].map(gcell), gd: "7/8", date: "14 AUG", rag: "Green", rs: chipS("--ok") },
+      { name: "Checksmart × Kenya", code: "AI INITIATIVES · 2 BRANCHES LIVE", stage: "PILOT", ss: chipS("--ok"), gates: [1, 1, 1, 1, 1, 1, 0, 0].map(gcell), gd: "6/8", date: "21 AUG", rag: "Green", rs: chipS("--ok") },
+      { name: "CBS Phase 1 × Kenya", code: "AI INITIATIVES · UAT RE-RUN", stage: "UAT", ss: chipS("--qinfo"), gates: [1, 1, 1, 0, 0, 0, 0, 0].map(gcell), gd: "3/8", date: "2 SEP", rag: "Amber", rs: chipS("--warn") },
+    ];
+    const implIssues = [
+      { t: "RNDPS API documentation missing — blocks telco integration", meta: "ZED CARD × RW · OWNER: SAM KARIUKI", sev: "HIGH", ss: sevS.HIGH, age: "6D" },
+      { t: "Certification environment down in Burundi", meta: "ZED ERP · OWNER: TERRY NJERI", sev: "HIGH", ss: sevS.HIGH, age: "3D" },
+      { t: "Agent training venue unconfirmed for pilot week", meta: "SWIPE × TZ · OWNER: BRIAN OTIENO", sev: "MED", ss: sevS.MED, age: "1D" },
+    ];
+    const calHead = ["M", "T", "W", "T", "F", "S", "S"];
+    const events = { "7 Aug": "ZED Card — Rwanda go-live", "14 Aug": "Swipe Mobile App — Tanzania pilot", "21 Aug": "Checksmart — Kenya branch rollout" };
+    const calDays = [{ d: "", s: "background:none", ev: false, ti: "" }, { d: "", s: "background:none", ev: false, ti: "" }];
+    for (let i = 0; i < 30; i++) {
+      const dt = new Date(2026, 6, 29 + i);
+      const label = dt.getDate() + " " + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep"][dt.getMonth()];
+      const ev = events[label];
+      const wknd = dt.getDay() === 0 || dt.getDay() === 6;
+      calDays.push({
+        d: String(dt.getDate()), ev: !!ev, ti: ev || "",
+        s: ev ? `color:var(--qink);background:${cm("--brand", 10)};border:1px solid ${cm("--brand", 35)}` : wknd ? "color:var(--ink5);background:var(--wash)" : "color:var(--ink4);background:var(--wash2)",
+      });
+    }
+    const calEvents = Object.entries(events).map(([date, t]) => ({ date: date.toUpperCase(), t }));
+    const handover = [
+      { t: "Operations handover pack", proj: "ZED CARD × RWANDA", who: "AWAITING HEAD OF PROJECTS", age: "2D" },
+      { t: "Support runbook v2", proj: "CHECKSMART", who: "AWAITING QA SIGN-OFF", age: "5D" },
+    ];
+
+    const LABELS = { executive: "EXECUTIVE", pm: "PM", developer: "DEVELOPER", qa: "QA", implementor: "IMPLEMENTOR" };
+    return {
+      rootClass: st.dark ? "dark" : "",
+      themeGlyph: st.dark ? "☀" : "☾",
+      toggleTheme: () => this.setState({ dark: !st.dark }),
+      navOpen: st.navOpen, sbW: st.navOpen ? 256 : 80,
+      toggleNav: () => this.setState({ navOpen: !st.navOpen }),
+      clock: st.clock,
+      navItems, personaTabs, scopeTabs,
+      personaLabel: LABELS[persona],
+      isExec: persona === "executive", isPm: persona === "pm", isDev: persona === "developer",
+      isQa: persona === "qa", isImpl: persona === "implementor",
+      hasScopeToggle: persona === "pm" || persona === "qa" || persona === "implementor",
+      sections, heatCols: ["KE", "TZ", "UG", "RW", "BI", "SS"],
+      attention, decisions, delta,
+      pmQueue, teamLoad,
+      buckets, doneWeek,
+      qaGroups, triage, bugsRaised, quality,
+      gates, pilots, implIssues, calHead, calDays, calEvents, handover,
+    };
+  }
+}
+</script>
+</body>
+</html>
