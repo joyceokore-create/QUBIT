@@ -1,0 +1,68 @@
+<h2 class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);">Wireframe of the executive dashboard grouped into portfolio sections: AI Initiatives pipeline table, ZED ERP and Swipe rollout heatmaps across subsidiaries, and a cell drill-down.</h2>
+<style>
+.wf{background:var(--surface-1);border-radius:12px;padding:14px;margin:0 0 1.25rem}
+.wf h3{font-size:15px;font-weight:500;margin:0 0 2px;color:var(--text-primary)}
+.wf .q{font-size:12px;color:var(--text-muted);margin:0 0 10px}
+.blk{background:var(--surface-2);border:0.5px solid var(--border);border-radius:var(--radius);padding:8px 10px}
+.blk b{display:block;font-size:12px;font-weight:500;color:var(--text-primary)}
+.blk span{font-size:11px;color:var(--text-secondary)}
+.ph{display:flex;justify-content:space-between;align-items:center;background:var(--surface-2);border:0.5px solid var(--border-strong);border-radius:var(--radius);padding:7px 10px;margin:10px 0 6px}
+.ph b{font-size:12.5px;font-weight:500;color:var(--text-primary)}
+.ph span{font-size:11px;color:var(--text-secondary)}
+.grp{font-size:11px;font-weight:500;padding:1px 8px;border-radius:4px;display:inline-block;margin:4px 0 1px}
+.tr{display:grid;grid-template-columns:1.1fr .4fr 1.2fr .35fr 1fr;gap:6px;font-size:11px;color:var(--text-secondary);padding:3px 0;border-top:0.5px solid var(--border)}
+.hm{display:grid;grid-template-columns:86px repeat(6,1fr);gap:3px;font-size:10px;margin-top:6px}
+.hm div{padding:4px 2px;text-align:center;border-radius:4px}
+.hm .rh{text-align:left;color:var(--text-secondary)}
+.hm .ch{color:var(--text-muted)}
+.pill{font-size:10.5px;padding:1px 7px;border-radius:9px}
+</style>
+
+<div class="wf">
+<h3>Executive dashboard — grouped by portfolio</h3>
+<p class="q">Hero + decision queue on top (unchanged). Then one collapsible section per portfolio, worst health first. No global KPI tiles.</p>
+<div class="blk" style="border-left:3px solid var(--border-stronger);border-radius:0 8px 8px 0"><b>Hero · "2 decisions waiting" + decision queue</b><span>escalations · gate approvals · unconfirmed check-ins</span></div>
+
+<div class="ph"><b>▼ AI Initiatives</b><span><span class="pill" style="background:var(--bg-warning);color:var(--text-warning)">Amber ▼</span> · 26 projects · 9 approved · 3 blockers</span></div>
+<div class="blk">
+<span class="grp" style="background:var(--bg-success);color:var(--text-success)">Approved · 9</span>
+<div class="tr"><span>Checksmart <i style="color:var(--text-muted)">chips: R2 M1 H</i></span><span>High</span><span>✓✓✓◐—— BRD→Live</span><span>80%</span><span>Pilot deployment</span></div>
+<div class="tr"><span>Keza</span><span>High</span><span>◐————— </span><span>10%</span><span>BRD finalization</span></div>
+<span class="grp" style="background:var(--bg-warning);color:var(--text-warning)">Evaluating · 6</span>
+<div class="tr"><span>Lumi</span><span>High</span><span>business case prep</span><span>8%</span><span>FBP financial model</span></div>
+<span class="grp" style="background:var(--bg-accent);color:var(--text-accent)">Exploring · 5</span>
+<div class="tr"><span>One-View</span><span>New</span><span>✓◐ proto</span><span>33%</span><span>Prototype in progress</span></div>
+</div>
+
+<div class="ph"><b>▼ ZED ERP</b><span><span class="pill" style="background:var(--bg-warning);color:var(--text-warning)">Amber →</span> · 54.6% · modules × 7 markets · 5 blockers</span></div>
+<div class="blk">
+<div class="hm">
+<div class="rh"></div><div class="ch">KE</div><div class="ch">TZ</div><div class="ch">UG</div><div class="ch">RW</div><div class="ch">BI</div><div class="ch">SS</div>
+<div class="rh"><b style="font-size:10px">All ZED</b></div><div style="background:var(--bg-success);color:var(--text-success)">98</div><div style="background:var(--bg-success);color:var(--text-success)">77</div><div style="background:var(--bg-warning);color:var(--text-warning)">62</div><div style="background:var(--bg-warning);color:var(--text-warning)">47</div><div style="background:var(--bg-danger);color:var(--text-danger)">25</div><div style="background:var(--bg-danger);color:var(--text-danger)">21</div>
+<div class="rh">Card</div><div style="background:var(--bg-success);color:var(--text-success)">✓</div><div style="background:var(--bg-danger);color:var(--text-danger)">✗</div><div style="background:var(--bg-danger);color:var(--text-danger)">✗</div><div style="background:var(--bg-warning);color:var(--text-warning)">◐</div><div style="background:var(--bg-danger);color:var(--text-danger)">✗</div><div style="background:var(--bg-danger);color:var(--text-danger)">✗</div>
+<div class="rh">Teller/Agency</div><div style="background:var(--bg-success);color:var(--text-success)">✓</div><div style="background:var(--bg-success);color:var(--text-success)">✓</div><div style="background:var(--bg-warning);color:var(--text-warning)">◐</div><div style="background:var(--bg-warning);color:var(--text-warning)">◐</div><div style="background:var(--bg-danger);color:var(--text-danger)">✗</div><div style="background:var(--bg-danger);color:var(--text-danger)">✗</div>
+</div>
+<span>rows = child projects/modules · summary row on top · click cell → checkpoint matrix + market blockers</span>
+</div>
+
+<div class="ph"><b>▼ Swipe Agent Banking</b><span><span class="pill" style="background:var(--bg-success);color:var(--text-success)">Green ▲</span> · 4 channel projects × 6 markets</span></div>
+<div class="blk">
+<div class="hm">
+<div class="rh"></div><div class="ch">KE</div><div class="ch">TZ</div><div class="ch">UG</div><div class="ch">RW</div><div class="ch">BI</div><div class="ch">SS</div>
+<div class="rh">POS</div><div style="background:var(--bg-success);color:var(--text-success)">Live</div><div style="background:var(--bg-success);color:var(--text-success)">Live</div><div style="background:var(--bg-success);color:var(--text-success)">Live</div><div style="background:var(--bg-warning);color:var(--text-warning)">Test</div><div style="background:var(--bg-success);color:var(--text-success)">Live</div><div style="background:var(--bg-success);color:var(--text-success)">Live</div>
+<div class="rh">USSD</div><div style="background:var(--bg-success);color:var(--text-success)">Live</div><div style="background:var(--bg-warning);color:var(--text-warning)">Test</div><div style="background:var(--bg-warning);color:var(--text-warning)">Test</div><div style="background:var(--surface-1);color:var(--text-muted)">—</div><div style="background:var(--bg-warning);color:var(--text-warning)">Test</div><div style="background:var(--bg-warning);color:var(--text-warning)">Test</div>
+<div class="rh">Agent Portal</div><div style="background:var(--bg-success);color:var(--text-success)">Live</div><div style="background:var(--bg-warning);color:var(--text-warning)">Test</div><div style="background:var(--bg-success);color:var(--text-success)">Live</div><div style="background:var(--bg-warning);color:var(--text-warning)">Test</div><div style="background:var(--bg-warning);color:var(--text-warning)">Test</div><div style="background:var(--bg-warning);color:var(--text-warning)">Test</div>
+<div class="rh">Mobile App</div><div style="background:var(--bg-warning);color:var(--text-warning)">Test</div><div style="background:var(--bg-warning);color:var(--text-warning)">Test</div><div style="background:var(--bg-warning);color:var(--text-warning)">Test</div><div style="background:var(--surface-1);color:var(--text-muted)">—</div><div style="background:var(--bg-warning);color:var(--text-warning)">Test</div><div style="background:var(--bg-warning);color:var(--text-warning)">Test</div>
+</div>
+<span>POS · USSD · Agent Portal · Mobile App are projects inside the portfolio, not checkpoints</span>
+</div>
+</div>
+
+<div class="wf" style="margin-bottom:0">
+<h3>Cell drill-down — one project × one market</h3>
+<p class="q">Click "ZED Card × Rwanda" → the live version of your "Where We Are" + "Critical Focus" slides.</p>
+<div style="display:grid;grid-template-columns:1.4fr 1fr;gap:8px">
+<div class="blk"><b>Checkpoint matrix (editable by PM/implementor)</b><span>Business case ✓ · Contract ◐ (with KCB RW) · Build ✓ · Bank int ◐ · Telco int ✗ · Testing ✗ · GTM ✗ · Rollout ✗ → 47% derived</span></div>
+<div class="blk" style="border-left:3px solid var(--fill-warning);border-radius:0 8px 8px 0"><b>Focus & blockers — Rwanda</b><span>weekly market check-in: narrative + RAG · "awaiting RNDPS API documentation" · edit-in-place</span></div>
+</div>
+</div>

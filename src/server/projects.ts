@@ -56,6 +56,9 @@ export const UpdateProjectInput = z.object({
   // the project:stage permission (route-enforced).
   pipelineStage: z.enum(PIPELINE_STAGES).optional(),
   statusNote: z.string().trim().max(200).nullable().optional(),
+  // docs/18 §0.5: moving between portfolios is a normal audited edit; never null —
+  // every project belongs to a portfolio.
+  portfolioId: z.string().uuid().optional(),
   dueDate: z.string().datetime().nullable().optional(),
   budget: z.string().nullable().optional(),
   leadUserId: z.string().uuid().nullable().optional(),
@@ -281,6 +284,7 @@ export interface ProjectPanelData {
   businessOwner: string | null;
   startDate: Date | null;
   leadName: string | null;
+  portfolioId: string | null;
   portfolioName: string | null;
   programmeName: string | null;
   avgProgress: number;
@@ -326,6 +330,7 @@ export async function getProjectPanelData(
       businessOwner: project.businessOwner,
       startDate: project.startDate,
       leadName: project.lead?.name ?? null,
+      portfolioId: project.portfolioId,
       portfolioName: project.portfolio?.name ?? null,
       programmeName: project.programme?.name ?? null,
       avgProgress: avgProgress(project),
@@ -443,6 +448,23 @@ export async function createProject(ctx: TenantContext, input: CreateProjectInpu
   }
 }
 
+/** docs/18 §0.5 — every project belongs to a portfolio. Self-healing lookup so the
+ * invariant survives even a tenant whose seed predates the Unassigned portfolio. */
+async function unassignedPortfolioId(tx: Prisma.TransactionClient, tenantId: string): Promise<string> {
+  const existing = await tx.portfolio.findFirst({ where: { name: "Unassigned" }, select: { id: true } });
+  if (existing) return existing.id;
+  const created = await tx.portfolio.create({
+    data: {
+      tenantId,
+      name: "Unassigned",
+      description: "Default portfolio — projects awaiting a portfolio decision (docs/18 §0.5).",
+      viewKind: "Pipeline",
+    },
+    select: { id: true },
+  });
+  return created.id;
+}
+
 async function createProjectOnce(ctx: TenantContext, input: CreateProjectInput) {
   return withTenant(ctx, async (tx) => {
     const code = input.code ?? (await nextFreeCode(tx, projectCodeBase(input.name)));
@@ -470,7 +492,9 @@ async function createProjectOnce(ctx: TenantContext, input: CreateProjectInput) 
         status: input.status,
         dueDate: input.dueDate ? new Date(input.dueDate) : null,
         budget: input.budget ?? null,
-        portfolioId: input.portfolioId ?? null,
+        // docs/18 §0.5: portfolio is required at creation — the picker defaults to
+        // Unassigned, and API/legacy callers without one land there too.
+        portfolioId: input.portfolioId ?? (await unassignedPortfolioId(tx, ctx.tenantId)),
         programmeId: input.programmeId ?? null,
         leadUserId: input.leadUserId ?? null,
         client: input.client ?? null,
@@ -516,6 +540,11 @@ export async function updateProject(
         throw new ProjectError("Lead user not found.", "LEAD_NOT_FOUND");
       });
     }
+    if (input.portfolioId) {
+      await tx.portfolio.findUniqueOrThrow({ where: { id: input.portfolioId } }).catch(() => {
+        throw new ProjectError("Portfolio not found.", "PORTFOLIO_NOT_FOUND");
+      });
+    }
 
     const after = await tx.project.update({
       where: { id: projectId },
@@ -526,6 +555,7 @@ export async function updateProject(
         priority: input.priority,
         pipelineStage: input.pipelineStage,
         statusNote: input.statusNote === undefined ? undefined : input.statusNote,
+        portfolioId: input.portfolioId,
         dueDate: input.dueDate === undefined ? undefined : input.dueDate ? new Date(input.dueDate) : null,
         budget: input.budget === undefined ? undefined : input.budget,
         leadUserId: input.leadUserId === undefined ? undefined : input.leadUserId,
@@ -548,6 +578,7 @@ export async function updateProject(
         priority: before.priority,
         pipelineStage: before.pipelineStage,
         statusNote: before.statusNote,
+        portfolioId: before.portfolioId,
         dueDate: before.dueDate,
         budget: before.budget,
         leadUserId: before.leadUserId,
@@ -558,6 +589,7 @@ export async function updateProject(
         priority: after.priority,
         pipelineStage: after.pipelineStage,
         statusNote: after.statusNote,
+        portfolioId: after.portfolioId,
         dueDate: after.dueDate,
         budget: after.budget,
         leadUserId: after.leadUserId,

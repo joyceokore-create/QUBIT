@@ -1248,6 +1248,15 @@ async function seedTenant(seed: TenantSeed) {
       });
       portfolioIdByKey.set(p.key, created.id);
     }
+    // docs/18 §0.5 — every project belongs to a portfolio; standalone seeds land here.
+    const unassigned = await tx.portfolio.create({
+      data: {
+        tenantId: tenant.id,
+        name: "Unassigned",
+        description: "Default portfolio — projects awaiting a portfolio decision (docs/18 §0.5).",
+        viewKind: "Pipeline",
+      },
+    });
 
     const programmeIdByKey = new Map<string, string>();
     for (const pr of seed.programmes) {
@@ -1273,7 +1282,7 @@ async function seedTenant(seed: TenantSeed) {
           name: proj.name,
           description: proj.description ?? null,
           type: proj.type,
-          portfolioId: proj.portfolioKey ? (portfolioIdByKey.get(proj.portfolioKey) ?? null) : null,
+          portfolioId: proj.portfolioKey ? (portfolioIdByKey.get(proj.portfolioKey) ?? unassigned.id) : unassigned.id,
           programmeId: proj.programmeKey ? (programmeIdByKey.get(proj.programmeKey) ?? null) : null,
           priority: mapPriority(proj.priority),
           // docs/18 §1: demo the four pipeline groups deterministically — Planning

@@ -25,6 +25,13 @@ confirmation (28 Jul 2026). Refines `16-revamp-plan.md` and supersedes parts of
 4. **Target report types** (must be producible in the reports module, print/PDF-ready):
    R1 portfolio pipeline status, R2 project × market "where we are" matrix, R3 market
    focus & blockers. See §5.
+5. **Every project belongs to a portfolio** (owner-confirmed 2026-07-28). Seed one
+   default **"Unassigned"** portfolio per tenant (`viewKind: Pipeline`); standalone
+   projects are backfilled into it (data migration — DM1.18 tenant-loop pattern).
+   `Project.portfolioId` becomes required at creation (picker defaults to Unassigned).
+   The `/standalone` route and nav concept are removed; the dashboard renders
+   Unassigned as the last portfolio section, only when non-empty. Moving a project
+   between portfolios is a normal audited edit (workspace → Overview, PM/heads/execs).
 
 ## 1. Pipeline stages (portfolio classification)
 
@@ -43,18 +50,43 @@ confirmation (28 Jul 2026). Refines `16-revamp-plan.md` and supersedes parts of
 Different portfolios march through different gates, so checkpoints are data:
 
 - `CheckpointTemplate` (tenant-scoped, admin-editable): name + ordered checkpoint list.
-  Seed three from the slides:
+  Seed two from the slides:
   - **Product build:** BRD → Prototype → MVP1 → SIT → UAT → Go-Live
   - **Market rollout:** Business Case → Contract → Solution Build → Bank Integration →
     Telco Integration → Testing → GTM/Pilot → Rollout
-  - **Channel rollout:** POS → HAL SLA/Ops → USSD → Agent Portal → Mobile App
+  - (⚠ CORRECTED 2026-07-28: the earlier "channel rollout" template was wrong —
+    POS/USSD/Agent Portal/Mobile App are **child projects of the Swipe portfolio**
+    (§3.0), not checkpoints. A status-only track uses a minimal single-checkpoint
+    template, e.g. `Rollout`.)
 - A project picks one template. Checkpoint state per unit of tracking:
   `Done | InProgress | NotStarted | Blocked` (Blocked = linked open Blocker, reason
   required — same flag pattern as tasks).
 - **% complete is derived** (weighted count of Done/InProgress), never typed. The slide's
   hand-maintained percentages become computed and therefore always current.
 
-## 3. Markets and rollout tracks
+## 3. Portfolio hierarchy, markets and rollout tracks
+
+### 3.0 The hierarchy (governs all grouping)
+
+```
+Portfolio  (AI Initiatives · ZED ERP · Swipe Agent Banking · …)
+ └─ Project / module          (Fikra, Checksmart… · ZED Card, ZED Teller… · POS, USSD,
+    │                          Agent Portal, Mobile App)
+    ├─ pipelineStage + checkpoint progress          (the "pipeline" lens)
+    └─ MarketTrack per subsidiary (KE TZ UG RW BI SS DRC)
+        └─ CheckpointStatus per checkpoint + market check-in   (the "rollout" lens)
+```
+
+- Uses the existing `Portfolio → Project` relation — no new hierarchy model. Modules
+  (ZED Card, Swipe POS) are ordinary child Projects of their portfolio.
+- **`Portfolio.viewKind: Pipeline | Rollout`** (admin-editable) declares the portfolio's
+  native lens: AI Initiatives = `Pipeline` (stage-grouped table); ZED and Swipe =
+  `Rollout` (project × market heatmap). Both lenses are available on drill-down; the
+  viewKind only picks the default.
+- Roll-ups are derived bottom-up: market-track % → project % → portfolio % / RAG
+  (worst-of or weighted — use the health engine, one function).
+
+### 3.1 Markets and rollout tracks
 
 - `OrgUnit.kind`: `Internal | Market` (new field). Seed the seven KCB markets as
   `Market` org units in the Riverbank tenant. The "Subsidiaries" nav-hiding rule keys on
@@ -64,13 +96,10 @@ Different portfolios march through different gates, so checkpoints are data:
   track × checkpoint) and a weekly **market check-in**: one narrative paragraph
   ("focus & blockers"), a RAG, and % (derived). Do NOT create a parallel model — one
   track model, extended (same reasoning that killed the second task system).
-- Portfolios with modules (ZED, Swipe): modules are child projects under the portfolio;
-  each module carries its own market tracks. The heatmap rolls up worst-status per
-  module × market.
-- Executive **rollout heatmap** = module/project rows × market columns; cell shows % (or
-  state label for channel templates) + WoW delta from snapshots; click → market
-  drill-down (checkpoint matrix + focus & blockers card, the "Where We Are" +
-  "Critical Focus" slides as one live page).
+- Executive **rollout heatmap** (per Rollout portfolio) = child-project rows × market
+  columns; cell = derived state/% + WoW delta from snapshots; click a cell → that
+  project-market's checkpoint matrix + focus & blockers card (the "Where We Are" +
+  "Critical Focus" slides as one live page). A portfolio-level summary row sits on top.
 
 ## 4. Personal boards (Trello/YouTrack-style)
 
@@ -130,12 +159,25 @@ replaces `/my-tasks` as the daily surface — keep the route as a redirect).
 
 ## 6. Executive dashboard v3 (supersedes 17 §2 layout, keeps its rules)
 
-Top → bottom: **hero + decision queue** (unchanged from 17) → **portfolio pipeline
-table** (§1, replaces the generic projects table; per-project stat chips carry budget/
-risks/milestones/velocity/health/resources — decision №1) → **rollout heatmap** (§3) →
-**market blockers top-N** (from market check-ins). No global KPI tiles. Other personas
-get the pipeline table filtered to their projects (PM: their projects; dev/QA/
-implementor: theirs) — same component, scoped query.
+**The dashboard is grouped by portfolio.** Top → bottom: **hero + decision queue**
+(unchanged from 17), then **one section per portfolio**, ordered by worst health.
+
+Each portfolio section: a header row (name · RAG + Δ · derived % · open blockers count
+· owner) and a body rendered by `viewKind`:
+
+- `Pipeline` (e.g. AI Initiatives): the stage-grouped pipeline table (§1) — Approved /
+  Evaluating / Exploring headers with counts; rows carry checkpoint ticks, %, priority,
+  status note, and the per-project stat chips (decision №1).
+- `Rollout` (e.g. ZED ERP, Swipe): the project × market heatmap (§3) with its
+  portfolio summary row; a "top blockers" strip beneath it (from market check-ins).
+
+Sections are collapsible; collapsed shows only the header row, so an exec scans all
+portfolios in one screen and expands the sick one. No global KPI tiles anywhere.
+
+Other personas get the **same portfolio sections, filtered**: only portfolios
+containing their projects, and within each section only their rows (scope toggle to
+"all" per DM1.20 — filter, not wall). Same components, scoped query. The Reports page
+shows every section read-only for everyone (DM1.3 global read).
 
 ## 7. Edit surfaces — who updates what, where
 
@@ -166,7 +208,8 @@ derived from such fields. Nothing on a dashboard is dead data with no edit path.
 
 | Model | Change | Notes |
 |---|---|---|
-| `Project` | `pipelineStage`, extend `priority` enum | audited, evented |
+| `Portfolio` | `viewKind: Pipeline \| Rollout` | admin-editable; picks default lens |
+| `Project` | `pipelineStage`, extend `priority` enum | audited, evented; modules = child projects of a portfolio (existing relation) |
 | `CheckpointTemplate`, `Checkpoint` | new | tenant-scoped, seeded ×3 |
 | `OrgUnit` | `kind: Internal \| Market` | seed 7 KCB markets |
 | `ProjectOrgStatus` | extend: checkpoint statuses, market check-in (narrative, RAG) | reuse, don't duplicate |
@@ -204,6 +247,8 @@ machine actor audited.
 - Reports page: a developer can read all portfolio/project status but cannot pull
   another person's weekly report (permission test both ways).
 - No global KPI tiles render on any preset; project rows carry the stat chips.
+- Zero portfolio-less projects exist after migration (assert in an RLS test for both
+  tenants); the Unassigned section renders only when non-empty; `/standalone` is gone.
 - **Every non-derived field on any dashboard has an edit surface on the project
   workspace** (§7 table is the checklist): a PM can change stage, priority, a checkpoint
   state, the status note, and a market check-in from the workspace, and each change is

@@ -28,7 +28,7 @@ export default async function ProjectWorkspacePage({
 
   if (!(await canViewProject(ctx, id))) return <Forbidden />;
 
-  const [p, members, canContribute, canPublish, membership] = await Promise.all([
+  const [p, members, canContribute, canPublish, membership, portfolios] = await Promise.all([
     getProjectPanelData(ctx, id),
     listProjectMembers(ctx, id),
     canContributeToProject(ctx, id),
@@ -40,6 +40,8 @@ export default async function ProjectWorkspacePage({
       ]);
       return { isMember: Boolean(lead || m), isLead: Boolean(lead), memberRole: m?.role ?? null };
     }),
+    // Portfolio choices for the governance editor's move control (docs/18 §0.5).
+    withTenant(ctx, (tx) => tx.portfolio.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } })),
   ]);
   if (!p) notFound();
 
@@ -60,6 +62,7 @@ export default async function ProjectWorkspacePage({
     canContribute, // tasks + blockers: any project member
     canPublish, // plan approval (Draft → Published) — PM-level (DM1.15 №3)
     canGovern: can(ctx, "project:stage") || (await canWriteProject(ctx, id)), // docs/18 §7
+    portfolios,
     viewerCategory,
     isMember: membership.isMember, // viewer leads or is allocated → hides "Request to join"
   };

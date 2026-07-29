@@ -203,6 +203,8 @@ export async function getPortfolioCards(ctx: TenantContext): Promise<PortfolioCa
   });
 }
 
+// Type kept for the portfolios page's programme-less grid; the /standalone surface and
+// its query died with docs/18 §0.5 (every project belongs to a portfolio).
 export interface StandaloneCardData {
   id: string;
   code: string;
@@ -213,31 +215,6 @@ export interface StandaloneCardData {
   budget: string | null;
   avgProgress: number;
   orgUnits: { code: string; flag: string | null }[];
-}
-
-export async function getStandaloneCards(ctx: TenantContext): Promise<StandaloneCardData[]> {
-  const [projects, orgUnits] = await Promise.all([
-    getProjectsWithStatus(ctx),
-    withTenant(ctx, (tx) => tx.orgUnit.findMany({ select: { id: true, code: true, flag: true } })),
-  ]);
-  const orgUnitById = new Map(orgUnits.map((o) => [o.id, o]));
-
-  return projects
-    .filter((p) => p.portfolioId === null)
-    .map((p) => ({
-      id: p.id,
-      code: p.code,
-      name: p.name,
-      type: p.type,
-      priority: p.priority,
-      status: p.status,
-      budget: p.budget,
-      avgProgress: avgProgress(p),
-      orgUnits: p.orgStatuses
-        .map((os) => orgUnitById.get(os.orgUnitId))
-        .filter((o): o is { id: string; code: string; flag: string | null } => !!o)
-        .map((o) => ({ code: o.code, flag: o.flag })),
-    }));
 }
 
 export interface EscalationItem {

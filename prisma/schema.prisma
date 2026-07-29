@@ -508,6 +508,10 @@ model Portfolio {
   name         String
   description  String?
   type         String?
+  // docs/18 §3.0 — the portfolio's native dashboard lens: Pipeline (stage-grouped
+  // table) or Rollout (project × market heatmap, lands with M-D). Default lens only;
+  // both are reachable on drill-down.
+  viewKind     String   @default("Pipeline") @map("view_kind")
   ownerId      String?  @map("owner_id")
   targetBudget String?  @map("target_budget")
   createdAt    DateTime @default(now()) @map("created_at")

@@ -780,3 +780,49 @@ chips incl. STRAT priority and 0/1! overdue markers, zero KPI tiles), a real sta
 change P003 Exploring→Evaluating that regrouped the table AND appeared in the delta
 feed, and the personal board with sub-badges, inline blocker reason, attribution, and
 the /my-tasks redirect.
+
+## M18-B — Portfolio grouping: §0.5/§3.0 hierarchy + the amended §6 dashboard (2026-07-29)
+
+### DM1.30 — Every project belongs to a portfolio; the dashboard groups by portfolio
+Amended docs/18 (§0.5, §3.0, §6, §10) implementation calls:
+
+- **Schema**: `Portfolio.viewKind` (`Pipeline|Rollout`, default Pipeline). **DM1.18
+  tenant-loop backfill** finds-or-creates an "Unassigned" portfolio per tenant and moves
+  every `portfolio_id IS NULL` project into it — verified 0 portfolio-less projects on
+  both tenants pre/post, and a §10 regression test keeps it that way. `createProject`
+  routes portfolio-less input to Unassigned via a **self-healing lookup** (recreates the
+  portfolio if a tenant predates the seed); `getPortfolioSections` additionally folds
+  any raw-inserted null-portfolio row into the Unassigned section so nothing can vanish
+  from the book.
+- **`getPortfolioSections`** replaces `getPipelineTable`: one section per portfolio
+  carrying name, worst-of-children RAG (via the ONE health engine), Δ vs ~7-days-ago
+  project snapshots, avg derived %, summed open blockers, owner, and the stage-grouped
+  pipeline as its body. Sections sort **worst health first**; Unassigned renders
+  **last and only when non-empty**; empty regular portfolios keep their header so execs
+  see the whole book. `viewKind=Rollout` renders the pipeline lens with an honest
+  "ROLLOUT · PIPELINE LENS" tag until M-D ships market tracks — never a placeholder
+  heatmap.
+- **Sections are collapsible** (`<details>`): Red/Amber open by default, Green starts
+  collapsed — trouble is one glance, the healthy book is one click.
+- **The exec org heatmap is REMOVED** (portfolio × subsidiary): its RAG+Δ signal moved
+  onto the section headers per the amended §6/wireframe. The rollout heatmap returns
+  per-portfolio with M-D. Exec preset is now hero → health trend → decision queue →
+  portfolio sections → delta. PM/dev consume the SAME sections with scope="mine"
+  (sections holding none of my projects drop out; the ALL toggle restores them —
+  DM1.20 stands).
+- **Portfolio move is a governance edit (§7)**: `portfolioId` joined
+  `GOVERNANCE_FIELDS` (PATCH allowed on `canWriteProject OR project:stage`), validated
+  (`PORTFOLIO_NOT_FOUND`), audited with before/after, editable inline from the
+  workspace GovernanceEditor (select shows the portfolio NAME — explicit SelectValue
+  text, since the raw value is a UUID). Moves are never-null: a project always lands in
+  a real portfolio.
+- **/standalone is gone** (§0.5): page + API deleted. The portfolios page's
+  programme-less grid is a different concept and stays.
+
+Verified: lint/typecheck/build green, 465/465 tests (65 files; new: portfolio-sections
+RLS suite — §10 zero-orphans both tenants, create-defaults-to-Unassigned, worst-first +
+Unassigned-last ordering, Rollout lens, audited move + target validation, cross-tenant
+isolation). Live on KCB (exec: Risk & Compliance RED first → ambers → Customer
+Experience GREEN collapsed → Unassigned last with 5; PM scope=mine filtered to P001's
+section) and Riverbank (red theme, single Unassigned book, PM view, governance PATCH
+with portfolioId 200 + portfolio select showing "Unassigned").

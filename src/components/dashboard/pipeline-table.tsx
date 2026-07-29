@@ -93,24 +93,21 @@ export function PipelineTable({
   scope = "all",
   boardLinks = false,
   title = "Portfolio pipeline",
+  bare = false,
 }: {
   data: PipelineTableData;
   scope?: "all" | "mine";
   boardLinks?: boolean;
   title?: string;
+  /** Embedded inside a portfolio section (docs/18 §6) — no outer card or title. */
+  bare?: boolean;
 }) {
   const groups: PipelineGroup[] = data.groups
     .map((g) => ({ ...g, rows: scope === "mine" ? g.rows.filter((r) => r.isMine) : g.rows }))
     .filter((g) => g.rows.length > 0);
 
-  return (
-    <div className={CARD} style={{ background: "var(--cardbg)", animation: "rise .5s cubic-bezier(.22,1,.36,1) both" }}>
-      <div className="flex items-baseline gap-2.5 border-b border-[var(--hair)] p-[12px_16px]">
-        <span className="font-heading text-[13.5px] rv:text-heading-xs font-bold text-[var(--qink)]">{title}</span>
-        <span className="font-mono rv:font-sans text-[9px] rv:text-overline tracking-[1.2px] text-[var(--ink4)]">
-          {scope === "mine" ? `${data.mineCount} OF ${data.total}` : `${data.total} PROJECTS`} · GROUPED BY STAGE
-        </span>
-      </div>
+  const body = (
+    <>
       {groups.length === 0 && (
         <div className="p-[12px_16px] text-[12px] text-[var(--ink5)]">No projects in scope.</div>
       )}
@@ -126,6 +123,19 @@ export function PipelineTable({
           ))}
         </div>
       ))}
+    </>
+  );
+
+  if (bare) return body;
+  return (
+    <div className={CARD} style={{ background: "var(--cardbg)", animation: "rise .5s cubic-bezier(.22,1,.36,1) both" }}>
+      <div className="flex items-baseline gap-2.5 border-b border-[var(--hair)] p-[12px_16px]">
+        <span className="font-heading text-[13.5px] rv:text-heading-xs font-bold text-[var(--qink)]">{title}</span>
+        <span className="font-mono rv:font-sans text-[9px] rv:text-overline tracking-[1.2px] text-[var(--ink4)]">
+          {scope === "mine" ? `${data.mineCount} OF ${data.total}` : `${data.total} PROJECTS`} · GROUPED BY STAGE
+        </span>
+      </div>
+      {body}
     </div>
   );
 }

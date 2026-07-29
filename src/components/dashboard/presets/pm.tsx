@@ -1,14 +1,15 @@
 import Link from "next/link";
 import { ArrowRight, ShieldAlert } from "lucide-react";
 import type { PmDashboard } from "@/server/dashboard-pm";
-import type { PipelineTableData } from "@/server/pipeline";
+import type { PortfolioSectionsData } from "@/server/pipeline";
 import { FirstLoginChecklist } from "@/components/dashboard/presets/first-login-checklist";
-import { PipelineTable } from "@/components/dashboard/pipeline-table";
+import { PortfolioSections } from "@/components/dashboard/portfolio-sections";
 import { CARD, Empty, Panel } from "@/components/dashboard/presets/v2-sections";
 
-// PM preset (docs/17 §3, project listing per docs/18 §6): the check-in ritual first,
-// then the SAME pipeline table every persona uses — scoped to my projects by default,
-// with an ALL toggle that is a filter, never a wall (DM1.20) — then what's stuck on me.
+// PM preset (docs/17 §3, project listing per amended docs/18 §6): the check-in ritual
+// first, then the SAME portfolio-grouped sections every persona sees — scoped to my
+// projects by default, with an ALL toggle that is a filter, never a wall (DM1.20) —
+// then what's stuck on me.
 
 function Hero({ d, userId }: { d: PmDashboard; userId: string }) {
   const { checkins, agedBlockers, draftsPending } = d.hero;
@@ -48,12 +49,12 @@ const QUEUE_KIND: Record<string, { label: string; tok: string }> = {
 
 export function PmPreset({
   d,
-  pipeline,
+  sections,
   userId,
   scope,
 }: {
   d: PmDashboard;
-  pipeline: PipelineTableData;
+  sections: PortfolioSectionsData;
   userId: string;
   scope: "mine" | "all";
 }) {
@@ -77,7 +78,7 @@ export function PmPreset({
           ))}
         </span>
       </div>
-      <PipelineTable data={pipeline} scope={scope} title={scope === "mine" ? "My project pipeline" : "Portfolio pipeline"} />
+      <PortfolioSections data={sections} scope={scope} />
 
       <section className="grid grid-cols-1 gap-3.5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <Panel title="Action queue" sub={`${d.actionQueue.length} STUCK ON YOU`}>

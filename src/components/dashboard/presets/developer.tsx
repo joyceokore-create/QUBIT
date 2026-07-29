@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { ArrowRight, CircleCheckBig, Play, ShieldAlert } from "lucide-react";
 import type { DevDashboard } from "@/server/dashboard-dev";
-import type { PipelineTableData } from "@/server/pipeline";
+import type { PortfolioSectionsData } from "@/server/pipeline";
 import type { MyTaskRow } from "@/server/project-tasks";
 import { FirstLoginChecklist } from "@/components/dashboard/presets/first-login-checklist";
-import { PipelineTable } from "@/components/dashboard/pipeline-table";
+import { PortfolioSections } from "@/components/dashboard/portfolio-sections";
 import { CARD, Empty, Panel } from "@/components/dashboard/presets/v2-sections";
 
 // Developer preset (docs/17 §4): ONE focus task — a decision made for them — then
@@ -96,11 +96,11 @@ function QueueBuckets({ d }: { d: DevDashboard }) {
 
 export function DeveloperPreset({
   d,
-  pipeline,
+  sections,
   userId,
 }: {
   d: DevDashboard;
-  pipeline: PipelineTableData;
+  sections: PortfolioSectionsData;
   userId: string;
 }) {
   return (
@@ -108,9 +108,8 @@ export function DeveloperPreset({
       <FirstLoginChecklist group="developer" userId={userId} />
       <FocusHero d={d} />
       <QueueBuckets d={d} />
-      {/* docs/18 §6: the shared pipeline table scoped to MY projects — rows deep-link
-          to the board with the dev lens. */}
-      <PipelineTable data={pipeline} scope="mine" boardLinks title="My project pipeline" />
+      {/* Amended docs/18 §6: the shared portfolio sections scoped to MY projects. */}
+      <PortfolioSections data={sections} scope="mine" />
       <Panel title="Done this week" sub="MOMENTUM">
         {d.doneThisWeek.length ? (
           d.doneThisWeek.map((t) => (

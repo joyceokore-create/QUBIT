@@ -11,41 +11,36 @@ import type { UserGroup } from "@/lib/personas";
 export const WIDGETS = {
   "exec-hero": { title: "Briefing hero" },
   "health-trend": { title: "Health trend" },
-  "exec-kpis": { title: "KPI row" },
   "decision-queue": { title: "Decision queue" },
-  "portfolio-heatmap": { title: "Portfolio heatmap" },
-  "milestones-30d": { title: "Milestones · 30 days" },
-  "top-risks": { title: "Top risks" },
+  // Amended docs/18 §6: ONE portfolio-grouped section list shared by every persona —
+  // it absorbed the flat pipeline table, the KPI strip (per-row chips), the org heatmap
+  // (per-section RAG+Δ) and the milestones/risks panels (per-row chips).
+  "portfolio-sections": { title: "Portfolios · grouped by health" },
   "changed-since": { title: "Since you last looked" },
   "focus-task": { title: "Focus task" },
   "queue-buckets": { title: "Queue buckets" },
-  "my-boards": { title: "My boards" },
   "done-this-week": { title: "Done this week" },
   "pm-hero": { title: "Check-in status hero" },
-  "project-cards": { title: "Project cards" },
   "action-queue": { title: "Action queue" },
   "team-load": { title: "Team load" },
 } as const;
 
 export type WidgetKey = keyof typeof WIDGETS;
 
-/** §2 wireframe order: hero|health-trend → KPIs → decision queue → heatmap|milestones+risks. */
+/** Amended 18 §6 order: hero|health-trend → decision queue → portfolio sections. */
 export const EXECUTIVE_PRESET: WidgetKey[] = [
   "exec-hero",
   "health-trend",
-  "exec-kpis",
   "decision-queue",
-  "portfolio-heatmap",
-  "milestones-30d",
-  "top-risks",
+  "portfolio-sections",
   "changed-since",
 ];
 
-/** §4 order: one decision made for you, then the queue, then context. */
-export const DEVELOPER_PRESET: WidgetKey[] = ["focus-task", "queue-buckets", "my-boards", "done-this-week"];
+/** §4 order: one decision made for you, then the queue, then context (scope=mine). */
+export const DEVELOPER_PRESET: WidgetKey[] = ["focus-task", "queue-buckets", "portfolio-sections", "done-this-week"];
 
-/** §3 order: this week's ritual first, projects, then what's stuck on you. */
-export const PM_PRESET: WidgetKey[] = ["pm-hero", "project-cards", "action-queue", "team-load"];
+/** §3 order: this week's ritual first, projects (scope toggle), then what's stuck on you. */
+export const PM_PRESET: WidgetKey[] = ["pm-hero", "portfolio-sections", "action-queue", "team-load"];
 
 /** Personas with a dedicated preset today. Everyone else gets the interim v2 sections. */
 export const BUILT_PRESETS: Partial<Record<UserGroup, WidgetKey[]>> = {

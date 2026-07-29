@@ -24,8 +24,11 @@ export interface ProjectPanelJson {
   priority: string;
   pipelineStage: string;
   statusNote: string | null;
-  /** docs/18 §7 — may edit stage/priority/status note (PM/lead, heads, execs). */
+  /** docs/18 §7 — may edit stage/priority/status note/portfolio (PM/lead, heads, execs). */
   canGovern?: boolean;
+  portfolioId: string | null;
+  /** Portfolio choices for the governance editor's move control (docs/18 §0.5). */
+  portfolios?: { id: string; name: string }[];
   status: string;
   dueDate: string | null;
   budget: string | null;

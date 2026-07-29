@@ -1,10 +1,10 @@
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { isoWeekId } from "@/lib/iso-week";
 import { getDeltaFeed, type DeltaFeed } from "@/server/delta";
-import { needsAttention, portfolioHealth, projectRag, ragRank, worstStatus, type PortfolioHealth, type Rag } from "@/server/health";
+import { needsAttention, portfolioHealth, type PortfolioHealth } from "@/server/health";
 import { listMyNudges, type MyNudge } from "@/server/nudger";
 import { mergeNudgesIntoPriorities } from "@/server/dashboard-v2";
-import { getPipelineTable, type PipelineTableData } from "@/server/pipeline";
+import { getPortfolioSections, type PortfolioSectionsData } from "@/server/pipeline";
 import { getBriefing, type BriefingItem } from "@/server/relevance";
 
 /**
@@ -40,22 +40,6 @@ export interface DecisionQueueRow {
   href: string;
 }
 
-export interface HeatmapV2Cell {
-  axisId: string;
-  rag: Rag;
-  /** RAG movement vs ~7 days ago: -1 improved · 0 flat · 1 worsened; null without history. */
-  delta: -1 | 0 | 1 | null;
-  count: number;
-  avgProgress: number;
-}
-
-export interface HeatmapV2 {
-  /** "subsidiary" for multi-org-unit tenants (KCB); "department" for flat ones (DM1.1). */
-  axis: "subsidiary" | "department";
-  columns: { id: string; label: string }[];
-  rows: { portfolioId: string; portfolioName: string; cells: (HeatmapV2Cell | null)[] }[];
-}
-
 export interface ExecutiveDashboard {
   priorities: BriefingItem[];
   nudges: MyNudge[];
@@ -63,10 +47,10 @@ export interface ExecutiveDashboard {
   health: PortfolioHealth;
   healthTrend: HealthTrend;
   decisionQueue: DecisionQueueRow[];
-  /** docs/18 §1/§6 — the pipeline table replaces the generic projects table; the old
-   * milestones/risks panels became per-row chips on it. */
-  pipeline: PipelineTableData;
-  heatmap: HeatmapV2;
+  /** Amended docs/18 §6 — one collapsible section per portfolio, worst health first.
+   * This replaced the flat pipeline table AND the portfolio × subsidiary heatmap
+   * (its RAG+Δ signal now lives on each section header). */
+  sections: PortfolioSectionsData;
   delta: DeltaFeed;
   /** code+status of every project — the health-parity contract with Q. */
   projects: { id: string; code: string; name: string; status: string }[];
@@ -83,32 +67,12 @@ export async function getExecutiveDashboard(ctx: TenantContext): Promise<Executi
     listMyNudges(ctx, now),
     getDeltaFeed(ctx),
     withTenant(ctx, async (tx) => {
-      const [
-        projects,
-        orgUnits,
-        departments,
-        portfolios,
-        snapshots,
-        weekAgoProjectSnaps,
-        escalations,
-        unconfirmed,
-        draftGroups,
-        overdueTasks,
-        leads,
-      ] = await Promise.all([
+      const [projects, snapshots, escalations, unconfirmed, draftGroups, overdueTasks] = await Promise.all([
         tx.project.findMany({
-          select: { id: true, code: true, name: true, status: true, portfolioId: true, leadUserId: true, orgStatuses: { select: { orgUnitId: true, progress: true, status: true } } },
+          select: { id: true, code: true, name: true, status: true },
           orderBy: { name: "asc" },
         }),
-        tx.orgUnit.findMany({ orderBy: { createdAt: "asc" }, select: { id: true, name: true, flag: true } }),
-        tx.department.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
-        tx.portfolio.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
         tx.portfolioSnapshot.findMany({ orderBy: { day: "desc" }, take: 60 }),
-        tx.projectSnapshot.findMany({
-          where: { day: { lte: new Date(now.getTime() - 6 * day), gte: new Date(now.getTime() - 10 * day) } },
-          orderBy: { day: "desc" },
-          select: { projectId: true, status: true, day: true },
-        }),
         tx.nudge.findMany({
           where: { isoWeek, escalationLevel: { gte: 1 } },
           orderBy: [{ escalationLevel: "desc" }, { sentAt: "asc" }],
@@ -127,12 +91,8 @@ export async function getExecutiveDashboard(ctx: TenantContext): Promise<Executi
         tx.projectTask.count({
           where: { approvalStatus: { not: "Draft" }, status: { not: "Completed" }, dueDate: { lt: now } },
         }),
-        tx.user.findMany({
-          where: { projectsLed: { some: {} } },
-          select: { id: true, departmentId: true },
-        }),
       ]);
-      return { projects, orgUnits, departments, portfolios, snapshots, weekAgoProjectSnaps, escalations, unconfirmed, draftGroups, overdueTasks, leads };
+      return { projects, snapshots, escalations, unconfirmed, draftGroups, overdueTasks };
     }),
   ]);
 
@@ -174,49 +134,10 @@ export async function getExecutiveDashboard(ctx: TenantContext): Promise<Executi
     })),
   ].slice(0, 12);
 
-  // ── Heatmap (§2): one encoding per cell — RAG + Δ vs last week ───────────────
-  const lastWeekStatus = new Map<string, string>(); // projectId → status ~7d ago (latest in window)
-  for (const s of live.weekAgoProjectSnaps) if (!lastWeekStatus.has(s.projectId)) lastWeekStatus.set(s.projectId, s.status);
-
-  const multiOrgUnit = live.orgUnits.length > 1;
-  const deptByLead = new Map(live.leads.map((l) => [l.id, l.departmentId]));
-  const UNASSIGNED = "unassigned";
-  const columns = multiOrgUnit
-    ? live.orgUnits.map((o) => ({ id: o.id, label: `${o.flag ?? ""} ${o.name}`.trim() }))
-    : [...live.departments.map((d) => ({ id: d.id, label: d.name })), { id: UNASSIGNED, label: "Unassigned" }];
-
-  const projectColumn = (p: (typeof live.projects)[number]): string[] => {
-    if (multiOrgUnit) return p.orgStatuses.map((os) => os.orgUnitId);
-    // Flat tenants (DM1.1): a project's column is its LEAD's department (DM1.27).
-    const dept = p.leadUserId ? deptByLead.get(p.leadUserId) : null;
-    return [dept ?? UNASSIGNED];
-  };
-
-  const rows = live.portfolios.map((portfolio) => {
-    const items = live.projects.filter((p) => p.portfolioId === portfolio.id);
-    const cells = columns.map((col): HeatmapV2Cell | null => {
-      const inCell = items.filter((p) => projectColumn(p).includes(col.id));
-      if (inCell.length === 0) return null;
-      const statuses = inCell.map((p) => p.status);
-      const current = worstStatus(statuses);
-      const prevStatuses = inCell.map((p) => lastWeekStatus.get(p.id)).filter((s): s is string => !!s);
-      const prev = prevStatuses.length === inCell.length ? worstStatus(prevStatuses) : null;
-      const delta = prev === null ? null : (Math.sign(ragRank(current) - ragRank(prev)) as -1 | 0 | 1);
-      const progress = multiOrgUnit
-        ? inCell.flatMap((p) => p.orgStatuses.filter((os) => os.orgUnitId === col.id).map((os) => os.progress))
-        : inCell.flatMap((p) => p.orgStatuses.map((os) => os.progress));
-      return {
-        axisId: col.id,
-        rag: projectRag(current),
-        delta,
-        count: inCell.length,
-        avgProgress: progress.length ? Math.round(progress.reduce((a, b) => a + b, 0) / progress.length) : 0,
-      };
-    });
-    return { portfolioId: portfolio.id, portfolioName: portfolio.name, cells };
-  });
-
-  const pipeline = await getPipelineTable(ctx, now);
+  // Amended docs/18 §6: the heatmap that lived here was replaced by per-section RAG+Δ
+  // on the portfolio sections themselves; the rollout heatmap returns per-portfolio
+  // (viewKind=Rollout) with M-D's market tracks.
+  const sections = await getPortfolioSections(ctx, now);
 
   return {
     priorities: mergeNudgesIntoPriorities(nudges, briefing),
@@ -236,8 +157,7 @@ export async function getExecutiveDashboard(ctx: TenantContext): Promise<Executi
       },
     },
     decisionQueue,
-    pipeline,
-    heatmap: { axis: multiOrgUnit ? "subsidiary" : "department", columns, rows },
+    sections,
     delta,
     projects: live.projects.map(({ id, code, name, status }) => ({ id, code, name, status })),
   };

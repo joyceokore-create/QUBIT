@@ -6,9 +6,10 @@ import { Check, Pencil } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // docs/18 §7 — the workspace edit surface for governance facts: pipeline stage,
-// priority, one-line status note. Humans update facts; the system derives numbers.
-// Inline, optimistic, audited + evented server-side. Read-only render without the gate
-// (§10 acceptance: test both ways). Gates come from can()/canWriteProject — never here.
+// priority, portfolio (§0.5 — every project belongs to one), one-line status note.
+// Humans update facts; the system derives numbers. Inline, optimistic, audited +
+// evented server-side. Read-only render without the gate (§10 acceptance: test both
+// ways). Gates come from can()/canWriteProject — never here.
 
 const STAGES = ["Exploring", "Evaluating", "Approved", "Paused"] as const;
 const PRIORITIES = ["High", "Med", "Low", "New", "Strat", "Paused"] as const;
@@ -19,17 +20,22 @@ export function GovernanceEditor({
   pipelineStage,
   priority,
   statusNote,
+  portfolioId,
+  portfolios = [],
   canGovern,
 }: {
   projectId: string;
   pipelineStage: string;
   priority: string;
   statusNote: string | null;
+  portfolioId?: string | null;
+  portfolios?: { id: string; name: string }[];
   canGovern: boolean;
 }) {
   const router = useRouter();
   const [stage, setStage] = useState(pipelineStage);
   const [prio, setPrio] = useState(priority);
+  const [pf, setPf] = useState(portfolioId ?? "");
   const [note, setNote] = useState(statusNote ?? "");
   const [editingNote, setEditingNote] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,12 +55,15 @@ export function GovernanceEditor({
     return true;
   };
 
+  const portfolioName = portfolios.find((p) => p.id === pf)?.name ?? null;
+
   if (!canGovern) {
     // Read-only render for everyone else — the facts stay visible, never editable.
     return (
       <div className="flex flex-wrap items-center gap-2">
         <Chip label="Stage" value={pipelineStage} tok={STAGE_TOKEN[pipelineStage] ?? "--ink4"} />
         <Chip label="Priority" value={priority} tok="--ink3" />
+        {portfolioName && <Chip label="Portfolio" value={portfolioName} tok="--ink3" />}
         {statusNote && <p className="w-full text-[11.5px] italic text-[var(--ink3)]">“{statusNote}”</p>}
       </div>
     );
@@ -96,6 +105,27 @@ export function GovernanceEditor({
             {PRIORITIES.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
           </SelectContent>
         </Select>
+        {/* Portfolio move (docs/18 §0.5) — every project belongs to exactly one. */}
+        {portfolios.length > 0 && (
+          <Select
+            value={pf}
+            onValueChange={(v) => {
+              if (!v || v === pf) return;
+              const prev = pf;
+              setPf(v);
+              void patch({ portfolioId: v }).then((ok) => !ok && setPf(prev));
+            }}
+          >
+            <SelectTrigger className="h-7 w-[150px] text-[11px]" aria-label="Portfolio">
+              {/* Explicit display text: the value is a UUID, so the default fallback
+                  (raw value) must never show. */}
+              <SelectValue placeholder="Portfolio…">{portfolioName ?? "Portfolio…"}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {portfolios.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        )}
       </div>
       {editingNote ? (
         <div className="flex items-center gap-1.5">

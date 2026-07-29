@@ -198,6 +198,8 @@ export function ProjectWorkspace({
                   pipelineStage={data.pipelineStage}
                   priority={data.priority}
                   statusNote={data.statusNote}
+                  portfolioId={data.portfolioId}
+                  portfolios={data.portfolios}
                   canGovern={data.canGovern ?? false}
                 />
               </div>

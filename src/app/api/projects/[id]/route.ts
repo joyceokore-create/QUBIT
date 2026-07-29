@@ -34,7 +34,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   });
 }
 
-const GOVERNANCE_FIELDS = new Set(["pipelineStage", "priority", "statusNote"]);
+const GOVERNANCE_FIELDS = new Set(["pipelineStage", "priority", "statusNote", "portfolioId"]);
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   let ctx;

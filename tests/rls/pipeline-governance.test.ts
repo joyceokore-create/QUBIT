@@ -7,7 +7,7 @@ import { withTenant, type TenantContext } from "@/lib/tenant";
 import { can } from "@/lib/rbac";
 import { canWriteProject } from "@/lib/access";
 import { updateProject } from "@/server/projects";
-import { getPipelineTable } from "@/server/pipeline";
+import { getPortfolioSections, type PortfolioSectionsData } from "@/server/pipeline";
 import { confirmCheckIn } from "@/server/checkins";
 import { ensureUsers, cleanupFixtureUsers } from "./_users";
 
@@ -85,14 +85,14 @@ describe("M18-A pipeline governance", () => {
   });
 
   it("the pipeline row shows the status note, and falls back to the confirmed check-in narrative", async () => {
-    let row = findRow(await getPipelineTable(leadCtx), projectId)!;
+    let row = findRow(await getPortfolioSections(leadCtx), projectId)!;
     expect(row.note).toBe("Business case in review with the vendor.");
     expect(row.priority).toBe("New"); // the extended enum round-trips
 
     // Clear the note; a confirmed check-in narrative takes over (docs/18 §7).
     await updateProject(leadCtx, projectId, { statusNote: null });
     await confirmCheckIn(leadCtx, projectId, { narrative: "Vendor demo went well — moving to scoring." });
-    row = findRow(await getPipelineTable(leadCtx), projectId)!;
+    row = findRow(await getPortfolioSections(leadCtx), projectId)!;
     expect(row.note).toBe("Vendor demo went well — moving to scoring.");
     expect(row.unconfirmed).toBe(false);
   });
@@ -108,6 +108,6 @@ describe("M18-A pipeline governance", () => {
   });
 });
 
-function findRow(table: Awaited<ReturnType<typeof getPipelineTable>>, id: string) {
-  return table.groups.flatMap((g) => g.rows).find((r) => r.id === id);
+function findRow(data: PortfolioSectionsData, id: string) {
+  return data.sections.flatMap((s) => s.pipeline.groups.flatMap((g) => g.rows)).find((r) => r.id === id);
 }

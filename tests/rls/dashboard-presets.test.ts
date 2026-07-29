@@ -6,8 +6,12 @@ import { prisma } from "@/lib/db";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { getDevDashboard } from "@/server/dashboard-dev";
 import { getPmDashboard } from "@/server/dashboard-pm";
-import { getPipelineTable } from "@/server/pipeline";
+import { getPortfolioSections, type PortfolioSectionsData } from "@/server/pipeline";
 import { ensureUsers, cleanupFixtureUsers } from "./_users";
+
+// Amended docs/18 §6: presets consume portfolio-grouped sections; each section body is
+// the stage-grouped pipeline. Flatten across sections when a test cares about rows.
+const allRows = (s: PortfolioSectionsData) => s.sections.flatMap((sec) => sec.pipeline.groups.flatMap((g) => g.rows));
 
 const day = 86_400_000;
 
@@ -86,19 +90,22 @@ describe("M1b dashboard presets", () => {
     expect(d.doneThisWeek.map((t) => t.title)).toContain("Ship burndown widget");
   });
 
-  it("pipeline table (docs/18 §1): stage grouping, derived chips, unconfirmed flag", async () => {
-    const p = await getPipelineTable(pmCtx);
-    const row = p.groups.flatMap((g) => g.rows).find((r) => r.id === projectId)!;
+  it("portfolio sections (docs/18 §1/§6): stage grouping, derived chips, unconfirmed flag", async () => {
+    const p = await getPortfolioSections(pmCtx);
+    const row = allRows(p).find((r) => r.id === projectId)!;
     expect(row.isMine).toBe(true);
     expect(row.chips.health).toBe("Amber"); // AtRisk via the one health engine
     expect(row.unconfirmed).toBe(true); // no check-in confirmed this week
     expect(row.chips.risksOpen).toBe(0);
     expect(row.chips.velocity7d).toBe(1); // "Ship burndown widget" completed this week
     expect(row.chips.resources).toBe(1); // the dev membership
+    // Raw fixture insert has no portfolio — it folds into Unassigned, never vanishes.
+    const home = p.sections.find((s) => s.pipeline.groups.some((g) => g.rows.some((r) => r.id === projectId)))!;
+    expect(home.isUnassigned).toBe(true);
     // The fixture project defaulted to Exploring — it sits in that stage group.
-    expect(p.groups.find((g) => g.stage === "Exploring")!.rows.map((r) => r.id)).toContain(projectId);
-    // Every row lands in exactly one stage group.
-    const allIds = p.groups.flatMap((g) => g.rows.map((r) => r.id));
+    expect(home.pipeline.groups.find((g) => g.stage === "Exploring")!.rows.map((r) => r.id)).toContain(projectId);
+    // Every row lands in exactly one section + stage group.
+    const allIds = allRows(p).map((r) => r.id);
     expect(new Set(allIds).size).toBe(allIds.length);
     expect(p.total).toBe(allIds.length);
   });
@@ -114,7 +121,7 @@ describe("M1b dashboard presets", () => {
   });
 
   it("PM: scope is a default filter, never a wall (DM1.20)", async () => {
-    const [d, p] = await Promise.all([getPmDashboard(pmCtx), getPipelineTable(pmCtx)]);
+    const [d, p] = await Promise.all([getPmDashboard(pmCtx), getPortfolioSections(pmCtx)]);
     expect(p.mineCount).toBeGreaterThanOrEqual(1);
     expect(p.total).toBeGreaterThan(p.mineCount); // seeded projects visible on the ALL side
     expect(d.myProjectCount).toBe(p.mineCount);

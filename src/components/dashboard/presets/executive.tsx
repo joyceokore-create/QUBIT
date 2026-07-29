@@ -1,17 +1,16 @@
 import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight, CircleHelp, Minus } from "lucide-react";
 import { ArrowRight } from "lucide-react";
-import type { DecisionQueueRow, ExecutiveDashboard, HeatmapV2 } from "@/server/dashboard-exec";
+import type { DecisionQueueRow, ExecutiveDashboard } from "@/server/dashboard-exec";
 import { Sparkline } from "@/components/dashboard/sparkline";
 import { NeedsAttentionList } from "@/components/dashboard/needs-attention";
-import { PipelineTable } from "@/components/dashboard/pipeline-table";
+import { PortfolioSections } from "@/components/dashboard/portfolio-sections";
 import { CARD, ChangedSection, Empty, Panel } from "@/components/dashboard/presets/v2-sections";
 
-// Executive preset v3 (docs/18 §6, superseding 17 §2's layout): hero + decision queue →
-// portfolio pipeline table (per-project stat chips replaced the global KPI strip,
-// 18 §0 decision №1) → heatmap. Rollout heatmap + market blockers join at M-D.
-
-const RAG_TOKEN: Record<string, string> = { Green: "--ok", Amber: "--warn", Red: "--bad" };
+// Executive preset v4 (amended docs/18 §6): hero + decision queue → one collapsible
+// section per portfolio, worst health first (per-project stat chips replaced the global
+// KPI strip, 18 §0 decision №1; the section headers' RAG+Δ replaced the org heatmap).
+// The rollout heatmap returns per-portfolio with M-D's market tracks.
 
 function Wow({ wow, invert }: { wow: number | null; invert?: boolean }) {
   if (wow === null) return <span className="font-mono text-[8.5px] uppercase tracking-[.8px] text-[var(--ink5)]">WoW after snapshots</span>;
@@ -106,55 +105,6 @@ function DecisionQueue({ d }: { d: ExecutiveDashboard }) {
   );
 }
 
-function HeatmapV2Table({ heatmap }: { heatmap: HeatmapV2 }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse">
-        <thead>
-          <tr>
-            <th className="p-[8px_16px] text-left font-mono text-[8.5px] font-medium uppercase tracking-[1.2px] text-[var(--ink4)]">Portfolio</th>
-            {heatmap.columns.map((c) => (
-              <th key={c.id} className="p-[8px_10px] text-center font-mono text-[8.5px] font-medium uppercase tracking-[1.2px] text-[var(--ink4)]">{c.label}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {heatmap.rows.map((row) => (
-            <tr key={row.portfolioId} className="border-t border-[var(--hair2)]">
-              <td className="p-[9px_16px]">
-                <Link href={`/portfolios/${row.portfolioId}`} className="text-[12px] font-semibold text-[var(--qink)] hover:text-brand">{row.portfolioName}</Link>
-              </td>
-              {row.cells.map((cell, i) => (
-                <td key={i} className="p-[6px_8px] text-center">
-                  {cell ? (
-                    // §2: ONE encoding — RAG + Δ arrow. Count/progress live in the tooltip.
-                    <span
-                      title={`${cell.count} project${cell.count === 1 ? "" : "s"} · ${cell.avgProgress}% avg progress`}
-                      className="inline-flex min-w-[52px] items-center justify-center gap-1 rounded-[7px] px-2 py-1.5"
-                      style={{ background: `color-mix(in oklab, var(${RAG_TOKEN[cell.rag]}) 14%, transparent)`, color: `var(${RAG_TOKEN[cell.rag]})` }}
-                    >
-                      <span className="size-2 rounded-full" style={{ background: `var(${RAG_TOKEN[cell.rag]})` }} />
-                      {cell.delta === null ? null : cell.delta > 0 ? (
-                        <ArrowUpRight className="size-3" aria-label="worsened vs last week" />
-                      ) : cell.delta < 0 ? (
-                        <ArrowDownRight className="size-3" aria-label="improved vs last week" />
-                      ) : (
-                        <Minus className="size-3 opacity-60" aria-label="unchanged vs last week" />
-                      )}
-                    </span>
-                  ) : (
-                    <span className="font-mono text-[10px] text-[var(--ink5)]">—</span>
-                  )}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 export function ExecutivePreset({ d, firstName }: { d: ExecutiveDashboard; firstName: string }) {
   return (
     <>
@@ -163,17 +113,11 @@ export function ExecutivePreset({ d, firstName }: { d: ExecutiveDashboard; first
         <HealthTrendCard d={d} />
       </section>
       <DecisionQueue d={d} />
-      {/* docs/18 §6: the pipeline table IS the projects view — milestones/risks/velocity
-          became per-row chips; there is no global KPI strip. */}
-      <PipelineTable data={d.pipeline} />
-      <Panel title={heatmapTitle(d.heatmap.axis)} sub="Δ VS LAST WEEK · HOVER FOR DETAIL">
-        <HeatmapV2Table heatmap={d.heatmap} />
-      </Panel>
+      {/* Amended docs/18 §6: portfolio-grouped sections ARE the projects view — worst
+          health first, Unassigned last; milestones/risks/velocity are per-row chips;
+          there is no global KPI strip and no separate heatmap. */}
+      <PortfolioSections data={d.sections} />
       <ChangedSection delta={d.delta} />
     </>
   );
-}
-
-function heatmapTitle(axis: HeatmapV2["axis"]): string {
-  return axis === "subsidiary" ? "Portfolio × subsidiary" : "Portfolio × department";
 }
