@@ -1,7 +1,5 @@
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { isoWeekId } from "@/lib/iso-week";
-import { avgProgress } from "@/server/dashboard";
-import { projectRag, ragRank, type Rag } from "@/server/health";
 import { listWorkload } from "@/server/resources";
 
 /**
@@ -14,23 +12,6 @@ import { listWorkload } from "@/server/resources";
 const PM_PROJECT_ROLES = ["Project Manager"];
 const day = 86_400_000;
 
-export interface PmProjectCard {
-  id: string;
-  code: string;
-  name: string;
-  rag: Rag;
-  /** RAG movement vs ~7 days ago: -1 improved · 0 flat · 1 worsened; null without history. */
-  ragDelta: -1 | 0 | 1 | null;
-  progress: number;
-  /** Progress vs the portfolio average — the comparison ask (§3). */
-  vsAvg: number;
-  nextMilestone: { name: string; due: Date } | null;
-  openBlockers: number;
-  /** This week's check-in not yet confirmed. */
-  unconfirmed: boolean;
-  isMine: boolean;
-}
-
 export interface PmActionRow {
   kind: "join" | "drafts" | "blocker" | "slipping";
   title: string;
@@ -39,6 +20,8 @@ export interface PmActionRow {
   href: string;
 }
 
+// The project listing itself is the shared pipeline table (docs/18 §6) — fetched via
+// getPipelineTable and rendered with scope="mine" by default.
 export interface PmDashboard {
   hero: {
     /** My active projects' check-ins this week. */
@@ -46,10 +29,8 @@ export interface PmDashboard {
     agedBlockers: number;
     draftsPending: number;
   };
-  cards: PmProjectCard[];
   actionQueue: PmActionRow[];
   teamLoad: { userId: string; name: string; totalPct: number }[];
-  portfolioAvgProgress: number;
   myProjectCount: number;
 }
 
@@ -58,27 +39,19 @@ export async function getPmDashboard(ctx: TenantContext, now = new Date()): Prom
   const [workload, live] = await Promise.all([
     listWorkload(ctx),
     withTenant(ctx, async (tx) => {
-      const [projects, checkIns, weekAgoSnaps, openBlockers, draftGroups, joinRequests, slipping, milestones, myMemberUserIds] =
+      const [projects, checkIns, openBlockers, draftGroups, joinRequests, slipping, myMemberUserIds] =
         await Promise.all([
           tx.project.findMany({
             where: { status: { notIn: ["Completed", "Cancelled"] } },
             select: {
               id: true,
-              code: true,
               name: true,
-              status: true,
               leadUserId: true,
-              orgStatuses: { select: { progress: true } },
               members: { where: { role: { in: PM_PROJECT_ROLES } }, select: { userId: true } },
             },
             orderBy: { name: "asc" },
           }),
           tx.checkIn.findMany({ where: { isoWeek }, select: { projectId: true, status: true } }),
-          tx.projectSnapshot.findMany({
-            where: { day: { lte: new Date(now.getTime() - 6 * day), gte: new Date(now.getTime() - 10 * day) } },
-            orderBy: { day: "desc" },
-            select: { projectId: true, status: true },
-          }),
           tx.blocker.findMany({
             where: { status: "Open" },
             select: { id: true, description: true, createdAt: true, projectId: true, taskId: true, project: { select: { name: true } } },
@@ -97,14 +70,9 @@ export async function getPmDashboard(ctx: TenantContext, now = new Date()): Prom
             select: { id: true, title: true, taskKey: true, dueDate: true, projectId: true, project: { select: { name: true } } },
             orderBy: { dueDate: "asc" },
           }),
-          tx.projectMilestone.findMany({
-            where: { status: { not: "Done" }, dueDate: { gte: now } },
-            orderBy: { dueDate: "asc" },
-            select: { projectId: true, name: true, dueDate: true },
-          }),
           tx.projectMember.findMany({ select: { projectId: true, userId: true } }),
         ]);
-      return { projects, checkIns, weekAgoSnaps, openBlockers, draftGroups, joinRequests, slipping, milestones, myMemberUserIds };
+      return { projects, checkIns, openBlockers, draftGroups, joinRequests, slipping, myMemberUserIds };
     }),
   ]);
 
@@ -115,36 +83,6 @@ export async function getPmDashboard(ctx: TenantContext, now = new Date()): Prom
   );
 
   const confirmedByProject = new Map(live.checkIns.map((c) => [c.projectId, c.status === "Confirmed"]));
-  const lastWeekStatus = new Map<string, string>();
-  for (const s of live.weekAgoSnaps) if (!lastWeekStatus.has(s.projectId)) lastWeekStatus.set(s.projectId, s.status);
-  const blockersByProject = new Map<string, number>();
-  for (const b of live.openBlockers) blockersByProject.set(b.projectId, (blockersByProject.get(b.projectId) ?? 0) + 1);
-  const nextMilestone = new Map<string, { name: string; due: Date }>();
-  for (const m of live.milestones) {
-    if (m.dueDate && !nextMilestone.has(m.projectId)) nextMilestone.set(m.projectId, { name: m.name, due: m.dueDate });
-  }
-
-  const progresses = live.projects.map((p) => avgProgress(p));
-  const portfolioAvgProgress = progresses.length
-    ? Math.round(progresses.reduce((a, b) => a + b, 0) / progresses.length)
-    : 0;
-
-  const cards: PmProjectCard[] = live.projects.map((p, i) => {
-    const prev = lastWeekStatus.get(p.id) ?? null;
-    return {
-      id: p.id,
-      code: p.code,
-      name: p.name,
-      rag: projectRag(p.status),
-      ragDelta: prev === null ? null : (Math.sign(ragRank(p.status) - ragRank(prev)) as -1 | 0 | 1),
-      progress: progresses[i],
-      vsAvg: progresses[i] - portfolioAvgProgress,
-      nextMilestone: nextMilestone.get(p.id) ?? null,
-      openBlockers: blockersByProject.get(p.id) ?? 0,
-      unconfirmed: !(confirmedByProject.get(p.id) ?? false),
-      isMine: mine.has(p.id),
-    };
-  });
 
   // ── Action queue (§3): everything stuck on ME, deep-linked to where it's fixed ──
   const ageDays = (d: Date) => Math.max(0, Math.floor((now.getTime() - d.getTime()) / day));
@@ -192,17 +130,18 @@ export async function getPmDashboard(ctx: TenantContext, now = new Date()): Prom
     .slice(0, 10)
     .map((w) => ({ userId: w.userId, name: w.name, totalPct: w.totalPct }));
 
-  const myActive = cards.filter((c) => c.isMine);
+  const myActive = live.projects.filter((p) => mine.has(p.id));
   return {
     hero: {
-      checkins: { confirmed: myActive.filter((c) => !c.unconfirmed).length, total: myActive.length },
+      checkins: {
+        confirmed: myActive.filter((p) => confirmedByProject.get(p.id) ?? false).length,
+        total: myActive.length,
+      },
       agedBlockers: agedBlockers.length,
       draftsPending: myDrafts.reduce((n, g) => n + g._count._all, 0),
     },
-    cards,
     actionQueue,
     teamLoad,
-    portfolioAvgProgress,
     myProjectCount: myActive.length,
   };
 }

@@ -55,6 +55,8 @@ describe("MVP1 — project tasks (M5–M7)", () => {
   it("adds tasks and lists them in order", async () => {
     await addTasks(kcb, projectId, [
       { title: "Discovery workshop", phase: "Discovery", ownerRole: "Business Analyst", priority: "High" },
+      // TASK priorities keep the docs/15 enum (Medium) — only PROJECT priorities moved
+      // to the docs/18 business enum (Med).
       { title: "Draft requirements", phase: "Requirements", priority: "Medium" },
       { title: "Build API", phase: "Development", ownerRole: "Developer" },
     ]);
@@ -69,7 +71,8 @@ describe("MVP1 — project tasks (M5–M7)", () => {
     expect(progress).toMatchObject({ total: 3, completed: 0, pct: 0 });
 
     const tasks = await listProjectTasks(kcb, projectId);
-    await setTaskStatus(kcb, tasks[0].id, "Completed");
+    // docs/18 §4: QA owns Completed for Feature/Bug — complete as a QA-capable actor.
+    await setTaskStatus({ ...kcb, roles: ["HeadOfQA"] }, tasks[0].id, "Completed");
     await flagTaskBlocked(kcb, tasks[1].id, { description: "Waiting on vendor sandbox" }); // blocked = flag (6.1)
 
     progress = await getProjectProgress(kcb, projectId);

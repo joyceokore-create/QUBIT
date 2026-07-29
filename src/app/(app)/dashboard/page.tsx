@@ -7,6 +7,7 @@ import { getDashboardV2 } from "@/server/dashboard-v2";
 import { getDevDashboard } from "@/server/dashboard-dev";
 import { getExecutiveDashboard } from "@/server/dashboard-exec";
 import { getPmDashboard } from "@/server/dashboard-pm";
+import { getPipelineTable } from "@/server/pipeline";
 import { Forbidden } from "@/components/forbidden";
 import { LiveClock } from "@/components/command/live-clock";
 import { PersonaSwitcher } from "@/components/dashboard/persona-switcher";
@@ -63,9 +64,9 @@ export default async function DashboardPage({
         {persona === "executive" ? (
           <ExecutivePreset d={await getExecutiveDashboard(ctx)} firstName={firstName} />
         ) : persona === "developer" ? (
-          <DeveloperPreset d={await getDevDashboard(ctx)} userId={ctx.userId} />
+          <DeveloperPreset d={await getDevDashboard(ctx)} pipeline={await getPipelineTable(ctx)} userId={ctx.userId} />
         ) : persona === "pm" ? (
-          <PmPreset d={await getPmDashboard(ctx)} userId={ctx.userId} scope={scope} />
+          <PmPreset d={await getPmDashboard(ctx)} pipeline={await getPipelineTable(ctx)} userId={ctx.userId} scope={scope} />
         ) : (
           <InterimPreset ctx={ctx} />
         )}

@@ -40,6 +40,8 @@ export function formatActivity(type: string, payload: Record<string, unknown>): 
       return `recorded a decision: “${String(payload.title ?? "").slice(0, 80)}”`;
     case "project.status_changed":
       return `moved the project ${String(payload.from ?? "?")} → ${String(payload.to ?? "?")}`;
+    case "project.pipeline_stage_changed":
+      return `moved the pipeline stage ${String(payload.from ?? "?")} → ${String(payload.to ?? "?")}`;
     case "join_request.created":
       return "asked to join the project";
     case "join_request.approved":

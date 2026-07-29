@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { ArrowRight, CircleCheckBig, Play, ShieldAlert } from "lucide-react";
 import type { DevDashboard } from "@/server/dashboard-dev";
+import type { PipelineTableData } from "@/server/pipeline";
 import type { MyTaskRow } from "@/server/project-tasks";
 import { FirstLoginChecklist } from "@/components/dashboard/presets/first-login-checklist";
+import { PipelineTable } from "@/components/dashboard/pipeline-table";
 import { CARD, Empty, Panel } from "@/components/dashboard/presets/v2-sections";
 
 // Developer preset (docs/17 §4): ONE focus task — a decision made for them — then
@@ -92,40 +94,36 @@ function QueueBuckets({ d }: { d: DevDashboard }) {
   );
 }
 
-export function DeveloperPreset({ d, userId }: { d: DevDashboard; userId: string }) {
+export function DeveloperPreset({
+  d,
+  pipeline,
+  userId,
+}: {
+  d: DevDashboard;
+  pipeline: PipelineTableData;
+  userId: string;
+}) {
   return (
     <>
       <FirstLoginChecklist group="developer" userId={userId} />
       <FocusHero d={d} />
       <QueueBuckets d={d} />
-      <section className="grid grid-cols-1 gap-3.5 lg:grid-cols-2">
-        <Panel title="My boards" sub="DEV LENS">
-          {d.boards.length ? (
-            d.boards.map((b) => (
-              <Link key={b.projectId} href={`/projects/${b.projectId}?tab=Board&lens=dev`} className="flex items-center gap-3 border-b border-[var(--hair2)] p-[9px_16px] transition-colors last:border-0 hover:bg-[var(--wash)]">
-                <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-[var(--qink)]">{b.name}</span>
-                <span className="font-mono text-[9.5px] tabular-nums text-[var(--ink4)]">{b.openMine} open · {b.code}</span>
-                <ArrowRight className="size-3 flex-none text-[var(--ink5)]" />
-              </Link>
-            ))
-          ) : (
-            <Empty>You&apos;re not on a project yet — ask to join one from /projects.</Empty>
-          )}
-        </Panel>
-        <Panel title="Done this week" sub="MOMENTUM">
-          {d.doneThisWeek.length ? (
-            d.doneThisWeek.map((t) => (
-              <div key={t.id} className="flex items-center gap-2.5 border-b border-[var(--hair2)] p-[8px_16px] last:border-0">
-                <CircleCheckBig className="size-3.5 flex-none text-[var(--ok)]" />
-                <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink2)]">{t.title}</span>
-                <span className="font-mono text-[9px] text-[var(--ink4)]">{t.projectCode}</span>
-              </div>
-            ))
-          ) : (
-            <Empty>Nothing completed yet this week — the list fills as you ship.</Empty>
-          )}
-        </Panel>
-      </section>
+      {/* docs/18 §6: the shared pipeline table scoped to MY projects — rows deep-link
+          to the board with the dev lens. */}
+      <PipelineTable data={pipeline} scope="mine" boardLinks title="My project pipeline" />
+      <Panel title="Done this week" sub="MOMENTUM">
+        {d.doneThisWeek.length ? (
+          d.doneThisWeek.map((t) => (
+            <div key={t.id} className="flex items-center gap-2.5 border-b border-[var(--hair2)] p-[8px_16px] last:border-0">
+              <CircleCheckBig className="size-3.5 flex-none text-[var(--ok)]" />
+              <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink2)]">{t.title}</span>
+              <span className="font-mono text-[9px] text-[var(--ink4)]">{t.projectCode}</span>
+            </div>
+          ))
+        ) : (
+          <Empty>Nothing completed yet this week — the list fills as you ship.</Empty>
+        )}
+      </Panel>
     </>
   );
 }

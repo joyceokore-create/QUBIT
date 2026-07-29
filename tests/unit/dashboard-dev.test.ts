@@ -10,9 +10,11 @@ const base: MyTaskRow = {
   projectCode: "P1",
   projectName: "Project",
   status: "InProgress",
-  priority: "Medium",
+  type: "Feature",
+  priority: "Med",
   blocked: false,
   blockedReason: null,
+  addedBy: null,
   dueDate: null,
   updatedAt: new Date("2026-07-27T00:00:00Z"),
 };

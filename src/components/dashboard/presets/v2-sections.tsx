@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { ArrowRight, TrendingUp, CalendarClock, UsersRound } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import type { DashboardV2 } from "@/server/dashboard-v2";
 import { HealthRing } from "@/components/command/health-ring";
-import { Sparkline } from "@/components/dashboard/sparkline";
 import { PortfolioHeatmap } from "@/components/dashboard/portfolio-heatmap";
 import { NeedsAttentionList } from "@/components/dashboard/needs-attention";
 
@@ -76,65 +75,17 @@ export function ChangedSection({ delta }: { delta: DashboardV2["delta"] }) {
 }
 
 export function AtRiskSection({ d }: { d: DashboardV2 }) {
-  const { kpis, health } = d;
-  const kpiTiles = [
-    {
-      label: "On-track %",
-      value: `${kpis.onTrackPct.current}%`,
-      tok: kpis.onTrackPct.current >= 70 ? "--ok" : "--warn",
-      foot: `${health.onTrack} of ${health.total} projects`,
-      href: "/projects",
-      points: kpis.onTrackPct.points,
-      Icon: TrendingUp,
-    },
-    {
-      label: "Overdue tasks",
-      value: kpis.overdueTasks.current,
-      tok: kpis.overdueTasks.current ? "--bad" : "--ok",
-      foot: "past due · open",
-      href: "/projects",
-      points: kpis.overdueTasks.points,
-      Icon: CalendarClock,
-    },
-    {
-      label: "Capacity pressure",
-      value: kpis.capacity.current,
-      tok: kpis.capacity.current ? "--bad" : "--ok",
-      foot: `over-allocated of ${kpis.capacity.allocated} allocated`,
-      href: "/people",
-      points: kpis.capacity.points,
-      Icon: UsersRound,
-    },
-  ];
-
+  // docs/18 §0 decision №1: no global KPI tiles anywhere — per-project stats live as
+  // chips on the pipeline table. The health rollup + drill-down survive.
+  const { health } = d;
   return (
     <section className="flex flex-col gap-3.5">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-[repeat(3,minmax(0,1fr))_auto]">
-        {kpiTiles.map((k) => {
-          const Icon = k.Icon;
-          return (
-            <Link key={k.label} href={k.href} className="flex flex-col gap-2 rounded-xl p-4 shadow-[var(--cardsh)]" style={{ background: "var(--cardbg)" }}>
-              <div className="flex items-center gap-2">
-                <span className="flex size-7 flex-none items-center justify-center rounded-lg" style={{ background: `color-mix(in oklab, var(${k.tok}) 14%, transparent)`, color: `var(${k.tok})` }}>
-                  <Icon className="size-[15px]" strokeWidth={1.9} aria-hidden />
-                </span>
-                <span className="font-mono rv:font-sans text-[9px] rv:text-overline font-medium uppercase tracking-[1.4px] text-[var(--ink4)]">{k.label}</span>
-              </div>
-              <div className="flex items-end justify-between gap-2">
-                <span className="font-heading rv:font-data text-[26px] rv:text-data-lg font-bold leading-none tracking-[-.6px] tabular-nums" style={{ color: `var(${k.tok})` }}>{k.value}</span>
-                <Sparkline points={k.points} tone={k.tok} />
-              </div>
-              <div className="text-[10px] text-[var(--ink4)]">{k.foot}</div>
-            </Link>
-          );
-        })}
-        <div className={`${CARD} flex flex-col items-center justify-center gap-1.5 p-[12px_18px]`} style={{ background: "var(--cardbg)" }}>
-          <HealthRing score={health.pct} />
-          <div className="flex gap-2.5 font-mono text-[9px] tracking-[.5px]">
-            <span className="text-[var(--ok)]">{health.onTrack} ON</span>
-            <span className="text-[var(--warn)]">{health.needAttention} RISK</span>
-            <span className="text-[var(--qinfo)]">{health.planning} PLAN</span>
-          </div>
+      <div className={`${CARD} flex items-center justify-center gap-6 p-[12px_18px]`} style={{ background: "var(--cardbg)" }}>
+        <HealthRing score={health.pct} />
+        <div className="flex gap-2.5 font-mono text-[9px] tracking-[.5px]">
+          <span className="text-[var(--ok)]">{health.onTrack} ON</span>
+          <span className="text-[var(--warn)]">{health.needAttention} RISK</span>
+          <span className="text-[var(--qinfo)]">{health.planning} PLAN</span>
         </div>
       </div>
 

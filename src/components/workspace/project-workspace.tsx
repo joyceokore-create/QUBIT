@@ -18,6 +18,7 @@ import { ActivityCard } from "@/components/conversation/activity-card";
 import { CommentsSection } from "@/components/conversation/comments-section";
 import { DecisionsCard } from "@/components/conversation/decisions-card";
 import { CheckInCard } from "@/components/workspace/checkin-card";
+import { GovernanceEditor } from "@/components/workspace/governance-editor";
 import { RequestToJoinButton } from "@/components/workspace/request-to-join-button";
 import { statusMeta } from "@/lib/project-view";
 import type { ProjectPanelJson } from "@/components/panels/project-panel-content";
@@ -190,6 +191,16 @@ export function ProjectWorkspace({
               <CommentsSection entityType="project" entityId={data.id} viewerId={viewerId ?? ""} canPromote={canEdit} />
             </div>
             <aside className="flex flex-col gap-3.5">
+              {/* docs/18 §7 — governance facts, inline-editable by the right roles. */}
+              <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
+                <GovernanceEditor
+                  projectId={data.id}
+                  pipelineStage={data.pipelineStage}
+                  priority={data.priority}
+                  statusNote={data.statusNote}
+                  canGovern={data.canGovern ?? false}
+                />
+              </div>
               {data.description && (
                 <div className={`${CARD} p-4 text-[13px] leading-relaxed text-[var(--ink2)]`} style={{ background: "var(--cardbg)" }}>
                   {data.description}

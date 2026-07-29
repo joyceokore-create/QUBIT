@@ -46,7 +46,7 @@ describe("Project create/update lifecycle", () => {
       code: TEST_CODE,
       name: "Test Lifecycle Project",
       type: "Project",
-      priority: "Medium",
+      priority: "Med",
       status: "Planning",
     });
 
@@ -65,7 +65,7 @@ describe("Project create/update lifecycle", () => {
       code: TEST_CODE,
       name: "Test Lifecycle Project",
       type: "Project",
-      priority: "Medium",
+      priority: "Med",
       status: "Planning",
     });
 
@@ -85,7 +85,7 @@ describe("Project create/update lifecycle", () => {
       code: TEST_CODE,
       name: "Test Lifecycle Project",
       type: "Project",
-      priority: "Medium",
+      priority: "Med",
       status: "Planning",
     });
 
@@ -98,7 +98,7 @@ describe("Project create/update lifecycle", () => {
       code: TEST_CODE,
       name: "Test Lifecycle Project (Riverbank)",
       type: "Project",
-      priority: "Medium",
+      priority: "Med",
       status: "Planning",
     });
 
@@ -115,7 +115,7 @@ describe("Project create/update lifecycle", () => {
       code: TEST_CODE,
       name: "Test Lifecycle Project",
       type: "Project",
-      priority: "Medium",
+      priority: "Med",
       status: "Planning",
     });
 
@@ -132,7 +132,7 @@ describe("Project create/update lifecycle", () => {
       tx.auditLog.findMany({ where: { entityId: project.id, action: "update" } }),
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0].before).toMatchObject({ status: "Planning", priority: "Medium" });
+    expect(rows[0].before).toMatchObject({ status: "Planning", priority: "Med" });
     expect(rows[0].after).toMatchObject({ status: "OnTrack", priority: "High", budget: "KES 10M" });
   });
 
@@ -141,7 +141,7 @@ describe("Project create/update lifecycle", () => {
       code: TEST_CODE,
       name: "Test Lifecycle Project",
       type: "Project",
-      priority: "Medium",
+      priority: "Med",
       status: "Planning",
     });
 

@@ -136,9 +136,11 @@ Projects today have a status; they need a **governed lifecycle**. This is what m
 a PMO tool rather than a task tracker, and it maps directly to the PRD's three governing
 use cases (risk during development, pilot go/no-go, post-deployment PIR).
 
-**Stages:** `Proposed → Initiation → Planning → Execution → Pilot/UAT → Closure →
-Benefits` — each with a **gate checklist** enforced (soft-block with override + mandatory
-reason, audited; hard rules can come later):
+**Stages (updated 2026-07-28):** the business pipeline is `Exploring → Evaluating →
+Approved (→ Paused)` with per-template delivery checkpoints (BRD → Proto → MVP1 → SIT →
+UAT → Go-Live, etc.) — see `18-delivery-tracking-boards-reporting-spec.md` §1–2, which
+supersedes the stage names below. Gate checklists still apply at checkpoint boundaries
+(soft-block with override + mandatory reason, audited; hard rules can come later):
 
 | Gate into | Requires |
 |---|---|

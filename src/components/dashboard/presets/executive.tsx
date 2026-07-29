@@ -1,13 +1,15 @@
 import Link from "next/link";
-import { ArrowDownRight, ArrowRight, ArrowUpRight, CircleHelp, Gauge, Minus, ShieldAlert, TrendingUp, UsersRound } from "lucide-react";
-import type { DecisionQueueRow, ExecKpi, ExecutiveDashboard, HeatmapV2 } from "@/server/dashboard-exec";
+import { ArrowDownRight, ArrowUpRight, CircleHelp, Minus } from "lucide-react";
+import { ArrowRight } from "lucide-react";
+import type { DecisionQueueRow, ExecutiveDashboard, HeatmapV2 } from "@/server/dashboard-exec";
 import { Sparkline } from "@/components/dashboard/sparkline";
 import { NeedsAttentionList } from "@/components/dashboard/needs-attention";
+import { PipelineTable } from "@/components/dashboard/pipeline-table";
 import { CARD, ChangedSection, Empty, Panel } from "@/components/dashboard/presets/v2-sections";
 
-// Executive preset (docs/17 §2). Wireframe: hero|health-trend → 4 KPIs →
-// decision queue → heatmap | milestones-30d + top-5-risks. Every number is grounded:
-// health from the engine, deltas from snapshots, the queue from live work.
+// Executive preset v3 (docs/18 §6, superseding 17 §2's layout): hero + decision queue →
+// portfolio pipeline table (per-project stat chips replaced the global KPI strip,
+// 18 §0 decision №1) → heatmap. Rollout heatmap + market blockers join at M-D.
 
 const RAG_TOKEN: Record<string, string> = { Green: "--ok", Amber: "--warn", Red: "--bad" };
 
@@ -69,40 +71,6 @@ function HealthTrendCard({ d }: { d: ExecutiveDashboard }) {
         )}
       </div>
       <Wow wow={t.wow} />
-    </div>
-  );
-}
-
-function KpiRow({ d }: { d: ExecutiveDashboard }) {
-  const tiles: { label: string; value: string | number; tok: string; foot: string; href: string; kpi: ExecKpi; invert?: boolean; Icon: typeof TrendingUp }[] = [
-    { label: "On-track %", value: `${d.kpis.onTrackPct.current}%`, tok: d.kpis.onTrackPct.current >= 70 ? "--ok" : "--warn", foot: `${d.health.onTrack} of ${d.health.total} projects`, href: "/projects", kpi: d.kpis.onTrackPct, Icon: TrendingUp },
-    { label: "At risk", value: d.kpis.atRisk.current, tok: d.kpis.atRisk.current ? "--warn" : "--ok", foot: "projects needing attention", href: "/projects", kpi: d.kpis.atRisk, invert: true, Icon: Gauge },
-    { label: "Open escalations", value: d.kpis.escalations.current, tok: d.kpis.escalations.current ? "--bad" : "--ok", foot: "this week · nudger level ≥ 1", href: "/risks", kpi: d.kpis.escalations, invert: true, Icon: ShieldAlert },
-    { label: "Capacity pressure", value: d.kpis.capacity.current, tok: d.kpis.capacity.current ? "--bad" : "--ok", foot: `over-allocated of ${d.kpis.capacity.allocated} allocated`, href: "/people", kpi: d.kpis.capacity, invert: true, Icon: UsersRound },
-  ];
-  return (
-    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-      {tiles.map((k) => {
-        const Icon = k.Icon;
-        return (
-          <Link key={k.label} href={k.href} className="flex flex-col gap-2 rounded-xl p-4 shadow-[var(--cardsh)]" style={{ background: "var(--cardbg)" }}>
-            <div className="flex items-center gap-2">
-              <span className="flex size-7 flex-none items-center justify-center rounded-lg" style={{ background: `color-mix(in oklab, var(${k.tok}) 14%, transparent)`, color: `var(${k.tok})` }}>
-                <Icon className="size-[15px]" strokeWidth={1.9} aria-hidden />
-              </span>
-              <span className="font-mono rv:font-sans text-[9px] rv:text-overline font-medium uppercase tracking-[1.4px] text-[var(--ink4)]">{k.label}</span>
-            </div>
-            <div className="flex items-end justify-between gap-2">
-              <span className="font-heading rv:font-data text-[26px] font-bold leading-none tracking-[-.6px] tabular-nums" style={{ color: `var(${k.tok})` }}>{k.value}</span>
-              <Sparkline points={k.kpi.points} tone={k.tok} />
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] text-[var(--ink4)]">{k.foot}</span>
-              <Wow wow={k.kpi.wow} invert={k.invert} />
-            </div>
-          </Link>
-        );
-      })}
     </div>
   );
 }
@@ -194,42 +162,13 @@ export function ExecutivePreset({ d, firstName }: { d: ExecutiveDashboard; first
         <ExecHero d={d} firstName={firstName} />
         <HealthTrendCard d={d} />
       </section>
-      <KpiRow d={d} />
       <DecisionQueue d={d} />
-      <section className="grid grid-cols-1 gap-3.5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        <Panel title={heatmapTitle(d.heatmap.axis)} sub="Δ VS LAST WEEK · HOVER FOR DETAIL">
-          <HeatmapV2Table heatmap={d.heatmap} />
-        </Panel>
-        <div className="flex flex-col gap-3.5">
-          <Panel title="Milestones" sub="NEXT 30 DAYS">
-            {d.milestones30d.length ? (
-              d.milestones30d.map((m) => (
-                <div key={m.id} className="flex items-baseline gap-2.5 border-b border-[var(--hair2)] p-[8px_16px] last:border-0">
-                  <span className="size-1.5 flex-none translate-y-[-1px] rounded-full" style={{ background: m.overdue ? "var(--bad)" : "var(--ok)" }} />
-                  <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink2)]">{m.text}</span>
-                  <span className="font-mono text-[9.5px]" style={{ color: m.overdue ? "var(--bad)" : "var(--ink4)" }}>
-                    {m.due.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                  </span>
-                </div>
-              ))
-            ) : (
-              <Empty>None due in the next 30 days.</Empty>
-            )}
-          </Panel>
-          <Panel title="Top risks" sub="BY HEAT">
-            {d.topRisks.length ? (
-              d.topRisks.map((r) => (
-                <Link key={r.id} href="/risks" className="flex items-baseline gap-2.5 border-b border-[var(--hair2)] p-[8px_16px] transition-colors last:border-0 hover:bg-[var(--wash)]">
-                  <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink2)]">{r.title}</span>
-                  <span className="font-mono text-[9.5px] text-[var(--ink4)]">{r.projectCode ?? "—"} · {r.heat}/25</span>
-                </Link>
-              ))
-            ) : (
-              <Empty>No open risks.</Empty>
-            )}
-          </Panel>
-        </div>
-      </section>
+      {/* docs/18 §6: the pipeline table IS the projects view — milestones/risks/velocity
+          became per-row chips; there is no global KPI strip. */}
+      <PipelineTable data={d.pipeline} />
+      <Panel title={heatmapTitle(d.heatmap.axis)} sub="Δ VS LAST WEEK · HOVER FOR DETAIL">
+        <HeatmapV2Table heatmap={d.heatmap} />
+      </Panel>
       <ChangedSection delta={d.delta} />
     </>
   );

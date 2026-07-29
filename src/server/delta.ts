@@ -60,6 +60,7 @@ export function summarizeDeltas(
   const tasksCompleted = new Map<string, number>();
   // Last status transition wins per project (a project can move twice in a window).
   const statusChanges = new Map<string, { from: string; to: string }>();
+  const stageChanges = new Map<string, { from: string; to: string }>();
   let assignedToMe = 0;
 
   for (const e of events) {
@@ -79,6 +80,15 @@ export function summarizeDeltas(
         if (projectId && p.from && p.to) {
           const existing = statusChanges.get(projectId);
           statusChanges.set(projectId, { from: existing?.from ?? p.from, to: p.to });
+        }
+        break;
+      }
+      case "project.pipeline_stage_changed": {
+        // docs/18 §7: stage moves appear in the exec delta feed.
+        const p = (e.payload ?? {}) as { from?: string; to?: string };
+        if (projectId && p.from && p.to) {
+          const existing = stageChanges.get(projectId);
+          stageChanges.set(projectId, { from: existing?.from ?? p.from, to: p.to });
         }
         break;
       }
@@ -103,6 +113,15 @@ export function summarizeDeltas(
     items.push({
       tone: slipped ? "bad" : "ok",
       text: `${name} ${slipped ? "slipped to" : "recovered to"} ${STATUS_LABEL[change.to] ?? change.to}`,
+      href: `/projects/${projectId}`,
+    });
+  }
+  for (const [projectId, change] of stageChanges) {
+    const name = nameOf(projectId);
+    if (!name || change.from === change.to) continue;
+    items.push({
+      tone: change.to === "Paused" ? "warn" : "info",
+      text: `${name} moved ${change.from} → ${change.to}`,
       href: `/projects/${projectId}`,
     });
   }

@@ -732,3 +732,51 @@ scoping). Live on KCB: PM view (checklist, "1 of 1 unconfirmed — due Friday", 
 with +21% vs avg and UNCONFIRMED badge, mine→all toggle showing all 15) and a seeded
 demo developer landing on the §4 view (focus hero with Start deep link, overdue bucket,
 dev-lens boards).
+
+## M18-A — Alignment to docs/18: pipeline, per-project chips, personal boards (2026-07-29)
+
+### DM1.29 — docs/18 §0 business decisions recorded + M18-A implementation calls
+The four confirmed business decisions (docs/18 §0): (1) the global KPI strip is REMOVED
+— per-project stat chips replace it; (2) real pipeline stages are Exploring → Evaluating
+→ Approved (+ Paused), superseding 16-revamp §6's invented names; (3) Riverbank tracks
+delivery across the seven KCB markets as a DELIVERY dimension (DM1.1 stands — lands in
+M-D); (4) target reports R1/R2/R3 (R1 view on the Reports page lands with M2/M-D).
+
+M18-A calls:
+- **Schema**: `Project.pipelineStage` (default Exploring) + `Project.statusNote`;
+  priority enum extended to `High|Med|Low|New|Strat|Paused` with a **DM1.18 tenant-loop
+  backfill** remapping live rows (`Medium→Med`, `Critical→High` — verified on both
+  tenants pre/post; a regression test asserts no legacy values survive). TASK priorities
+  keep the docs/15 enum — only PROJECT priorities moved.
+- **Pipeline table** (`src/server/pipeline.ts` + one shared component): stage groups
+  with counts + blurbs; rows carry priority, derived % (checkpoint ticks replace it in
+  M-D — no placeholder ticks), note = `statusNote ?? latest confirmed check-in
+  narrative`, unconfirmed flag, and the six derived chips (risks, milestones w/ overdue
+  marker, velocity 7d, health RAG from the engine, resources; budget returns when money
+  is typed). Same component on exec (all) / PM (mine↔all toggle kept) / dev (mine, rows
+  deep-link to the dev-lens board, replacing the "My boards" panel).
+- **Removed from every preset**: exec KPI row, exec milestones-30d + top-risks panels
+  (now chips), PM project-card grid, the interim layout's KPI tiles. No global KPI
+  tiles render anywhere (§10).
+- **Governance edits (§7)**: new `project:stage` permission (Executive + both Heads;
+  SuperAdmin via `*`); the project PATCH route allows governance-only payloads
+  (stage/priority/note) on `canWriteProject OR can(project:stage)` — wider edits keep
+  the DM1.4 transitional gate. `GovernanceEditor` on the workspace Overview:
+  inline/optimistic, read-only render without the gate (tested both ways); stage changes
+  are audited + evented and narrated by the exec delta feed.
+- **Personal board (§4)**: `/board` with To do · Doing · Done as VIEWS over the 5-status
+  taxonomy (Doing wears the sub-state badge), project tabs, "added by <name>"
+  attribution, SSE refetch on task events. **Completion rules**: Feature/Bug →
+  QA-category members / HeadOfQA only ("QA owns Completed"); Chore/Spike/Improvement →
+  direct. Lane moves emit `task.status_changed` and notify the REPORTER (never the
+  mover). `/my-tasks` redirects to `/board` (old deep links keep working); its approval
+  queue + PM/QA reference lists moved onto the board page; the dead my-tasks client was
+  deleted. One legacy test updated: the auto-progress suite now completes via a
+  QA-capable actor, honouring the new rule.
+
+Verified: lint/typecheck/build green, 460/460 tests (64 files; new: pipeline-governance
++ board-rules RLS suites). Live on KCB: v3 exec dashboard (grouped pipeline 2/1/12 with
+chips incl. STRAT priority and 0/1! overdue markers, zero KPI tiles), a real stage
+change P003 Exploring→Evaluating that regrouped the table AND appeared in the delta
+feed, and the personal board with sub-badges, inline blocker reason, attribution, and
+the /my-tasks redirect.

@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { getDevDashboard } from "@/server/dashboard-dev";
 import { getPmDashboard } from "@/server/dashboard-pm";
+import { getPipelineTable } from "@/server/pipeline";
 import { ensureUsers, cleanupFixtureUsers } from "./_users";
 
 const day = 86_400_000;
@@ -83,18 +84,23 @@ describe("M1b dashboard presets", () => {
     expect(d.buckets.blocked).toHaveLength(1);
     expect(d.buckets.blocked[0].blockedReason).toBe("Waiting on DBA window");
     expect(d.doneThisWeek.map((t) => t.title)).toContain("Ship burndown widget");
-    expect(d.boards.find((b) => b.projectId === projectId)?.openMine).toBe(2);
   });
 
-  it("PM: cards flag unconfirmed check-ins, count blockers, and carry vs-avg + next milestone", async () => {
-    const d = await getPmDashboard(pmCtx);
-    const card = d.cards.find((c) => c.id === projectId)!;
-    expect(card.isMine).toBe(true);
-    expect(card.rag).toBe("Amber"); // AtRisk via the one health engine
-    expect(card.unconfirmed).toBe(true); // no check-in confirmed this week
-    expect(card.openBlockers).toBe(1);
-    expect(card.nextMilestone?.name).toBe("Pilot go-live");
-    expect(card.vsAvg).toBe(card.progress - d.portfolioAvgProgress);
+  it("pipeline table (docs/18 §1): stage grouping, derived chips, unconfirmed flag", async () => {
+    const p = await getPipelineTable(pmCtx);
+    const row = p.groups.flatMap((g) => g.rows).find((r) => r.id === projectId)!;
+    expect(row.isMine).toBe(true);
+    expect(row.chips.health).toBe("Amber"); // AtRisk via the one health engine
+    expect(row.unconfirmed).toBe(true); // no check-in confirmed this week
+    expect(row.chips.risksOpen).toBe(0);
+    expect(row.chips.velocity7d).toBe(1); // "Ship burndown widget" completed this week
+    expect(row.chips.resources).toBe(1); // the dev membership
+    // The fixture project defaulted to Exploring — it sits in that stage group.
+    expect(p.groups.find((g) => g.stage === "Exploring")!.rows.map((r) => r.id)).toContain(projectId);
+    // Every row lands in exactly one stage group.
+    const allIds = p.groups.flatMap((g) => g.rows.map((r) => r.id));
+    expect(new Set(allIds).size).toBe(allIds.length);
+    expect(p.total).toBe(allIds.length);
   });
 
   it("PM: the action queue holds what's stuck on ME — drafts, aged blocker, slipping tasks", async () => {
@@ -108,11 +114,10 @@ describe("M1b dashboard presets", () => {
   });
 
   it("PM: scope is a default filter, never a wall (DM1.20)", async () => {
-    const d = await getPmDashboard(pmCtx);
-    const mineCount = d.cards.filter((c) => c.isMine).length;
-    expect(mineCount).toBeGreaterThanOrEqual(1);
-    expect(d.cards.length).toBeGreaterThan(mineCount); // seeded projects visible on the ALL side
-    expect(d.myProjectCount).toBe(mineCount);
+    const [d, p] = await Promise.all([getPmDashboard(pmCtx), getPipelineTable(pmCtx)]);
+    expect(p.mineCount).toBeGreaterThanOrEqual(1);
+    expect(p.total).toBeGreaterThan(p.mineCount); // seeded projects visible on the ALL side
+    expect(d.myProjectCount).toBe(p.mineCount);
   });
 
   it("PM: team load lists only members of MY projects", async () => {

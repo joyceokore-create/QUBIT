@@ -4,6 +4,7 @@ import { getDeltaFeed, type DeltaFeed } from "@/server/delta";
 import { needsAttention, portfolioHealth, projectRag, ragRank, worstStatus, type PortfolioHealth, type Rag } from "@/server/health";
 import { listMyNudges, type MyNudge } from "@/server/nudger";
 import { mergeNudgesIntoPriorities } from "@/server/dashboard-v2";
+import { getPipelineTable, type PipelineTableData } from "@/server/pipeline";
 import { getBriefing, type BriefingItem } from "@/server/relevance";
 
 /**
@@ -13,13 +14,8 @@ import { getBriefing, type BriefingItem } from "@/server/relevance";
  * when the M8 stage machine exists — no placeholder rows before then (§9).
  */
 
-export interface ExecKpi {
-  current: number;
-  /** Week-over-week delta from snapshots; null until enough history accrues. */
-  wow: number | null;
-  /** Daily points, oldest → newest (empty until ≥2 nights). */
-  points: number[];
-}
+// The global KPI strip was REMOVED per docs/18 §0 decision №1 — its stats live as
+// per-project chips on the pipeline table rows (src/server/pipeline.ts).
 
 export interface HealthTrend {
   score: number; // portfolioHealth.pct, 0–100
@@ -60,31 +56,17 @@ export interface HeatmapV2 {
   rows: { portfolioId: string; portfolioName: string; cells: (HeatmapV2Cell | null)[] }[];
 }
 
-export interface MilestoneRow {
-  id: string;
-  text: string;
-  due: Date;
-  overdue: boolean;
-}
-
-export interface RiskRow {
-  id: string;
-  title: string;
-  heat: number;
-  projectCode: string | null;
-}
-
 export interface ExecutiveDashboard {
   priorities: BriefingItem[];
   nudges: MyNudge[];
   decisionCount: number;
   health: PortfolioHealth;
   healthTrend: HealthTrend;
-  kpis: { onTrackPct: ExecKpi; atRisk: ExecKpi; escalations: ExecKpi; capacity: ExecKpi & { allocated: number } };
   decisionQueue: DecisionQueueRow[];
+  /** docs/18 §1/§6 — the pipeline table replaces the generic projects table; the old
+   * milestones/risks panels became per-row chips on it. */
+  pipeline: PipelineTableData;
   heatmap: HeatmapV2;
-  milestones30d: MilestoneRow[];
-  topRisks: RiskRow[];
   delta: DeltaFeed;
   /** code+status of every project — the health-parity contract with Q. */
   projects: { id: string; code: string; name: string; status: string }[];
@@ -112,9 +94,6 @@ export async function getExecutiveDashboard(ctx: TenantContext): Promise<Executi
         unconfirmed,
         draftGroups,
         overdueTasks,
-        allocations,
-        milestones,
-        risks,
         leads,
       ] = await Promise.all([
         tx.project.findMany({
@@ -148,43 +127,25 @@ export async function getExecutiveDashboard(ctx: TenantContext): Promise<Executi
         tx.projectTask.count({
           where: { approvalStatus: { not: "Draft" }, status: { not: "Completed" }, dueDate: { lt: now } },
         }),
-        tx.projectMember.groupBy({ by: ["userId"], _sum: { allocationPct: true } }),
-        tx.projectMilestone.findMany({
-          where: { status: { not: "Done" }, dueDate: { not: null, lt: new Date(now.getTime() + 30 * day) } },
-          orderBy: { dueDate: "asc" },
-          take: 8,
-          select: { id: true, name: true, dueDate: true, project: { select: { name: true } } },
-        }),
-        tx.risk.findMany({
-          where: { status: { notIn: ["Closed", "Mitigated"] } },
-          select: { id: true, title: true, probability: true, impact: true, project: { select: { code: true } } },
-        }),
         tx.user.findMany({
           where: { projectsLed: { some: {} } },
           select: { id: true, departmentId: true },
         }),
       ]);
-      return { projects, orgUnits, departments, portfolios, snapshots, weekAgoProjectSnaps, escalations, unconfirmed, draftGroups, overdueTasks, allocations, milestones, risks, leads };
+      return { projects, orgUnits, departments, portfolios, snapshots, weekAgoProjectSnaps, escalations, unconfirmed, draftGroups, overdueTasks, leads };
     }),
   ]);
 
   const health = portfolioHealth(live.projects.map((p) => p.status));
   const snapshots = [...live.snapshots].reverse(); // oldest → newest
 
-  const kpi = (current: number, pick: (s: (typeof snapshots)[number]) => number): ExecKpi => {
-    const points = snapshots.length >= 2 ? snapshots.slice(-14).map(pick) : [];
-    const weekAgo = [...snapshots].reverse().find((s) => now.getTime() - s.day.getTime() >= 6 * day);
-    return { current, wow: weekAgo ? current - pick(weekAgo) : null, points };
-  };
-
-  // Weekly health trend: the latest snapshot of each ISO week, up to 8 weeks (§2).
+  // Weekly health trend: the latest snapshot of each ISO week, up to 8 weeks (17 §2 —
+  // the trend survives the docs/18 KPI-strip removal).
   const byWeek = new Map<string, number>();
   for (const s of snapshots) byWeek.set(isoWeekId(s.day), s.onTrackPct); // later days overwrite
   const weekly = [...byWeek.values()].slice(-8);
-  const healthKpi = kpi(health.pct, (s) => s.onTrackPct);
-
-  const peopleAllocated = live.allocations.length;
-  const overAllocated = live.allocations.filter((a) => (a._sum.allocationPct ?? 0) > 100).length;
+  const weekAgoSnap = [...snapshots].reverse().find((s) => now.getTime() - s.day.getTime() >= 6 * day);
+  const healthWow = weekAgoSnap ? health.pct - weekAgoSnap.onTrackPct : null;
 
   // ── Decision queue (§2): the exec's job in one table ─────────────────────────
   const ageDays = (d: Date) => Math.max(0, Math.floor((now.getTime() - d.getTime()) / day));
@@ -255,10 +216,7 @@ export async function getExecutiveDashboard(ctx: TenantContext): Promise<Executi
     return { portfolioId: portfolio.id, portfolioName: portfolio.name, cells };
   });
 
-  const topRisks = live.risks
-    .map((r) => ({ id: r.id, title: r.title, heat: r.probability * r.impact, projectCode: r.project?.code ?? null }))
-    .sort((a, b) => b.heat - a.heat)
-    .slice(0, 5);
+  const pipeline = await getPipelineTable(ctx, now);
 
   return {
     priorities: mergeNudgesIntoPriorities(nudges, briefing),
@@ -267,7 +225,7 @@ export async function getExecutiveDashboard(ctx: TenantContext): Promise<Executi
     health,
     healthTrend: {
       score: health.pct,
-      wow: healthKpi.wow,
+      wow: healthWow,
       weekly,
       factors: {
         onTrack: health.onTrack,
@@ -277,21 +235,9 @@ export async function getExecutiveDashboard(ctx: TenantContext): Promise<Executi
         escalationsOpen: live.escalations.length,
       },
     },
-    kpis: {
-      onTrackPct: kpi(health.pct, (s) => s.onTrackPct),
-      atRisk: kpi(health.needAttention, (s) => s.needAttention),
-      escalations: kpi(live.escalations.length, (s) => s.escalationsOpen),
-      capacity: { ...kpi(overAllocated, (s) => s.peopleOverAllocated), allocated: peopleAllocated },
-    },
     decisionQueue,
+    pipeline,
     heatmap: { axis: multiOrgUnit ? "subsidiary" : "department", columns, rows },
-    milestones30d: live.milestones.map((m) => ({
-      id: m.id,
-      text: `${m.project.name} — ${m.name}`,
-      due: m.dueDate!,
-      overdue: m.dueDate! < now,
-    })),
-    topRisks,
     delta,
     projects: live.projects.map(({ id, code, name, status }) => ({ id, code, name, status })),
   };

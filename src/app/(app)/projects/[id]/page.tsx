@@ -59,6 +59,7 @@ export default async function ProjectWorkspacePage({
     canEdit: can(ctx, "project:update"), // project settings / team
     canContribute, // tasks + blockers: any project member
     canPublish, // plan approval (Draft → Published) — PM-level (DM1.15 №3)
+    canGovern: can(ctx, "project:stage") || (await canWriteProject(ctx, id)), // docs/18 §7
     viewerCategory,
     isMember: membership.isMember, // viewer leads or is allocated → hides "Request to join"
   };

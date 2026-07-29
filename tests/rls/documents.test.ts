@@ -34,7 +34,7 @@ describe("Workspace — documents + access", () => {
       code: `DOC-${Date.now().toString().slice(-6)}`,
       name: "Workspace test project",
       type: "Project",
-      priority: "Medium",
+      priority: "Med",
       status: "Planning",
     });
     projectId = project.id;

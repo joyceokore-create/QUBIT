@@ -25,7 +25,7 @@ describe("project contribution — members can write, non-members can't", () => 
       memberId = member.id;
       outsiderId = outsider.id;
       const project = await tx.project.create({
-        data: { tenantId, code: "CONTRIB-TEST-01", name: "Contribution Test", type: "Project", priority: "Medium", status: "OnTrack" },
+        data: { tenantId, code: "CONTRIB-TEST-01", name: "Contribution Test", type: "Project", priority: "Med", status: "OnTrack" },
       });
       projectId = project.id;
       // The member is a plain "Developer" — NOT the lead, NOT a PM-role member.

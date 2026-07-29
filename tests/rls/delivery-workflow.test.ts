@@ -33,7 +33,7 @@ describe("delivery workflow (6.2) — publish gate + notifications", () => {
       code: `DW-${Date.now().toString().slice(-6)}`,
       name: "Delivery workflow test",
       type: "Project",
-      priority: "Medium",
+      priority: "Med",
       status: "OnTrack",
       leadUserId: pmId, // enrols the PM as a "Project Manager" member (DM1.17)
     });

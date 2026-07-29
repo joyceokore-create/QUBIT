@@ -7,7 +7,11 @@ import { emitDomainEvent } from "@/server/events";
 import { ragCounts } from "@/server/health";
 
 const PROJECT_STATUSES = ["Planning", "OnTrack", "AtRisk", "Overdue", "Completed", "Cancelled"] as const;
-const PROJECT_PRIORITIES = ["Low", "Medium", "High", "Critical"] as const;
+// docs/18 §1 — business usage; legacy Medium/Critical were remapped by the M18-A migration.
+export const PROJECT_PRIORITIES = ["High", "Med", "Low", "New", "Strat", "Paused"] as const;
+// docs/18 §1 — the real pipeline. Stage changes are audited + evented.
+export const PIPELINE_STAGES = ["Exploring", "Evaluating", "Approved", "Paused"] as const;
+export type PipelineStage = (typeof PIPELINE_STAGES)[number];
 
 // PRD Module 2 definition fields, reused by create + update.
 const ProjectDefinitionFields = {
@@ -48,6 +52,10 @@ export const UpdateProjectInput = z.object({
   description: z.string().nullable().optional(),
   status: z.enum(PROJECT_STATUSES).optional(),
   priority: z.enum(PROJECT_PRIORITIES).optional(),
+  // docs/18 §7 governance fields — PM/lead via canWriteProject, heads/execs via
+  // the project:stage permission (route-enforced).
+  pipelineStage: z.enum(PIPELINE_STAGES).optional(),
+  statusNote: z.string().trim().max(200).nullable().optional(),
   dueDate: z.string().datetime().nullable().optional(),
   budget: z.string().nullable().optional(),
   leadUserId: z.string().uuid().nullable().optional(),
@@ -262,6 +270,8 @@ export interface ProjectPanelData {
   type: string;
   priority: string;
   status: string;
+  pipelineStage: string;
+  statusNote: string | null;
   dueDate: Date | null;
   budget: string | null;
   team: string | null;
@@ -305,6 +315,8 @@ export async function getProjectPanelData(
       type: project.type,
       priority: project.priority,
       status: project.status,
+      pipelineStage: project.pipelineStage,
+      statusNote: project.statusNote,
       dueDate: project.dueDate,
       budget: project.budget,
       team: project.team,
@@ -512,6 +524,8 @@ export async function updateProject(
         description: input.description === undefined ? undefined : input.description,
         status: input.status,
         priority: input.priority,
+        pipelineStage: input.pipelineStage,
+        statusNote: input.statusNote === undefined ? undefined : input.statusNote,
         dueDate: input.dueDate === undefined ? undefined : input.dueDate ? new Date(input.dueDate) : null,
         budget: input.budget === undefined ? undefined : input.budget,
         leadUserId: input.leadUserId === undefined ? undefined : input.leadUserId,
@@ -532,6 +546,8 @@ export async function updateProject(
         name: before.name,
         status: before.status,
         priority: before.priority,
+        pipelineStage: before.pipelineStage,
+        statusNote: before.statusNote,
         dueDate: before.dueDate,
         budget: before.budget,
         leadUserId: before.leadUserId,
@@ -540,11 +556,23 @@ export async function updateProject(
         name: after.name,
         status: after.status,
         priority: after.priority,
+        pipelineStage: after.pipelineStage,
+        statusNote: after.statusNote,
         dueDate: after.dueDate,
         budget: after.budget,
         leadUserId: after.leadUserId,
       },
     });
+
+    if (after.pipelineStage !== before.pipelineStage) {
+      // docs/18 §1: stage changes are evented — the exec delta feed narrates them.
+      await emitDomainEvent(tx, ctx, {
+        type: "project.pipeline_stage_changed",
+        entityType: "project",
+        entityId: projectId,
+        payload: { projectId, from: before.pipelineStage, to: after.pipelineStage },
+      });
+    }
 
     if (after.status !== before.status) {
       // Feeds the dashboard delta feed ("X slipped to At Risk" / "recovered to On Track").

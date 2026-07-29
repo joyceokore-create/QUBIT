@@ -555,8 +555,14 @@ model Project {
   portfolio     Portfolio? @relation(fields: [portfolioId], references: [id])
   programmeId   String?    @map("programme_id")
   programme     Programme? @relation(fields: [programmeId], references: [id])
-  priority      String
+  priority      String // High | Med | Low | New | Strat | Paused (docs/18 §1)
   status        String
+  // docs/18 §1 — the business pipeline: Exploring | Evaluating | Approved | Paused.
+  // Audited + evented on change; the exec dashboard groups by this.
+  pipelineStage String     @default("Exploring") @map("pipeline_stage")
+  // docs/18 §7 — the one-line status/comment column; dashboards fall back to the
+  // latest confirmed check-in narrative when unset.
+  statusNote    String?    @map("status_note")
   dueDate       DateTime?  @map("due_date")
   budget        String?
   // Legacy free-text summary (kept for back-compat). Real per-person assignment now

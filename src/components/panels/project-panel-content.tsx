@@ -22,6 +22,10 @@ export interface ProjectPanelJson {
   description: string | null;
   type: string;
   priority: string;
+  pipelineStage: string;
+  statusNote: string | null;
+  /** docs/18 §7 — may edit stage/priority/status note (PM/lead, heads, execs). */
+  canGovern?: boolean;
   status: string;
   dueDate: string | null;
   budget: string | null;

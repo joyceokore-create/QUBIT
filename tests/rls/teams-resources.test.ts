@@ -39,7 +39,7 @@ describe("MVP1 — teams & resource allocation", () => {
       code: `QA-${Date.now().toString().slice(-6)}`,
       name: "Resource test project",
       type: "Project",
-      priority: "Medium",
+      priority: "Med",
       status: "Planning",
     });
     projectId = project.id;

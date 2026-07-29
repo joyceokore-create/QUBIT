@@ -16,13 +16,6 @@ export interface DevBuckets {
   blocked: MyTaskRow[];
 }
 
-export interface DevBoard {
-  projectId: string;
-  code: string;
-  name: string;
-  openMine: number;
-}
-
 export interface DoneRow {
   id: string;
   title: string;
@@ -35,7 +28,6 @@ export interface DevDashboard {
   /** Why THIS task — the ranking is explained, never an unexplained pick. */
   focusReason: string;
   buckets: DevBuckets;
-  boards: DevBoard[];
   doneThisWeek: DoneRow[];
 }
 
@@ -67,7 +59,7 @@ export function rankFocus(tasks: MyTaskRow[], now: Date): { task: MyTaskRow; rea
 
 export async function getDevDashboard(ctx: TenantContext, now = new Date()): Promise<DevDashboard> {
   const { start, end } = weekWindow(now);
-  const [tasks, done, memberships] = await Promise.all([
+  const [tasks, done] = await Promise.all([
     listMyTasks(ctx, ctx.userId),
     withTenant(ctx, (tx) =>
       tx.projectTask.findMany({
@@ -75,12 +67,6 @@ export async function getDevDashboard(ctx: TenantContext, now = new Date()): Pro
         orderBy: { updatedAt: "desc" },
         take: 6,
         select: { id: true, title: true, projectId: true, project: { select: { code: true } } },
-      }),
-    ),
-    withTenant(ctx, (tx) =>
-      tx.projectMember.findMany({
-        where: { userId: ctx.userId, project: { status: { notIn: ["Completed", "Cancelled"] } } },
-        select: { project: { select: { id: true, code: true, name: true } } },
       }),
     ),
   ]);
@@ -93,22 +79,11 @@ export async function getDevDashboard(ctx: TenantContext, now = new Date()): Pro
     blocked: open.filter((t) => t.blocked),
   };
 
-  const openByProject = new Map<string, number>();
-  for (const t of open) openByProject.set(t.projectId, (openByProject.get(t.projectId) ?? 0) + 1);
-
   const focus = rankFocus(tasks, now);
   return {
     focus: focus?.task ?? null,
     focusReason: focus?.reason ?? "",
     buckets,
-    boards: memberships
-      .map((m) => ({
-        projectId: m.project.id,
-        code: m.project.code,
-        name: m.project.name,
-        openMine: openByProject.get(m.project.id) ?? 0,
-      }))
-      .sort((a, b) => b.openMine - a.openMine),
     doneThisWeek: done.map((d) => ({ id: d.id, title: d.title, projectCode: d.project.code, projectId: d.projectId })),
   };
 }

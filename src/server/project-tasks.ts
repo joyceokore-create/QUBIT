@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
+import { projectRoleCategory } from "@/lib/roles";
 import { emitDomainEvent } from "@/server/events";
 import { mockEnabled, mockPlanFromText } from "@/server/q/mock";
 import { llmChat, llmEnabled, llmModel } from "@/server/q/llm";
@@ -28,7 +29,7 @@ export type TaskType = (typeof TASK_TYPES)[number];
 export class TaskError extends Error {
   constructor(
     message: string,
-    public code: "NOT_FOUND" | "BAD_INPUT" | "AI_UNAVAILABLE",
+    public code: "NOT_FOUND" | "BAD_INPUT" | "AI_UNAVAILABLE" | "FORBIDDEN",
   ) {
     super(message);
     this.name = "TaskError";
@@ -103,23 +104,34 @@ export interface MyTaskRow {
   projectCode: string;
   projectName: string;
   status: string;
+  type: string;
   priority: string;
   blocked: boolean;
   /** Why it's stuck (the open linked blocker's description) — shown in the Blocked bucket. */
   blockedReason: string | null;
+  /** docs/18 §4 attribution: who put this on my board (null when self-created). */
+  addedBy: string | null;
   dueDate: Date | null;
   updatedAt: Date;
 }
 
-/** Tasks assigned to a user across all projects — powers the My Tasks page (PRD member view). */
+/** Tasks assigned to a user across all projects — powers the personal board (docs/18 §4)
+ * and the developer preset. */
 export async function listMyTasks(ctx: TenantContext, userId: string): Promise<MyTaskRow[]> {
   return withTenant(ctx, async (tx) => {
     const rows = await tx.projectTask.findMany({
       where: { assigneeId: userId, approvalStatus: { not: "Draft" } },
-      include: { project: { select: { code: true, name: true } }, blockers: OPEN_BLOCKER_SELECT },
+      include: {
+        project: { select: { code: true, name: true } },
+        blockers: OPEN_BLOCKER_SELECT,
+        reporter: { select: { id: true, name: true } },
+      },
       orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
     });
-    return rows.map(rowToMyTask);
+    return rows.map((t) => ({
+      ...rowToMyTask(t),
+      addedBy: t.reporter && t.reporter.id !== userId ? t.reporter.name : null,
+    }));
   });
 }
 
@@ -130,6 +142,7 @@ function rowToMyTask(t: {
   title: string;
   projectId: string;
   status: string;
+  type: string;
   priority: string;
   dueDate: Date | null;
   updatedAt: Date;
@@ -143,9 +156,11 @@ function rowToMyTask(t: {
     projectCode: t.project.code,
     projectName: t.project.name,
     status: t.status,
+    type: t.type,
     priority: t.priority,
     blocked: t.blockers.length > 0,
     blockedReason: t.blockers[0]?.description ?? null,
+    addedBy: null,
     dueDate: t.dueDate,
     updatedAt: t.updatedAt,
   };
@@ -398,6 +413,9 @@ export async function updateTask(ctx: TenantContext, taskId: string, input: Upda
       },
     });
     if (!before) throw new TaskError("Task not found.", "NOT_FOUND");
+    if (input.status === "Completed" && before.status !== "Completed") {
+      await assertCanComplete(tx, ctx, before); // docs/18 §4: QA owns Completed for Feature/Bug
+    }
     if (input.assigneeId) {
       await tx.user.findUniqueOrThrow({ where: { id: input.assigneeId } }).catch(() => {
         throw new TaskError("Assignee not found.", "BAD_INPUT");
@@ -473,13 +491,34 @@ export async function updateTask(ctx: TenantContext, taskId: string, input: Upda
   });
 }
 
+/** docs/18 §4 completion rules: Feature/Bug reach Completed only through QA (QA-category
+ * member of the project, or HeadOfQA); ad-hoc types (Chore/Spike/Improvement) complete
+ * directly. Keeps QA integrity without blocking action items. */
+async function assertCanComplete(
+  tx: Prisma.TransactionClient,
+  ctx: TenantContext,
+  task: { type: string; projectId: string },
+): Promise<void> {
+  if (!["Feature", "Bug"].includes(task.type)) return;
+  if (ctx.roles.includes("HeadOfQA") || ctx.roles.includes("PlatformSuperAdmin")) return;
+  const membership = await tx.projectMember.findFirst({
+    where: { projectId: task.projectId, userId: ctx.userId },
+    select: { role: true },
+  });
+  if (membership && projectRoleCategory(membership.role) === "QA") return;
+  throw new TaskError("QA owns Completed for features and bugs — move it to In QA instead.", "FORBIDDEN");
+}
+
 export async function setTaskStatus(ctx: TenantContext, taskId: string, status: TaskStatus) {
   return withTenant(ctx, async (tx) => {
     const task = await tx.projectTask.findUnique({
       where: { id: taskId },
-      select: { status: true, projectId: true, approvalStatus: true },
+      select: { status: true, projectId: true, approvalStatus: true, type: true, reporterId: true, title: true, taskKey: true, project: { select: { name: true } } },
     });
     if (!task) throw new TaskError("Task not found.", "NOT_FOUND");
+    if (status === "Completed" && task.status !== "Completed") {
+      await assertCanComplete(tx, ctx, task);
+    }
     const updated = await tx.projectTask.update({ where: { id: taskId }, data: { status, lastActivityAt: new Date() } });
     await audit(tx, ctx, {
       action: "update",
@@ -488,12 +527,25 @@ export async function setTaskStatus(ctx: TenantContext, taskId: string, status: 
       before: { status: task.status },
       after: { status },
     });
-    if (status === "Completed" && task.status !== "Completed" && task.approvalStatus === "Published") {
+    if (status !== task.status && task.approvalStatus === "Published") {
+      const completed = status === "Completed";
       await emitDomainEvent(tx, ctx, {
-        type: "task.completed",
+        type: completed ? "task.completed" : "task.status_changed",
         entityType: "project_task",
         entityId: taskId,
-        payload: { projectId: task.projectId },
+        payload: { projectId: task.projectId, from: task.status, to: status },
+        // docs/18 §4: the reporter/assigner sees the handoff move — never the mover.
+        notify:
+          task.reporterId && task.reporterId !== ctx.userId
+            ? [
+                {
+                  userId: task.reporterId,
+                  kind: "task_update",
+                  message: `${task.taskKey ?? task.title.slice(0, 60)} moved to ${status} on ${task.project.name}`,
+                  link: `/projects/${task.projectId}?tab=Board&task=${taskId}`,
+                },
+              ]
+            : [],
       });
     }
     return updated;

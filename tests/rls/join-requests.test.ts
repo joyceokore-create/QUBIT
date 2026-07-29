@@ -34,11 +34,11 @@ describe("join requests (Phase 5)", () => {
       await tx.roleAssignment.create({ data: { tenantId, userId: exec.id, role: "Executive" } });
       await tx.roleAssignment.create({ data: { tenantId, userId: head.id, role: "HeadOfProjects" } });
       const project = await tx.project.create({
-        data: { tenantId, code: "JR-TEST-01", name: "Join Test", type: "Project", priority: "Medium", status: "OnTrack", leadUserId: lead.id },
+        data: { tenantId, code: "JR-TEST-01", name: "Join Test", type: "Project", priority: "Med", status: "OnTrack", leadUserId: lead.id },
       });
       projectId = project.id;
       const orphan = await tx.project.create({
-        data: { tenantId, code: "JR-TEST-02", name: "Orphan Join Test", type: "Project", priority: "Medium", status: "Planning" },
+        data: { tenantId, code: "JR-TEST-02", name: "Orphan Join Test", type: "Project", priority: "Med", status: "Planning" },
       });
       orphanProjectId = orphan.id;
     });

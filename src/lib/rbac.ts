@@ -98,6 +98,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     "project:create",
     "project:write", // may edit any project (governance)
     "project:update", // transitional coarse write key for existing routes (see file header)
+    "project:stage", // docs/18 §7 — pipeline stage / priority / status note governance
     "milestone:write",
     "task:write",
     "budget:read",
@@ -116,6 +117,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     "users:invite",
     "teams:manage:all",
     "project:create",
+    "project:stage", // docs/18 §7 — governance fields, not delivery scope
     "budget:read",
     "report:resource:others",
     ...MANAGE_RAID,
@@ -127,6 +129,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     "reports:read",
     "budget:read",
     "report:resource:others", // may query any person's workload / any project report
+    "project:stage", // docs/18 §7 — execs edit governance fields (stage/priority/note)
   ],
 
   // Runs their own projects. project:write / budget:read / report:resource:others are
@@ -177,6 +180,7 @@ export const PERMISSION_CATALOGUE = [
   "project:create",
   "project:write",
   "project:update",
+  "project:stage",
   "project:join:request",
   "milestone:write",
   "task:write",

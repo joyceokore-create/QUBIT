@@ -16,7 +16,7 @@ describe("plan approval — Draft tasks (§2.2)", () => {
     ctx = { tenantId, userId: "approval-actor", roles: ["ProjectManager"] };
     await withTenant(ctx, async (tx) => {
       const p = await tx.project.create({
-        data: { tenantId, code: "APPROVAL-TEST-01", name: "Approval Test", type: "Project", priority: "Medium", status: "OnTrack" },
+        data: { tenantId, code: "APPROVAL-TEST-01", name: "Approval Test", type: "Project", priority: "Med", status: "OnTrack" },
       });
       projectId = p.id;
     });

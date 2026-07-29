@@ -28,7 +28,7 @@ describe("Workspace — connectors (phase 4)", () => {
       code: `CN-${Date.now().toString().slice(-6)}`,
       name: "Connector test",
       type: "Project",
-      priority: "Medium",
+      priority: "Med",
       status: "Planning",
     });
     projectId = project.id;

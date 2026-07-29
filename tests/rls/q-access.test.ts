@@ -23,7 +23,7 @@ describe("Q person-workload access gating (Phase 5 §7)", () => {
       leadId = lead.id;
       memberId = member.id;
       const project = await tx.project.create({
-        data: { tenantId, code: "QACC-1", name: "Q Access Fixture", type: "Project", priority: "Medium", status: "Planning", leadUserId: lead.id },
+        data: { tenantId, code: "QACC-1", name: "Q Access Fixture", type: "Project", priority: "Med", status: "Planning", leadUserId: lead.id },
       });
       projectId = project.id;
       await tx.projectMember.create({ data: { tenantId, projectId: project.id, userId: member.id, role: "Developer", allocationPct: 50 } });

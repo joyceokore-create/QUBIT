@@ -25,7 +25,8 @@ export async function PATCH(req: Request, { params }: Ctx) {
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e instanceof TaskError) {
-      return NextResponse.json({ error: { code: e.code, message: e.message } }, { status: 404 });
+      const status = e.code === "FORBIDDEN" ? 403 : e.code === "NOT_FOUND" ? 404 : 400;
+      return NextResponse.json({ error: { code: e.code, message: e.message } }, { status });
     }
     throw e;
   }

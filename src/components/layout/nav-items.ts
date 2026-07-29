@@ -26,7 +26,7 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "My Tasks", href: "/my-tasks", icon: ListChecks },
+  { label: "My Board", href: "/board", icon: ListChecks }, // docs/18 §4 — the daily surface
   { label: "Projects", href: "/projects", icon: FolderKanban },
   { label: "Risks", href: "/risks", icon: TriangleAlert },
   { label: "Time", href: "/time", icon: Clock },

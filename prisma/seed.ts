@@ -22,6 +22,19 @@ function mapStatus(label: string): string {
   return STATUS_MAP[label] ?? label;
 }
 
+// docs/18 §1 — legacy seed priorities → the business enum (matches the M18-A migration).
+const PRIORITY_MAP: Record<string, string> = { Medium: "Med", Critical: "High" };
+function mapPriority(label: string): string {
+  return PRIORITY_MAP[label] ?? label;
+}
+
+/** Deterministic demo grouping across the four pipeline stages (docs/18 §1). */
+function mapPipelineStage(status: string, index: number): string {
+  if (status === "Cancelled") return "Paused";
+  if (status === "Planning") return index % 2 === 0 ? "Exploring" : "Evaluating";
+  return "Approved";
+}
+
 function daysAgoToDate(daysAgo?: number): Date | undefined {
   return daysAgo === undefined ? undefined : new Date(Date.now() - daysAgo * 86_400_000);
 }
@@ -75,6 +88,8 @@ interface ProjectSeed {
   programmeKey: string | null;
   priority: string;
   status: string;
+  /** docs/18 §7 — optional one-line status/comment for demo rows. */
+  statusNote?: string;
   due: string | null;
   budget: string | null;
   // Free-text role placeholders only (e.g. "Project Lead, Contributor") — never real names.
@@ -208,7 +223,8 @@ const KCB_SEED: TenantSeed = {
       type: "Project",
       portfolioKey: "p1",
       programmeKey: "prog1",
-      priority: "Critical",
+      priority: "Strat",
+      statusNote: "UAT slip contained to Kenya; recovery plan holds the go-live date.",
       status: "At Risk",
       due: "2026-09-30",
       budget: "KES 650M",
@@ -258,6 +274,7 @@ const KCB_SEED: TenantSeed = {
       type: "Project",
       portfolioKey: "p1",
       programmeKey: "prog1",
+      statusNote: "Vendor scoping underway; business case refresh due next week.",
       priority: "High",
       status: "Planning",
       due: "2027-03-31",
@@ -1258,7 +1275,12 @@ async function seedTenant(seed: TenantSeed) {
           type: proj.type,
           portfolioId: proj.portfolioKey ? (portfolioIdByKey.get(proj.portfolioKey) ?? null) : null,
           programmeId: proj.programmeKey ? (programmeIdByKey.get(proj.programmeKey) ?? null) : null,
-          priority: proj.priority,
+          priority: mapPriority(proj.priority),
+          // docs/18 §1: demo the four pipeline groups deterministically — Planning
+          // projects alternate Exploring/Evaluating; live delivery is Approved;
+          // cancelled reads Paused.
+          pipelineStage: mapPipelineStage(mapStatus(proj.status), seed.projects.indexOf(proj)),
+          statusNote: proj.statusNote ?? null,
           status: mapStatus(proj.status),
           dueDate: proj.due ? new Date(proj.due) : null,
           budget: proj.budget,

@@ -1,22 +1,14 @@
 import Link from "next/link";
-import { ArrowDownRight, ArrowRight, ArrowUpRight, Minus, ShieldAlert } from "lucide-react";
-import type { PmDashboard, PmProjectCard } from "@/server/dashboard-pm";
+import { ArrowRight, ShieldAlert } from "lucide-react";
+import type { PmDashboard } from "@/server/dashboard-pm";
+import type { PipelineTableData } from "@/server/pipeline";
 import { FirstLoginChecklist } from "@/components/dashboard/presets/first-login-checklist";
+import { PipelineTable } from "@/components/dashboard/pipeline-table";
 import { CARD, Empty, Panel } from "@/components/dashboard/presets/v2-sections";
 
-// PM preset (docs/17 §3): "Are my projects on track this week, and what's stuck on me?"
-// Default scope = projects I lead/manage, with an ALL toggle — a filter, never a
-// visibility wall (DM1.20). No portfolio heatmap here: the PM's unit of thought is
-// the project.
-
-const RAG_TOKEN: Record<string, string> = { Green: "--ok", Amber: "--warn", Red: "--bad" };
-
-function RagDelta({ delta }: { delta: -1 | 0 | 1 | null }) {
-  if (delta === null) return null;
-  if (delta > 0) return <ArrowUpRight className="size-3 text-[var(--bad)]" aria-label="worsened vs last week" />;
-  if (delta < 0) return <ArrowDownRight className="size-3 text-[var(--ok)]" aria-label="improved vs last week" />;
-  return <Minus className="size-3 text-[var(--ink5)] opacity-60" aria-label="unchanged vs last week" />;
-}
+// PM preset (docs/17 §3, project listing per docs/18 §6): the check-in ritual first,
+// then the SAME pipeline table every persona uses — scoped to my projects by default,
+// with an ALL toggle that is a filter, never a wall (DM1.20) — then what's stuck on me.
 
 function Hero({ d, userId }: { d: PmDashboard; userId: string }) {
   const { checkins, agedBlockers, draftsPending } = d.hero;
@@ -47,15 +39,31 @@ function Hero({ d, userId }: { d: PmDashboard; userId: string }) {
   );
 }
 
-function ProjectCards({ cards, scope, avg }: { cards: PmProjectCard[]; scope: "mine" | "all"; avg: number }) {
-  const visible = scope === "mine" ? cards.filter((c) => c.isMine) : cards;
+const QUEUE_KIND: Record<string, { label: string; tok: string }> = {
+  join: { label: "JOIN", tok: "--qinfo" },
+  drafts: { label: "APPROVAL", tok: "--qinfo" },
+  blocker: { label: "BLOCKER", tok: "--bad" },
+  slipping: { label: "SLIPPING", tok: "--warn" },
+};
+
+export function PmPreset({
+  d,
+  pipeline,
+  userId,
+  scope,
+}: {
+  d: PmDashboard;
+  pipeline: PipelineTableData;
+  userId: string;
+  scope: "mine" | "all";
+}) {
   return (
-    <section className="flex flex-col gap-2.5">
-      <div className="flex items-center gap-2">
-        <h2 className="font-heading text-[13.5px] font-bold text-[var(--qink)]">Projects</h2>
-        <span className="font-mono text-[9px] uppercase tracking-[1.2px] text-[var(--ink4)]">AVG PROGRESS {avg}%</span>
-        {/* Scope toggle (DM1.20): default mine, never a wall. */}
-        <span className="ml-auto flex items-center gap-1 rounded-full border border-[var(--w07)] bg-[var(--wash)] p-0.5">
+    <>
+      <Hero d={d} userId={userId} />
+
+      {/* Scope toggle (DM1.20): default mine, never a wall. */}
+      <div className="-mb-1.5 flex items-center justify-end">
+        <span className="flex items-center gap-1 rounded-full border border-[var(--w07)] bg-[var(--wash)] p-0.5">
           {(["mine", "all"] as const).map((s) => (
             <Link
               key={s}
@@ -69,68 +77,8 @@ function ProjectCards({ cards, scope, avg }: { cards: PmProjectCard[]; scope: "m
           ))}
         </span>
       </div>
-      {visible.length === 0 ? (
-        <div className={`${CARD} p-4 text-[12px] text-[var(--ink5)]`} style={{ background: "var(--cardbg)" }}>
-          {scope === "mine" ? "You don't lead or manage any active projects — flip to All, or take one on." : "No active projects."}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {visible.map((c) => (
-            <Link key={c.id} href={`/projects/${c.id}`} className={`${CARD} flex flex-col gap-2 p-3.5 transition-colors hover:border-[var(--brand)]`} style={{ background: "var(--cardbg)" }}>
-              <div className="flex items-center gap-1.5">
-                <span className="inline-flex items-center gap-1.5 rounded-[6px] border px-1.5 py-0.5 font-mono text-[9px] font-bold" style={{ color: `var(${RAG_TOKEN[c.rag]})`, borderColor: `color-mix(in oklab, var(${RAG_TOKEN[c.rag]}) 35%, transparent)`, background: `color-mix(in oklab, var(${RAG_TOKEN[c.rag]}) 9%, transparent)` }}>
-                  <span className="size-1.5 rounded-full" style={{ background: `var(${RAG_TOKEN[c.rag]})` }} />
-                  {c.rag.toUpperCase()}
-                </span>
-                <RagDelta delta={c.ragDelta} />
-                {c.unconfirmed && (
-                  <span className="rounded-[5px] bg-[var(--warn)]/12 px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-[.6px] text-[var(--warn)]" style={{ background: "color-mix(in oklab, var(--warn) 12%, transparent)" }}>
-                    Unconfirmed
-                  </span>
-                )}
-                <span className="ml-auto font-mono text-[9px] text-[var(--ink4)]">{c.code}</span>
-              </div>
-              <p className="truncate text-[13px] font-semibold text-[var(--qink)]">{c.name}</p>
-              <div className="flex items-center gap-2">
-                <span className="h-[4px] flex-1 overflow-hidden rounded-full bg-[var(--wash2)]">
-                  <span className="block h-full rounded-full bg-[var(--brand)]" style={{ width: `${c.progress}%` }} />
-                </span>
-                <span className="font-mono text-[10px] tabular-nums text-[var(--ink3)]">{c.progress}%</span>
-                <span className="rounded-[4px] bg-[var(--wash2)] px-1 py-0.5 font-mono text-[8.5px] tabular-nums" style={{ color: c.vsAvg >= 0 ? "var(--ok)" : "var(--warn)" }} title="vs portfolio average">
-                  {c.vsAvg >= 0 ? "+" : ""}
-                  {c.vsAvg}% vs avg
-                </span>
-              </div>
-              <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-[.6px] text-[var(--ink4)]">
-                {c.nextMilestone ? (
-                  <span className="min-w-0 truncate">
-                    Next: {c.nextMilestone.name} · {c.nextMilestone.due.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                  </span>
-                ) : (
-                  <span>No upcoming milestone</span>
-                )}
-                {c.openBlockers > 0 && <span className="ml-auto flex-none text-[var(--bad)]">{c.openBlockers} blocked</span>}
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
+      <PipelineTable data={pipeline} scope={scope} title={scope === "mine" ? "My project pipeline" : "Portfolio pipeline"} />
 
-const QUEUE_KIND: Record<string, { label: string; tok: string }> = {
-  join: { label: "JOIN", tok: "--qinfo" },
-  drafts: { label: "APPROVAL", tok: "--qinfo" },
-  blocker: { label: "BLOCKER", tok: "--bad" },
-  slipping: { label: "SLIPPING", tok: "--warn" },
-};
-
-export function PmPreset({ d, userId, scope }: { d: PmDashboard; userId: string; scope: "mine" | "all" }) {
-  return (
-    <>
-      <Hero d={d} userId={userId} />
-      <ProjectCards cards={d.cards} scope={scope} avg={d.portfolioAvgProgress} />
       <section className="grid grid-cols-1 gap-3.5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <Panel title="Action queue" sub={`${d.actionQueue.length} STUCK ON YOU`}>
           {d.actionQueue.length ? (

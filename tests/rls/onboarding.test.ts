@@ -41,7 +41,7 @@ describe("Onboarding tracking", () => {
 
   it("invites a user placed on a team + project on day one", async () => {
     const team = await createTeam(kcb, { name: `OB Team ${Date.now()}` });
-    const project = await createProject(kcb, { code: `OB-${Date.now().toString().slice(-6)}`, name: "OB", type: "Project", priority: "Medium", status: "Planning" });
+    const project = await createProject(kcb, { code: `OB-${Date.now().toString().slice(-6)}`, name: "OB", type: "Project", priority: "Med", status: "Planning" });
     const placedEmail = `placed_${Date.now()}@kcb.example.invalid`;
     await createUser(kcb, {
       name: "Placed User", email: placedEmail, password: "Passw0rd!23xyz", roles: ["Contributor"],

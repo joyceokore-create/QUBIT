@@ -34,7 +34,7 @@ describe("Phase 6.1 — task keys, taxonomy, blocked flag", () => {
     riverbank = { tenantId: r.id, userId: "rb-actor", roles: ["ProjectManager"] };
     await withTenant(kcb, async (tx) => {
       const p = await tx.project.create({
-        data: { tenantId: k.id, code: CODE, name: "Key allocation test", type: "Project", priority: "Medium", status: "OnTrack" },
+        data: { tenantId: k.id, code: CODE, name: "Key allocation test", type: "Project", priority: "Med", status: "OnTrack" },
       });
       projectId = p.id;
     });
@@ -131,7 +131,7 @@ describe("Phase 6.1 — task keys, taxonomy, blocked flag", () => {
       code: `LEAD-${Date.now().toString().slice(-6)}`,
       name: "Lead enrolment test",
       type: "Project",
-      priority: "Medium",
+      priority: "Med",
       status: "Planning",
       leadUserId: kcb.userId,
     });
@@ -158,7 +158,7 @@ describe("Phase 6.1 — task keys, taxonomy, blocked flag", () => {
 
     // Same name twice → base, then suffixed; task keys use the generated code.
     const mk = (name: string) =>
-      createProject(kcb, { name, type: "Project", priority: "Medium", status: "Planning", leadUserId: kcb.userId });
+      createProject(kcb, { name, type: "Project", priority: "Med", status: "Planning", leadUserId: kcb.userId });
     const a = await mk("Quantum Ledger Fixture");
     const b = await mk("Quantum Ledger Fixture");
     try {

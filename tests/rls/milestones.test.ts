@@ -21,7 +21,7 @@ describe("MVP1 — milestones", () => {
     const ru = await withTenant({ tenantId: r.id, userId: "seed" }, (tx) => tx.user.findFirstOrThrow({ where: { status: "ACTIVE" } }));
     kcb = { tenantId: k.id, userId: ku.id, roles: [] };
     riverbank = { tenantId: r.id, userId: ru.id, roles: [] };
-    const p = await createProject(kcb, { code: `MS-${Date.now().toString().slice(-6)}`, name: "Milestone test", type: "Project", priority: "Medium", status: "Planning" });
+    const p = await createProject(kcb, { code: `MS-${Date.now().toString().slice(-6)}`, name: "Milestone test", type: "Project", priority: "Med", status: "Planning" });
     projectId = p.id;
     projectIds.push(p.id);
   });

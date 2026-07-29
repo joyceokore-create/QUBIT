@@ -75,6 +75,12 @@ Zod). Migration is additive — DM1.18 pattern not needed beyond defaults.
 
 ## 2. Executive preset (revise current Command Center)
 
+> **Amended 2026-07-28:** layout details below are superseded by
+> `18-delivery-tracking-boards-reporting-spec.md` §6 — the KPI strip is removed
+> entirely (supervisor decision; stats move to per-project chips), and the projects
+> table becomes the portfolio pipeline table. The strip/fix/keep rationale below still
+> applies to the hero, health trend, heatmap encoding, and decision queue.
+
 The current screen (screenshot 2026-07-28) is the base. Changes:
 
 **Keep** — briefing hero with decision count + 3 ranked cards (this is the best part;
