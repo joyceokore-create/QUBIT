@@ -153,6 +153,38 @@ describe("M1c QA + Implementor dashboards", () => {
     expect(d.issues.some((i) => i.description === "Telco API docs outstanding" && i.severity === "Critical")).toBe(true);
     expect(d.calendar.map((c) => c.label)).toContain("Go-live pilot");
     expect(d.handoverDocs.some((doc) => doc.title === "Handover pack")).toBe(true);
+    // No checkpoint template on this fixture — the row says it fell back to milestones.
+    expect(pilot.gateSource).toBe("milestones");
+  });
+
+  it("M8: with a checkpoint template attached, the gates come from the template", async () => {
+    const template = await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+      const tmpl = await tx.checkpointTemplate.findFirstOrThrow({
+        where: { name: "Product build" },
+        select: { id: true, checkpoints: { select: { id: true }, orderBy: { orderIndex: "asc" } } },
+      });
+      await tx.project.update({ where: { id: projectId }, data: { checkpointTemplateId: tmpl.id } });
+      // Close the first two gates and block the third.
+      await tx.checkpointStatus.createMany({
+        data: [
+          { tenantId: kcbId, projectId, checkpointId: tmpl.checkpoints[0].id, state: "Done" },
+          { tenantId: kcbId, projectId, checkpointId: tmpl.checkpoints[1].id, state: "Done" },
+          { tenantId: kcbId, projectId, checkpointId: tmpl.checkpoints[2].id, state: "Blocked" },
+        ],
+      });
+      return tmpl;
+    });
+
+    const d = await getImplDashboard(qaCtx);
+    const pilot = d.pilots.find((p) => p.projectId === projectId)!;
+    expect(pilot.gateSource).toBe("checkpoints");
+    expect(pilot.gatesTotal).toBe(template.checkpoints.length); // 6, not the 3 milestones
+    expect(pilot.gatesDone).toBe(2);
+    expect(pilot.hasLateGate).toBe(true); // a Blocked gate is the "late" signal
+    // The hero's open-gate list is the template's own, in order.
+    expect(d.nextGoLive!.gatesTotal).toBe(template.checkpoints.length);
+    expect(d.nextGoLive!.openGates[0].name).toBe("MVP1");
+    expect(d.nextGoLive!.openGates[0].late).toBe(true);
   });
 
   it("RLS: tenant B sees none of tenant A's QA or rollout data", async () => {

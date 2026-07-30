@@ -3,10 +3,13 @@ import { projectRag, type Rag } from "@/server/health";
 
 /**
  * Implementor preset data (docs/17 §7). First question: "what goes live next, and is
- * it ready?" INTERIM DATA SOURCE (§7.2, stated in the UI): the 16-revamp M8 stage
- * machine doesn't exist yet, so "gates" are the project's milestones and a project is
- * in the rollout window when a milestone name reads like UAT / pilot / go-live. When M8
- * ships gate checklists, this module repoints — the preset's shape doesn't change.
+ * it ready?"
+ *
+ * Since M8 shipped, GATES ARE REAL: a project with a checkpoint template reports its
+ * actual CheckpointStatus rows (docs/18 §2), and the promised repoint from the interim
+ * milestone source is done. Projects with no template still fall back to milestones,
+ * which is honest rather than empty — the row says which source it used. The rollout
+ * WINDOW is still milestone-tagged (§7.2): that is about dates, not gates.
  * Scoped to the viewer's projects (member or lead), like every hands-on persona.
  */
 
@@ -44,6 +47,8 @@ export interface ImplPilotRow {
   hasLateGate: boolean;
   goLive: Date | null;
   rag: Rag;
+  /** "checkpoints" once the project has a template; "milestones" is the fallback. */
+  gateSource: "checkpoints" | "milestones";
 }
 
 export interface ImplIssue {
@@ -87,7 +92,7 @@ export async function getImplDashboard(ctx: TenantContext, now = new Date()): Pr
       tx.projectMember.findMany({ where: { userId: ctx.userId }, select: { projectId: true } }),
     ]);
     const projectIds = [...new Set([...led.map((p) => p.id), ...memberships.map((m) => m.projectId)])];
-    if (!projectIds.length) return { projects: [], milestones: [], blockers: [], docs: [] };
+    if (!projectIds.length) return { projects: [], milestones: [], blockers: [], docs: [], gateRows: [], templates: [] };
 
     const [projects, milestones, blockers, docs] = await Promise.all([
       tx.project.findMany({
@@ -115,7 +120,22 @@ export async function getImplDashboard(ctx: TenantContext, now = new Date()): Pr
         orderBy: { createdAt: "asc" },
       }),
     ]);
-    return { projects, milestones, blockers, docs };
+    // M8: the real gates. Ordered so "next open gate" means the next one in the template.
+    const gateRows = await tx.checkpointStatus.findMany({
+      where: { projectId: { in: projectIds }, orgUnitId: null },
+      select: {
+        projectId: true, state: true, overrideReason: true,
+        checkpoint: { select: { name: true, orderIndex: true, templateId: true } },
+      },
+    });
+    const templates = await tx.project.findMany({
+      where: { id: { in: projectIds }, checkpointTemplateId: { not: null } },
+      select: {
+        id: true,
+        checkpointTemplate: { select: { checkpoints: { select: { id: true, name: true, orderIndex: true }, orderBy: { orderIndex: "asc" } } } },
+      },
+    });
+    return { projects, milestones, blockers, docs, gateRows, templates };
   });
 
   const milestonesByProject = new Map<string, typeof live.milestones>();
@@ -125,24 +145,50 @@ export async function getImplDashboard(ctx: TenantContext, now = new Date()): Pr
     milestonesByProject.set(m.projectId, list);
   }
 
-  // A project is in the rollout window when any milestone carries a rollout tag (§7.2).
+  // M8: real gates per project, when a checkpoint template is attached.
+  const templateById = new Map(live.templates.map((t) => [t.id, t.checkpointTemplate?.checkpoints ?? []]));
+  const gateStateFor = new Map<string, Map<string, string>>();
+  for (const g of live.gateRows) {
+    const byName = gateStateFor.get(g.projectId) ?? new Map<string, string>();
+    byName.set(g.checkpoint.name, g.state);
+    gateStateFor.set(g.projectId, byName);
+  }
+  /** Ordered open gates for a project, or null when it has no template. */
+  const openCheckpoints = (projectId: string): { name: string; late: boolean }[] | null => {
+    const checkpoints = templateById.get(projectId);
+    if (!checkpoints?.length) return null;
+    const states = gateStateFor.get(projectId) ?? new Map<string, string>();
+    return checkpoints
+      .filter((c) => (states.get(c.name) ?? "NotStarted") !== "Done")
+      // "Late" for a gate means Blocked — a gate has no date of its own (that's the
+      // milestone's job), so inventing one would be a lie.
+      .map((c) => ({ name: c.name, late: (states.get(c.name) ?? "NotStarted") === "Blocked" }));
+  };
+
+  // A project is in the rollout window when any milestone carries a rollout tag (§7.2) —
+  // the window is about DATES; the gates themselves come from the checkpoint template.
   const pilots: ImplPilotRow[] = live.projects
     .map((p) => {
       const ms = milestonesByProject.get(p.id) ?? [];
       if (!ms.some((m) => ROLLOUT_TAG.test(m.name))) return null;
       const pending = ms.filter((m) => m.status !== "Done");
-      // Interim gates = ALL milestones of the project; done ⇔ milestone Done.
       const goLive = pending.find((m) => m.dueDate)?.dueDate ?? null;
+      const checkpoints = templateById.get(p.id);
+      const open = openCheckpoints(p.id);
+      const useGates = !!checkpoints?.length && open !== null;
       return {
         projectId: p.id,
         projectCode: p.code,
         projectName: p.name,
         stage: pending.some((m) => UAT_TAG.test(m.name)) ? ("UAT" as const) : ("Pilot" as const),
-        gatesDone: ms.length - pending.length,
-        gatesTotal: ms.length,
-        hasLateGate: pending.some((m) => m.dueDate && m.dueDate < now),
+        gatesDone: useGates ? checkpoints!.length - open!.length : ms.length - pending.length,
+        gatesTotal: useGates ? checkpoints!.length : ms.length,
+        hasLateGate: useGates
+          ? open!.some((g) => g.late)
+          : pending.some((m) => m.dueDate && m.dueDate < now),
         goLive,
         rag: projectRag(p.status),
+        gateSource: useGates ? ("checkpoints" as const) : ("milestones" as const),
       };
     })
     .filter((r): r is ImplPilotRow => r !== null)
@@ -161,6 +207,10 @@ export async function getImplDashboard(ctx: TenantContext, now = new Date()): Pr
     const project = live.projects.find((p) => p.id === head.projectId)!;
     const ms = milestonesByProject.get(head.projectId) ?? [];
     const pending = ms.filter((m) => m.status !== "Done");
+    // Real gates when the project has a template; milestones only as the fallback.
+    const checkpoints = templateById.get(project.id);
+    const open = openCheckpoints(project.id);
+    const useGates = !!checkpoints?.length && open !== null;
     nextGoLive = {
       projectId: project.id,
       projectCode: project.code,
@@ -169,9 +219,11 @@ export async function getImplDashboard(ctx: TenantContext, now = new Date()): Pr
       dueDate: head.dueDate!,
       daysUntil: Math.round((head.dueDate!.getTime() - now.getTime()) / day),
       rag: projectRag(project.status),
-      openGates: pending.slice(0, 3).map((m) => ({ name: m.name, late: !!m.dueDate && m.dueDate < now })),
-      gatesDone: ms.length - pending.length,
-      gatesTotal: ms.length,
+      openGates: useGates
+        ? open!.slice(0, 3)
+        : pending.slice(0, 3).map((m) => ({ name: m.name, late: !!m.dueDate && m.dueDate < now })),
+      gatesDone: useGates ? checkpoints!.length - open!.length : ms.length - pending.length,
+      gatesTotal: useGates ? checkpoints!.length : ms.length,
     };
   }
 

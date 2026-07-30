@@ -8,9 +8,9 @@ import { ScopeToggle } from "@/components/dashboard/scope-toggle";
 import { CARD, Empty, Panel } from "@/components/dashboard/presets/v2-sections";
 
 // Implementor preset (docs/17 §7, design handoff persona-dashboards): "what goes live
-// next, and is it ready?" INTERIM data source, stated honestly in the UI: gates are the
-// project's milestones and the rollout window comes from UAT/pilot-tagged milestone
-// names — the M8 stage machine replaces both without changing this composition.
+// next, and is it ready?" Since M8 the gates are REAL — a project's checkpoint template
+// drives them, with milestones as a marked fallback for projects that have no template.
+// The rollout WINDOW still comes from UAT/pilot-tagged milestones, which is about dates.
 
 const RAG_TOKEN: Record<string, string> = { Green: "--ok", Amber: "--warn", Red: "--bad" };
 const SEVERITY_TOK: Record<string, string> = { Critical: "--bad", High: "--warn", Medium: "--qinfo", Low: "--ink4" };
@@ -69,9 +69,10 @@ function OpenGates({ d }: { d: ImplDashboard }) {
       ) : (
         <Empty>All gates closed — ship it.</Empty>
       )}
-      {/* §7.2 — say what the data is until M8 makes gates real. */}
+      {/* M8 shipped: gates are the project's real checkpoints. Projects without a
+          template still fall back to milestones, and the row says so. */}
       <div className="p-[8px_16px] font-mono text-[8.5px] uppercase tracking-[.8px] text-[var(--ink5)]">
-        Gate checklists ship with M8 · interim: milestones tagged UAT / pilot
+        Gates come from the project&apos;s checkpoint template · rollout window from UAT / pilot milestones
       </div>
     </Panel>
   );
@@ -106,6 +107,11 @@ function Pilots({ d }: { d: ImplDashboard }) {
             {p.stage.toUpperCase()}
           </span>
           <GateSegments done={p.gatesDone} total={p.gatesTotal} late={p.hasLateGate} />
+          {p.gateSource === "milestones" && (
+            <span className="flex-none font-mono text-[8px] uppercase tracking-[.6px] text-[var(--ink5)]" title="No checkpoint template on this project — milestones shown instead">
+              ms
+            </span>
+          )}
           <span className="w-[64px] flex-none text-right font-mono text-[9px] tabular-nums text-[var(--ink3)]">
             {p.goLive ? p.goLive.toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "—"}
           </span>
