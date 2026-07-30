@@ -89,6 +89,7 @@ model Tenant {
   checkpoints         Checkpoint[]
   checkpointStatuses  CheckpointStatus[]
   marketCheckIns      MarketCheckIn[]
+  lessonsLearned      LessonLearned[]
   nudges              Nudge[]
   nudgeSnoozes        NudgeSnooze[]
   workComments        WorkComment[]
@@ -182,6 +183,8 @@ model User {
   memberReports        MemberReport[]        @relation("MemberReports")
   memberReportAcks     MemberReportAck[]     @relation("MemberReportAcks")
   marketCheckIns       MarketCheckIn[]       @relation("MarketCheckInAuthor")
+  lessonsAuthored      LessonLearned[]       @relation("LessonAuthor")
+  checkpointOverrides  CheckpointStatus[]    @relation("CheckpointOverrider")
   nudgeSnoozes         NudgeSnooze[]         @relation("UserNudgeSnoozes")
   workComments         WorkComment[]         @relation("WorkCommentAuthor")
   decisionsMade        Decision[]            @relation("DecisionDecider")
@@ -616,6 +619,7 @@ model Project {
   checkpointTemplateId String?               @map("checkpoint_template_id")
   checkpointStatuses   CheckpointStatus[]
   marketCheckIns       MarketCheckIn[]
+  lessonsLearned       LessonLearned[]
 
   @@unique([tenantId, code])
   @@map("project")
@@ -702,22 +706,51 @@ model Checkpoint {
   @@map("checkpoint")
 }
 
+// Lessons learned (docs/16 §6 — a direct stakeholder ask). Captured at closure and
+// required by the closure gate: a project that taught nobody anything did not close.
+model LessonLearned {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  projectId String   @map("project_id")
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title     String
+  detail    String?
+  /**
+   * WhatWentWell | WhatDidNot | Recommendation
+   */
+  category  String   @default("Recommendation")
+  authorId  String?  @map("author_id")
+  author    User?    @relation("LessonAuthor", fields: [authorId], references: [id])
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId, projectId])
+  @@map("lesson_learned")
+}
+
 model CheckpointStatus {
-  id           String     @id @default(cuid())
-  tenantId     String     @map("tenant_id")
-  tenant       Tenant     @relation(fields: [tenantId], references: [id])
-  projectId    String     @map("project_id")
-  project      Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  checkpointId String     @map("checkpoint_id")
-  checkpoint   Checkpoint @relation(fields: [checkpointId], references: [id], onDelete: Cascade)
+  id             String     @id @default(cuid())
+  tenantId       String     @map("tenant_id")
+  tenant         Tenant     @relation(fields: [tenantId], references: [id])
+  projectId      String     @map("project_id")
+  project        Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  checkpointId   String     @map("checkpoint_id")
+  checkpoint     Checkpoint @relation(fields: [checkpointId], references: [id], onDelete: Cascade)
   // NULL = the project's own track (pipeline lens); set = one market track (rollout lens).
-  orgUnitId    String?    @map("org_unit_id")
-  orgUnit      OrgUnit?   @relation(fields: [orgUnitId], references: [id], onDelete: Cascade)
-  state        String     @default("NotStarted") // Done | InProgress | NotStarted | Blocked
+  orgUnitId      String?    @map("org_unit_id")
+  orgUnit        OrgUnit?   @relation(fields: [orgUnitId], references: [id], onDelete: Cascade)
+  state          String     @default("NotStarted") // Done | InProgress | NotStarted | Blocked
   // Blocked mirrors the task pattern: a reason is required, and it points at the blocker.
-  blockerId    String?    @map("blocker_id")
-  blocker      Blocker?   @relation("CheckpointBlocker", fields: [blockerId], references: [id], onDelete: SetNull)
-  updatedAt    DateTime   @updatedAt @map("updated_at")
+  blockerId      String?    @map("blocker_id")
+  blocker        Blocker?   @relation("CheckpointBlocker", fields: [blockerId], references: [id], onDelete: SetNull)
+  // docs/16 §6 — gates SOFT-block: a gate closed with unmet requirements records why,
+  // by whom and when, so the override is visible forever rather than silent.
+  overrideReason String?    @map("override_reason")
+  overriddenById String?    @map("overridden_by_id")
+  overriddenBy   User?      @relation("CheckpointOverrider", fields: [overriddenById], references: [id])
+  overriddenAt   DateTime?  @map("overridden_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
 
   // Postgres treats NULLs as distinct, so the project-level row (orgUnitId IS NULL) is
   // pinned by a partial unique index created in the migration instead.

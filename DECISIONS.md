@@ -1000,3 +1000,45 @@ isolation). Live on Riverbank: the Market Rollout section renders 3 products × 
 with the derived summary row (83/44/32/19%) and the top-blockers strip, a cell opens the
 Kenya track at 69% derived, a market check-in saved and appeared in both the heatmap and
 R3, and an empty narrative was refused.
+
+## M8-A — Gate checklists (soft-block + audited override) + lessons learned (docs/16 §6) (2026-07-30)
+
+### DM1.35 — Gates state their requirements, soft-block, and record every override
+M8 is XL, so it ships in thirds: **M8-A** (this entry) governs the gates; **M8-B** is the
+document register (types, versions, review workflow); **M8-C** is AI ingest →
+`Requirement` with source anchors + traceability coverage.
+
+- **Rules are keyed off the CHECKPOINT NAME**, not a hardcoded stage enum, because
+  checkpoints are per-template data (docs/18 §2). A template nobody wrote rules for has
+  none and its gates close freely — governance is opt-in per gate, not a wall.
+- **Checkable today, from live data**: an approved BRD in the register + lead and members
+  allocated (BRD / Business Case); published tasks and milestones (MVP1 / Solution
+  Build); zero open Critical bugs (SIT / UAT / Testing / Pilot); lessons captured + an
+  approved handover doc (Go-Live / Rollout / Closure).
+- **Rules that cannot be enforced yet are ABSENT, not stubbed.** Requirement coverage ≥
+  threshold (docs/16 §6) needs M8-C's `Requirement` model; a rule that always passes is
+  worse than no rule because it teaches people the checklist is theatre.
+- **Soft-block per §6**: closing a gate with unmet requirements is allowed but needs a
+  written reason (≥5 chars). The reason, the actor and the timestamp are stamped on the
+  `CheckpointStatus` row, audited, and carried on the domain event — an override is
+  visible forever, and the UI badges the gate "OVERRIDDEN". Satisfying the requirements
+  later and re-closing clears the override rather than leaving a false scar.
+- **The API answers 409, not 400**, for an unmet gate: the request is well-formed, the
+  gate simply isn't satisfied. The response carries the unmet rules so the UI lists them
+  and offers the override inline instead of failing flat.
+- **`LessonLearned`** (docs/16 §6, a direct stakeholder ask) is captured as the project
+  runs — any project member may record one, because the people who lived the work know
+  the lesson — and the closure gate requires at least one.
+- **A behaviour change caught by the existing suite**: M-D-A's checkpoint tests began
+  failing because closing BRD is now governed. Rather than weaken the gate, the fixture
+  was given what the rule asks for (an allocated member and a Final BRD) — the suite's
+  intent was the derived-% maths, not ungoverned gates.
+
+Verified: lint/typecheck/build green, 505/505 tests (72 files; new gate-rules RLS suite —
+rules surfaced before anyone closes a gate, Done refused with the unmet list, rules-free
+gates closing freely, override stamped + audited + evented, satisfying requirements
+clearing the override, lessons gating closure, cross-tenant isolation). Live on KCB: the
+seeded P001 evaluated all six gates correctly against real data (BRD needs its document,
+SIT/UAT blocked by the seeded Critical bug, Go-Live needs lessons + handover), a
+too-short override reason was refused, a proper one closed SIT and badged it OVERRIDDEN,
+and recording a lesson flipped `lessons-captured` to met.

@@ -23,6 +23,9 @@ const STATUS: Record<CheckpointError["code"], number> = {
   NOT_FOUND: 404,
   BLOCKER_REQUIRED: 400,
   TEMPLATE_MISMATCH: 400,
+  // 409: the request is well-formed, the gate simply isn't satisfied yet. The response
+  // carries the unmet requirements so the UI can list them and offer an override.
+  GATE_UNMET: 409,
 };
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -69,7 +72,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json(data);
   } catch (e) {
     if (e instanceof CheckpointError) {
-      return NextResponse.json({ error: { code: e.code, message: e.message } }, { status: STATUS[e.code] });
+      return NextResponse.json(
+        { error: { code: e.code, message: e.message, unmet: e.unmet ?? undefined } },
+        { status: STATUS[e.code] },
+      );
     }
     throw e;
   }

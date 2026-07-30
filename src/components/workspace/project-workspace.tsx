@@ -20,6 +20,7 @@ import { DecisionsCard } from "@/components/conversation/decisions-card";
 import { CheckInCard } from "@/components/workspace/checkin-card";
 import { GovernanceEditor } from "@/components/workspace/governance-editor";
 import { CheckpointMatrix } from "@/components/workspace/checkpoint-matrix";
+import { LessonsCard } from "@/components/workspace/lessons-card";
 import { RequestToJoinButton } from "@/components/workspace/request-to-join-button";
 import { statusMeta } from "@/lib/project-view";
 import type { ProjectPanelJson } from "@/components/panels/project-panel-content";
@@ -207,6 +208,10 @@ export function ProjectWorkspace({
               {/* docs/18 §2 — the gate matrix; % underneath is derived from these states. */}
               <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
                 <CheckpointMatrix projectId={data.id} />
+              </div>
+              {/* docs/16 §6 — captured as the project runs; the closure gate reads these. */}
+              <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
+                <LessonsCard projectId={data.id} />
               </div>
               {data.description && (
                 <div className={`${CARD} p-4 text-[13px] leading-relaxed text-[var(--ink2)]`} style={{ background: "var(--cardbg)" }}>

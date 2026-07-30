@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, ShieldAlert, TriangleAlert } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { CheckpointState, ProjectCheckpoints, TemplateOption } from "@/server/checkpoints";
 
@@ -32,6 +32,10 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
   const [data, setData] = useState<Payload | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // docs/16 §6 — a gate whose checklist is unmet soft-blocks: we surface what is
+  // missing and ask for a reason rather than silently refusing or silently allowing.
+  const [gateBlock, setGateBlock] = useState<{ checkpointId: string; unmet: { key: string; label: string; detail: string | null }[] } | null>(null);
+  const [overrideReason, setOverrideReason] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -61,11 +65,18 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (!res.ok) {
+    if (res.status === 409) {
+      // Gate unmet — show the checklist and offer the override rather than failing flat.
+      const err = (await res.json().catch(() => null))?.error;
+      setGateBlock({ checkpointId: String(body.checkpointId), unmet: err?.unmet ?? [] });
+      setError(null);
+    } else if (!res.ok) {
       setError((await res.json().catch(() => null))?.error?.message ?? "Could not save.");
     } else {
       const next = await res.json();
       setData((prev) => (prev ? { ...prev, ...next } : prev));
+      setGateBlock(null);
+      setOverrideReason("");
     }
     setBusy(null);
   };
@@ -121,6 +132,15 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
                 />
                 <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink2)]">{row.name}</span>
                 {busy === row.checkpointId && <Loader2 className="size-3 animate-spin text-[var(--ink4)]" />}
+                {row.overrideReason && (
+                  <span
+                    title={`Gate closed early: ${row.overrideReason}`}
+                    className="flex flex-none items-center gap-1 rounded-[5px] px-1.5 py-0.5 font-mono text-[8.5px] font-bold uppercase tracking-[.6px] text-[var(--warn)]"
+                    style={{ background: "color-mix(in oklab, var(--warn) 10%, transparent)" }}
+                  >
+                    <ShieldAlert className="size-2.5" /> overridden
+                  </span>
+                )}
                 {data.canGovern ? (
                   <Select
                     value={row.state}
@@ -145,9 +165,62 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
               </li>
             ))}
           </ol>
+          {/* docs/16 §6 — the gate soft-blocks: say exactly what is missing, then let a
+              governed user proceed with a written reason that is recorded on the row. */}
+          {gateBlock && (
+            <div
+              className="flex flex-col gap-2 rounded-[10px] border p-3"
+              style={{ borderColor: "color-mix(in oklab, var(--warn) 35%, transparent)", background: "color-mix(in oklab, var(--warn) 6%, transparent)" }}
+            >
+              <span className="flex items-center gap-1.5 font-mono text-[9px] font-bold uppercase tracking-[1.2px] text-[var(--warn)]">
+                <TriangleAlert className="size-3" /> This gate is not satisfied yet
+              </span>
+              <ul className="flex flex-col gap-1">
+                {gateBlock.unmet.map((r) => (
+                  <li key={r.key} className="text-[12px] text-[var(--ink2)]">
+                    {r.label}
+                    {r.detail && <span className="text-[var(--ink4)]"> — {r.detail}</span>}
+                  </li>
+                ))}
+              </ul>
+              <input
+                value={overrideReason}
+                onChange={(e) => setOverrideReason(e.target.value)}
+                maxLength={300}
+                placeholder="Why is it being closed anyway? This is recorded."
+                className="h-8 rounded-[8px] border border-[var(--w07)] bg-[var(--wash)] px-2.5 text-[12px] text-[var(--ink2)] outline-none focus:border-[var(--brand)]"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={overrideReason.trim().length < 5 || busy !== null}
+                  onClick={() =>
+                    void patch(
+                      { checkpointId: gateBlock.checkpointId, state: "Done", overrideReason: overrideReason.trim() },
+                      gateBlock.checkpointId,
+                    )
+                  }
+                  className="rounded-[8px] bg-[var(--warn)] px-3 py-1.5 text-[11.5px] font-bold text-[var(--onbrand)] disabled:opacity-60"
+                >
+                  Close gate with reason
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGateBlock(null);
+                    setOverrideReason("");
+                  }}
+                  className="text-[11.5px] font-semibold text-[var(--ink4)] hover:text-[var(--qink)]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
           {/* Blocked needs a linked blocker (§2) — say so rather than silently rejecting. */}
           <p className="font-mono text-[8.5px] uppercase tracking-[.8px] text-[var(--ink5)]">
-            % is derived from these states · Blocked needs an open blocker on the project
+            % is derived from these states · Blocked needs an open blocker · gates check their
+            requirements before closing
           </p>
         </>
       )}

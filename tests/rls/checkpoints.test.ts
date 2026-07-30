@@ -55,6 +55,14 @@ describe("M-D-A delivery checkpoints", () => {
       });
       templateId = tmpl.id;
       gateIds = tmpl.checkpoints.map((c) => c.id);
+
+      // M8-A: closing the BRD gate now runs its checklist (docs/16 §6). This suite is
+      // about the derived-% maths, so give the fixture what that gate asks for — an
+      // allocated member and an approved BRD — rather than overriding past it.
+      await tx.projectMember.create({ data: { tenantId: kcbId, projectId, userId: leadId, role: "Project Manager" } });
+      await tx.projectDocument.create({
+        data: { tenantId: kcbId, projectId, title: "Business requirements", kind: "BRD", status: "Final" },
+      });
     });
   });
 

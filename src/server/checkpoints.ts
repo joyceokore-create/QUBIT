@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { emitDomainEvent } from "@/server/events";
+import { evaluateGate, type GateRule } from "@/server/gate-rules";
 
 /**
  * Delivery checkpoints (docs/18 §2). The gates a project marches through are DATA — a
@@ -35,6 +36,10 @@ export interface CheckpointRow {
   state: CheckpointState;
   blockerId: string | null;
   blockerReason: string | null;
+  /** What this gate asks for, and whether it is satisfied (docs/16 §6). */
+  gate: GateRule[];
+  /** Set when the gate was closed with its checklist unmet — visible forever. */
+  overrideReason: string | null;
 }
 
 export interface ProjectCheckpoints {
@@ -66,11 +71,20 @@ export async function getProjectCheckpoints(
     }
     const statuses = await tx.checkpointStatus.findMany({
       where: { projectId, orgUnitId: null },
-      select: { checkpointId: true, state: true, blockerId: true, blocker: { select: { description: true } } },
+      select: {
+        checkpointId: true, state: true, blockerId: true, overrideReason: true,
+        blocker: { select: { description: true } },
+      },
     });
     const byCheckpoint = new Map(statuses.map((s) => [s.checkpointId, s]));
 
-    const rows: CheckpointRow[] = project.checkpointTemplate.checkpoints.map((c) => {
+    // Gate checklists are evaluated for every checkpoint so the UI can show what a gate
+    // will ask for BEFORE somebody tries to close it (docs/16 §6).
+    const gates = await Promise.all(
+      project.checkpointTemplate.checkpoints.map((c) => evaluateGate(tx, projectId, c.name)),
+    );
+
+    const rows: CheckpointRow[] = project.checkpointTemplate.checkpoints.map((c, i) => {
       const s = byCheckpoint.get(c.id);
       return {
         checkpointId: c.id,
@@ -79,6 +93,8 @@ export async function getProjectCheckpoints(
         state: ((s?.state ?? "NotStarted") as CheckpointState),
         blockerId: s?.blockerId ?? null,
         blockerReason: s?.blocker?.description ?? null,
+        gate: gates[i].rules,
+        overrideReason: s?.overrideReason ?? null,
       };
     });
     return {
@@ -161,10 +177,13 @@ export async function gateTicksByProject(
 }
 
 export class CheckpointError extends Error {
-  code: "NOT_FOUND" | "BLOCKER_REQUIRED" | "TEMPLATE_MISMATCH";
-  constructor(message: string, code: CheckpointError["code"]) {
+  code: "NOT_FOUND" | "BLOCKER_REQUIRED" | "TEMPLATE_MISMATCH" | "GATE_UNMET";
+  /** Populated for GATE_UNMET so the UI can list what the gate is still waiting on. */
+  unmet?: GateRule[];
+  constructor(message: string, code: CheckpointError["code"], unmet?: GateRule[]) {
     super(message);
     this.code = code;
+    this.unmet = unmet;
   }
 }
 
@@ -173,6 +192,8 @@ export const SetCheckpointStateInput = z.object({
   state: z.enum(CHECKPOINT_STATES),
   /** Required when moving to Blocked — same flag pattern as tasks (§2). */
   blockerId: z.string().uuid().nullable().optional(),
+  /** docs/16 §6 — closing a gate whose checklist is unmet needs a written reason. */
+  overrideReason: z.string().trim().min(5, "Say why the gate is being closed early.").max(300).optional(),
 });
 export type SetCheckpointStateInputT = z.infer<typeof SetCheckpointStateInput>;
 
@@ -203,17 +224,46 @@ export async function setCheckpointState(
       if (!blocker) throw new CheckpointError("That blocker is not open on this project.", "NOT_FOUND");
     }
 
+    // docs/16 §6 — the gate checklist. Closing a gate whose requirements are unmet is
+    // allowed (soft-block), but only with a written reason, and the override is stamped
+    // on the row so it stays visible long after the moment.
+    let override: { reason: string; byId: string; at: Date } | null = null;
+    if (input.state === "Done") {
+      const gate = await evaluateGate(tx, projectId, checkpoint.name);
+      if (gate.unmet.length > 0) {
+        if (!input.overrideReason) {
+          throw new CheckpointError(
+            `${checkpoint.name} still needs: ${gate.unmet.map((r) => r.label).join("; ")}.`,
+            "GATE_UNMET",
+            gate.unmet,
+          );
+        }
+        override = { reason: input.overrideReason, byId: ctx.userId, at: new Date() };
+      }
+    }
+
     const before = await tx.checkpointStatus.findFirst({
       where: { projectId, checkpointId: input.checkpointId, orgUnitId: null },
       select: { id: true, state: true },
     });
     const blockerId = input.state === "Blocked" ? (input.blockerId ?? null) : null;
+    const overrideData = {
+      overrideReason: override?.reason ?? null,
+      overriddenById: override?.byId ?? null,
+      overriddenAt: override?.at ?? null,
+    };
 
     if (before) {
-      await tx.checkpointStatus.update({ where: { id: before.id }, data: { state: input.state, blockerId } });
+      await tx.checkpointStatus.update({
+        where: { id: before.id },
+        data: { state: input.state, blockerId, ...overrideData },
+      });
     } else {
       await tx.checkpointStatus.create({
-        data: { tenantId: ctx.tenantId, projectId, checkpointId: input.checkpointId, orgUnitId: null, state: input.state, blockerId },
+        data: {
+          tenantId: ctx.tenantId, projectId, checkpointId: input.checkpointId, orgUnitId: null,
+          state: input.state, blockerId, ...overrideData,
+        },
       });
     }
     if (before?.state === input.state) return;
@@ -223,14 +273,24 @@ export async function setCheckpointState(
       entityType: "checkpoint_status",
       entityId: `${projectId}:${input.checkpointId}`,
       before: { state: before?.state ?? "NotStarted" },
-      after: { state: input.state, checkpoint: checkpoint.name },
+      after: {
+        state: input.state,
+        checkpoint: checkpoint.name,
+        ...(override ? { gateOverridden: true, overrideReason: override.reason } : {}),
+      },
     });
     // The exec delta feed narrates gate movement like any other tracked change.
     await emitDomainEvent(tx, ctx, {
       type: "checkpoint.state_changed",
       entityType: "checkpoint_status",
       entityId: `${projectId}:${input.checkpointId}`,
-      payload: { projectId, checkpoint: checkpoint.name, from: before?.state ?? "NotStarted", to: input.state },
+      payload: {
+        projectId,
+        checkpoint: checkpoint.name,
+        from: before?.state ?? "NotStarted",
+        to: input.state,
+        gateOverridden: !!override,
+      },
     });
   });
   return getProjectCheckpoints(ctx, projectId);
