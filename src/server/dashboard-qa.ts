@@ -6,8 +6,8 @@ import { AGING_BUSINESS_DAYS, businessDaysBetween } from "@/lib/board-lens";
  * of my bugs are stuck?" Everything is scoped to the viewer's projects (member or lead)
  * — HeadOfQA-style oversight lives on the executive persona, not here. Aging reuses the
  * board-lens business-day clock so the dashboard and the QA board lens can't disagree
- * (bad > AGING_BUSINESS_DAYS; warn from 3). Requirement coverage joins after 16-revamp
- * M8 — no placeholder number before then (§9).
+ * (bad > AGING_BUSINESS_DAYS; warn from 3). Requirement coverage became real with
+ * M8-C's traceability — the quality strip shows the derived number, never a placeholder.
  */
 
 const day = 86_400_000;
@@ -54,6 +54,8 @@ export interface QaBugRaised {
 export interface QaProjectQuality {
   projectId: string;
   projectName: string;
+  /** docs/16 §6 traceability — null when the project captured no requirements. */
+  coveragePct: number | null;
   /** OPEN bugs by severity. */
   bySeverity: { critical: number; high: number; medium: number; low: number };
   /** reopened ÷ ever-completed bugs, percent; null before any bug completed. */
@@ -81,9 +83,9 @@ export async function getQaDashboard(ctx: TenantContext, now = new Date()): Prom
       tx.projectMember.findMany({ where: { userId: ctx.userId }, select: { projectId: true } }),
     ]);
     const projectIds = [...new Set([...led.map((p) => p.id), ...memberships.map((m) => m.projectId)])];
-    if (!projectIds.length) return { projects: [], queueTasks: [], myBugs: [], projectBugs: [], events: [] };
+    if (!projectIds.length) return { projects: [], queueTasks: [], myBugs: [], projectBugs: [], requirements: [], events: [] };
 
-    const [projects, queueTasks, myBugs, projectBugs] = await Promise.all([
+    const [projects, queueTasks, myBugs, projectBugs, requirements] = await Promise.all([
       tx.project.findMany({
         where: { id: { in: projectIds }, status: { notIn: ["Completed", "Cancelled"] } },
         select: { id: true, code: true, name: true },
@@ -125,6 +127,12 @@ export async function getQaDashboard(ctx: TenantContext, now = new Date()): Prom
         where: { projectId: { in: projectIds }, type: "Bug", approvalStatus: { not: "Draft" } },
         select: { id: true, projectId: true, status: true, severity: true },
       }),
+      // M8-C: requirement coverage per project — a requirement is covered by at least
+      // one PUBLISHED task (docs/16 §6).
+      tx.requirement.findMany({
+        where: { projectId: { in: projectIds }, status: "Accepted" },
+        select: { projectId: true, taskLinks: { select: { task: { select: { approvalStatus: true } } } } },
+      }),
     ]);
 
     // Reopen signal: a task.status_changed event leaving Completed (docs/17 §5.3).
@@ -135,7 +143,7 @@ export async function getQaDashboard(ctx: TenantContext, now = new Date()): Prom
           select: { entityId: true, type: true, payload: true },
         })
       : [];
-    return { projects, queueTasks, myBugs, projectBugs, events };
+    return { projects, queueTasks, myBugs, projectBugs, requirements, events };
   });
 
   const reopenedIds = new Set(
@@ -194,10 +202,20 @@ export async function getQaDashboard(ctx: TenantContext, now = new Date()): Prom
     raisedDaysAgo: Math.max(0, Math.floor((now.getTime() - b.createdAt.getTime()) / day)),
   }));
 
+  const coverageByProject = new Map<string, number>();
+  for (const p of live.projects) {
+    const reqs = live.requirements.filter((r) => r.projectId === p.id);
+    if (!reqs.length) continue; // no requirements captured → no coverage claim
+    const covered = reqs.filter((r) => r.taskLinks.some((l) => l.task.approvalStatus !== "Draft")).length;
+    coverageByProject.set(p.id, Math.round((covered / reqs.length) * 100));
+  }
+
   const quality: QaProjectQuality[] = live.projects
     .map((p) => {
       const bugs = live.projectBugs.filter((b) => b.projectId === p.id);
-      if (!bugs.length) return null;
+      const coveragePct = coverageByProject.get(p.id) ?? null;
+      // A project with neither bugs nor requirements has nothing to say here.
+      if (!bugs.length && coveragePct === null) return null;
       const open = bugs.filter((b) => b.status !== "Completed");
       const completed = bugs.filter((b) => everCompletedIds.has(b.id));
       const reopened = bugs.filter((b) => reopenedIds.has(b.id));
@@ -205,6 +223,7 @@ export async function getQaDashboard(ctx: TenantContext, now = new Date()): Prom
       return {
         projectId: p.id,
         projectName: p.name,
+        coveragePct,
         bySeverity: { critical: count("Critical"), high: count("High"), medium: count("Medium"), low: count("Low") },
         reopenRatePct: completed.length ? Math.round((reopened.length / completed.length) * 100) : null,
       };

@@ -150,6 +150,16 @@ function Quality({ d }: { d: QaDashboard }) {
               <span className="font-mono text-[9px] tabular-nums text-[var(--ink4)]">
                 {critical}C · {high}H · {medium + low}M/L
               </span>
+              {/* M8-C: real requirement coverage, derived from requirement→task links. */}
+              {q.coveragePct !== null && (
+                <span
+                  className="font-mono text-[9px] font-bold tabular-nums"
+                  style={{ color: q.coveragePct >= 80 ? "var(--ok)" : "var(--warn)" }}
+                  title="Requirements with at least one covering task"
+                >
+                  {q.coveragePct}% COVERED
+                </span>
+              )}
               {q.reopenRatePct !== null && (
                 <span className="font-mono text-[9px] font-bold tabular-nums" style={{ color: q.reopenRatePct > 10 ? "var(--warn)" : "var(--ink4)" }}>
                   {q.reopenRatePct}% REOPEN
@@ -167,7 +177,7 @@ function Quality({ d }: { d: QaDashboard }) {
         );
       })}
       <div className="p-[8px_16px] font-mono text-[8.5px] uppercase tracking-[.8px] text-[var(--ink5)]">
-        Requirement coverage joins after M8 · <Link href="/risks" className="underline underline-offset-2 hover:text-[var(--qink)]">open risks →</Link>
+        Coverage = requirements with a covering task · <Link href="/risks" className="underline underline-offset-2 hover:text-[var(--qink)]">open risks →</Link>
       </div>
     </Panel>
   );

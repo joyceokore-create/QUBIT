@@ -8,10 +8,12 @@ import type { Prisma } from "@prisma/client";
  *
  * Rules are keyed off the CHECKPOINT NAME, because checkpoints are per-template data
  * (docs/18 §2): a template nobody has written rules for simply has none, and its gates
- * close freely. Rules that depend on machinery that hasn't shipped (requirement
- * coverage needs M8-C's Requirement model) are deliberately ABSENT rather than faked —
- * an unenforceable rule that always passes is worse than no rule.
+ * close freely. A rule is only written once the data behind it exists — an unenforceable
+ * rule that always passes is worse than no rule.
  */
+
+/** Requirement coverage the pilot gate demands (docs/16 §6 "≥ threshold"). */
+export const COVERAGE_THRESHOLD_PCT = 80;
 
 export interface GateRule {
   key: string;
@@ -38,6 +40,8 @@ interface GateFacts {
   approvedBrds: number;
   approvedHandovers: number;
   lessons: number;
+  requirements: number;
+  coveragePct: number;
 }
 
 /**
@@ -90,8 +94,18 @@ const RULES: { match: (name: string) => boolean; build: (f: GateFacts) => GateRu
         met: f.openCriticalBugs === 0,
         detail: f.openCriticalBugs === 0 ? null : `${f.openCriticalBugs} Critical bug(s) still open.`,
       },
-      // Requirement coverage ≥ threshold belongs here (docs/16 §6) and lands with the
-      // Requirement model in M8-C. Deliberately not stubbed.
+      // M8-C requirement coverage (docs/16 §6). A project that captured NO requirements
+      // has nothing to cover, so the rule passes — the gate asks about coverage, not
+      // about whether the team uses requirements at all.
+      {
+        key: "requirement-coverage",
+        label: `Requirement coverage at or above ${COVERAGE_THRESHOLD_PCT}%`,
+        met: f.requirements === 0 || f.coveragePct >= COVERAGE_THRESHOLD_PCT,
+        detail:
+          f.requirements === 0 || f.coveragePct >= COVERAGE_THRESHOLD_PCT
+            ? null
+            : `${f.coveragePct}% of ${f.requirements} requirements have a covering task.`,
+      },
     ],
   },
   {
@@ -115,7 +129,7 @@ const RULES: { match: (name: string) => boolean; build: (f: GateFacts) => GateRu
 ];
 
 async function gatherFacts(tx: Prisma.TransactionClient, projectId: string): Promise<GateFacts> {
-  const [project, memberCount, publishedTasks, milestones, openCriticalBugs, documents, lessons] = await Promise.all([
+  const [project, memberCount, publishedTasks, milestones, openCriticalBugs, documents, lessons, requirements] = await Promise.all([
     tx.project.findUnique({ where: { id: projectId }, select: { leadUserId: true } }),
     tx.projectMember.count({ where: { projectId } }),
     tx.projectTask.count({ where: { projectId, approvalStatus: { not: "Draft" } } }),
@@ -127,7 +141,13 @@ async function gatherFacts(tx: Prisma.TransactionClient, projectId: string): Pro
     // register has real Handover/Signoff types instead of a title convention.
     tx.projectDocument.findMany({ where: { projectId, status: "Approved" }, select: { kind: true, title: true } }),
     tx.lessonLearned.count({ where: { projectId } }),
+    // M8-C traceability: a requirement is covered by at least one PUBLISHED task.
+    tx.requirement.findMany({
+      where: { projectId, status: "Accepted" },
+      select: { taskLinks: { select: { task: { select: { approvalStatus: true } } } } },
+    }),
   ]);
+  const coveredReqs = requirements.filter((r) => r.taskLinks.some((l) => l.task.approvalStatus !== "Draft")).length;
   const approvedTitles = documents.map((d) => `${d.kind} ${d.title}`.toLowerCase());
   return {
     hasLead: !!project?.leadUserId,
@@ -140,6 +160,8 @@ async function gatherFacts(tx: Prisma.TransactionClient, projectId: string): Pro
     // documents filed before those types existed.
     approvedHandovers: documents.filter((d) => d.kind === "Handover").length + approvedTitles.filter((t) => t.includes("handover")).length,
     lessons,
+    requirements: requirements.length,
+    coveragePct: requirements.length ? Math.round((coveredReqs / requirements.length) * 100) : 0,
   };
 }
 

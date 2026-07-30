@@ -1078,3 +1078,43 @@ and re-submission clearing decisions, versioning superseding, the gate rule read
 register, cross-tenant isolation). Live on KCB: a Handover document created, submitted to
 a named approver, a decision by a non-approver refused with 403, the approver's approval
 flipping it to Approved, and the Go-Live gate's `handover-approved` rule turning met.
+
+## M8-C — Requirements, AI ingest behind a human gate, traceability coverage (docs/16 §6) (2026-07-31)
+
+### DM1.37 — Extraction proposes, a human accepts, and coverage names the anchor
+This completes M8 (A: gates · B: register · C: requirements).
+
+- **Never auto-apply (§6, the P0 from the improvement notes).** `extractCandidates`
+  reads a BRD/URS and returns CANDIDATES — it writes nothing, and there is no code path
+  that turns a read into a requirement. Only `acceptCandidates`, carrying what a person
+  ticked on the "Q found this in your document" screen, creates rows. Verified live with
+  the real AI path: after a read, the project still had zero requirements.
+- **Every requirement keeps its SOURCE ANCHOR** (document + section). That is what lets
+  coverage say "§3.2 has no covering task" instead of publishing a percentage nobody can
+  act on — the uncovered list names each anchor, and the panel leads with it.
+- **Two extraction paths, one contract.** With the Q AI box configured, the LLM reads the
+  document; without it, a deterministic parser keeps the nearest heading as the anchor and
+  takes must/shall/should lines. The feature works without an LLM rather than failing
+  shut, and the parser is unit-tested so its behaviour is pinned rather than incidental.
+  A document with no text is refused outright — better than inventing requirements.
+- **Coverage = accepted requirements with at least one PUBLISHED covering task.** A Draft
+  (AI-proposed, unapproved) task proves nothing and does not count. A task from another
+  project is refused as evidence.
+- **The pilot gate now enforces coverage ≥ 80%** (docs/16 §6 "≥ threshold"), retiring the
+  rule M8-A deliberately left absent. **A project with NO requirements passes** — the gate
+  asks about coverage, not about whether the team uses requirements at all. Blocking an
+  empty set would punish teams for a practice they never adopted.
+- **The QA preset's "requirement coverage joins after M8" placeholder is gone**, replaced
+  by the derived number from the same engine the gate reads.
+- **Tooling note:** running `npx prettier` on a source file reformatted it wholesale (the
+  repo has no prettier config), turning a 15-line change into a 145-line diff. Reverted
+  and edited by hand. Don't reach for prettier here.
+
+Verified: lint/typecheck/build green, 526/526 tests (75 files; new requirements RLS suite
+— read-writes-nothing, empty-document refusal, anchors preserved on accept, coverage
+naming uncovered anchors, draft-tasks-aren't-coverage, cross-project evidence refused,
+the gate + QA strip reading one number, empty-set passing, tenant isolation — plus a
+parser unit suite). Live on KCB: a URS filed, Q proposed 3 requirements with §3.1/§3.2
+anchors while persisting none, two accepted as REQ-001/REQ-002, a published task linked,
+and coverage moved 0% → 50% with the UAT gate reporting "50% of 2 requirements have a
+covering task".

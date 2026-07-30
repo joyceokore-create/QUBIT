@@ -78,23 +78,25 @@ model Tenant {
   joinRequests        JoinRequest[]
 
   // ── Revamp M0–M2 backbone (docs/16-revamp-plan.md §10) ──
-  domainEvents        DomainEvent[]
-  projectSnapshots    ProjectSnapshot[]
-  portfolioSnapshots  PortfolioSnapshot[]
-  checkIns            CheckIn[]
-  reportSubscriptions ReportSubscription[]
-  memberReports       MemberReport[]
-  memberReportAcks    MemberReportAck[]
-  checkpointTemplates CheckpointTemplate[]
-  checkpoints         Checkpoint[]
-  checkpointStatuses  CheckpointStatus[]
-  marketCheckIns      MarketCheckIn[]
-  lessonsLearned      LessonLearned[]
-  documentApprovals   DocumentApproval[]
-  nudges              Nudge[]
-  nudgeSnoozes        NudgeSnooze[]
-  workComments        WorkComment[]
-  decisions           Decision[]
+  domainEvents         DomainEvent[]
+  projectSnapshots     ProjectSnapshot[]
+  portfolioSnapshots   PortfolioSnapshot[]
+  checkIns             CheckIn[]
+  reportSubscriptions  ReportSubscription[]
+  memberReports        MemberReport[]
+  memberReportAcks     MemberReportAck[]
+  checkpointTemplates  CheckpointTemplate[]
+  checkpoints          Checkpoint[]
+  checkpointStatuses   CheckpointStatus[]
+  marketCheckIns       MarketCheckIn[]
+  lessonsLearned       LessonLearned[]
+  documentApprovals    DocumentApproval[]
+  requirements         Requirement[]
+  requirementTaskLinks RequirementTaskLink[]
+  nudges               Nudge[]
+  nudgeSnoozes         NudgeSnooze[]
+  workComments         WorkComment[]
+  decisions            Decision[]
 
   @@map("tenant")
 }
@@ -186,6 +188,7 @@ model User {
   marketCheckIns       MarketCheckIn[]       @relation("MarketCheckInAuthor")
   lessonsAuthored      LessonLearned[]       @relation("LessonAuthor")
   documentApprovals    DocumentApproval[]    @relation("DocumentApprover")
+  requirementsAuthored Requirement[]         @relation("RequirementAuthor")
   checkpointOverrides  CheckpointStatus[]    @relation("CheckpointOverrider")
   nudgeSnoozes         NudgeSnooze[]         @relation("UserNudgeSnoozes")
   workComments         WorkComment[]         @relation("WorkCommentAuthor")
@@ -242,47 +245,48 @@ model SharedReport {
 // manually), their execution status, and the data auto-progress is computed from. Distinct
 // from the ClickUp `task` model (that surface is out of the MVP nav).
 model ProjectTask {
-  id               String            @id @default(uuid())
-  tenantId         String            @map("tenant_id")
-  tenant           Tenant            @relation(fields: [tenantId], references: [id])
-  projectId        String            @map("project_id")
-  project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id               String                @id @default(uuid())
+  tenantId         String                @map("tenant_id")
+  tenant           Tenant                @relation(fields: [tenantId], references: [id])
+  projectId        String                @map("project_id")
+  project          Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
   title            String
   description      String?
   phase            String? // Discovery / Requirements / Design / … (PRD Module 4)
-  ownerRole        String?           @map("owner_role") // suggested project role (PRD Module 5)
-  priority         String            @default("Medium") // Low | Medium | High | Critical
-  status           String            @default("NotStarted") // NotStarted | InProgress | Blocked | Completed
+  ownerRole        String?               @map("owner_role") // suggested project role (PRD Module 5)
+  priority         String                @default("Medium") // Low | Medium | High | Critical
+  status           String                @default("NotStarted") // NotStarted | InProgress | Blocked | Completed
   // Draft = AI-generated, pending approval (excluded from progress/reports/member views);
   // Published = live. Manual tasks are Published; a plan is approved to publish (§2.2).
-  approvalStatus   String            @default("Published") @map("approval_status")
+  approvalStatus   String                @default("Published") @map("approval_status")
   estimate         String? // free-form estimated effort, e.g. "3d"
-  assigneeId       String?           @map("assignee_id")
-  assignee         User?             @relation("ProjectTaskAssignee", fields: [assigneeId], references: [id])
-  dueDate          DateTime?         @map("due_date")
-  orderIndex       Int               @default(0) @map("order_index")
+  assigneeId       String?               @map("assignee_id")
+  assignee         User?                 @relation("ProjectTaskAssignee", fields: [assigneeId], references: [id])
+  dueDate          DateTime?             @map("due_date")
+  orderIndex       Int                   @default(0) @map("order_index")
   // ── Phase 6.1 taxonomy (docs/15) ──
-  type             String            @default("Feature") // Feature | Bug | Chore | Spike | Improvement
+  type             String                @default("Feature") // Feature | Bug | Chore | Spike | Improvement
   // Human-readable key "<project.code>-<n>" referenced in commit messages (6.3). Allocated
   // from ProjectTaskCounter on publish/manual create; Drafts carry NULL until approved.
-  taskKey          String?           @map("task_key")
+  taskKey          String?               @map("task_key")
   severity         String? // Bugs only: Low | Medium | High | Critical
-  reporterId       String?           @map("reporter_id") // who filed it (QA authorship on bugs)
-  reporter         User?             @relation("ProjectTaskReporter", fields: [reporterId], references: [id])
-  parentTaskId     String?           @map("parent_task_id") // e.g. the task a bug was found while testing
-  parentTask       ProjectTask?      @relation("ProjectTaskParent", fields: [parentTaskId], references: [id])
-  childTasks       ProjectTask[]     @relation("ProjectTaskParent")
-  sourceDocumentId String?           @map("source_document_id") // BRD the plan was generated from (traceability)
-  sourceDocument   ProjectDocument?  @relation("TaskSourceDocument", fields: [sourceDocumentId], references: [id])
-  milestoneId      String?           @map("milestone_id")
-  milestone        ProjectMilestone? @relation("MilestoneTasks", fields: [milestoneId], references: [id])
+  reporterId       String?               @map("reporter_id") // who filed it (QA authorship on bugs)
+  reporter         User?                 @relation("ProjectTaskReporter", fields: [reporterId], references: [id])
+  parentTaskId     String?               @map("parent_task_id") // e.g. the task a bug was found while testing
+  parentTask       ProjectTask?          @relation("ProjectTaskParent", fields: [parentTaskId], references: [id])
+  childTasks       ProjectTask[]         @relation("ProjectTaskParent")
+  requirementLinks RequirementTaskLink[] @relation("TaskRequirements")
+  sourceDocumentId String?               @map("source_document_id") // BRD the plan was generated from (traceability)
+  sourceDocument   ProjectDocument?      @relation("TaskSourceDocument", fields: [sourceDocumentId], references: [id])
+  milestoneId      String?               @map("milestone_id")
+  milestone        ProjectMilestone?     @relation("MilestoneTasks", fields: [milestoneId], references: [id])
   // Touched on every task mutation (incl. commit-driven ones in 6.3); feeds the nudger's
   // staleness check (6.4). Distinct from updatedAt only by intent — set explicitly.
-  lastActivityAt   DateTime          @default(now()) @map("last_activity_at")
+  lastActivityAt   DateTime              @default(now()) @map("last_activity_at")
   // "Blocked" is a flag, not a status: a task is blocked while an Open Blocker links to it.
-  blockers         Blocker[]         @relation("TaskBlockers")
-  createdAt        DateTime          @default(now()) @map("created_at")
-  updatedAt        DateTime          @updatedAt @map("updated_at")
+  blockers         Blocker[]             @relation("TaskBlockers")
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
 
   @@unique([projectId, taskKey])
   @@index([tenantId, projectId])
@@ -356,6 +360,7 @@ model ProjectDocument {
   supersedes     ProjectDocument?   @relation("DocumentVersions", fields: [supersedesId], references: [id])
   supersededBy   ProjectDocument[]  @relation("DocumentVersions")
   approvals      DocumentApproval[]
+  requirements   Requirement[]      @relation("RequirementSource")
   source         String             @default("Uploaded") // Uploaded | AIDrafted
   createdById    String?            @map("created_by_id")
   createdBy      User?              @relation("DocumentAuthor", fields: [createdById], references: [id])
@@ -428,6 +433,56 @@ model ProjectIntegration {
 // tab; overdue = Pending with a past due date.
 // Named approvers on a document under review (docs/16 §6). One row per person asked;
 // the document reaches Approved only when every one of them has approved.
+// Requirements extracted from a source document (docs/16 §6). Every requirement keeps a
+// SOURCE ANCHOR — the document it came from and the section within it — so traceability
+// can say "URS §3.2 has no covering task" rather than "something is uncovered".
+// Extraction proposes; only a human accepts (§6 "never auto-apply").
+model Requirement {
+  id               String                @id @default(cuid())
+  tenantId         String                @map("tenant_id")
+  tenant           Tenant                @relation(fields: [tenantId], references: [id])
+  projectId        String                @map("project_id")
+  project          Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceDocumentId String?               @map("source_document_id")
+  sourceDocument   ProjectDocument?      @relation("RequirementSource", fields: [sourceDocumentId], references: [id], onDelete: SetNull)
+  /**
+   * The section the text came from, e.g. "§3.2" or a heading — the anchor's human half.
+   */
+  sectionAnchor    String?               @map("section_anchor")
+  /**
+   * Stable human reference within the project, e.g. "REQ-004".
+   */
+  ref              String
+  text             String
+  status           String                @default("Accepted") // Accepted | Rejected
+  createdById      String?               @map("created_by_id")
+  createdBy        User?                 @relation("RequirementAuthor", fields: [createdById], references: [id])
+  taskLinks        RequirementTaskLink[]
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
+
+  @@unique([projectId, ref])
+  @@index([tenantId, projectId])
+  @@map("requirement")
+}
+
+// requirement → task coverage (docs/16 §6). A requirement is COVERED when at least one
+// published task is linked to it; the QA evidence layer builds on the same link.
+model RequirementTaskLink {
+  id            String      @id @default(cuid())
+  tenantId      String      @map("tenant_id")
+  tenant        Tenant      @relation(fields: [tenantId], references: [id])
+  requirementId String      @map("requirement_id")
+  requirement   Requirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  taskId        String      @map("task_id")
+  task          ProjectTask @relation("TaskRequirements", fields: [taskId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  @@unique([requirementId, taskId])
+  @@index([tenantId, taskId])
+  @@map("requirement_task_link")
+}
+
 model DocumentApproval {
   id         String          @id @default(cuid())
   tenantId   String          @map("tenant_id")
@@ -653,6 +708,7 @@ model Project {
   checkpointStatuses   CheckpointStatus[]
   marketCheckIns       MarketCheckIn[]
   lessonsLearned       LessonLearned[]
+  requirements         Requirement[]
 
   @@unique([tenantId, code])
   @@map("project")
