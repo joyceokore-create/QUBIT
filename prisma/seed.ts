@@ -1422,6 +1422,92 @@ async function seedTenant(seed: TenantSeed) {
           },
         });
       }
+
+      // ── M1c (docs/17 §5/§7) — QA + Implementor demo members on the first project so
+      // both new personas render real content out of the box. Synthetic accounts only —
+      // prefer the tenant's .invalid domain so no demo account sits on a real one.
+      const domain = seed.domains.find((d) => d.endsWith(".invalid")) ?? seed.domains[0];
+      const qaUser = await tx.user.create({
+        data: {
+          tenantId: tenant.id,
+          email: `qa.demo@${domain}`,
+          name: "QA Demo",
+          status: "ACTIVE",
+          passwordHash: demoPasswordHash,
+          userGroups: ["qa"],
+          primaryGroup: "qa",
+        },
+      });
+      await tx.roleAssignment.create({ data: { tenantId: tenant.id, userId: qaUser.id, role: "Member" } });
+      await tx.projectMember.create({
+        data: { tenantId: tenant.id, projectId: firstProject, userId: qaUser.id, role: "QA Engineer" },
+      });
+      const implUser = await tx.user.create({
+        data: {
+          tenantId: tenant.id,
+          email: `impl.demo@${domain}`,
+          name: "Implementor Demo",
+          status: "ACTIVE",
+          passwordHash: demoPasswordHash,
+          userGroups: ["implementor"],
+          primaryGroup: "implementor",
+        },
+      });
+      await tx.roleAssignment.create({ data: { tenantId: tenant.id, userId: implUser.id, role: "Member" } });
+      await tx.projectMember.create({
+        data: { tenantId: tenant.id, projectId: firstProject, userId: implUser.id, role: "Implementation Lead" },
+      });
+      // QA fixtures: a critical bug awaiting triage + a bug the QA demo raised.
+      await tx.projectTask.create({
+        data: {
+          tenantId: tenant.id,
+          projectId: firstProject,
+          title: "Session drops on statement download over weak connectivity",
+          type: "Bug",
+          severity: "Critical",
+          status: "NotStarted",
+          phase: "Testing",
+          priority: "Critical",
+          taskKey: `${code}-5`,
+          reporterId: qaUser.id,
+        },
+      });
+      await tx.projectTask.create({
+        data: {
+          tenantId: tenant.id,
+          projectId: firstProject,
+          title: "Rounding error on FX rate display",
+          type: "Bug",
+          severity: "Medium",
+          status: "InProgress",
+          phase: "Testing",
+          priority: "Medium",
+          taskKey: `${code}-6`,
+          reporterId: qaUser.id,
+          assigneeId: seedUserId,
+        },
+      });
+      await tx.projectTaskCounter.update({ where: { projectId: firstProject }, data: { next: 7 } });
+      // Implementor fixtures: a rollout window (UAT/pilot milestones) + a handover doc.
+      const in9d = new Date(Date.now() + 9 * 86_400_000);
+      const in16d = new Date(Date.now() + 16 * 86_400_000);
+      await tx.projectMilestone.createMany({
+        data: [
+          { tenantId: tenant.id, projectId: firstProject, name: "SIT complete", status: "Done", orderIndex: 0 },
+          { tenantId: tenant.id, projectId: firstProject, name: "UAT sign-off — pilot branch", status: "Pending", dueDate: in9d, orderIndex: 1 },
+          { tenantId: tenant.id, projectId: firstProject, name: "Go-live — pilot branch", status: "Pending", dueDate: in16d, orderIndex: 2 },
+        ],
+      });
+      await tx.projectDocument.create({
+        data: {
+          tenantId: tenant.id,
+          projectId: firstProject,
+          title: "Operations handover pack",
+          kind: "Note",
+          status: "PendingReview",
+          createdById: implUser.id,
+        },
+      });
     }
 
     // ── Demo sparkline history — SYNTHETIC tenant (KCB) ONLY ──────────────────

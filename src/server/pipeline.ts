@@ -14,7 +14,6 @@ import { PIPELINE_STAGES, type PipelineStage } from "@/server/projects";
  * global KPI strip (18 §0 decision №1).
  */
 
-const PM_PROJECT_ROLES = ["Project Manager"];
 const day = 86_400_000;
 
 export interface PipelineChips {
@@ -114,7 +113,9 @@ export async function getPortfolioSections(ctx: TenantContext, now = new Date())
             portfolioId: true,
             leadUserId: true,
             orgStatuses: { select: { progress: true } },
-            members: { where: { role: { in: PM_PROJECT_ROLES } }, select: { userId: true } },
+            // isMine = the viewer leads it or is a member in ANY role (docs/18 §6 —
+            // the scope toggle filters to "projects I'm on", not "projects I manage").
+            members: { where: { userId: ctx.userId }, select: { userId: true } },
           },
           orderBy: [{ priority: "asc" }, { name: "asc" }],
         }),

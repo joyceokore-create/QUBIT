@@ -1,6 +1,6 @@
 import { Check, Users, ClipboardList } from "lucide-react";
 
-const EXEC = ["A single command center across every subsidiary", "RAG heatmaps from group down to one branch", "Steering packs drafted from live data", "Slippage surfaced before it turns red"];
+const EXEC = ["A single command center across every subsidiary", "Portfolio health rollups from group down to one project", "Steering packs drafted from live data", "Slippage surfaced before it turns red"];
 const PM = ["One place for programmes, milestones and RAID", "Task priorities re-ranked with a “why”", "Deadline and stale-invite chasers handled by Q", "Every mutation captured in the audit trail"];
 
 // Clean checklist: no per-item cards, no CTA — each column is a light check + text

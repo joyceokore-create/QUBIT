@@ -3,24 +3,25 @@ import { FileBarChart } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { isUserGroup } from "@/lib/personas";
-import { getDashboardV2 } from "@/server/dashboard-v2";
 import { getDevDashboard } from "@/server/dashboard-dev";
 import { getExecutiveDashboard } from "@/server/dashboard-exec";
+import { getImplDashboard } from "@/server/dashboard-impl";
 import { getPmDashboard } from "@/server/dashboard-pm";
+import { getQaDashboard } from "@/server/dashboard-qa";
 import { getPortfolioSections } from "@/server/pipeline";
 import { Forbidden } from "@/components/forbidden";
 import { LiveClock } from "@/components/command/live-clock";
 import { PersonaSwitcher } from "@/components/dashboard/persona-switcher";
 import { DeveloperPreset } from "@/components/dashboard/presets/developer";
 import { ExecutivePreset } from "@/components/dashboard/presets/executive";
+import { ImplementorPreset } from "@/components/dashboard/presets/implementor";
 import { PmPreset } from "@/components/dashboard/presets/pm";
-import { AtRiskSection, ChangedSection, TodaySection } from "@/components/dashboard/presets/v2-sections";
+import { QaPreset } from "@/components/dashboard/presets/qa";
 
 // ── The dashboard shell (docs/17 §0): ONE route, one shell, per-persona composition.
 // The session's resolved personas pick the preset; a ?persona= override (validated
-// against the user's own groups) powers the switcher. Presets not yet built (§8:
-// developer/PM in M1b, QA/implementor in M1c) render the interim v2 sections — a real
-// dashboard, never a placeholder.
+// against the user's own groups) powers the switcher. Since M1c all five personas have
+// dedicated presets — the interim v2 layout is retired (§8 complete).
 
 export default async function DashboardPage({
   searchParams,
@@ -67,27 +68,12 @@ export default async function DashboardPage({
           <DeveloperPreset d={await getDevDashboard(ctx)} sections={await getPortfolioSections(ctx)} userId={ctx.userId} />
         ) : persona === "pm" ? (
           <PmPreset d={await getPmDashboard(ctx)} sections={await getPortfolioSections(ctx)} userId={ctx.userId} scope={scope} />
+        ) : persona === "qa" ? (
+          <QaPreset d={await getQaDashboard(ctx)} sections={await getPortfolioSections(ctx)} userId={ctx.userId} scope={scope} />
         ) : (
-          <InterimPreset ctx={ctx} />
+          <ImplementorPreset d={await getImplDashboard(ctx)} sections={await getPortfolioSections(ctx)} userId={ctx.userId} scope={scope} />
         )}
       </main>
     </div>
-  );
-}
-
-// Interim composition for personas whose dedicated preset lands in M1b/M1c — the proven
-// v2 three-questions layout, Today first (these are hands-on personas).
-async function InterimPreset({
-  ctx,
-}: {
-  ctx: { tenantId: string; userId: string; roles: string[]; permissions?: string[] };
-}) {
-  const d = await getDashboardV2(ctx);
-  return (
-    <>
-      <TodaySection d={d} collapsed={false} />
-      <ChangedSection delta={d.delta} />
-      <AtRiskSection d={d} />
-    </>
   );
 }

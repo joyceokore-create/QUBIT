@@ -1,5 +1,5 @@
 import { withTenant, type TenantContext } from "@/lib/tenant";
-import { projectRag, ragCounts, worstStatus } from "@/server/health";
+import { projectRag, ragCounts } from "@/server/health";
 
 // ── Derived-value helpers (docs/09-ui-spec.md "Derived values") ──────────────
 // These mirror docs/design-reference-exec-dashboard.html's own helpers (avgPct, sc(),
@@ -103,60 +103,9 @@ export async function getDashboardSummary(ctx: TenantContext): Promise<Dashboard
   };
 }
 
-export interface HeatmapCell {
-  orgUnitId: string;
-  pct: number;
-  count: number;
-  status: RagStatus;
-}
-
-export interface HeatmapRow {
-  portfolioId: string;
-  portfolioName: string;
-  itemCount: number;
-  cells: (HeatmapCell | null)[];
-}
-
-export interface HeatmapData {
-  orgUnits: { id: string; code: string; name: string; flag: string | null }[];
-  rows: HeatmapRow[];
-}
-
-export async function getHeatmap(ctx: TenantContext): Promise<HeatmapData> {
-  const [projects, portfolios, orgUnits] = await Promise.all([
-    getProjectsWithStatus(ctx),
-    withTenant(ctx, (tx) => tx.portfolio.findMany({ orderBy: { name: "asc" } })),
-    withTenant(ctx, (tx) =>
-      tx.orgUnit.findMany({ orderBy: { createdAt: "asc" }, select: { id: true, code: true, name: true, flag: true } }),
-    ),
-  ]);
-
-  const rows: HeatmapRow[] = portfolios.map((portfolio) => {
-    const portfolioProjects = projects.filter((p) => p.portfolioId === portfolio.id);
-    const cells = orgUnits.map((ou): HeatmapCell | null => {
-      const items = portfolioProjects.filter((p) => p.orgStatuses.some((os) => os.orgUnitId === ou.id));
-      if (items.length === 0) return null;
-      const pctValues = items.map(
-        (p) => p.orgStatuses.find((os) => os.orgUnitId === ou.id)?.progress ?? 0,
-      );
-      const pct = Math.round(pctValues.reduce((a, b) => a + b, 0) / pctValues.length);
-      return {
-        orgUnitId: ou.id,
-        pct,
-        count: items.length,
-        status: worstStatus(items.map((p) => p.status)),
-      };
-    });
-    return {
-      portfolioId: portfolio.id,
-      portfolioName: portfolio.name,
-      itemCount: portfolioProjects.length,
-      cells,
-    };
-  });
-
-  return { orgUnits, rows };
-}
+// The portfolio × subsidiary heatmap that lived here left with the amended docs/18 §6:
+// its signal is the per-section RAG+Δ on the dashboard's portfolio sections (DM1.30),
+// and the rollout heatmap returns per-portfolio with M-D's market tracks.
 
 export interface PortfolioCardData {
   id: string;

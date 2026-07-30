@@ -21,6 +21,7 @@ const CATEGORY_GROUP: Record<ProjectRoleCategory, UserGroup | null> = {
   PM: "pm",
   Dev: "developer",
   QA: "qa",
+  Implementor: "implementor", // docs/17 §7 — fifth category, joined in M1c
   // Stakeholders get no group of their own — their landing persona comes from
   // declared groups or tenant roles; a pure stakeholder falls back per landingPersona().
   Stakeholder: null,

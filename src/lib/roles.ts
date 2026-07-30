@@ -18,17 +18,24 @@ export const PROJECT_ROLES = [
   "QA Engineer",
   "Developer",
   "UX Designer",
+  // docs/17 §7 (M1c, confirmed 2026-07-28): the rollout/delivery hats — mapped to the
+  // Implementor category below. No data migration; existing members keep their roles.
+  "Implementation Lead",
+  "Implementor",
+  "Trainer",
+  "Support Analyst",
   "Stakeholder",
 ] as const;
 export type ProjectRole = (typeof PROJECT_ROLES)[number];
 
 /**
  * Phase 6.1 (DM1.15 №1) — collapse a project role into the category the delivery workflow
- * keys off: board lenses, QA write scope, nudger escalation. Unknown/legacy free-text
- * (e.g. old join-request roles) deliberately lands on Stakeholder — read-mostly, never a
- * write grant it shouldn't have.
+ * keys off: board lenses, QA write scope, nudger escalation. Implementor joined as the
+ * fifth category in M1c (docs/17 §7). Unknown/legacy free-text (e.g. old join-request
+ * roles) deliberately lands on Stakeholder — read-mostly, never a write grant it
+ * shouldn't have.
  */
-export type ProjectRoleCategory = "PM" | "Dev" | "QA" | "Stakeholder";
+export type ProjectRoleCategory = "PM" | "Dev" | "QA" | "Implementor" | "Stakeholder";
 export function projectRoleCategory(role: string): ProjectRoleCategory {
   switch (role) {
     case "Project Manager":
@@ -40,6 +47,11 @@ export function projectRoleCategory(role: string): ProjectRoleCategory {
     case "QA Lead":
     case "QA Engineer":
       return "QA";
+    case "Implementation Lead":
+    case "Implementor":
+    case "Trainer":
+    case "Support Analyst":
+      return "Implementor";
     default:
       return "Stakeholder";
   }

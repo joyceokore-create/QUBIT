@@ -130,11 +130,21 @@ describe("M1b dashboard presets", () => {
   it("PM: team load lists only members of MY projects", async () => {
     const d = await getPmDashboard(pmCtx);
     expect(d.teamLoad.map((m) => m.userId)).toContain(devId);
-    // The seeded demo lead runs their own project — not on the fixture PM's team.
-    const otherLeads = d.teamLoad.filter((m) => m.userId !== devId && m.userId !== pmId);
-    for (const member of otherLeads) {
-      // every listed member must share at least one of MY projects
-      expect([devId, pmId]).toContain(member.userId);
+    // Every listed member must actually share one of MY projects (the fixture PM may
+    // also run seeded demo projects with their own members — that's legitimate).
+    const myMembers = await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+      const mine = await tx.project.findMany({
+        where: { OR: [{ leadUserId: pmId }, { members: { some: { userId: pmId, role: "Project Manager" } } }] },
+        select: { id: true },
+      });
+      const members = await tx.projectMember.findMany({
+        where: { projectId: { in: mine.map((p) => p.id) } },
+        select: { userId: true },
+      });
+      return new Set(members.map((m) => m.userId));
+    });
+    for (const member of d.teamLoad) {
+      expect(myMembers.has(member.userId)).toBe(true);
     }
   });
 

@@ -32,7 +32,7 @@ const REST: Feature[] = [
     body: "Every task ranked by deadline, dependencies and risk — and Q shows its working, so you can trust the order.",
     body2: "Open any item to see the factors behind its position — no black box, and the ranking updates as things shift.",
   },
-  { icon: LayoutGrid, tone: "var(--accent-indigo)", title: "Group to branch in two clicks", body: "Portfolio × subsidiary heatmaps, programmes, milestones and RAID — drill from group level to a single branch." },
+  { icon: LayoutGrid, tone: "var(--accent-indigo)", title: "Group to branch in two clicks", body: "Portfolios grouped by health, programmes, milestones and RAID — drill from group level to a single project." },
   {
     icon: ShieldCheck,
     tone: "var(--warn)",

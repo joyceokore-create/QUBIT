@@ -826,3 +826,45 @@ isolation). Live on KCB (exec: Risk & Compliance RED first → ambers → Custom
 Experience GREEN collapsed → Unassigned last with 5; PM scope=mine filtered to P001's
 section) and Riverbank (red theme, single Unassigned book, PM view, governance PATCH
 with portfolioId 200 + portfolio select showing "Unassigned").
+
+## M1c — QA preset + Implementor persona (docs/17 §5/§7) (2026-07-30)
+
+### DM1.31 — The fifth persona ships; every persona now has a dedicated preset
+- **Implementor category (§7, confirmed 2026-07-28)**: `projectRoleCategory()` gained
+  `Implementor` as the fifth category; PROJECT_ROLES gained "Implementation Lead",
+  "Implementor", "Trainer", "Support Analyst". No data migration (same pattern as 6.1);
+  legacy free-text still lands on Stakeholder. `defaultLens(Implementor)` = "all".
+- **QA preset (§5)**: sentence hero (never KPI tiles), test queue grouped per project
+  with a TRIAGE-FIRST strip for unassigned CRITICAL bugs, "Bugs I raised"
+  (reporter=me, severity/status/reopened), per-project quality strip (open bugs by
+  severity + reopen rate, coverage joins after M8 — no placeholder). **Aging uses the
+  board-lens business-day clock** (bad > 5 business days per AGING_BUSINESS_DAYS, warn
+  from 3) — NOT the mockup's calendar-day constants, so the dashboard and the QA board
+  lens cannot disagree. **Reopened is derived** from task.status_changed domain events
+  leaving Completed — no new schema.
+- **Implementor preset (§7)**: next-go-live hero with a plain-language critical-path
+  sentence, open gate items, pilot/UAT list with gate segments, rollout issues (open
+  Blockers), 30-day go-live calendar, handover docs (ProjectDocument PendingReview).
+  **Interim data source stated in the UI**: gates = the project's milestones; the
+  rollout window = milestone names matching UAT/SIT/pilot/go-live/rollout/launch/
+  hypercare. M8's stage machine repoints the module; the composition doesn't change.
+- **Scope toggle adopted on QA + Implementor** (design proposal №10 → DM1.20
+  extension): one shared ScopeToggle component now serves PM/QA/Implementor.
+- **isMine scoping fixed while verifying**: getPortfolioSections counted only PM-role
+  members, so a QA/Dev/Implementor member saw "none of your projects". isMine is now
+  lead-or-member-in-ANY-role, per §6 "rows the viewer is a member of".
+- **Interim preset retired** (§8 complete): InterimPreset, TodaySection/AtRiskSection,
+  portfolio-heatmap component, /api/dashboard/heatmap and getHeatmap all deleted;
+  dashboard-v2 slimmed to the shared engine surface + the health-parity contract.
+  Marketing copy no longer sells heatmaps.
+- **Seed**: per-tenant synthetic qa.demo@/impl.demo@ members (on the .invalid domain)
+  with triage/raised-bug/UAT-milestone/handover fixtures so both personas demo out of
+  the box on both tenants.
+
+Verified: lint/typecheck/build green, 471/471 tests (66 files; new: dashboard-qa-impl
+RLS suite — triage-only-unassigned-critical, business-day aging, Completed→reopened
+derivation incl. QA-owns-Completed, interim rollout window, cross-tenant isolation; the
+M1b team-load test was hardened to assert real membership sharing instead of assuming
+the fixture pair). Live on KCB (QA: triage strip, aging clock note, quality bars;
+Implementor: go-live hero "8 of 15 gate items open", pilot 7/15 segments, calendar,
+handover pack) and Riverbank (both personas, red theme).

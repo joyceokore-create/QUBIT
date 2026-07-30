@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { derivedGroups, effectiveGroups, landingPersona } from "@/lib/personas";
+import { projectRoleCategory } from "@/lib/roles";
 
 describe("derivedGroups", () => {
   it("maps membership categories, oversight roles, and leadership", () => {
@@ -8,6 +9,17 @@ describe("derivedGroups", () => {
     ).toEqual(["developer", "qa"]);
     expect(derivedGroups({ membershipCategories: [], tenantRoles: ["HeadOfQA"], leadsProjects: false })).toEqual(["executive"]);
     expect(derivedGroups({ membershipCategories: [], tenantRoles: ["Member"], leadsProjects: true })).toEqual(["pm"]);
+  });
+
+  it("maps the Implementor category to the implementor group (docs/17 §7, M1c)", () => {
+    for (const role of ["Implementation Lead", "Implementor", "Trainer", "Support Analyst"]) {
+      expect(projectRoleCategory(role)).toBe("Implementor");
+    }
+    expect(
+      derivedGroups({ membershipCategories: ["Implementor"], tenantRoles: ["Member"], leadsProjects: false }),
+    ).toEqual(["implementor"]);
+    // Landing priority: implementor outranks qa/developer, sits below pm (17 §1.1).
+    expect(effectiveGroups([], ["developer", "implementor", "qa"])).toEqual(["implementor", "qa", "developer"]);
   });
 
   it("gives stakeholders no group of their own", () => {

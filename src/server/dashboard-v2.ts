@@ -1,30 +1,21 @@
 import { withTenant, type TenantContext } from "@/lib/tenant";
-import { getHeatmap, type HeatmapData } from "@/server/dashboard";
 import { getDeltaFeed, type DeltaFeed } from "@/server/delta";
-import { portfolioHealth, ragCounts, type PortfolioHealth } from "@/server/health";
+import { portfolioHealth, type PortfolioHealth } from "@/server/health";
 import { listMyNudges, type MyNudge } from "@/server/nudger";
 import { getBriefing, type BriefingItem } from "@/server/relevance";
 
 /**
  * Dashboard v2 (M1, docs/16-revamp-plan.md §3) — a dashboard answers three questions in
  * ten seconds: What needs me today? What changed since I last looked? What's at risk?
- * Everything else lives on its own page. One shared dashboard for every role (DM1.10);
- * role composition only reorders sections in the page.
+ * Since M1c every persona has a dedicated preset, so this module's remaining job is the
+ * shared engine surface (health/priorities/delta) and the health-parity contract with Q.
+ * The old portfolio×subsidiary heatmap left with the M18-B amendment (DM1.30/DM1.31).
  */
 
 export interface KpiTrend {
   current: number;
   /** Oldest → newest daily values from PortfolioSnapshot. Empty until ≥2 nights accrue. */
   points: number[];
-}
-
-export interface PortfolioHealthRow {
-  id: string;
-  name: string;
-  itemCount: number;
-  onTrack: number;
-  atRisk: number;
-  overdue: number;
 }
 
 export interface DashboardV2 {
@@ -41,10 +32,6 @@ export interface DashboardV2 {
     /** current = people over-allocated; allocated = denominator for context. */
     capacity: KpiTrend & { allocated: number };
   };
-  /** Portfolio × subsidiary heatmap — null for single-org-unit tenants (DM1.1). */
-  heatmap: HeatmapData | null;
-  /** Per-portfolio rollup shown instead of the heatmap when it is null. */
-  portfolioList: PortfolioHealthRow[] | null;
   delta: DeltaFeed;
 }
 
@@ -71,9 +58,9 @@ export async function getDashboardV2(ctx: TenantContext): Promise<DashboardV2> {
     listMyNudges(ctx, now),
     getDeltaFeed(ctx),
     withTenant(ctx, async (tx) => {
-      const [projects, overdueTasks, allocations, snapshots, orgUnitCount, portfolios] = await Promise.all([
+      const [projects, overdueTasks, allocations, snapshots] = await Promise.all([
         tx.project.findMany({
-          select: { id: true, code: true, name: true, status: true, portfolioId: true },
+          select: { id: true, code: true, name: true, status: true },
           orderBy: { name: "asc" },
         }),
         tx.projectTask.count({
@@ -82,10 +69,8 @@ export async function getDashboardV2(ctx: TenantContext): Promise<DashboardV2> {
         tx.projectMember.groupBy({ by: ["userId"], _sum: { allocationPct: true } }),
         // Newest SPARK_DAYS rows; reversed below so sparklines read oldest → newest.
         tx.portfolioSnapshot.findMany({ orderBy: { day: "desc" }, take: SPARK_DAYS }),
-        tx.orgUnit.count(),
-        tx.portfolio.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
       ]);
-      return { projects, overdueTasks, allocations, snapshots, orgUnitCount, portfolios };
+      return { projects, overdueTasks, allocations, snapshots };
     }),
   ]);
 
@@ -96,16 +81,6 @@ export async function getDashboardV2(ctx: TenantContext): Promise<DashboardV2> {
   const health = portfolioHealth(live.projects.map((p) => p.status));
   const peopleAllocated = live.allocations.length;
   const peopleOverAllocated = live.allocations.filter((a) => (a._sum.allocationPct ?? 0) > 100).length;
-
-  const multiOrgUnit = live.orgUnitCount > 1;
-  const heatmap = multiOrgUnit ? await getHeatmap(ctx) : null;
-  const portfolioList: PortfolioHealthRow[] | null = multiOrgUnit
-    ? null
-    : live.portfolios.map((portfolio) => {
-        const items = live.projects.filter((p) => p.portfolioId === portfolio.id);
-        const { onTrack, atRisk, overdue } = ragCounts(items);
-        return { id: portfolio.id, name: portfolio.name, itemCount: items.length, onTrack, atRisk, overdue };
-      });
 
   return {
     priorities: mergeNudgesIntoPriorities(nudges, briefing),
@@ -121,8 +96,6 @@ export async function getDashboardV2(ctx: TenantContext): Promise<DashboardV2> {
         points: trend((s) => s.peopleOverAllocated),
       },
     },
-    heatmap,
-    portfolioList,
     delta,
   };
 }

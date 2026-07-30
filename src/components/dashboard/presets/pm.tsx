@@ -4,6 +4,7 @@ import type { PmDashboard } from "@/server/dashboard-pm";
 import type { PortfolioSectionsData } from "@/server/pipeline";
 import { FirstLoginChecklist } from "@/components/dashboard/presets/first-login-checklist";
 import { PortfolioSections } from "@/components/dashboard/portfolio-sections";
+import { ScopeToggle } from "@/components/dashboard/scope-toggle";
 import { CARD, Empty, Panel } from "@/components/dashboard/presets/v2-sections";
 
 // PM preset (docs/17 §3, project listing per amended docs/18 §6): the check-in ritual
@@ -63,21 +64,7 @@ export function PmPreset({
       <Hero d={d} userId={userId} />
 
       {/* Scope toggle (DM1.20): default mine, never a wall. */}
-      <div className="-mb-1.5 flex items-center justify-end">
-        <span className="flex items-center gap-1 rounded-full border border-[var(--w07)] bg-[var(--wash)] p-0.5">
-          {(["mine", "all"] as const).map((s) => (
-            <Link
-              key={s}
-              href={`/dashboard?persona=pm&scope=${s}`}
-              className={`rounded-full px-2.5 py-1 font-mono text-[9.5px] font-bold uppercase tracking-[.8px] transition-colors ${
-                scope === s ? "bg-[var(--brand)] text-[var(--onbrand)]" : "text-[var(--ink4)] hover:text-[var(--qink)]"
-              }`}
-            >
-              {s === "mine" ? "My projects" : "All"}
-            </Link>
-          ))}
-        </span>
-      </div>
+      <ScopeToggle persona="pm" scope={scope} />
       <PortfolioSections data={sections} scope={scope} />
 
       <section className="grid grid-cols-1 gap-3.5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">

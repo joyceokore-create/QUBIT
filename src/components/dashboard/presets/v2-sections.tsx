@@ -1,13 +1,10 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import type { DashboardV2 } from "@/server/dashboard-v2";
-import { HealthRing } from "@/components/command/health-ring";
-import { PortfolioHeatmap } from "@/components/dashboard/portfolio-heatmap";
-import { NeedsAttentionList } from "@/components/dashboard/needs-attention";
+import type { DeltaFeed } from "@/server/delta";
 
-// The M1 "three questions" sections (docs/16 §3) — now the INTERIM preset for personas
-// whose dedicated composition hasn't shipped yet (docs/17 §8: developer/PM land M1b,
-// QA/implementor M1c). The executive preset lives in ./executive.tsx.
+// Shared preset chrome (CARD, Panel, Empty) + the "since you last looked" delta feed.
+// The interim "three questions" layout that lived here retired with M1c — every
+// persona now has a dedicated preset (docs/17 §8 complete).
 
 export const CARD =
   "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]";
@@ -29,25 +26,7 @@ export function Empty({ children }: { children: React.ReactNode }) {
   return <div className="p-[12px_16px] text-[12px] text-[var(--ink5)]">{children}</div>;
 }
 
-export function TodaySection({ d, collapsed }: { d: DashboardV2; collapsed: boolean }) {
-  const body = (
-    <Panel title="Needs attention" sub="TOP 5 · FOR YOU">
-      <NeedsAttentionList items={d.priorities} nudges={d.nudges.map((n) => ({ id: n.id, entityId: n.entityId }))} />
-    </Panel>
-  );
-
-  if (!collapsed) return body;
-  return (
-    <details className="group">
-      <summary className="cursor-pointer list-none rounded-[12px] border border-[var(--cardbd)] p-[10px_16px] font-heading text-[13px] font-bold text-[var(--ink3)] transition-colors hover:text-[var(--qink)] group-open:hidden" style={{ background: "var(--cardbg)" }}>
-        Today · {d.priorities.length} item{d.priorities.length === 1 ? "" : "s"} need you — expand
-      </summary>
-      {body}
-    </details>
-  );
-}
-
-export function ChangedSection({ delta }: { delta: DashboardV2["delta"] }) {
+export function ChangedSection({ delta }: { delta: DeltaFeed }) {
   const since = delta.since.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
   return (
     <Panel title="Since you last looked" sub={`FROM ${since.toUpperCase()}`}>
@@ -74,41 +53,3 @@ export function ChangedSection({ delta }: { delta: DashboardV2["delta"] }) {
   );
 }
 
-export function AtRiskSection({ d }: { d: DashboardV2 }) {
-  // docs/18 §0 decision №1: no global KPI tiles anywhere — per-project stats live as
-  // chips on the pipeline table. The health rollup + drill-down survive.
-  const { health } = d;
-  return (
-    <section className="flex flex-col gap-3.5">
-      <div className={`${CARD} flex items-center justify-center gap-6 p-[12px_18px]`} style={{ background: "var(--cardbg)" }}>
-        <HealthRing score={health.pct} />
-        <div className="flex gap-2.5 font-mono text-[9px] tracking-[.5px]">
-          <span className="text-[var(--ok)]">{health.onTrack} ON</span>
-          <span className="text-[var(--warn)]">{health.needAttention} RISK</span>
-          <span className="text-[var(--qinfo)]">{health.planning} PLAN</span>
-        </div>
-      </div>
-
-      {d.heatmap ? (
-        <Panel title="Portfolio × subsidiary" sub="DRILL DOWN">
-          <PortfolioHeatmap data={d.heatmap} />
-        </Panel>
-      ) : d.portfolioList?.length ? (
-        <Panel title="Portfolios" sub="DRILL DOWN">
-          {d.portfolioList.map((p) => (
-            <Link key={p.id} href={`/portfolios/${p.id}`} className="flex items-center gap-3 border-b border-[var(--hair2)] p-[9px_16px] transition-colors last:border-0 hover:bg-[var(--wash)]">
-              <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-[var(--qink)]">{p.name}</span>
-              <span className="font-mono text-[9.5px] tabular-nums text-[var(--ink4)]">{p.itemCount} projects</span>
-              <span className="flex gap-2 font-mono text-[9px] tracking-[.5px]">
-                <span className="text-[var(--ok)]">{p.onTrack} OK</span>
-                <span className="text-[var(--warn)]">{p.atRisk} AR</span>
-                <span className="text-[var(--bad)]">{p.overdue} OD</span>
-              </span>
-              <ArrowRight className="size-3 flex-none text-[var(--ink5)]" />
-            </Link>
-          ))}
-        </Panel>
-      ) : null}
-    </section>
-  );
-}
