@@ -11,7 +11,7 @@ import { emitDomainEvent } from "@/server/events";
 /**
  * Q drafts a Business Requirements Document from what QUBIT already knows about a project
  * (description, objective/mission, team, tasks, risks) and files it as a **draft pending the
- * project manager's review** (source=AIDrafted, status=PendingReview). Grounded only on the
+ * project manager's review** (source=AIDrafted, status=InReview). Grounded only on the
  * provided data; graceful deterministic fallback when the Q AI box is unconfigured.
  */
 
@@ -116,7 +116,7 @@ export async function draftBrd(
     kind: "BRD",
     format: "markdown",
     content: markdown,
-    status: "PendingReview",
+    status: "InReview",
     source: "AIDrafted",
   });
 

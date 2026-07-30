@@ -61,7 +61,7 @@ describe("M-D-A delivery checkpoints", () => {
       // allocated member and an approved BRD — rather than overriding past it.
       await tx.projectMember.create({ data: { tenantId: kcbId, projectId, userId: leadId, role: "Project Manager" } });
       await tx.projectDocument.create({
-        data: { tenantId: kcbId, projectId, title: "Business requirements", kind: "BRD", status: "Final" },
+        data: { tenantId: kcbId, projectId, title: "Business requirements", kind: "BRD", status: "Approved" },
       });
     });
   });

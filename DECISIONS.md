@@ -1042,3 +1042,39 @@ seeded P001 evaluated all six gates correctly against real data (BRD needs its d
 SIT/UAT blocked by the seeded Critical bug, Go-Live needs lessons + handover), a
 too-short override reason was refused, a proper one closed SIT and badged it OVERRIDDEN,
 and recording a lesson flipped `lessons-captured` to met.
+
+## M8-B — Document register: types, versions, named-approver review (docs/16 §6) (2026-07-31)
+
+### DM1.36 — Approval is a decision by named people, not a status flip
+- **Status vocabulary moved** to `Draft → InReview → Approved | Rejected`, replacing
+  `Draft | PendingReview | Final`. Live rows were remapped inside a **DM1.18 tenant
+  loop** (PendingReview → InReview, Final → Approved) — verified pre/post on both
+  tenants with zero legacy values left, and a regression test asserts it stays that way.
+- **Named approvers (§6)**: submitting a document names who must approve it, and ONLY
+  those people can decide. The rule lives in `recordDecision`, not the route, so it
+  holds for every caller. The author is not implicitly an approver; neither is anyone
+  who merely has project access. Verified live: a non-approver gets 403.
+- **Every named approver must approve** for the document to reach Approved; **one
+  rejection sends it back** rather than leaving it half-approved. Re-submitting after a
+  rejection **clears the previous decisions** — a fresh review, not a half-remembered one.
+- **Versioning supersedes, never overwrites**: `newVersion` creates the next version
+  linked to its predecessor and starting as Draft, while the approved v1 stays readable
+  and is marked superseded. Submitting an already-approved document is refused with
+  "raise a new version instead" — the approved history is not editable in place.
+- **The register's types are real** (`BRD | URS | SRS | Design | TestPlan | Signoff |
+  Handover | Plan | Note | Other`). M8-A's gate rules read the new vocabulary: an
+  approved BRD satisfies the planning gate and an approved **Handover** document
+  satisfies the closure gate — replacing the title-substring approximation, which stays
+  only as a fallback for documents filed before the types existed.
+- **Documents now enter the register as drafts.** The old default filed everything as
+  Final, which quietly asserted approval nobody had given.
+- **Five test fixtures across four suites** used the old vocabulary and failed as
+  designed; each was updated to the new words rather than the gates being weakened.
+
+Verified: lint/typecheck/build green, 514/514 tests (73 files; new document-register RLS
+suite — draft-by-default, submission naming approvers and notifying them but not the
+submitter, named-approvers-only enforcement both ways, unanimity, rejection sending back
+and re-submission clearing decisions, versioning superseding, the gate rule reading the
+register, cross-tenant isolation). Live on KCB: a Handover document created, submitted to
+a named approver, a decision by a non-approver refused with 403, the approver's approval
+flipping it to Approved, and the Go-Live gate's `handover-approved` rule turning met.

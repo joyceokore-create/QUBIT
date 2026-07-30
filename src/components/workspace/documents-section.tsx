@@ -10,6 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Markdown } from "@/components/q/markdown";
 
+interface Approval {
+  approverId: string;
+  approverName: string;
+  decision: "Pending" | "Approved" | "Rejected";
+  comment: string | null;
+}
 interface Doc {
   id: string;
   title: string;
@@ -20,14 +26,19 @@ interface Doc {
   authorName: string | null;
   hasFile: boolean;
   createdAt: string;
+  version: number;
+  superseded: boolean;
+  approvals: Approval[];
 }
 interface DocDetail extends Doc {
   content: string | null;
   fileData: string | null;
 }
 
-const KINDS = ["BRD", "Plan", "Spec", "Note", "Other"] as const;
-const STATUS_TOKEN: Record<string, string> = { Draft: "--ink4", PendingReview: "--warn", Final: "--ok" };
+// docs/16 §6 — the register's real types and its review vocabulary.
+const KINDS = ["BRD", "URS", "SRS", "Design", "TestPlan", "Signoff", "Handover", "Plan", "Note", "Other"] as const;
+const STATUS_TOKEN: Record<string, string> = { Draft: "--ink4", InReview: "--warn", Approved: "--ok", Rejected: "--bad" };
+const STATUS_LABEL: Record<string, string> = { Draft: "Draft", InReview: "In review", Approved: "Approved", Rejected: "Sent back" };
 
 export function DocumentsSection({
   projectId,
@@ -43,6 +54,9 @@ export function DocumentsSection({
   const [addOpen, setAddOpen] = useState(false);
   const [view, setView] = useState<DocDetail | null>(null);
   const [drafting, setDrafting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
+  const [submitFor, setSubmitFor] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const d = await fetch(`/api/projects/${projectId}/documents`).then((r) => r.json());
@@ -51,6 +65,13 @@ export function DocumentsSection({
   useEffect(() => {
     void load();
   }, [load]);
+  // Approvers are picked from the project's own team.
+  useEffect(() => {
+    void (async () => {
+      const r = await fetch(`/api/projects/${projectId}/members`).then((x) => (x.ok ? x.json() : null));
+      if (r?.data) setMembers(r.data.map((m: { userId: string; name: string }) => ({ id: m.userId, name: m.name })));
+    })();
+  }, [projectId]);
 
   const open = async (id: string) => {
     const d = await fetch(`/api/documents/${id}`).then((r) => r.json());
@@ -59,13 +80,33 @@ export function DocumentsSection({
   const remove = async (id: string) => {
     if (await fetch(`/api/documents/${id}`, { method: "DELETE" }).then((r) => r.ok)) void load();
   };
-  const approve = async (id: string) => {
-    const ok = await fetch(`/api/documents/${id}`, {
-      method: "PATCH",
+  // docs/16 §6 — a document is approved by its NAMED approvers, never by a one-click
+  // status flip. Submitting names them; deciding is the approver's own act.
+  const submit = async (id: string, approverIds: string[]) => {
+    const res = await fetch(`/api/documents/${id}/review`, {
+      method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ status: "Final" }),
-    }).then((r) => r.ok);
-    if (ok) void load();
+      body: JSON.stringify({ approverIds }),
+    });
+    if (res.ok) void load();
+    else setError((await res.json().catch(() => null))?.error?.message ?? "Could not submit.");
+  };
+  const decide = async (id: string, decision: "Approved" | "Rejected") => {
+    const res = await fetch(`/api/documents/${id}/review`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ decision }),
+    });
+    if (res.ok) void load();
+    else setError((await res.json().catch(() => null))?.error?.message ?? "Could not record that.");
+  };
+  const raiseVersion = async (id: string) => {
+    const res = await fetch(`/api/documents/${id}/review`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ newVersion: true }),
+    });
+    if (res.ok) void load();
   };
   const draftBrd = async () => {
     setDrafting(true);
@@ -104,22 +145,27 @@ export function DocumentsSection({
 
       <div className="flex flex-col gap-2">
         {docs.map((d) => (
-          <div key={d.id} className="group flex items-center gap-3 rounded-[12px] border border-[var(--w07)] bg-[var(--qcard)] p-3">
+          <div key={d.id} className="flex flex-col gap-2">
+          <div className="group flex items-center gap-3 rounded-[12px] border border-[var(--w07)] bg-[var(--qcard)] p-3">
             <span className="flex size-9 flex-none items-center justify-center rounded-[9px] bg-[color-mix(in_oklab,var(--brand)_12%,transparent)] text-brand">
               <FileText className="size-4" />
             </span>
             <button type="button" onClick={() => open(d.id)} className="min-w-0 flex-1 text-left">
               <span className="block truncate text-[13.5px] font-semibold text-[var(--qink)]">{d.title}</span>
               <span className="block truncate text-[11px] text-[var(--ink4)]">
-                {d.kind} · {d.source === "AIDrafted" ? "Q-drafted" : "Uploaded"}
+                {d.kind} · v{d.version}
+                {d.superseded ? " · superseded" : ""} · {d.source === "AIDrafted" ? "Q-drafted" : "Uploaded"}
                 {d.authorName ? ` · ${d.authorName}` : ""} · {new Date(d.createdAt).toLocaleDateString()}
+                {d.status === "InReview" && d.approvals.length > 0
+                  ? ` · ${d.approvals.filter((a) => a.decision === "Approved").length}/${d.approvals.length} approved`
+                  : ""}
               </span>
             </button>
             <span
               className="flex-none rounded-full px-2.5 py-1 text-[10px] font-bold"
               style={{ color: `var(${STATUS_TOKEN[d.status] ?? "--ink4"})`, background: `color-mix(in oklab, var(${STATUS_TOKEN[d.status] ?? "--ink4"}) 14%, transparent)` }}
             >
-              {d.status === "PendingReview" ? "Pending review" : d.status}
+              {STATUS_LABEL[d.status] ?? d.status}
             </span>
             <button
               type="button"
@@ -130,9 +176,25 @@ export function DocumentsSection({
             >
               <MessageSquare className="size-3.5" />
             </button>
-            {canEdit && d.status === "PendingReview" && (
-              <button type="button" onClick={() => approve(d.id)} className="flex flex-none items-center gap-1 rounded-full border border-[var(--w10)] px-2.5 py-1 text-[10.5px] font-semibold text-ink-3 hover:border-[var(--ok)] hover:text-[var(--ok)]">
-                <Check className="size-3.5" /> Approve
+            {/* I am a named approver on a document in review — my decision, my act. */}
+            {d.status === "InReview" && d.approvals.some((a) => a.approverId === viewerId && a.decision === "Pending") && (
+              <>
+                <button type="button" onClick={() => decide(d.id, "Approved")} className="flex flex-none items-center gap-1 rounded-full border border-[var(--w10)] px-2.5 py-1 text-[10.5px] font-semibold text-ink-3 hover:border-[var(--ok)] hover:text-[var(--ok)]">
+                  <Check className="size-3.5" /> Approve
+                </button>
+                <button type="button" onClick={() => decide(d.id, "Rejected")} className="flex-none rounded-full border border-[var(--w10)] px-2.5 py-1 text-[10.5px] font-semibold text-ink-3 hover:border-[var(--bad)] hover:text-[var(--bad)]">
+                  Send back
+                </button>
+              </>
+            )}
+            {canEdit && (d.status === "Draft" || d.status === "Rejected") && members.length > 0 && (
+              <button type="button" onClick={() => setSubmitFor(submitFor === d.id ? null : d.id)} className="flex-none rounded-full border border-[var(--w10)] px-2.5 py-1 text-[10.5px] font-semibold text-ink-3 hover:border-[var(--brand)] hover:text-brand">
+                Submit for review
+              </button>
+            )}
+            {canEdit && d.status === "Approved" && !d.superseded && (
+              <button type="button" onClick={() => void raiseVersion(d.id)} title="Raise the next version" className="flex-none rounded-full border border-[var(--w10)] px-2.5 py-1 text-[10.5px] font-semibold text-ink-3 hover:border-[var(--brand)] hover:text-brand">
+                New version
               </button>
             )}
             {canEdit && (
@@ -148,7 +210,37 @@ export function DocumentsSection({
               />
             )}
           </div>
+          {/* Naming the approvers (docs/16 §6) — pick from the project's own team. */}
+          {submitFor === d.id && (
+            <div className="flex flex-wrap items-center gap-1.5 rounded-[10px] border border-[var(--w07)] bg-[var(--wash)] p-2.5">
+              <span className="font-mono text-[9px] font-bold uppercase tracking-[1px] text-[var(--ink4)]">
+                Send to
+              </span>
+              {members.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => {
+                    void submit(d.id, [m.id]);
+                    setSubmitFor(null);
+                  }}
+                  className="rounded-full border border-[var(--w10)] px-2.5 py-1 text-[10.5px] font-semibold text-ink-3 hover:border-[var(--brand)] hover:text-brand"
+                >
+                  {m.name}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setSubmitFor(null)}
+                className="ml-auto text-[10.5px] font-semibold text-[var(--ink4)] hover:text-[var(--qink)]"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+          </div>
         ))}
+        {error && <p className="text-[11.5px] text-[var(--bad)]">{error}</p>}
         {docs.length === 0 && (
           <div className="rounded-[12px] border border-dashed border-[var(--w10)] p-8 text-center text-[13px] text-[var(--ink4)]">
             No documents yet.{canEdit ? " Add a BRD, plan or spec." : ""}

@@ -68,12 +68,12 @@ describe("Workspace — documents + access", () => {
     expect(await listDocuments(riverbank, projectId)).toHaveLength(0);
   });
 
-  it("Q drafts a BRD and files it as Pending review for the PM", async () => {
+  it("Q drafts a BRD and files it In review for the PM", async () => {
     const { documentId, usedAi } = await draftBrd(kcb, projectId, { tenantName: "KCB" });
     expect(usedAi).toBe(false); // deterministic path
     const doc = await getDocument(kcb, documentId);
     expect(doc?.kind).toBe("BRD");
-    expect(doc?.status).toBe("PendingReview");
+    expect(doc?.status).toBe("InReview");
     expect(doc?.source).toBe("AIDrafted");
     expect(doc?.content).toContain("Business Requirements Document");
     expect(doc?.content).toContain("Requirements & deliverables");
@@ -82,7 +82,7 @@ describe("Workspace — documents + access", () => {
   it("grounds the project report on attached documents", async () => {
     await createDocument(kcb, projectId, {
       title: "Payments spec — UNIQUE-MARKER-42",
-      kind: "Spec",
+      kind: "SRS", // M8-B renamed the register's types (docs/16 §6)
       content: "The system must reconcile mobile wallet transactions nightly.",
     });
     const { markdown } = await generateReport(kcb, { type: "project", targetId: projectId, tenantName: "KCB" });

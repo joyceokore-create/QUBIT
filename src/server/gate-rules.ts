@@ -53,7 +53,7 @@ const RULES: { match: (name: string) => boolean; build: (f: GateFacts) => GateRu
         key: "brd-approved",
         label: "An approved BRD or business case in the document register",
         met: f.approvedBrds > 0,
-        detail: f.approvedBrds > 0 ? null : "No document of kind BRD has reached Final.",
+        detail: f.approvedBrds > 0 ? null : "No BRD in the register has been approved yet.",
       },
       {
         key: "team-allocated",
@@ -108,7 +108,7 @@ const RULES: { match: (name: string) => boolean; build: (f: GateFacts) => GateRu
         key: "handover-approved",
         label: "An approved handover document",
         met: f.approvedHandovers > 0,
-        detail: f.approvedHandovers > 0 ? null : "No handover document has reached Final.",
+        detail: f.approvedHandovers > 0 ? null : "No handover document has been approved yet.",
       },
     ],
   },
@@ -123,10 +123,12 @@ async function gatherFacts(tx: Prisma.TransactionClient, projectId: string): Pro
     tx.projectTask.count({
       where: { projectId, type: "Bug", severity: "Critical", status: { not: "Completed" }, approvalStatus: { not: "Draft" } },
     }),
-    tx.projectDocument.findMany({ where: { projectId, status: "Final" }, select: { kind: true, title: true } }),
+    // M8-B: "approved" now means the review workflow said so (docs/16 §6), and the
+    // register has real Handover/Signoff types instead of a title convention.
+    tx.projectDocument.findMany({ where: { projectId, status: "Approved" }, select: { kind: true, title: true } }),
     tx.lessonLearned.count({ where: { projectId } }),
   ]);
-  const finalTitles = documents.map((d) => `${d.kind} ${d.title}`.toLowerCase());
+  const approvedTitles = documents.map((d) => `${d.kind} ${d.title}`.toLowerCase());
   return {
     hasLead: !!project?.leadUserId,
     memberCount,
@@ -134,9 +136,9 @@ async function gatherFacts(tx: Prisma.TransactionClient, projectId: string): Pro
     milestones,
     openCriticalBugs,
     approvedBrds: documents.filter((d) => d.kind === "BRD").length,
-    // A handover doc is any Final document whose kind or title says so — the register
-    // gains a real Handover kind with M8-B's document types.
-    approvedHandovers: finalTitles.filter((t) => t.includes("handover")).length,
+    // Since M8-B the register has a real Handover kind; the title fallback stays for
+    // documents filed before those types existed.
+    approvedHandovers: documents.filter((d) => d.kind === "Handover").length + approvedTitles.filter((t) => t.includes("handover")).length,
     lessons,
   };
 }

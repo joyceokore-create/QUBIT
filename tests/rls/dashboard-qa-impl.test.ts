@@ -83,7 +83,7 @@ describe("M1c QA + Implementor dashboards", () => {
         data: { tenantId: kcbId, projectId, description: "Telco API docs outstanding", severity: "Critical", status: "Open" },
       });
       await tx.projectDocument.create({
-        data: { tenantId: kcbId, projectId, title: "Handover pack", kind: "Note", status: "PendingReview" },
+        data: { tenantId: kcbId, projectId, title: "Handover pack", kind: "Handover", status: "InReview" },
       });
     });
   });

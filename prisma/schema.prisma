@@ -90,6 +90,7 @@ model Tenant {
   checkpointStatuses  CheckpointStatus[]
   marketCheckIns      MarketCheckIn[]
   lessonsLearned      LessonLearned[]
+  documentApprovals   DocumentApproval[]
   nudges              Nudge[]
   nudgeSnoozes        NudgeSnooze[]
   workComments        WorkComment[]
@@ -184,6 +185,7 @@ model User {
   memberReportAcks     MemberReportAck[]     @relation("MemberReportAcks")
   marketCheckIns       MarketCheckIn[]       @relation("MarketCheckInAuthor")
   lessonsAuthored      LessonLearned[]       @relation("LessonAuthor")
+  documentApprovals    DocumentApproval[]    @relation("DocumentApprover")
   checkpointOverrides  CheckpointStatus[]    @relation("CheckpointOverrider")
   nudgeSnoozes         NudgeSnooze[]         @relation("UserNudgeSnoozes")
   workComments         WorkComment[]         @relation("WorkCommentAuthor")
@@ -332,24 +334,35 @@ model Blocker {
 // text/markdown body (also what Q grounds on); `fileData` holds a base64 blob for PDF
 // uploads (download). A doc can be Uploaded or AI-drafted and move through a review state.
 model ProjectDocument {
-  id             String        @id @default(uuid())
-  tenantId       String        @map("tenant_id")
-  tenant         Tenant        @relation(fields: [tenantId], references: [id])
-  projectId      String        @map("project_id")
-  project        Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id             String             @id @default(uuid())
+  tenantId       String             @map("tenant_id")
+  tenant         Tenant             @relation(fields: [tenantId], references: [id])
+  projectId      String             @map("project_id")
+  project        Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
   title          String
-  kind           String        @default("Other") // BRD | Plan | Spec | Note | Other
-  format         String        @default("text") // text | markdown | pdf
+  // docs/16 §6 — the register's document types. Handover/Signoff/TestPlan feed the
+  // gate checklists (M8-A); URS/SRS become requirement sources in M8-C.
+  kind           String             @default("Other") // BRD | URS | SRS | Design | TestPlan | Signoff | Handover | Plan | Note | Other
+  format         String             @default("text") // text | markdown | pdf
   content        String? // text/markdown body
-  fileData       String?       @map("file_data") // base64 (pdf uploads)
-  status         String        @default("Final") // Draft | PendingReview | Final
-  source         String        @default("Uploaded") // Uploaded | AIDrafted
-  createdById    String?       @map("created_by_id")
-  createdBy      User?         @relation("DocumentAuthor", fields: [createdById], references: [id])
+  fileData       String?            @map("file_data") // base64 (pdf uploads)
+  // Review workflow (docs/16 §6): Draft → InReview → Approved, or Rejected back to the
+  // author. Every transition is audited; only NAMED approvers decide.
+  status         String             @default("Draft") // Draft | InReview | Approved | Rejected
+  // Versioning: a new version supersedes its predecessor rather than overwriting it, so
+  // the approved history stays readable.
+  version        Int                @default(1)
+  supersedesId   String?            @map("supersedes_id")
+  supersedes     ProjectDocument?   @relation("DocumentVersions", fields: [supersedesId], references: [id])
+  supersededBy   ProjectDocument[]  @relation("DocumentVersions")
+  approvals      DocumentApproval[]
+  source         String             @default("Uploaded") // Uploaded | AIDrafted
+  createdById    String?            @map("created_by_id")
+  createdBy      User?              @relation("DocumentAuthor", fields: [createdById], references: [id])
   // Tasks whose plan was generated from this document (Phase 6.1 traceability).
-  generatedTasks ProjectTask[] @relation("TaskSourceDocument")
-  createdAt      DateTime      @default(now()) @map("created_at")
-  updatedAt      DateTime      @updatedAt @map("updated_at")
+  generatedTasks ProjectTask[]      @relation("TaskSourceDocument")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
 
   @@index([tenantId, projectId])
   @@map("project_document")
@@ -413,6 +426,26 @@ model ProjectIntegration {
 
 // PRD Module 8 — project milestones (schedule checkpoints). Powers the workspace Deadlines
 // tab; overdue = Pending with a past due date.
+// Named approvers on a document under review (docs/16 §6). One row per person asked;
+// the document reaches Approved only when every one of them has approved.
+model DocumentApproval {
+  id         String          @id @default(cuid())
+  tenantId   String          @map("tenant_id")
+  tenant     Tenant          @relation(fields: [tenantId], references: [id])
+  documentId String          @map("document_id")
+  document   ProjectDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  approverId String          @map("approver_id")
+  approver   User            @relation("DocumentApprover", fields: [approverId], references: [id])
+  decision   String          @default("Pending") // Pending | Approved | Rejected
+  comment    String?
+  decidedAt  DateTime?       @map("decided_at")
+  createdAt  DateTime        @default(now()) @map("created_at")
+
+  @@unique([documentId, approverId])
+  @@index([tenantId, approverId])
+  @@map("document_approval")
+}
+
 model ProjectMilestone {
   id         String        @id @default(uuid())
   tenantId   String        @map("tenant_id")

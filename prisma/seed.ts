@@ -1538,8 +1538,8 @@ async function seedTenant(seed: TenantSeed) {
           tenantId: tenant.id,
           projectId: firstProject,
           title: "Operations handover pack",
-          kind: "Note",
-          status: "PendingReview",
+          kind: "Handover",
+          status: "InReview",
           createdById: implUser.id,
         },
       });

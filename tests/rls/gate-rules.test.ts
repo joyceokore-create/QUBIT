@@ -108,12 +108,12 @@ describe("M8-A gate checklists", () => {
   });
 
   it("satisfying the requirements closes the gate with no override recorded", async () => {
-    // Give the project a lead + member and a Final BRD — the gate's own conditions.
+    // Give the project a lead + member and an approved BRD — the gate's own conditions.
     await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
       await tx.project.update({ where: { id: projectId }, data: { leadUserId: leadId } });
       await tx.projectMember.create({ data: { tenantId: kcbId, projectId, userId: leadId, role: "Project Manager" } });
       await tx.projectDocument.create({
-        data: { tenantId: kcbId, projectId, title: "Business requirements", kind: "BRD", status: "Final" },
+        data: { tenantId: kcbId, projectId, title: "Business requirements", kind: "BRD", status: "Approved" },
       });
     });
     // Re-close it cleanly: reset then set Done with no reason at all.

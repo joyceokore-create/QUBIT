@@ -109,7 +109,8 @@ export async function getImplDashboard(ctx: TenantContext, now = new Date()): Pr
         orderBy: { dateRaised: "asc" },
       }),
       tx.projectDocument.findMany({
-        where: { projectId: { in: projectIds }, status: "PendingReview" },
+        // M8-B vocabulary: documents awaiting a named approver's decision.
+        where: { projectId: { in: projectIds }, status: "InReview" },
         select: { id: true, projectId: true, title: true, createdAt: true },
         orderBy: { createdAt: "asc" },
       }),
