@@ -14,9 +14,6 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed"
   },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  },
   "packageManager": "pnpm@9.15.9",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",

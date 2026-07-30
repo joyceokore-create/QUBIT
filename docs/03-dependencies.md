@@ -99,10 +99,16 @@ docker run --name qubit-pg -e POSTGRES_USER=qubit -e POSTGRES_PASSWORD=qubit \
     "test:e2e": "playwright test",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed"
-  },
-  "prisma": { "seed": "tsx prisma/seed.ts" }
+  }
 }
 ```
+
+The seed command moved out of `package.json#prisma` (deprecated, removed in Prisma 7)
+into `prisma.config.ts`. A config file makes Prisma skip its own `.env` loading, so that
+file calls Node's built-in `process.loadEnvFile()` — no new dependency. The production
+image deliberately ships without it: the container only runs `prisma migrate deploy`,
+which uses the default schema path and reads `DATABASE_URL` from the container
+environment, and never seeds.
 
 ## Explicitly NOT used
 

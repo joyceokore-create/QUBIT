@@ -39,6 +39,11 @@ COPY --from=builder /app/public ./public
 # `prisma migrate deploy` (schema + RLS policies) at startup. The Next standalone trace
 # bundles the app's runtime deps but omits the CLI's own deps (e.g. @prisma/config →
 # effect), so we copy node_modules wholesale over the standalone one.
+#
+# prisma.config.ts is deliberately NOT copied: it configures the local CLI (seed command
+# + .env loading), and `migrate deploy` here needs neither — it resolves the default
+# prisma/schema.prisma path and reads DATABASE_URL from the container environment. The
+# container never seeds. Keeping it out also keeps a TS config off the startup path.
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules ./node_modules
 COPY docker/entrypoint.sh ./entrypoint.sh
