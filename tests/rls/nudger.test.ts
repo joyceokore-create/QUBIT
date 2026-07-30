@@ -40,6 +40,14 @@ describe("M3 nudger", () => {
     devCtx = { tenantId: kcbId, userId: devId, roles: ["Member"] };
 
     await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+      // Since M6-A the nudger skips people on leave and reroutes to the PM, so this
+      // suite must control that precondition: any absence on its actors (ensureUsers
+      // reuses seeded accounts, which other work may have booked off) would silently
+      // change who gets nudged.
+      await tx.absence.deleteMany({ where: { userId: { in: [leadId, devId] } } });
+    });
+
+    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
       const project = await tx.project.create({
         data: {
           tenantId: kcbId,

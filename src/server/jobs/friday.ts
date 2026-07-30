@@ -5,6 +5,7 @@ import { computeCheckInDraft, effectiveRag, type CheckInDraft } from "@/server/c
 import { emitDomainEvent } from "@/server/events";
 import { portfolioHealth } from "@/server/health";
 import { computeMemberDraft } from "@/server/member-reports";
+import { leaveExposureNextWeek } from "@/server/absence";
 import type { JobDefinition } from "@/server/jobs/types";
 
 /**
@@ -206,6 +207,8 @@ export const fridayReport: JobDefinition = {
       return `- ${RAG_DOT[ci?.computedRag ?? "Green"]} **${p.name}** (${p.code}) — ⚠️ _unconfirmed — computed status shown_${factLine ? `\n  ${factLine}` : ""}`;
     });
 
+    // docs/16 §5 — next week's leave exposure, so the lead sees the hole before it bites.
+    const exposure = await leaveExposureNextWeek(tx, now);
     const confirmedCount = checkIns.filter((c) => c.status === "Confirmed").length;
     const sorted = [...rows].sort((a, b) => {
       const rank = (s: string) => (s.includes("🔴") ? 0 : s.includes("🟡") ? 1 : 2);
@@ -228,6 +231,15 @@ export const fridayReport: JobDefinition = {
         : "_Nothing escalated this week._",
       `\n## Project check-ins`,
       sorted.length ? sorted.join("\n") : "_No active projects._",
+      `\n## Leave next week`,
+      exposure.peopleAway === 0
+        ? "_Nobody is booked off next week._"
+        : [
+            `- **${exposure.peopleAway} ${exposure.peopleAway === 1 ? "person is" : "people are"} on leave next week.**`,
+            ...exposure.projects.map(
+              (p) => `- ${p.projectName} loses ${p.away} of ${p.members} (${Math.round((p.away / p.members) * 100)}%)`,
+            ),
+          ].join("\n"),
       `\n## Due in the next 7 days`,
       milestonesAhead.length
         ? milestonesAhead

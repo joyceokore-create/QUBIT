@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { requirePermission, forbidden } from "@/lib/api-guard";
 import { canWriteTask, canPublishTask } from "@/lib/access";
 import { updateTask, removeTask, UpdateTaskInput, TaskError } from "@/server/project-tasks";
+import { assignmentWarning } from "@/server/absence";
+import { withTenant } from "@/lib/tenant";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -22,7 +24,16 @@ export async function PATCH(req: Request, { params }: Ctx) {
   }
   try {
     await updateTask(guard.ctx, id, parsed.data);
-    return NextResponse.json({ ok: true });
+    // docs/16 §5 — the update SUCCEEDS, then we tell the caller if the assignee is away
+    // on the due date and who else could take it. A warning, never a block: the PM may
+    // know something the leave calendar does not.
+    const task = await withTenant(guard.ctx, (tx) =>
+      tx.projectTask.findUnique({ where: { id }, select: { projectId: true, assigneeId: true, dueDate: true } }),
+    );
+    const warning = task
+      ? await assignmentWarning(guard.ctx, task.projectId, task.assigneeId, task.dueDate)
+      : null;
+    return NextResponse.json({ ok: true, ...(warning?.conflict ? { warning } : {}) });
   } catch (e) {
     if (e instanceof TaskError) {
       const status = e.code === "FORBIDDEN" ? 403 : e.code === "NOT_FOUND" ? 404 : 400;

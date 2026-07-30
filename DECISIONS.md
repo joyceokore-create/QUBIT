@@ -1157,3 +1157,42 @@ rerouted to the PM, imported rows undeletable, tenant isolation — plus a pure 
 unit suite covering weekends, clipping, unioned overlaps and the never-negative floor).
 Live on KCB: leave recorded through the API, a backwards range refused with 400, and the
 PM team-load showing "ON LEAVE UNTIL 8 AUG" against the right person.
+
+## M6-B — Absence reactions: assignment warnings, exposure line, CSV bridge (docs/16 §5) (2026-07-31)
+
+### DM1.39 — Absence changes decisions, not just numbers
+M6-A made the system know who is away; M6-B is where that knowledge changes what
+somebody does.
+
+- **Assignment warning (§5)**: assigning a task due inside the assignee's leave returns
+  a warning naming when they are back and up to three alternates — SAME project role,
+  present that day, least loaded first. It is a **warning, never a block**: the update
+  succeeds and the caller is told, because the PM may know something the leave calendar
+  does not.
+- **Friday exposure line (§5)**: the weekly report now carries "N people are on leave
+  next week" plus the projects losing the largest share of their team. It counts
+  **people, not percentages of an allocation nobody typed** — the honest figure with the
+  data we actually have.
+- **CSV file bridge (§5 adapter mode 2)**: `email,type,start,end[,ref]` from any ERP
+  export, no API call needed. **Idempotent on externalRef** so re-running an export
+  corrects dates in place instead of stacking duplicates. A malformed row is rejected
+  **with a reason and a 1-based line number** while the rest still import — one bad line
+  must not cost you the file. Unknown people are surfaced, not swallowed.
+- **Deferred from M6, with reasons**: dated allocations
+  (`ProjectMember.startDate/endDate`) and the `TimeEntry`→`ProjectTask` retarget are
+  mechanical and independent of the absence layer; the ERP API pull waits on the
+  endpoint being provisioned (docs/14). None of them block the §5 payoff.
+
+**A contamination lesson worth recording**: three M3 nudger tests failed after M6-A
+because my own live browser verification had booked a *seeded* user off, and
+`ensureUsers` reuses seeded accounts — so the nudger's assignee looked absent and the
+reroute fired. The product was right; the suite simply no longer controlled a
+precondition that now matters. The nudger suite now clears absences for its own actors.
+Live verification against the shared dev database can change later test runs.
+
+Verified: lint/typecheck/build green, 551/551 tests (79 files; new reactions RLS suite —
+warning fires only inside the window, alternates respect role and exclude anyone also
+away, exposure counts, CSV idempotency and per-row rejection, cross-tenant invisibility
+— plus a pure CSV-parser unit suite). Live on KCB: leave booked, a task assigned into
+that window returned `conflict: true` with the return date, and the generated Friday
+report read "1 person is on leave next week · CBS Phase 1 loses 1 of 3 (33%)".
