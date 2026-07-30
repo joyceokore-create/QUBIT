@@ -116,7 +116,7 @@ export function ExecutivePreset({ d, firstName }: { d: ExecutiveDashboard; first
       {/* Amended docs/18 §6: portfolio-grouped sections ARE the projects view — worst
           health first, Unassigned last; milestones/risks/velocity are per-row chips;
           there is no global KPI strip and no separate heatmap. */}
-      <PortfolioSections data={d.sections} />
+      <PortfolioSections data={d.sections} matrices={d.rolloutMatrices} />
       <ChangedSection delta={d.delta} />
     </>
   );

@@ -1,14 +1,17 @@
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import type { PortfolioSection, PortfolioSectionsData } from "@/server/pipeline";
+import type { RolloutMatrix } from "@/server/rollout";
 import { PipelineTable } from "@/components/dashboard/pipeline-table";
+import { RolloutHeatmap } from "@/components/dashboard/rollout-heatmap";
 import { CARD } from "@/components/dashboard/presets/v2-sections";
 
 // Portfolio sections (docs/18 §6 amended, shape per the supervisor's wireframe): one
 // collapsible <details> per portfolio, worst health first, Unassigned last and only
 // when non-empty. Collapsed shows just the header row, so the whole book scans in one
 // screen. Sections with trouble open by default; Green ones start collapsed (DM1.30).
-// Body = the viewKind lens; Rollout portfolios render the pipeline lens until M-D
-// ships market tracks — honestly labelled, never a placeholder heatmap.
+// Body = the viewKind lens: Pipeline renders the stage-grouped table, Rollout renders
+// the project × market heatmap (M-D-B). A Rollout portfolio with no market tracks yet
+// falls back to the pipeline lens rather than showing an empty grid.
 
 const RAG_TOKEN: Record<string, string> = { Green: "--ok", Amber: "--warn", Red: "--bad" };
 
@@ -19,8 +22,18 @@ function SectionDelta({ delta }: { delta: -1 | 0 | 1 | null }) {
   return <Minus className="size-3 text-[var(--ink5)] opacity-60" aria-label="unchanged vs last week" />;
 }
 
-function Section({ section, scope }: { section: PortfolioSection; scope: "all" | "mine" }) {
+function Section({
+  section,
+  scope,
+  matrix,
+}: {
+  section: PortfolioSection;
+  scope: "all" | "mine";
+  matrix?: RolloutMatrix;
+}) {
   const tok = RAG_TOKEN[section.rag];
+  // Only use the rollout lens when there is something to show in it.
+  const showRollout = section.viewKind === "Rollout" && !!matrix && matrix.rows.length > 0 && matrix.markets.length > 0;
   return (
     <details className={`${CARD} group overflow-hidden`} style={{ background: "var(--cardbg)" }} open={section.rag !== "Green"}>
       <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2.5 p-[11px_16px]">
@@ -39,12 +52,16 @@ function Section({ section, scope }: { section: PortfolioSection; scope: "all" |
           <span className="tabular-nums">{section.progress}%</span>
           {section.openBlockers > 0 && <span className="text-[var(--bad)]">{section.openBlockers} blocked</span>}
           {section.ownerName && <span className="hidden md:inline">{section.ownerName}</span>}
-          {section.viewKind === "Rollout" && <span className="text-[var(--qinfo)]" title="Market heatmap lens arrives with M-D — pipeline lens shown until then">ROLLOUT · PIPELINE LENS</span>}
+          {section.viewKind === "Rollout" && (
+            <span className="text-[var(--qinfo)]">{showRollout ? "ROLLOUT" : "ROLLOUT · NO MARKET TRACKS YET"}</span>
+          )}
         </span>
       </summary>
       <div className="border-t border-[var(--hair)]">
         {section.projectCount === 0 ? (
           <p className="p-[12px_16px] text-[12px] text-[var(--ink5)]">No active projects in this portfolio.</p>
+        ) : showRollout ? (
+          <RolloutHeatmap matrix={matrix!} />
         ) : (
           <PipelineTable data={section.pipeline} scope={scope} bare />
         )}
@@ -53,7 +70,16 @@ function Section({ section, scope }: { section: PortfolioSection; scope: "all" |
   );
 }
 
-export function PortfolioSections({ data, scope = "all" }: { data: PortfolioSectionsData; scope?: "all" | "mine" }) {
+export function PortfolioSections({
+  data,
+  scope = "all",
+  matrices = [],
+}: {
+  data: PortfolioSectionsData;
+  scope?: "all" | "mine";
+  /** Rollout matrices keyed by portfolio (docs/18 §6) — absent ones fall back to pipeline. */
+  matrices?: RolloutMatrix[];
+}) {
   // Scoped views (PM/dev "mine") drop sections holding none of the viewer's projects —
   // still a filter, never a wall: the ALL toggle restores the whole book (DM1.20).
   const sections =
@@ -66,10 +92,11 @@ export function PortfolioSections({ data, scope = "all" }: { data: PortfolioSect
       </div>
     );
   }
+  const matrixByPortfolio = new Map(matrices.map((m) => [m.portfolioId, m]));
   return (
     <section className="flex flex-col gap-2.5">
       {sections.map((s) => (
-        <Section key={s.id} section={s} scope={scope} />
+        <Section key={s.id} section={s} scope={scope} matrix={matrixByPortfolio.get(s.id)} />
       ))}
     </section>
   );

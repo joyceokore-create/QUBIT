@@ -81,6 +81,7 @@ export interface PortfolioSectionsData {
   mineCount: number;
 }
 
+
 function groupByStage(rows: (PipelineRow & { stage: PipelineStage })[]): PipelineTableData {
   return {
     groups: PIPELINE_STAGES.map((stage) => ({ stage, rows: rows.filter((r) => r.stage === stage) })).filter(

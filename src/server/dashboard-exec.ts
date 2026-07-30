@@ -5,6 +5,7 @@ import { needsAttention, portfolioHealth, type PortfolioHealth } from "@/server/
 import { listMyNudges, type MyNudge } from "@/server/nudger";
 import { mergeNudgesIntoPriorities } from "@/server/dashboard-v2";
 import { getPortfolioSections, type PortfolioSectionsData } from "@/server/pipeline";
+import { getRolloutMatrices, type RolloutMatrix } from "@/server/rollout";
 import { getBriefing, type BriefingItem } from "@/server/relevance";
 
 /**
@@ -51,6 +52,8 @@ export interface ExecutiveDashboard {
    * This replaced the flat pipeline table AND the portfolio × subsidiary heatmap
    * (its RAG+Δ signal now lives on each section header). */
   sections: PortfolioSectionsData;
+  /** docs/18 §6 — the project × market heatmap for each Rollout portfolio. */
+  rolloutMatrices: RolloutMatrix[];
   delta: DeltaFeed;
   /** code+status of every project — the health-parity contract with Q. */
   projects: { id: string; code: string; name: string; status: string }[];
@@ -137,7 +140,7 @@ export async function getExecutiveDashboard(ctx: TenantContext): Promise<Executi
   // Amended docs/18 §6: the heatmap that lived here was replaced by per-section RAG+Δ
   // on the portfolio sections themselves; the rollout heatmap returns per-portfolio
   // (viewKind=Rollout) with M-D's market tracks.
-  const sections = await getPortfolioSections(ctx, now);
+  const [sections, rolloutMatrices] = await Promise.all([getPortfolioSections(ctx, now), getRolloutMatrices(ctx, now)]);
 
   return {
     priorities: mergeNudgesIntoPriorities(nudges, briefing),
@@ -158,6 +161,7 @@ export async function getExecutiveDashboard(ctx: TenantContext): Promise<Executi
     },
     decisionQueue,
     sections,
+    rolloutMatrices,
     delta,
     projects: live.projects.map(({ id, code, name, status }) => ({ id, code, name, status })),
   };

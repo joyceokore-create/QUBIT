@@ -960,3 +960,43 @@ market counts per tenant, cross-tenant isolation — plus a pure derived-% unit 
 Live on KCB (gate matrix at 42%, a real MVP1 Done → 50% with the exec row's ticks
 updating, Blocked without a blocker refused with the plain-language reason) and
 Riverbank (same template attached, seven Market org units, both templates listed).
+
+## M-D-B — Rollout lens: project × market heatmap, market check-ins, R2/R3 (docs/18 §3/§6) (2026-07-30)
+
+### DM1.34 — The rollout lens ships; M-D is complete
+- **`MarketCheckIn`** (project × market × ISO week): one narrative paragraph of focus &
+  blockers plus a RAG. Mirrors the project `CheckIn` rather than extending
+  `ProjectOrgStatus`, because a check-in is inherently per-week while the track is not.
+  The track's **% stays derived** from that market's own `CheckpointStatus` rows —
+  this model carries only what a human must say.
+- **A track exists when a `ProjectOrgStatus` row exists** for that project × market
+  (§3.1: reuse the model, don't duplicate it). A market a project does not ship into
+  renders **"—", never 0%** — an absent track and a stalled one must not look alike.
+- **Roll-ups run bottom-up through the ONE health engine** (§3.0): market-track RAG →
+  project row (worst-of) → the portfolio section header. A market check-in's RAG
+  **outranks** the track's stored status for that week, because it is the human's word.
+- **One encoding per cell** (17 §2): RAG dot + Δ arrow only; % and gate counts live in
+  the tooltip and the aria-label, so colour is never the sole channel (16 §11).
+- **The interim "ROLLOUT · PIPELINE LENS" chip is gone.** A Rollout portfolio now
+  renders the real heatmap, and one with no market tracks yet falls back to the pipeline
+  lens labelled "NO MARKET TRACKS YET" rather than showing an empty grid.
+- **Drill-down** (`/projects/:id/markets/:orgUnitId`): that track's checkpoint matrix
+  plus the focus & blockers card — the "Where We Are" and "Critical Focus" slides as one
+  live page, reached by clicking a cell. The check-in editor rides the §7 governance
+  gate; without it the card is read-only.
+- **R2 and R3 joined the Reports page** (§5.2) rendered from `getRolloutMatrices`, the
+  same engine the dashboard uses, so the two cannot drift. R1/R2/R3 are all global read.
+- **Seed**: Riverbank gained one `Rollout` portfolio whose first three products carry
+  market tracks with per-market gate states, so the lens demos out of the box. KCB has
+  no Market org units, so its rollout portfolios correctly render no columns.
+- **Test-teardown note**: `ProjectOrgStatus`'s project FK does not cascade (the seed's
+  reset clears it explicitly for the same reason) — suites creating market tracks must
+  delete them before the project.
+
+Verified: lint/typecheck/build green, 498/498 tests (71 files; new rollout RLS suite —
+per-cell derived %, null-not-zero for unused markets, worst-of roll-up, check-in RAG
+overriding + audit + event, drill-down gates and Internal-unit rejection, cross-tenant
+isolation). Live on Riverbank: the Market Rollout section renders 3 products × 7 markets
+with the derived summary row (83/44/32/19%) and the top-blockers strip, a cell opens the
+Kenya track at 69% derived, a market check-in saved and appeared in both the heatmap and
+R3, and an empty narrative was refused.

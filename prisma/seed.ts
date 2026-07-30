@@ -64,6 +64,8 @@ interface PortfolioSeed {
   name: string;
   description: string;
   budget: string;
+  /** docs/18 §3.0 — Pipeline (stage-grouped table) or Rollout (project × market heatmap). */
+  viewKind?: "Pipeline" | "Rollout";
 }
 interface ProgrammeSeed {
   key: string;
@@ -1035,9 +1037,23 @@ const RIVERBANK_SEED: TenantSeed = {
       departmentName: "Executive Office",
     },
   ],
-  portfolios: [],
+  // docs/18 §3.0 — Riverbank delivers into KCB's markets, so it carries one Rollout
+  // portfolio whose projects are tracked market-by-market (the heatmap lens).
+  portfolios: [
+    {
+      key: "rollout",
+      name: "Market Rollout",
+      description: "Products being taken live market by market across the KCB footprint.",
+      budget: "—",
+      viewKind: "Rollout",
+    },
+  ],
   programmes: [],
-  projects: RBS_PROJECTS.map(rbsToProjectSeed),
+  projects: RBS_PROJECTS.map((src, i) => ({
+    ...rbsToProjectSeed(src),
+    // The first three products demo the rollout lens; the rest stay unassigned.
+    portfolioKey: i < 3 ? "rollout" : null,
+  })),
   // Synthetic RAID content (risk/issue text is business data, not personal data) against
   // the real RBS-xx project codes, owned by the already-seeded synthetic Riverbank
   // identities above — added for Milestone 7 so the RAID screen isn't empty on day one.
@@ -1262,6 +1278,7 @@ async function seedTenant(seed: TenantSeed) {
           name: p.name,
           description: p.description,
           targetBudget: p.budget,
+          viewKind: p.viewKind ?? "Pipeline",
         },
       });
       portfolioIdByKey.set(p.key, created.id);
@@ -1575,6 +1592,52 @@ async function seedTenant(seed: TenantSeed) {
               state: states[i],
             },
           });
+        }
+      }
+    }
+
+    // ── M-D-B (docs/18 §3.1) — market tracks for the Rollout portfolio. A track is a
+    // ProjectOrgStatus row against a Market org unit (the model reused, not duplicated),
+    // plus per-market CheckpointStatus rows whose states drive the cell's derived %.
+    const rolloutPortfolioId = portfolioIdByKey.get("rollout");
+    if (rolloutPortfolioId) {
+      const marketUnits = await tx.orgUnit.findMany({ where: { kind: "Market" }, orderBy: { createdAt: "asc" }, select: { id: true, code: true } });
+      const rolloutTemplate = await tx.checkpointTemplate.findFirst({
+        where: { name: "Market rollout" },
+        select: { id: true, checkpoints: { select: { id: true }, orderBy: { orderIndex: "asc" } } },
+      });
+      const rolloutProjects = await tx.project.findMany({
+        where: { portfolioId: rolloutPortfolioId },
+        select: { id: true },
+        orderBy: { code: "asc" },
+      });
+      // Deterministic demo spread: each project ships into the first N markets, each a
+      // little further along than the next, so the heatmap has real variety to show.
+      const TRACK_SHAPES = [
+        { markets: 4, done: [6, 4, 3, 1], status: ["OnTrack", "OnTrack", "AtRisk", "Planning"] },
+        { markets: 3, done: [5, 2, 1], status: ["OnTrack", "AtRisk", "Planning"] },
+        { markets: 2, done: [8, 3], status: ["OnTrack", "OnTrack"] },
+      ];
+      for (let pi = 0; pi < rolloutProjects.length && pi < TRACK_SHAPES.length; pi++) {
+        const project = rolloutProjects[pi];
+        const shape = TRACK_SHAPES[pi];
+        if (rolloutTemplate) {
+          await tx.project.update({ where: { id: project.id }, data: { checkpointTemplateId: rolloutTemplate.id } });
+        }
+        for (let mi = 0; mi < shape.markets && mi < marketUnits.length; mi++) {
+          const market = marketUnits[mi];
+          const doneCount = shape.done[mi] ?? 0;
+          const gates = rolloutTemplate?.checkpoints ?? [];
+          const pct = gates.length ? Math.round((doneCount / gates.length) * 100) : 0;
+          await tx.projectOrgStatus.create({
+            data: { tenantId: tenant.id, projectId: project.id, orgUnitId: market.id, progress: pct, status: shape.status[mi] ?? "OnTrack" },
+          });
+          for (let gi = 0; gi < gates.length; gi++) {
+            const state = gi < doneCount ? "Done" : gi === doneCount ? "InProgress" : "NotStarted";
+            await tx.checkpointStatus.create({
+              data: { tenantId: tenant.id, projectId: project.id, checkpointId: gates[gi].id, orgUnitId: market.id, state },
+            });
+          }
         }
       }
     }
