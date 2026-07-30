@@ -6,6 +6,7 @@ import { isoWeekId, weekWindow } from "@/lib/iso-week";
 import { avgProgress } from "@/server/dashboard";
 import { emitDomainEvent } from "@/server/events";
 import { projectRag, type Rag } from "@/server/health";
+import { acknowledgedMemberLines } from "@/server/member-reports";
 
 /**
  * Friday check-ins (M2, docs/16-revamp-plan.md §7). The system drafts the weekly status
@@ -107,9 +108,13 @@ export async function computeCheckInDraft(
     progress,
     progressDelta: prevSnapshot ? progress - prevSnapshot.progress : null,
   };
+  // docs/18 §5.1.4 — member reports the PM already acknowledged roll into the check-in,
+  // so the lead never re-types what their team told them. Acknowledged only: an unread
+  // report is not yet the PM's word.
+  const memberLines = await acknowledgedMemberLines(tx, projectId, isoWeekId(now));
   return {
     computedRag: projectRag(project.status),
-    draft: { ...facts, lines: buildDraftLines(facts) },
+    draft: { ...facts, lines: [...buildDraftLines(facts), ...memberLines] },
   };
 }
 

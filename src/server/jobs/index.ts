@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { withTenant } from "@/lib/tenant";
-import { fridayCheckinDrafts, fridayReport } from "@/server/jobs/friday";
+import { fridayCheckinDrafts, fridayMemberDrafts, fridayReport } from "@/server/jobs/friday";
 import { checkinChase, nudgerJob } from "@/server/jobs/nudger-jobs";
 import { nightlySnapshot } from "@/server/jobs/nightly-snapshot";
 import type { JobDefinition, JobRunResult } from "@/server/jobs/types";
@@ -24,7 +24,9 @@ const heartbeat: JobDefinition = {
 };
 
 const REGISTRY = new Map<string, JobDefinition>(
-  [heartbeat, nightlySnapshot, fridayCheckinDrafts, fridayReport, nudgerJob, checkinChase].map((job) => [job.name, job]),
+  [heartbeat, nightlySnapshot, fridayCheckinDrafts, fridayMemberDrafts, fridayReport, nudgerJob, checkinChase].map(
+    (job) => [job.name, job],
+  ),
 );
 
 export function getJob(name: string): JobDefinition | undefined {

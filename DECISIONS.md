@@ -868,3 +868,51 @@ M1b team-load test was hardened to assert real membership sharing instead of ass
 the fixture pair). Live on KCB (QA: triage strip, aging clock note, quality bars;
 Implementor: go-live hero "8 of 15 gate items open", pilot 7/15 segments, calendar,
 handover pack) and Riverbank (both personas, red theme).
+
+## M2-B — Member weekly report: compose → submit → acknowledge (docs/18 §5.1/§5.2) (2026-07-30)
+
+### DM1.32 — One report per member per week, acknowledged per project
+- **Shape**: ONE `MemberReport` per member per ISO week (`Draft|Submitted|Acknowledged`)
+  whose `draft` JSON carries a section per project, plus one `MemberReportAck` row per
+  project lead who signs off. §5.1.3 says a multi-project member submits one report and
+  each PM sees their project's section — that shape follows directly, and it keeps
+  "who acknowledged what" as data rather than a status guess. Both tables carry
+  tenant_id under FORCE RLS; no backfill, so no DM1.18 loop.
+- **Drafting is automatic; SENDING never is** (§5.1.2). `friday-member-drafts` builds a
+  draft from the member's OWN board (done this week, still-in-flight with board-lens
+  business-day aging, blockers raised/resolved) and notifies them. A member with no
+  tracked movement gets NO draft — an empty report is noise, and it would trigger a
+  Monday nudge for nothing.
+- **The client can never rewrite the facts**: `saveMyReport` accepts only narrative,
+  per-project notes and the (editable) summary lines; done/doing/blocker facts are
+  recomputed server-side and preserved.
+- **Acknowledgement is resource-scoped**: only a lead/PM of THAT project, only for a
+  section the report actually carries. The report flips to `Acknowledged` only when
+  every section it holds has been signed off — a partially-acknowledged report stays
+  Submitted, which is the honest state.
+- **Rollup (§5.1.4)**: acknowledged sections feed `computeCheckInDraft`, so the PM's
+  check-in carries what their team told them without re-typing. ACKNOWLEDGED only — an
+  unread report is not yet the PM's word.
+- **Monday chase (§5.1.5)** joined the existing `checkin-chase` job as a second signal
+  (`member_report_unsent`) rather than a new cron entry: one Monday sweep, same weekly
+  dedupe, no crontab change on the box.
+- **Reports page (§5.2)** became four tabs: **Status (R1)** — live portfolio/project
+  status, globally readable, rendered from `getPortfolioSections` so it can never drift
+  from the dashboard; **My weekly report** (composer); **Team reports** (lead's
+  acknowledge queue); **Generate** (the existing Q builder, scoped pulls still gated by
+  `canAccessReport`). R2/R3 market matrices arrive with M-D.
+- **Found by live verification, fixed**: the lead's view rendered section lines but not
+  the member's own narrative — the "anything else your lead should know?" answer never
+  reached anyone. `TeamReportRow` now carries `narrative` and the UI shows it; the RLS
+  test asserts it.
+- **Test-fixture hazard recorded**: `ensureUsers` REUSES seeded accounts, so its first
+  user is the tenant super-admin (holds every permission, already on the demo project).
+  Suites whose meaning depends on clean actors now use the new `createUsers` helper.
+  Four failures in this milestone traced to that, not to product code.
+
+Verified: lint/typecheck/build green, 481/481 tests (68 files; new: member-reports RLS
+suite covering own-board drafting, multi-project routing, cross-project acknowledgement
+denial, the check-in rollup, §10 permission both ways, tenant isolation + a pure
+line-builder unit suite). Live on KCB: `friday-member-drafts` drafted 1 and correctly
+skipped 2 empty weeks per tenant, a member composed and sent, the lead saw the narrative
+and acknowledged, and the notifications landed (drafted → submitted → acknowledged).

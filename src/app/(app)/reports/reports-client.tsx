@@ -181,16 +181,13 @@ export function ReportsClient({
   }
 
   return (
-    <main className="grid w-full grid-cols-1 items-start gap-4 p-[22px_24px_90px] lg:grid-cols-[400px_minmax(0,1fr)]">
-      {/* Left column: header + builder */}
+    // The page owns the heading and tab strip (docs/18 §5.2); this is the builder only.
+    <div className="grid w-full grid-cols-1 items-start gap-4 lg:grid-cols-[400px_minmax(0,1fr)]">
+      {/* Left column: builder */}
       <div className="flex flex-col gap-3.5">
-        <div className="[animation:rise_.5s_cubic-bezier(.22,1,.36,1)_both]">
-          <div className="mb-1.5 font-mono rv:font-sans text-[10px] rv:text-overline font-semibold uppercase tracking-[2.4px] text-[var(--ink4)]">Reports centre</div>
-          <h1 className="font-heading text-[27px] rv:text-heading-lg font-bold tracking-[-.8px] text-[var(--qink)]">Reports</h1>
-          <p className="mt-1.5 text-[13px] rv:text-body-sm text-[var(--ink3)]">
-            Exports are downloadable (.md / print-ready) and shareable via a tenant-scoped link.
-          </p>
-        </div>
+        <p className="text-[13px] rv:text-body-sm text-[var(--ink3)]">
+          Exports are downloadable (.md / print-ready) and shareable via a tenant-scoped link.
+        </p>
 
         <div className={`flex flex-col gap-4 p-[18px] [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.05s_both] ${CARD}`} style={{ background: "var(--cardbg)" }}>
           {/* Report kind */}
@@ -360,7 +357,7 @@ export function ReportsClient({
           </div>
         )}
       </div>
-    </main>
+    </div>
   );
 }
 

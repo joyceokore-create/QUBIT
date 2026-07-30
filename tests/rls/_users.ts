@@ -7,6 +7,32 @@ export interface FixtureUser {
   name: string;
 }
 
+/**
+ * Always-fresh fixture users. Use this (not ensureUsers) when the test's meaning depends
+ * on the people being CLEAN — no tenant roles, no existing project membership, no work
+ * assigned. ensureUsers reuses seeded accounts, so its first user is the tenant's
+ * super-admin, who holds every permission and already sits on the demo project.
+ */
+export async function createUsers(tenantId: string, n: number, label = "u"): Promise<FixtureUser[]> {
+  return withTenant({ tenantId, userId: "seed" }, async (tx) => {
+    const out: FixtureUser[] = [];
+    for (let i = 0; i < n; i++) {
+      out.push(
+        await tx.user.create({
+          data: {
+            tenantId,
+            email: `fixture_${label}_${Date.now()}_${i}@fixture.invalid`,
+            name: `Fixture ${label.toUpperCase()}${i + 1}`,
+            status: "ACTIVE",
+          },
+          select: { id: true, name: true },
+        }),
+      );
+    }
+    return out;
+  });
+}
+
 export async function ensureUsers(tenantId: string, n: number): Promise<FixtureUser[]> {
   return withTenant({ tenantId, userId: "seed" }, async (tx) => {
     const existing = await tx.user.findMany({ where: { status: { not: "DELETED" } }, take: n, orderBy: { createdAt: "asc" }, select: { id: true, name: true } });

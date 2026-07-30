@@ -21,6 +21,7 @@ export const NUDGE_SIGNALS = [
   "bug_unassigned",
   "milestone_at_risk",
   "checkin_unconfirmed",
+  "member_report_unsent",
 ] as const;
 export type NudgeSignal = (typeof NUDGE_SIGNALS)[number];
 
@@ -238,6 +239,30 @@ export async function collectCheckinChase(tx: Prisma.TransactionClient, now: Dat
     link: `/projects/${c.projectId}`,
     level: 0,
     recipientsByLevel: [pmByProject.get(c.projectId) ?? []],
+  }));
+}
+
+/** Last week's member reports still sitting in Draft — chased Monday 10:00 (docs/18
+ * §5.1.5). The nudge goes to the member who owns the draft; nobody else is pinged for
+ * a report that is theirs to send. */
+export async function collectMemberReportChase(
+  tx: Prisma.TransactionClient,
+  now: Date,
+): Promise<NudgeCandidate[]> {
+  const prevWeek = isoWeekId(new Date(now.getTime() - 7 * day));
+  const stale = await tx.memberReport.findMany({
+    where: { isoWeek: prevWeek, status: "Draft" },
+    select: { id: true, userId: true, isoWeek: true },
+  });
+  return stale.map((r) => ({
+    signal: "member_report_unsent" as const,
+    entityType: "member_report",
+    entityId: r.id,
+    projectId: null,
+    message: `Your ${r.isoWeek} weekly report is still a draft — review and send it`,
+    link: "/reports",
+    level: 0,
+    recipientsByLevel: [[r.userId]],
   }));
 }
 

@@ -13,7 +13,7 @@ const PM_PROJECT_ROLES = ["Project Manager"];
 const day = 86_400_000;
 
 export interface PmActionRow {
-  kind: "join" | "drafts" | "blocker" | "slipping";
+  kind: "join" | "drafts" | "blocker" | "slipping" | "report";
   title: string;
   project: string;
   meta: string;
@@ -72,7 +72,18 @@ export async function getPmDashboard(ctx: TenantContext, now = new Date()): Prom
           }),
           tx.projectMember.findMany({ select: { projectId: true, userId: true } }),
         ]);
-      return { projects, checkIns, openBlockers, draftGroups, joinRequests, slipping, myMemberUserIds };
+      // docs/18 §5.1.4 — member reports submitted to me and not yet acknowledged.
+      const submittedReports = await tx.memberReport.findMany({
+        where: { isoWeek, status: { in: ["Submitted", "Acknowledged"] }, userId: { not: ctx.userId } },
+        select: {
+          id: true,
+          submittedAt: true,
+          draft: true,
+          user: { select: { name: true } },
+          acks: { select: { projectId: true } },
+        },
+      });
+      return { projects, checkIns, openBlockers, draftGroups, joinRequests, slipping, myMemberUserIds, submittedReports };
     }),
   ]);
 
@@ -91,7 +102,23 @@ export async function getPmDashboard(ctx: TenantContext, now = new Date()): Prom
   const myJoins = live.joinRequests.filter((j) => mine.has(j.projectId));
   const mySlipping = live.slipping.filter((t) => mine.has(t.projectId));
 
+  // Member reports waiting on MY acknowledgement, for MY projects only (§5.1.3).
+  const pendingReports = live.submittedReports.flatMap((r) => {
+    const draft = r.draft as { sections?: { projectId: string; projectName: string }[] };
+    const acked = new Set(r.acks.map((a) => a.projectId));
+    return (draft.sections ?? [])
+      .filter((s) => mine.has(s.projectId) && !acked.has(s.projectId))
+      .map((s) => ({ name: r.user.name, projectName: s.projectName, submittedAt: r.submittedAt }));
+  });
+
   const actionQueue: PmActionRow[] = [
+    ...pendingReports.slice(0, 5).map((r) => ({
+      kind: "report" as const,
+      title: `${r.name} sent their weekly report`,
+      project: r.projectName,
+      meta: r.submittedAt ? `${ageDays(r.submittedAt)}d waiting` : "acknowledge it",
+      href: "/reports?tab=team",
+    })),
     ...myJoins.map((j) => ({
       kind: "join" as const,
       title: `${j.user.name} asked to join`,

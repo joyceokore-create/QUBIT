@@ -4,12 +4,16 @@ import { isoWeekId } from "@/lib/iso-week";
 import { computeCheckInDraft, effectiveRag, type CheckInDraft } from "@/server/checkins";
 import { emitDomainEvent } from "@/server/events";
 import { portfolioHealth } from "@/server/health";
+import { computeMemberDraft } from "@/server/member-reports";
 import type { JobDefinition } from "@/server/jobs/types";
 
 /**
- * The Friday loop (M2, docs/16-revamp-plan.md §7), two jobs on the box's crontab:
+ * The Friday loop (M2, docs/16-revamp-plan.md §7 + docs/18 §5.1), on the box's crontab:
  *  - friday-checkin-drafts (Friday morning): persist a Draft check-in per active project
  *    and tell each lead their 2-minute confirm is ready.
+ *  - friday-member-drafts (Friday morning): a Draft weekly report per active member,
+ *    built from their own board. Drafting is automatic; SENDING never is — the member
+ *    edits and submits (§5.1.2).
  *  - friday-report (Friday afternoon): the weekly SharedReport — confirmed check-ins
  *    speak in the lead's voice; unconfirmed projects are marked "unconfirmed — computed
  *    status shown". Honest by default. Subscribers (ReportSubscription) get the link.
@@ -71,6 +75,70 @@ export const fridayCheckinDrafts: JobDefinition = {
       });
     }
     return { isoWeek, drafted, skippedConfirmed };
+  },
+};
+
+/**
+ * docs/18 §5.1.1 — a Draft weekly report for every member with a live allocation.
+ * Never auto-submits: the draft waits in the composer until the member sends it.
+ */
+export const fridayMemberDrafts: JobDefinition = {
+  name: "friday-member-drafts",
+  async run(tx, tenant) {
+    const now = new Date();
+    const isoWeek = isoWeekId(now);
+    const machineCtx = { tenantId: tenant.id, userId: "job:friday-member-drafts" };
+
+    const members = await tx.projectMember.findMany({
+      where: { project: { status: ACTIVE_STATUSES } },
+      select: { userId: true },
+      distinct: ["userId"],
+    });
+
+    let drafted = 0;
+    let skippedSubmitted = 0;
+    let skippedEmpty = 0;
+    for (const m of members) {
+      const existing = await tx.memberReport.findUnique({
+        where: { tenantId_userId_isoWeek: { tenantId: tenant.id, userId: m.userId, isoWeek } },
+        select: { id: true, status: true },
+      });
+      // Never overwrite what a member already edited or sent.
+      if (existing && existing.status !== "Draft") {
+        skippedSubmitted++;
+        continue;
+      }
+      const draft = await computeMemberDraft(tx, m.userId, now);
+      if (!draft.sections.length) {
+        skippedEmpty++;
+        continue; // nothing moved for them this week — no empty draft, no nudge
+      }
+      const data = { draft: draft as unknown as Prisma.InputJsonValue };
+      const row = await tx.memberReport.upsert({
+        where: { tenantId_userId_isoWeek: { tenantId: tenant.id, userId: m.userId, isoWeek } },
+        create: { tenantId: tenant.id, userId: m.userId, isoWeek, status: "Draft", ...data },
+        update: data,
+      });
+      drafted++;
+
+      if (!existing) {
+        await emitDomainEvent(tx, machineCtx, {
+          type: "member_report.drafted",
+          entityType: "member_report",
+          entityId: row.id,
+          payload: { isoWeek, projects: draft.sections.length },
+          notify: [
+            {
+              userId: m.userId,
+              kind: "member_report",
+              message: `Your ${isoWeek} weekly report is drafted — review and send it`,
+              link: "/reports",
+            },
+          ],
+        });
+      }
+    }
+    return { isoWeek, drafted, skippedSubmitted, skippedEmpty };
   },
 };
 

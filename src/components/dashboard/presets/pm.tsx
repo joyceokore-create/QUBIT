@@ -46,6 +46,7 @@ const QUEUE_KIND: Record<string, { label: string; tok: string }> = {
   drafts: { label: "APPROVAL", tok: "--qinfo" },
   blocker: { label: "BLOCKER", tok: "--bad" },
   slipping: { label: "SLIPPING", tok: "--warn" },
+  report: { label: "REPORT", tok: "--ok" },
 };
 
 export function PmPreset({
