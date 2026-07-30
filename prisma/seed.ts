@@ -43,6 +43,9 @@ interface OrgUnitSeed {
   code: string;
   name: string;
   flag?: string;
+  /** docs/18 §3.1 — Internal = a subsidiary of this tenant (drives the Subsidiaries nav);
+   *  Market = a rollout geography a portfolio ships into. Defaults to Internal. */
+  kind?: "Internal" | "Market";
 }
 interface UserSeed {
   email: string;
@@ -1002,6 +1005,16 @@ const RIVERBANK_SEED: TenantSeed = {
     // because ProjectOrgStatus.orgUnitId is non-nullable; it is hidden from the UI by the
     // ≤1-org-unit nav guard. The old WR/CR "regions" were wrong and are removed.
     { code: "HQ", name: "Riverbank" },
+    // docs/18 §3.1 — the seven KCB markets Riverbank tracks rollout against. These are
+    // Market-kind units, so they never make the tenant look multi-subsidiary: the
+    // Subsidiaries nav rule keys on Internal units only (DM1.1 stands).
+    { code: "KE", name: "Kenya", flag: "🇰🇪", kind: "Market" },
+    { code: "TZ", name: "Tanzania", flag: "🇹🇿", kind: "Market" },
+    { code: "UG", name: "Uganda", flag: "🇺🇬", kind: "Market" },
+    { code: "RW", name: "Rwanda", flag: "🇷🇼", kind: "Market" },
+    { code: "BI", name: "Burundi", flag: "🇧🇮", kind: "Market" },
+    { code: "SS", name: "South Sudan", flag: "🇸🇸", kind: "Market" },
+    { code: "DRC", name: "DR Congo", flag: "🇨🇩", kind: "Market" },
   ],
   // Flat departments (DM1.1). Riverbank is the firm's REAL tenant, so no synthetic people
   // are seeded — departments start headless and real members (incl. department heads and the
@@ -1145,6 +1158,11 @@ async function resetTenant(slug: string) {
     await tx.issue.deleteMany({});
     await tx.risk.deleteMany({});
     await tx.project.deleteMany({});
+    // Checkpoint templates hold a RESTRICT tenant FK. They are created by the M-D-A
+    // migration for already-deployed tenants AND by this seed for freshly created ones,
+    // so a reseed must clear them here or the tenant delete trips the constraint.
+    await tx.checkpoint.deleteMany({});
+    await tx.checkpointTemplate.deleteMany({});
     await tx.programme.deleteMany({});
     await tx.portfolio.deleteMany({});
     // shared_report + department both hold a RESTRICT tenant FK and must be cleared before
@@ -1181,7 +1199,7 @@ async function seedTenant(seed: TenantSeed) {
     const orgUnitLabelByCode = new Map<string, string>();
     for (const ou of seed.orgUnits) {
       const created = await tx.orgUnit.create({
-        data: { tenantId: tenant.id, code: ou.code, name: ou.name, flag: ou.flag },
+        data: { tenantId: tenant.id, code: ou.code, name: ou.name, flag: ou.flag, kind: ou.kind ?? "Internal" },
       });
       orgUnitIdByCode.set(ou.code, created.id);
       orgUnitLabelByCode.set(ou.code, [ou.flag, ou.name].filter(Boolean).join(" "));
@@ -1508,6 +1526,57 @@ async function seedTenant(seed: TenantSeed) {
           createdById: implUser.id,
         },
       });
+    }
+
+    // ── M-D-A (docs/18 §2) — the two checkpoint templates. The migration creates these
+    // for tenants that already exist; a freshly seeded tenant needs them here, so both
+    // paths converge on the same two templates.
+    const TEMPLATES: { name: string; description: string; gates: string[] }[] = [
+      {
+        name: "Product build",
+        description: "Build-out gates for a product or platform (docs/18 §2).",
+        gates: ["BRD", "Prototype", "MVP1", "SIT", "UAT", "Go-Live"],
+      },
+      {
+        name: "Market rollout",
+        description: "Gates for taking a product into a market (docs/18 §2).",
+        gates: ["Business Case", "Contract", "Solution Build", "Bank Integration", "Telco Integration", "Testing", "GTM/Pilot", "Rollout"],
+      },
+    ];
+    for (const t of TEMPLATES) {
+      await tx.checkpointTemplate.create({
+        data: {
+          tenantId: tenant.id,
+          name: t.name,
+          description: t.description,
+          checkpoints: { create: t.gates.map((name, orderIndex) => ({ tenantId: tenant.id, name, orderIndex })) },
+        },
+      });
+    }
+
+    // Attach "Product build" to the demo project and walk its first gates so the derived
+    // % and the pipeline gate ticks have real data to show.
+    if (firstProject) {
+      const template = await tx.checkpointTemplate.findFirst({
+        where: { name: "Product build" },
+        select: { id: true, checkpoints: { select: { id: true }, orderBy: { orderIndex: "asc" } } },
+      });
+      if (template) {
+        await tx.project.update({ where: { id: firstProject }, data: { checkpointTemplateId: template.id } });
+        // BRD + Prototype done, MVP1 in progress → derived 42% on a 6-gate template.
+        const states = ["Done", "Done", "InProgress"];
+        for (let i = 0; i < states.length && i < template.checkpoints.length; i++) {
+          await tx.checkpointStatus.create({
+            data: {
+              tenantId: tenant.id,
+              projectId: firstProject,
+              checkpointId: template.checkpoints[i].id,
+              orgUnitId: null,
+              state: states[i],
+            },
+          });
+        }
+      }
     }
 
     // ── Demo sparkline history — SYNTHETIC tenant (KCB) ONLY ──────────────────

@@ -916,3 +916,47 @@ denial, the check-in rollup, §10 permission both ways, tenant isolation + a pur
 line-builder unit suite). Live on KCB: `friday-member-drafts` drafted 1 and correctly
 skipped 2 empty weeks per tenant, a member composed and sent, the lead saw the narrative
 and acknowledged, and the notifications landed (drafted → submitted → acknowledged).
+
+## M-D-A — Delivery checkpoints as data + markets as a kind of org unit (docs/18 §2/§3.1) (2026-07-30)
+
+### DM1.33 — Gates are templates, % is derived, markets are org units
+M-D is large, so it ships in two halves: **M-D-A** (this entry) puts the data and the
+edit surface in place; **M-D-B** adds the rollout heatmap, the project×market drill-down
+and the R2/R3 report views.
+
+- **Checkpoints are DATA (§2)**: `CheckpointTemplate` → ordered `Checkpoint` list; a
+  project picks one via `Project.checkpointTemplateId`. `CheckpointStatus` is keyed
+  (project, checkpoint, orgUnit) where **orgUnitId NULL = the project's own track**
+  (pipeline lens) and a set orgUnitId is a market track (rollout lens, M-D-B). Postgres
+  treats NULLs as distinct, so the project-level row is pinned by an explicit **partial
+  unique index** — the composite unique alone would have allowed duplicates.
+- **% complete is DERIVED and never typed (§2)**: Done = 1, InProgress = 0.5,
+  **Blocked and NotStarted = 0**. A blocked gate is honest about being stuck rather than
+  half-credited; the difference lives in the state, never smuggled into the number.
+  `avgProgress` now takes an optional checkpoint map and prefers it, falling back to the
+  per-subsidiary rollup for ungated projects — so nothing drops to 0% on the way in.
+- **Blocked demands a real open blocker on THIS project** (the task flag pattern), and a
+  checkpoint from another template is refused.
+- **Pipeline rows show gate ticks** instead of the bare bar when a template is attached;
+  every tick carries an aria-label, so colour is never the only channel (16 §11).
+- **Markets (§3.1)**: `OrgUnit.kind` = `Internal | Market`, defaulting to Internal so
+  existing subsidiaries are untouched. The seven markets belong to the **Riverbank**
+  tenant; DM1.1 stands because the Subsidiaries nav keys on Internal units only.
+- **Migration-seeded reference data must also be seeded by seed.ts.** The migration
+  creates the two templates and the markets for tenants that already exist, but
+  `prisma db seed` wipes and recreates tenants — so without a matching path in seed.ts a
+  reseed would leave every tenant with no templates and Riverbank with no markets. Both
+  are now created in both places, and `resetTenant` clears the checkpoint tables (they
+  hold a RESTRICT tenant FK). Two live failures traced to exactly this.
+- **`prisma format` silently dropped an `@map`** when it reordered the new relation
+  block, so `checkpointTemplateId` looked for a camelCase column and every project write
+  failed with P2022 while psql showed the column present. Re-checking the formatted
+  schema after `prisma format` is now part of the loop.
+
+Verified: lint/typecheck/build green, 492/492 tests (70 files; new: checkpoints RLS
+suite — template seeding per tenant, derived % reaching the dashboard with ordered
+ticks, Blocked-needs-a-blocker both ways, cross-template rejection, audit + event,
+market counts per tenant, cross-tenant isolation — plus a pure derived-% unit suite).
+Live on KCB (gate matrix at 42%, a real MVP1 Done → 50% with the exec row's ticks
+updating, Blocked without a blocker refused with the plain-language reason) and
+Riverbank (same template attached, seven Market org units, both templates listed).

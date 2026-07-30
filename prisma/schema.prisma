@@ -85,6 +85,9 @@ model Tenant {
   reportSubscriptions ReportSubscription[]
   memberReports       MemberReport[]
   memberReportAcks    MemberReportAck[]
+  checkpointTemplates CheckpointTemplate[]
+  checkpoints         Checkpoint[]
+  checkpointStatuses  CheckpointStatus[]
   nudges              Nudge[]
   nudgeSnoozes        NudgeSnooze[]
   workComments        WorkComment[]
@@ -100,10 +103,15 @@ model OrgUnit {
   code      String
   name      String
   flag      String?
+  // docs/18 §3.1 — Internal = a subsidiary of THIS tenant (drives the Subsidiaries nav
+  // and the DM1.1 flat-tenant rules); Market = a rollout geography a portfolio ships
+  // into. Riverbank stays flat internally while gaining the seven KCB markets.
+  kind      String   @default("Internal")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   projectOrgStatuses ProjectOrgStatus[]
+  checkpointStatuses CheckpointStatus[]
   departments        Department[]
 
   @@unique([tenantId, code])
@@ -290,24 +298,25 @@ model ProjectTaskCounter {
 // MVP1 PRD Module 10 — Blocker Register. Distinct from Risk (a future possibility) and
 // Issue (a materialised risk): a blocker is a live impediment on a project right now.
 model Blocker {
-  id              String       @id @default(uuid())
-  tenantId        String       @map("tenant_id")
-  tenant          Tenant       @relation(fields: [tenantId], references: [id])
-  projectId       String       @map("project_id")
-  project         Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  description     String
-  severity        String       @default("Medium") // Low | Medium | Critical
-  status          String       @default("Open") // Open | Resolved
-  ownerId         String?      @map("owner_id")
-  owner           User?        @relation("BlockerOwner", fields: [ownerId], references: [id])
+  id                 String             @id @default(uuid())
+  tenantId           String             @map("tenant_id")
+  tenant             Tenant             @relation(fields: [tenantId], references: [id])
+  projectId          String             @map("project_id")
+  project            Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  description        String
+  severity           String             @default("Medium") // Low | Medium | Critical
+  status             String             @default("Open") // Open | Resolved
+  ownerId            String?            @map("owner_id")
+  owner              User?              @relation("BlockerOwner", fields: [ownerId], references: [id])
   // Optional link to the task this blocker stalls (Phase 6.1 blocked-as-flag). A task is
   // "blocked" while an Open blocker points at it. Survives task deletion (SetNull).
-  taskId          String?      @map("task_id")
-  task            ProjectTask? @relation("TaskBlockers", fields: [taskId], references: [id], onDelete: SetNull)
-  resolutionNotes String?      @map("resolution_notes")
-  dateRaised      DateTime     @default(now()) @map("date_raised")
-  createdAt       DateTime     @default(now()) @map("created_at")
-  updatedAt       DateTime     @updatedAt @map("updated_at")
+  taskId             String?            @map("task_id")
+  task               ProjectTask?       @relation("TaskBlockers", fields: [taskId], references: [id], onDelete: SetNull)
+  checkpointStatuses CheckpointStatus[] @relation("CheckpointBlocker")
+  resolutionNotes    String?            @map("resolution_notes")
+  dateRaised         DateTime           @default(now()) @map("date_raised")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
 
   @@index([tenantId, projectId])
   @@map("blocker")
@@ -581,25 +590,28 @@ model Project {
   createdAt     DateTime   @default(now()) @map("created_at")
   updatedAt     DateTime   @updatedAt @map("updated_at")
 
-  orgStatuses      ProjectOrgStatus[]
-  risks            Risk[]
-  issues           Issue[]
-  members          ProjectMember[]
-  teams            ProjectTeam[]
-  projectTasks     ProjectTask[]
-  taskCounter      ProjectTaskCounter?
-  blockers         Blocker[]
-  documents        ProjectDocument[]
-  statusUpdates    ProjectStatusUpdate[]
-  integrations     ProjectIntegration[]
-  milestonesV2     ProjectMilestone[]
-  joinRequests     JoinRequest[]
-  snapshots        ProjectSnapshot[]
-  checkIns         CheckIn[]
-  nudges           Nudge[]
-  workComments     WorkComment[]
-  decisions        Decision[]
-  memberReportAcks MemberReportAck[]
+  orgStatuses          ProjectOrgStatus[]
+  risks                Risk[]
+  issues               Issue[]
+  members              ProjectMember[]
+  teams                ProjectTeam[]
+  projectTasks         ProjectTask[]
+  taskCounter          ProjectTaskCounter?
+  blockers             Blocker[]
+  documents            ProjectDocument[]
+  statusUpdates        ProjectStatusUpdate[]
+  integrations         ProjectIntegration[]
+  milestonesV2         ProjectMilestone[]
+  joinRequests         JoinRequest[]
+  snapshots            ProjectSnapshot[]
+  checkIns             CheckIn[]
+  nudges               Nudge[]
+  workComments         WorkComment[]
+  decisions            Decision[]
+  memberReportAcks     MemberReportAck[]
+  checkpointTemplate   CheckpointTemplate?   @relation(fields: [checkpointTemplateId], references: [id])
+  checkpointTemplateId String?               @map("checkpoint_template_id")
+  checkpointStatuses   CheckpointStatus[]
 
   @@unique([tenantId, code])
   @@map("project")
@@ -620,6 +632,65 @@ model ProjectOrgStatus {
 
   @@unique([projectId, orgUnitId])
   @@map("project_org_status")
+}
+
+// Delivery checkpoints (docs/18 §2). Different portfolios march through different gates,
+// so the gates are DATA, not columns: a tenant-scoped template holds an ordered list, a
+// project picks one, and state is tracked per unit of tracking — the project itself
+// (pipeline lens) or the project × market track (rollout lens, orgUnitId set).
+// % complete is DERIVED from these states and never typed (§2).
+model CheckpointTemplate {
+  id          String       @id @default(cuid())
+  tenantId    String       @map("tenant_id")
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  name        String
+  description String?
+  checkpoints Checkpoint[]
+  projects    Project[]
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  @@unique([tenantId, name])
+  @@map("checkpoint_template")
+}
+
+model Checkpoint {
+  id         String             @id @default(cuid())
+  tenantId   String             @map("tenant_id")
+  tenant     Tenant             @relation(fields: [tenantId], references: [id])
+  templateId String             @map("template_id")
+  template   CheckpointTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  name       String
+  orderIndex Int                @default(0) @map("order_index")
+  statuses   CheckpointStatus[]
+
+  @@unique([templateId, name])
+  @@index([tenantId, templateId])
+  @@map("checkpoint")
+}
+
+model CheckpointStatus {
+  id           String     @id @default(cuid())
+  tenantId     String     @map("tenant_id")
+  tenant       Tenant     @relation(fields: [tenantId], references: [id])
+  projectId    String     @map("project_id")
+  project      Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  checkpointId String     @map("checkpoint_id")
+  checkpoint   Checkpoint @relation(fields: [checkpointId], references: [id], onDelete: Cascade)
+  // NULL = the project's own track (pipeline lens); set = one market track (rollout lens).
+  orgUnitId    String?    @map("org_unit_id")
+  orgUnit      OrgUnit?   @relation(fields: [orgUnitId], references: [id], onDelete: Cascade)
+  state        String     @default("NotStarted") // Done | InProgress | NotStarted | Blocked
+  // Blocked mirrors the task pattern: a reason is required, and it points at the blocker.
+  blockerId    String?    @map("blocker_id")
+  blocker      Blocker?   @relation("CheckpointBlocker", fields: [blockerId], references: [id], onDelete: SetNull)
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  // Postgres treats NULLs as distinct, so the project-level row (orgUnitId IS NULL) is
+  // pinned by a partial unique index created in the migration instead.
+  @@unique([projectId, checkpointId, orgUnitId])
+  @@index([tenantId, projectId])
+  @@map("checkpoint_status")
 }
 
 // The legacy per-subsidiary `Milestone` model merged into `ProjectMilestone` in M1

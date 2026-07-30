@@ -28,8 +28,20 @@ export interface ProjectWithStatus {
   orgStatuses: OrgStatus[];
 }
 
-/** A project's overall progress = the average of its subsidiaries' progress. */
-export function avgProgress(project: { orgStatuses: { progress: number }[] }): number {
+/**
+ * A project's overall progress. Since M-D-A there are two sources, in priority order
+ * (docs/18 §2 — % is derived, never typed):
+ *   1. checkpoint states, when the project has a checkpoint template attached;
+ *   2. otherwise the average of its subsidiaries' ProjectOrgStatus progress.
+ * Callers that can supply checkpoint figures pass them in `checkpointProgress` — see
+ * checkpointProgressByProject(). Everything else keeps the legacy rollup, so a project
+ * without gates still reads honestly instead of dropping to 0%.
+ */
+export function avgProgress(
+  project: { id?: string; orgStatuses: { progress: number }[] },
+  checkpointProgress?: Map<string, number>,
+): number {
+  if (project.id && checkpointProgress?.has(project.id)) return checkpointProgress.get(project.id)!;
   if (project.orgStatuses.length === 0) return 0;
   const sum = project.orgStatuses.reduce((acc, s) => acc + s.progress, 0);
   return Math.round(sum / project.orgStatuses.length);

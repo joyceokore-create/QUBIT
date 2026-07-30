@@ -1,6 +1,7 @@
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { isoWeekId } from "@/lib/iso-week";
 import { avgProgress } from "@/server/dashboard";
+import { checkpointProgressByProject, gateTicksByProject, type CheckpointState } from "@/server/checkpoints";
 import { projectRag, ragRank, worstStatus, type Rag } from "@/server/health";
 import { PIPELINE_STAGES, type PipelineStage } from "@/server/projects";
 
@@ -34,6 +35,8 @@ export interface PipelineRow {
   description: string | null;
   priority: string;
   progress: number;
+  /** Ordered checkpoint states (docs/18 §2) — empty when no template is attached. */
+  gates: CheckpointState[];
   /** statusNote ?? latest confirmed check-in narrative (docs/18 §7). */
   note: string | null;
   unconfirmed: boolean;
@@ -136,10 +139,14 @@ export async function getPortfolioSections(ctx: TenantContext, now = new Date())
         }),
       ]);
     const ownerIds = portfolios.map((p) => p.ownerId).filter((o): o is string => !!o);
-    const owners = ownerIds.length
-      ? await tx.user.findMany({ where: { id: { in: ownerIds } }, select: { id: true, name: true } })
-      : [];
-    return { portfolios, projects, checkIns, riskAgg, milestones, velocityAgg, memberAgg, blockerAgg, weekAgoSnaps, owners };
+    const projectIds = projects.map((p) => p.id);
+    const [owners, checkpointProgress, gates] = await Promise.all([
+      ownerIds.length ? tx.user.findMany({ where: { id: { in: ownerIds } }, select: { id: true, name: true } }) : [],
+      // docs/18 §2 — gated projects report derived checkpoint %, not the typed rollup.
+      checkpointProgressByProject(tx, projectIds),
+      gateTicksByProject(tx, projectIds),
+    ]);
+    return { portfolios, projects, checkIns, riskAgg, milestones, velocityAgg, memberAgg, blockerAgg, weekAgoSnaps, owners, checkpointProgress, gates };
   });
 
   const checkinByProject = new Map(live.checkIns.map((c) => [c.projectId, c]));
@@ -166,7 +173,9 @@ export async function getPortfolioSections(ctx: TenantContext, now = new Date())
       name: p.name,
       description: p.description,
       priority: p.priority,
-      progress: avgProgress(p),
+      progress: avgProgress(p, live.checkpointProgress),
+      /** Gate ticks for the row (docs/18 §2) — empty when the project has no template. */
+      gates: live.gates.get(p.id) ?? [],
       note: p.statusNote ?? (confirmed ? (checkin?.narrative ?? null) : null),
       unconfirmed: !confirmed,
       isMine: p.leadUserId === ctx.userId || p.members.some((m) => m.userId === ctx.userId),

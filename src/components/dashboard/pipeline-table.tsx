@@ -18,6 +18,14 @@ const PRIORITY_TOKEN: Record<string, string> = {
   Low: "--ink4",
   Paused: "--ink5",
 };
+// Gate ticks (docs/18 §2): Done fills, InProgress half-credits, Blocked shouts, the rest
+// stay empty. Colour is never the only channel — each tick carries an aria-label.
+const GATE_TOK: Record<string, string> = {
+  Done: "--ok",
+  InProgress: "--qinfo",
+  Blocked: "--bad",
+  NotStarted: "--wash2",
+};
 const STAGE_BLURB: Record<string, string> = {
   Exploring: "ideas being shaped",
   Evaluating: "business case under review",
@@ -61,11 +69,25 @@ function Row({ row, boardLinks }: { row: PipelineRow; boardLinks?: boolean }) {
       >
         {row.priority}
       </span>
-      {/* Derived %, never typed (docs/18 §2) — checkpoint ticks replace this in M-D. */}
+      {/* Derived %, never typed (docs/18 §2). Gated projects show their checkpoint ticks;
+          ungated ones keep the plain bar over the per-subsidiary rollup. */}
       <span className="flex items-center gap-1.5 max-md:hidden">
-        <span className="h-[3px] w-9 overflow-hidden rounded-full bg-[var(--wash2)]">
-          <span className="block h-full rounded-full bg-[var(--brand)]" style={{ width: `${row.progress}%` }} />
-        </span>
+        {row.gates.length > 0 ? (
+          <span className="flex gap-[2px]" title={row.gates.map((g, i) => `${i + 1}. ${g}`).join(" · ")}>
+            {row.gates.map((g, i) => (
+              <span
+                key={i}
+                className="size-[7px] rounded-[2px]"
+                style={{ background: `var(${GATE_TOK[g] ?? "--wash2"})` }}
+                aria-label={`gate ${i + 1}: ${g}`}
+              />
+            ))}
+          </span>
+        ) : (
+          <span className="h-[3px] w-9 overflow-hidden rounded-full bg-[var(--wash2)]">
+            <span className="block h-full rounded-full bg-[var(--brand)]" style={{ width: `${row.progress}%` }} />
+          </span>
+        )}
         <span className="font-mono text-[9.5px] tabular-nums text-[var(--ink3)]">{row.progress}%</span>
       </span>
       <span className="min-w-0 truncate text-[11px] italic text-[var(--ink3)] max-md:hidden">

@@ -19,6 +19,7 @@ import { CommentsSection } from "@/components/conversation/comments-section";
 import { DecisionsCard } from "@/components/conversation/decisions-card";
 import { CheckInCard } from "@/components/workspace/checkin-card";
 import { GovernanceEditor } from "@/components/workspace/governance-editor";
+import { CheckpointMatrix } from "@/components/workspace/checkpoint-matrix";
 import { RequestToJoinButton } from "@/components/workspace/request-to-join-button";
 import { statusMeta } from "@/lib/project-view";
 import type { ProjectPanelJson } from "@/components/panels/project-panel-content";
@@ -202,6 +203,10 @@ export function ProjectWorkspace({
                   portfolios={data.portfolios}
                   canGovern={data.canGovern ?? false}
                 />
+              </div>
+              {/* docs/18 §2 — the gate matrix; % underneath is derived from these states. */}
+              <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
+                <CheckpointMatrix projectId={data.id} />
               </div>
               {data.description && (
                 <div className={`${CARD} p-4 text-[13px] leading-relaxed text-[var(--ink2)]`} style={{ background: "var(--cardbg)" }}>
