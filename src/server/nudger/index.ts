@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { isoWeekId } from "@/lib/iso-week";
+import { absentUserIds } from "@/server/absence";
 import { emitDomainEvent } from "@/server/events";
 import { NUDGE_THRESHOLDS as T } from "@/server/nudger/config";
 
@@ -278,12 +279,26 @@ export async function applyCandidates(
   const snoozed = new Set(snoozes.map((s) => `${s.userId}:${s.entityId}:${s.signal}`));
   const quiet = (c: NudgeCandidate, userIds: string[]) => userIds.filter((u) => !snoozed.has(`${u}:${c.entityId}:${c.signal}`));
 
+  // docs/16 §5 — never nudge somebody who is on leave: it is how you teach a team to
+  // ignore nudges. The nudge is not dropped, though; it REROUTES to the project's PM,
+  // because the thing still needs doing.
+  const absent = await absentUserIds(tx, now);
+  const { pmByProject } = await resolveRecipients(tx);
+  const present = (c: NudgeCandidate, userIds: string[]): string[] => {
+    if (!absent.size) return userIds;
+    const here = userIds.filter((u) => !absent.has(u));
+    const away = userIds.filter((u) => absent.has(u));
+    if (!away.length) return here;
+    const standIns = (c.projectId ? (pmByProject.get(c.projectId) ?? []) : []).filter((u) => !absent.has(u));
+    return [...new Set([...here, ...standIns])];
+  };
+
   let created = 0;
   let escalated = 0;
   let skipped = 0;
   for (const c of candidates) {
     const dedupeKey = `${c.entityId}:${c.signal}:${isoWeek}`;
-    const recipients = [...new Set(c.recipientsByLevel.slice(0, c.level + 1).flat())];
+    const recipients = present(c, [...new Set(c.recipientsByLevel.slice(0, c.level + 1).flat())]);
     if (recipients.length === 0) {
       skipped++;
       continue;

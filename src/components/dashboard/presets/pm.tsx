@@ -93,12 +93,26 @@ export function PmPreset({
           {d.teamLoad.length ? (
             d.teamLoad.map((m) => {
               const over = m.totalPct > 100;
+              const away = m.onLeaveUntil
+                ? new Date(m.onLeaveUntil).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+                : null;
               return (
                 <div key={m.userId} className="flex flex-col gap-1 p-[8px_16px]">
                   <div className="flex items-baseline justify-between gap-2">
-                    <span className="truncate text-[12px] font-medium text-[var(--ink2)]">{m.name}</span>
+                    <span className="flex min-w-0 items-baseline gap-1.5">
+                      <span className="truncate text-[12px] font-medium text-[var(--ink2)]">{m.name}</span>
+                      {/* docs/16 §5 — say they're away rather than showing a full bar. */}
+                      {away && (
+                        <span className="flex-none rounded-[5px] px-1.5 py-0.5 font-mono text-[8.5px] font-bold uppercase tracking-[.6px] text-[var(--qinfo)]" style={{ background: "color-mix(in oklab, var(--qinfo) 10%, transparent)" }}>
+                          on leave until {away}
+                        </span>
+                      )}
+                    </span>
                     <span className="font-mono text-[10px] font-bold tabular-nums" style={{ color: over ? "var(--bad)" : "var(--ink3)" }}>
                       {m.totalPct}%{over ? " · OVER" : ""}
+                      {m.effectivePct !== m.totalPct && (
+                        <span className="text-[var(--ink4)]"> · {m.effectivePct}% eff</span>
+                      )}
                     </span>
                   </div>
                   <div className="h-1 overflow-hidden rounded-full bg-[var(--wash2)]">

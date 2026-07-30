@@ -97,6 +97,7 @@ model Tenant {
   nudgeSnoozes         NudgeSnooze[]
   workComments         WorkComment[]
   decisions            Decision[]
+  absences             Absence[]
 
   @@map("tenant")
 }
@@ -151,6 +152,10 @@ model User {
   // cycles (A -> B -> A) aren't guarded; nothing today traverses this chain beyond a
   // direct lookup, so it's inert bad data rather than an active bug (unlike Department's
   // parentId, which IS walked for cycle prevention because hierarchy queries rely on it).
+  /**
+   * /** Hours available in a normal week — the denominator leave is subtracted from.
+   */
+  capacityHoursPerWeek   Int         @default(40) @map("capacity_hours_per_week")
   managerId              String?     @map("manager_id")
   manager                User?       @relation("UserManager", fields: [managerId], references: [id])
   createdAt              DateTime    @default(now()) @map("created_at")
@@ -189,6 +194,8 @@ model User {
   lessonsAuthored      LessonLearned[]       @relation("LessonAuthor")
   documentApprovals    DocumentApproval[]    @relation("DocumentApprover")
   requirementsAuthored Requirement[]         @relation("RequirementAuthor")
+  absences             Absence[]             @relation("UserAbsences")
+  absencesRecorded     Absence[]             @relation("AbsenceAuthor")
   checkpointOverrides  CheckpointStatus[]    @relation("CheckpointOverrider")
   nudgeSnoozes         NudgeSnooze[]         @relation("UserNudgeSnoozes")
   workComments         WorkComment[]         @relation("WorkCommentAuthor")
@@ -797,6 +804,34 @@ model Checkpoint {
 
 // Lessons learned (docs/16 §6 — a direct stakeholder ask). Captured at closure and
 // required by the closure gate: a project that taught nobody anything did not close.
+// Absence (docs/16 §5). QUBIT should know who is away and react — so capacity maths,
+// badges and the nudger all read this one table. SOURCE-AGNOSTIC by design: manual entry
+// ships day one, a CSV/ICS bridge and a read-only ERP pull attach later without changing
+// the model. The ERP stays the system of record; QUBIT never writes leave back.
+model Absence {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  userId      String   @map("user_id")
+  user        User     @relation("UserAbsences", fields: [userId], references: [id], onDelete: Cascade)
+  type        String   @default("Leave") // Leave | Sick | Training | Other
+  startDate   DateTime @map("start_date")
+  /**
+   * Inclusive last day away.
+   */
+  endDate     DateTime @map("end_date")
+  source      String   @default("manual") // manual | import | erp
+  externalRef String?  @map("external_ref")
+  note        String?
+  createdById String?  @map("created_by_id")
+  createdBy   User?    @relation("AbsenceAuthor", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId, userId, startDate])
+  @@map("absence")
+}
+
 model LessonLearned {
   id        String   @id @default(cuid())
   tenantId  String   @map("tenant_id")

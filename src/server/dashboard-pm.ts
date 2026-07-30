@@ -30,7 +30,8 @@ export interface PmDashboard {
     draftsPending: number;
   };
   actionQueue: PmActionRow[];
-  teamLoad: { userId: string; name: string; totalPct: number }[];
+  /** docs/16 §5 — effectivePct is leave-aware; onLeaveUntil drives the badge. */
+  teamLoad: { userId: string; name: string; totalPct: number; effectivePct: number; onLeaveUntil: Date | null }[];
   myProjectCount: number;
 }
 
@@ -149,13 +150,19 @@ export async function getPmDashboard(ctx: TenantContext, now = new Date()): Prom
     })),
   ].slice(0, 12);
 
-  // ── Team load (§3): people on MY projects only (leave badges join with M6) ──
+  // ── Team load (§3): people on MY projects only, leave-aware since M6-A ──
   const myTeamUserIds = new Set(live.myMemberUserIds.filter((m) => mine.has(m.projectId)).map((m) => m.userId));
   const teamLoad = workload
     .filter((w) => myTeamUserIds.has(w.userId))
     .sort((a, b) => b.totalPct - a.totalPct)
     .slice(0, 10)
-    .map((w) => ({ userId: w.userId, name: w.name, totalPct: w.totalPct }));
+    .map((w) => ({
+      userId: w.userId,
+      name: w.name,
+      totalPct: w.totalPct,
+      effectivePct: w.effectivePct,
+      onLeaveUntil: w.onLeaveUntil,
+    }));
 
   const myActive = live.projects.filter((p) => mine.has(p.id));
   return {

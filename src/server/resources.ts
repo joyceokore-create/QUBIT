@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { withTenant, type TenantContext } from "@/lib/tenant";
+import { availabilityFactor } from "@/server/absence";
 import { audit } from "@/lib/audit";
 import { PROJECT_ROLES } from "@/lib/roles";
 
@@ -132,35 +133,75 @@ export interface WorkloadRow {
   email: string;
   departmentName: string | null;
   projectCount: number;
+  /** Allocation as typed — what the person is booked to, ignoring leave. */
   totalPct: number;
+  /**
+   * docs/16 §5 — allocation scaled by the days they are actually available over the
+   * next fortnight. Somebody away all fortnight reads 0, not "100% allocated".
+   */
+  effectivePct: number;
+  /** 0–1 availability over that window; 1 when they are not away at all. */
+  availability: number;
+  /** Set while they are away today — drives the "On leave until 12 Aug" badge. */
+  onLeaveUntil: Date | null;
   allocations: { projectCode: string; projectName: string; role: string; allocationPct: number | null }[];
 }
 
-/** All people with their project allocations — powers the /people workload view. */
-export async function listWorkload(ctx: TenantContext): Promise<WorkloadRow[]> {
+/** All people with their project allocations — powers the /people workload view.
+ * Leave-aware since M6-A (docs/16 §5): the effective figure subtracts the days each
+ * person is away over the coming fortnight, so nobody reads "on leave but 100%
+ * allocated". The typed allocation is kept alongside it, because both are true. */
+export async function listWorkload(ctx: TenantContext, now = new Date()): Promise<WorkloadRow[]> {
+  const windowStart = now;
+  const windowEnd = new Date(now.getTime() + 14 * 86_400_000);
   return withTenant(ctx, async (tx) => {
-    const users = await tx.user.findMany({
-      where: { status: { not: "DELETED" } },
-      include: {
-        department: { select: { name: true } },
-        projectAllocations: { include: { project: { select: { code: true, name: true } } } },
-      },
-      orderBy: { name: "asc" },
+    const [users, absences] = await Promise.all([
+      tx.user.findMany({
+        where: { status: { not: "DELETED" } },
+        include: {
+          department: { select: { name: true } },
+          projectAllocations: { include: { project: { select: { code: true, name: true } } } },
+        },
+        orderBy: { name: "asc" },
+      }),
+      tx.absence.findMany({
+        where: { startDate: { lte: windowEnd }, endDate: { gte: windowStart } },
+        select: { userId: true, startDate: true, endDate: true },
+      }),
+    ]);
+    const byUser = new Map<string, { startDate: Date; endDate: Date }[]>();
+    for (const a of absences) {
+      const list = byUser.get(a.userId) ?? [];
+      list.push(a);
+      byUser.set(a.userId, list);
+    }
+    return users.map((u) => {
+      const mine = byUser.get(u.id) ?? [];
+      const availability = availabilityFactor(mine, windowStart, windowEnd);
+      const totalPct = u.projectAllocations.reduce((n, a) => n + (a.allocationPct ?? 0), 0);
+      // Away TODAY → the badge; a future absence lowers capacity without a badge.
+      const activeNow = mine.filter((a) => a.startDate <= now && a.endDate >= now);
+      const onLeaveUntil = activeNow.length
+        ? activeNow.reduce((latest, a) => (a.endDate > latest ? a.endDate : latest), activeNow[0].endDate)
+        : null;
+      return {
+        userId: u.id,
+        name: u.name,
+        email: u.email,
+        departmentName: u.department?.name ?? null,
+        projectCount: u.projectAllocations.length,
+        totalPct,
+        effectivePct: Math.round(totalPct * availability),
+        availability,
+        onLeaveUntil,
+        allocations: u.projectAllocations.map((a) => ({
+          projectCode: a.project.code,
+          projectName: a.project.name,
+          role: a.role,
+          allocationPct: a.allocationPct,
+        })),
+      };
     });
-    return users.map((u) => ({
-      userId: u.id,
-      name: u.name,
-      email: u.email,
-      departmentName: u.department?.name ?? null,
-      projectCount: u.projectAllocations.length,
-      totalPct: u.projectAllocations.reduce((n, a) => n + (a.allocationPct ?? 0), 0),
-      allocations: u.projectAllocations.map((a) => ({
-        projectCode: a.project.code,
-        projectName: a.project.name,
-        role: a.role,
-        allocationPct: a.allocationPct,
-      })),
-    }));
   });
 }
 

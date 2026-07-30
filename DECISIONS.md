@@ -1118,3 +1118,42 @@ parser unit suite). Live on KCB: a URS filed, Q proposed 3 requirements with §3
 anchors while persisting none, two accepted as REQ-001/REQ-002, a published task linked,
 and coverage moved 0% → 50% with the UAT gate reporting "50% of 2 requirements have a
 covering task".
+
+## M6-A — Absence-aware capacity: leave lowers capacity and silences nudges (docs/16 §5) (2026-07-31)
+
+### DM1.38 — One absence table, and every surface that should react does
+M6 is L-sized, so it ships in halves: **M6-A** (this entry) makes the system know who is
+away and react; **M6-B** adds the CSV/ICS bridge, dated allocations, assignment warnings
+with suggested alternates, the Friday exposure line, and the TimeEntry retarget.
+
+- **`Absence` is source-agnostic by design** (userId, type, start/end, `source`,
+  externalRef). Manual entry ships now; a CSV/ICS import and a read-only ERP pull attach
+  later without a schema change. The ERP stays the system of record — QUBIT never writes
+  leave back to it.
+- **Capacity is leave-aware, and BOTH numbers are kept.** `totalPct` is what somebody is
+  booked to; `effectivePct` scales it by the working days they are actually available
+  over the coming fortnight. Somebody away all fortnight reads 0% effective, not "100%
+  allocated". Overlapping absences are unioned by day, so stacked leave cannot drive
+  availability negative, and weekend-only leave costs nothing.
+- **The nudger reroutes rather than drops.** An absent person is never pinged — that is
+  how you teach a team to ignore nudges (§5) — but the nudge is not lost: it goes to the
+  project's PM instead, because the thing still needs doing. If the PM is also away, the
+  remaining present recipients keep it.
+- **Writes are gated on `iam:manage` or `project:update`**; reading is open within the
+  tenant, because every surface that reacts to leave needs it and a colleague's absence
+  is not sensitive internally. Only `manual` rows can be deleted — imported and ERP rows
+  belong to their source.
+- **Found by its own test**: `createAbsence` accepted a backwards date range because the
+  refinement lived only on the route's Zod schema. The invariant moved INTO the engine,
+  matching the rule M8-B established for approvers — a route-only guard is one import
+  away from being bypassed.
+- **Operational note**: I deleted `.next` while the dev server was running, which broke
+  it with ENOENT build-manifest errors. Stop the preview server before a clean build.
+
+Verified: lint/typecheck/build green, 542/542 tests (77 files; new absence RLS suite —
+manual entry audited, backwards range refused at the engine, capacity dropping to 0
+effective while the typed allocation stands, nudge suppressed for the absent person and
+rerouted to the PM, imported rows undeletable, tenant isolation — plus a pure capacity
+unit suite covering weekends, clipping, unioned overlaps and the never-negative floor).
+Live on KCB: leave recorded through the API, a backwards range refused with 400, and the
+PM team-load showing "ON LEAVE UNTIL 8 AUG" against the right person.
