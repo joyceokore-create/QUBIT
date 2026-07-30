@@ -78,26 +78,27 @@ model Tenant {
   joinRequests        JoinRequest[]
 
   // ── Revamp M0–M2 backbone (docs/16-revamp-plan.md §10) ──
-  domainEvents         DomainEvent[]
-  projectSnapshots     ProjectSnapshot[]
-  portfolioSnapshots   PortfolioSnapshot[]
-  checkIns             CheckIn[]
-  reportSubscriptions  ReportSubscription[]
-  memberReports        MemberReport[]
-  memberReportAcks     MemberReportAck[]
-  checkpointTemplates  CheckpointTemplate[]
-  checkpoints          Checkpoint[]
-  checkpointStatuses   CheckpointStatus[]
-  marketCheckIns       MarketCheckIn[]
-  lessonsLearned       LessonLearned[]
-  documentApprovals    DocumentApproval[]
-  requirements         Requirement[]
-  requirementTaskLinks RequirementTaskLink[]
-  nudges               Nudge[]
-  nudgeSnoozes         NudgeSnooze[]
-  workComments         WorkComment[]
-  decisions            Decision[]
-  absences             Absence[]
+  domainEvents            DomainEvent[]
+  projectSnapshots        ProjectSnapshot[]
+  portfolioSnapshots      PortfolioSnapshot[]
+  checkIns                CheckIn[]
+  reportSubscriptions     ReportSubscription[]
+  memberReports           MemberReport[]
+  memberReportAcks        MemberReportAck[]
+  checkpointTemplates     CheckpointTemplate[]
+  checkpoints             Checkpoint[]
+  checkpointStatuses      CheckpointStatus[]
+  marketCheckIns          MarketCheckIn[]
+  lessonsLearned          LessonLearned[]
+  documentApprovals       DocumentApproval[]
+  requirements            Requirement[]
+  requirementTaskLinks    RequirementTaskLink[]
+  nudges                  Nudge[]
+  nudgeSnoozes            NudgeSnooze[]
+  workComments            WorkComment[]
+  decisions               Decision[]
+  absences                Absence[]
+  notificationPreferences NotificationPreference[]
 
   @@map("tenant")
 }
@@ -153,6 +154,7 @@ model User {
   // direct lookup, so it's inert bad data rather than an active bug (unlike Department's
   // parentId, which IS walked for cycle prevention because hierarchy queries rely on it).
   /**
+   * /**
    * /** Hours available in a normal week — the denominator leave is subtracted from.
    */
   capacityHoursPerWeek   Int         @default(40) @map("capacity_hours_per_week")
@@ -172,34 +174,35 @@ model User {
   commentsAuthored Comment[]
 
   // ── MVP1 — Riverbank teams & resource allocation ──
-  teamsLed             Team[]                @relation("TeamLead")
+  teamsLed             Team[]                   @relation("TeamLead")
   teamMemberships      TeamMember[]
   projectAllocations   ProjectMember[]
-  projectsLed          Project[]             @relation("ProjectLead")
+  projectsLed          Project[]                @relation("ProjectLead")
   aiCallLogs           AiCallLog[]
-  assignedProjectTasks ProjectTask[]         @relation("ProjectTaskAssignee")
-  reportedProjectTasks ProjectTask[]         @relation("ProjectTaskReporter")
-  ownedBlockers        Blocker[]             @relation("BlockerOwner")
-  authoredDocuments    ProjectDocument[]     @relation("DocumentAuthor")
-  statusUpdatesPosted  ProjectStatusUpdate[] @relation("StatusAuthor")
-  notifications        Notification[]        @relation("UserNotifications")
-  sharedReports        SharedReport[]        @relation("SharedReportAuthor")
-  joinRequests         JoinRequest[]         @relation("JoinRequestUser")
-  joinRequestsDecided  JoinRequest[]         @relation("JoinRequestDecider")
-  checkInsConfirmed    CheckIn[]             @relation("CheckInConfirmer")
-  reportSubscriptions  ReportSubscription[]  @relation("ReportSubscriptions")
-  memberReports        MemberReport[]        @relation("MemberReports")
-  memberReportAcks     MemberReportAck[]     @relation("MemberReportAcks")
-  marketCheckIns       MarketCheckIn[]       @relation("MarketCheckInAuthor")
-  lessonsAuthored      LessonLearned[]       @relation("LessonAuthor")
-  documentApprovals    DocumentApproval[]    @relation("DocumentApprover")
-  requirementsAuthored Requirement[]         @relation("RequirementAuthor")
-  absences             Absence[]             @relation("UserAbsences")
-  absencesRecorded     Absence[]             @relation("AbsenceAuthor")
-  checkpointOverrides  CheckpointStatus[]    @relation("CheckpointOverrider")
-  nudgeSnoozes         NudgeSnooze[]         @relation("UserNudgeSnoozes")
-  workComments         WorkComment[]         @relation("WorkCommentAuthor")
-  decisionsMade        Decision[]            @relation("DecisionDecider")
+  assignedProjectTasks ProjectTask[]            @relation("ProjectTaskAssignee")
+  reportedProjectTasks ProjectTask[]            @relation("ProjectTaskReporter")
+  ownedBlockers        Blocker[]                @relation("BlockerOwner")
+  authoredDocuments    ProjectDocument[]        @relation("DocumentAuthor")
+  statusUpdatesPosted  ProjectStatusUpdate[]    @relation("StatusAuthor")
+  notifications        Notification[]           @relation("UserNotifications")
+  sharedReports        SharedReport[]           @relation("SharedReportAuthor")
+  joinRequests         JoinRequest[]            @relation("JoinRequestUser")
+  joinRequestsDecided  JoinRequest[]            @relation("JoinRequestDecider")
+  checkInsConfirmed    CheckIn[]                @relation("CheckInConfirmer")
+  reportSubscriptions  ReportSubscription[]     @relation("ReportSubscriptions")
+  notificationPrefs    NotificationPreference[] @relation("NotificationPreferences")
+  memberReports        MemberReport[]           @relation("MemberReports")
+  memberReportAcks     MemberReportAck[]        @relation("MemberReportAcks")
+  marketCheckIns       MarketCheckIn[]          @relation("MarketCheckInAuthor")
+  lessonsAuthored      LessonLearned[]          @relation("LessonAuthor")
+  documentApprovals    DocumentApproval[]       @relation("DocumentApprover")
+  requirementsAuthored Requirement[]            @relation("RequirementAuthor")
+  absences             Absence[]                @relation("UserAbsences")
+  absencesRecorded     Absence[]                @relation("AbsenceAuthor")
+  checkpointOverrides  CheckpointStatus[]       @relation("CheckpointOverrider")
+  nudgeSnoozes         NudgeSnooze[]            @relation("UserNudgeSnoozes")
+  workComments         WorkComment[]            @relation("WorkCommentAuthor")
+  decisionsMade        Decision[]               @relation("DecisionDecider")
 
   @@unique([tenantId, email])
   @@map("user")
@@ -409,9 +412,14 @@ model Notification {
   message   String
   link      String?
   readAt    DateTime? @map("read_at")
+  /**
+   * Set once this notification has gone out in a digest — the job never re-sends.
+   */
+  emailedAt DateTime? @map("emailed_at")
   createdAt DateTime  @default(now()) @map("created_at")
 
   @@index([tenantId, userId, readAt])
+  @@index([tenantId, emailedAt])
   @@map("notification")
 }
 
@@ -1702,6 +1710,31 @@ model MemberReportAck {
   @@unique([memberReportId, projectId])
   @@index([tenantId, projectId])
   @@map("member_report_ack")
+}
+
+// Per-user notification routing (docs/16 §8). DIGEST-FIRST: the default for almost
+// everything is one batched email, not a message per event — an inbox full of QUBIT is
+// an inbox nobody reads. A row here only exists when somebody CHANGED the default, so
+// the matrix in src/server/mail/preferences.ts stays the single source of truth.
+model NotificationPreference {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  userId    String   @map("user_id")
+  user      User     @relation("NotificationPreferences", fields: [userId], references: [id], onDelete: Cascade)
+  /**
+   * Notification kind, e.g. "task_assigned" — or "*" for the catch-all default.
+   */
+  kind      String
+  /**
+   * InApp (bell only) | Digest (batched email) | Email (send immediately)
+   */
+  channel   String   @default("Digest")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, userId, kind])
+  @@map("notification_preference")
 }
 
 model ReportSubscription {

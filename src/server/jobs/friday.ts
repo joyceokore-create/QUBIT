@@ -6,6 +6,8 @@ import { emitDomainEvent } from "@/server/events";
 import { portfolioHealth } from "@/server/health";
 import { computeMemberDraft } from "@/server/member-reports";
 import { leaveExposureNextWeek } from "@/server/absence";
+import { getMailer } from "@/server/mail/mailer";
+import { weeklyReportEmail } from "@/server/mail/template";
 import type { JobDefinition } from "@/server/jobs/types";
 
 /**
@@ -280,6 +282,30 @@ export const fridayReport: JobDefinition = {
       })),
     });
 
-    return { isoWeek, projects: projects.length, confirmed: confirmedCount, notified: subscribers.length };
+    // docs/16 §8 — the report EMAIL is a link, never a copy: depth lives in the app.
+    // Subscribers who opted out of report email still get the bell notification above.
+    const brand = await tx.tenant.findUnique({ where: { id: tenant.id }, select: { name: true, brandColor: true } });
+    const recipients = subscribers.length
+      ? await tx.user.findMany({
+          where: { id: { in: subscribers.map((s) => s.userId) }, status: "ACTIVE" },
+          select: { email: true },
+        })
+      : [];
+    const mail = weeklyReportEmail({
+      tenantName: brand?.name ?? tenant.slug,
+      brandColor: brand?.brandColor ?? "#231F20",
+      isoWeek,
+      confirmed: confirmedCount,
+      projects: projects.length,
+      url: `${process.env.AUTH_URL ?? ""}/reports/s/${token}`,
+    });
+    const mailer = getMailer();
+    let emailed = 0;
+    for (const r of recipients) {
+      // Best-effort: a mail outage must not fail the job that published the report.
+      if ((await mailer.send({ to: r.email, ...mail })).ok) emailed++;
+    }
+
+    return { isoWeek, projects: projects.length, confirmed: confirmedCount, notified: subscribers.length, emailed };
   },
 };

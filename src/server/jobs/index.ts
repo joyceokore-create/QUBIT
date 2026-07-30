@@ -4,6 +4,7 @@ import { withTenant } from "@/lib/tenant";
 import { fridayCheckinDrafts, fridayMemberDrafts, fridayReport } from "@/server/jobs/friday";
 import { checkinChase, nudgerJob } from "@/server/jobs/nudger-jobs";
 import { nightlySnapshot } from "@/server/jobs/nightly-snapshot";
+import { dailyDigest } from "@/server/jobs/digest";
 import type { JobDefinition, JobRunResult } from "@/server/jobs/types";
 
 /**
@@ -24,7 +25,7 @@ const heartbeat: JobDefinition = {
 };
 
 const REGISTRY = new Map<string, JobDefinition>(
-  [heartbeat, nightlySnapshot, fridayCheckinDrafts, fridayMemberDrafts, fridayReport, nudgerJob, checkinChase].map(
+  [heartbeat, nightlySnapshot, fridayCheckinDrafts, fridayMemberDrafts, fridayReport, nudgerJob, checkinChase, dailyDigest].map(
     (job) => [job.name, job],
   ),
 );

@@ -1196,3 +1196,51 @@ away, exposure counts, CSV idempotency and per-row rejection, cross-tenant invis
 — plus a pure CSV-parser unit suite). Live on KCB: leave booked, a task assigned into
 that window returned `conflict: true` with the return date, and the generated Friday
 report read "1 person is on leave next week · CBS Phase 1 loses 1 of 3 (33%)".
+
+## M5 — Email: digest-first, Graph adapter, per-user routing (docs/16 §8) (2026-07-31)
+
+### DM1.40 — One digest beats twenty notifications, and a mail outage is never a lost mutation
+- **Digest-first is the default, in code.** `DEFAULT_CHANNELS` in
+  `src/server/mail/preferences.ts` is the single source of truth; a
+  `NotificationPreference` row exists ONLY when somebody changed their mind. The default
+  can therefore evolve for everyone without a migration, and "what happens if I do
+  nothing" has one answer rather than one per user. Resolution is
+  explicit-kind → the user's catch-all → the code default.
+- **Only time-critical kinds mail immediately**: `nudge` (a nudge that arrives tomorrow
+  has already failed) and `weekly_report`. Mentions and task updates batch; `checkin_ready`
+  never leaves the bell. Emailing every mention is how people mute a tool.
+- **A failed send is never a failed mutation.** `Mailer.send` resolves with an outcome
+  instead of throwing, so a mail outage cannot roll back a check-in, a report or an
+  approval. Delivery is best-effort; the in-app bell stays the reliable channel.
+- **The digest job is idempotent by construction**: it collects only
+  `emailedAt = null` rows and stamps them in the same run, so a re-delivered cron hit
+  sends nothing twice. A FAILED send deliberately leaves the stamp unset so tomorrow
+  retries — a bounced digest is not a delivered one. In-app-only rows are stamped too:
+  they were considered and deliberately not sent, and should not be reconsidered nightly.
+- **Two adapters, one contract**: Graph/M365 client-credentials `sendMail` when
+  `FEATURE_EMAIL` is on AND all four credentials exist; otherwise a log adapter that
+  records what it would have sent. Every other code path behaves identically either way,
+  so the feature is testable and demoable with no mailbox.
+- **Templates are tenant-branded** (KCB green, Riverbank red — docs/08's rule holds in
+  email too), table-free inline CSS with a real plain-text alternative, and **all
+  user-supplied text is escaped**: a notification message contains whatever somebody
+  typed into a task title. The weekly-report email is a LINK, never a copy — depth lives
+  in the app (docs/17 §6).
+- **Preferences are always the caller's own**: no userId in the path, so nobody can
+  reroute a colleague's mail. The API reports `emailEnabled` so the UI can say "email is
+  off for this deployment" instead of pretending a Digest choice sends something.
+- **Ships with the flag OFF in production** — it stays off until M365 credentials are
+  provisioned. The job runs harmlessly against the log adapter until then.
+
+**A test-coupling note**: the digest suite first asserted a GLOBAL send count from a job
+that processes every pending notification in the tenant, and failed once on a full-suite
+run before passing on re-run. Rather than shrug at a flake, the assertions now check the
+fixture user's own outcome (his three rows stamped, two mailed in one email). Suite-order
+coupling is a real defect in a test, not noise.
+
+Verified: lint/typecheck/build green, 560/560 tests (81 files; new digest RLS suite —
+channel resolution precedence, one-email-per-person batching, never-twice stamping,
+flag+credentials gating, tenant isolation — plus a template unit suite covering brand
+colour, pluralisation, HTML escaping and link-not-copy). Live on KCB: three pending
+notifications produced exactly ONE digest ("QUBIT: 2 updates for you" to Daniel) with the
+`checkin_ready` row correctly left in the bell, and a second run sent nothing.
