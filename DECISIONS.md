@@ -1402,3 +1402,60 @@ toggles + Mine and every card; the invite wizard's Dashboard group collapsed to
 Executive / PM / Member→(Developer/QA/Implementor) with a live landing chip. One
 pre-existing suite (`project-contribution`) asserted the superseded member-writes-any
 rule and was updated to assert the new rule instead of weakening the gate.
+
+---
+
+## DM1.44 — GitHub commit automation: signed webhook, commit grammar, links + transitions (M7-B)
+
+Implements docs/15 §6.3. Commits reference tasks by key and QUBIT reacts — the board
+stops being something developers update *about* their work and starts being updated *by*
+their work.
+
+- **The grammar is the contract** (`github-commit-grammar.ts`, pure, table-tested):
+  `KEY #progress` → InProgress; `KEY #done` / `fixes KEY` / `closes KEY` → **InReview,
+  never Completed** — QA owns Completed (docs/18 §4) and a commit is a claim, not a
+  verification. `KEY #blocked <reason>` opens a linked Blocker owned by the matched
+  committer (ownerless when unmatched — a sentinel can't hold a real FK). Bare `KEY`
+  links the commit and nothing else. Blocked > done > progress > mention when one
+  message says several things about the same key.
+- **Trust order in the webhook**: the HMAC (X-Hub-Signature-256, timing-safe, over the
+  RAW bytes) is checked against a **per-integration secret** — minted at connect time,
+  stored encrypted, plaintext shown exactly once. Reading `repository.full_name` out of
+  the body first is pure data extraction to FIND that secret; nothing is acted on until
+  the signature passes. Tenant routing comes from OUR stored `resource`, never the
+  payload — a forged payload naming tenant B's repo authenticates against tenant B's
+  secret alone. Proven by test: a same-key task in the other tenant is untouchable.
+- **Replays are recorded no-ops** via `WebhookDelivery` (unique provider+deliveryId) —
+  GitHub redelivers on timeouts; same idempotency shape as JobRun.
+- **Transitions ride the existing engine** (`updateTask` / `flagTaskBlocked`), so audit,
+  lastActivityAt and notifications fire exactly like a human move. The audit actor is
+  the tenant user matched by verified commit author email, else the `github-sync`
+  sentinel. Illegal moves (Completed stays Completed; a status the task already has) are
+  ignored and counted — GitHub only retries on errors, so errors are never the answer.
+- **The M7-C seam**: commits may reference a YouTrack key (`RBC-123`) on a mirrored
+  issue — it LINKS (traceability) but never moves; YouTrack owns status. QUBIT taskKeys
+  and tracker externalKeys are matched as separate namespaces, both scoped to the
+  integration's own project.
+- **Machine routes left the auth middleware**: `/api/webhooks/*` and `/api/internal/*`
+  are excluded from the session matcher — their own guards (HMAC, CRON_SECRET) are the
+  real authentication, and the old behaviour (a login redirect answered to a webhook
+  POST) was a latent bug for the cron route too.
+- **Board reward**: cards show a linked-commit count chip — the visible payoff that
+  makes the grammar worth using.
+- **Deferred, stated**: the polling fallback for repos that can't add a webhook (spec
+  §6.3) — the seam is ready (same parser), no such repo exists yet. Q's `github_status`
+  commit lines ride later. Rate limiting per integration is deferred; the 1 MB body cap
+  and signature check bound the damage meanwhile.
+
+**Deploy notes**: `FEATURE_COMMIT_AUTOMATION` stays OFF in production until a repo is
+connected. When it goes live: verify the openresty proxy at q.fikrawork.com passes the
+request body through UNTOUCHED — signature verification breaks on any rewrite; the §6.3
+deploy check is a signed test delivery from GitHub's "Redeliver" button.
+
+**Verified**: lint/typecheck/build green, 673/673 tests (88 files; 22-case grammar table
++ signature suite incl. the proxy-rewrite failure mode; a 10-test webhook RLS suite
+covering the §6.3 done-when list). Live end-to-end against the dev server with curl:
+ping 200, bad signature 401, unknown repo 204, signed `fixes P001-2` push moved the task
+to In Review with the commit chip rendering on the board card, replay returned
+`{replay:true}` and changed nothing. Demo wiring removed afterwards; `resetTenant` in
+the seed now clears both new tables (webhook_delivery has no cascade path).

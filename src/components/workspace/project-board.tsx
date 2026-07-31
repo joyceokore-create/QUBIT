@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ExternalLink, Flag, MessageSquare, Plus, Sparkles, TriangleAlert } from "lucide-react";
+import { ExternalLink, Flag, GitCommitHorizontal, MessageSquare, Plus, Sparkles, TriangleAlert } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConversationDrawer } from "@/components/conversation/conversation-drawer";
 import { GenerateDialog } from "@/components/panels/project-tasks-section";
@@ -26,6 +26,8 @@ interface Task {
   blocked: boolean;
   /** M7-D (DM1.43) — assignee's project-role category; decides the card's lane. */
   assigneeCategory: ProjectRoleCategory | null;
+  /** M7-B — commits that referenced this task's key. */
+  commitCount: number;
   /** M7-A — keys of the incomplete tasks this one waits on. */
   waitingOn: string[];
   /** M7-C — set when the card mirrors a YouTrack issue (read-only, links out). */
@@ -547,6 +549,15 @@ export function ProjectBoard({
                       >
                         <MessageSquare className="size-3" />
                       </button>
+                      {/* M7-B: commits that referenced this key — board hygiene's reward. */}
+                      {t.commitCount > 0 && (
+                        <span
+                          className="flex items-center gap-0.5 font-mono text-[9.5px] text-[var(--ink4)]"
+                          title={`${t.commitCount} linked commit${t.commitCount === 1 ? "" : "s"}`}
+                        >
+                          <GitCommitHorizontal className="size-3" /> {t.commitCount}
+                        </span>
+                      )}
                       <span className="min-w-0 truncate">
                         {[t.type !== "Feature" ? t.type : null, t.phase, t.priority, t.assigneeName ?? t.externalAssigneeName].filter(Boolean).join(" · ") || "—"}
                         {t.dueDate && (

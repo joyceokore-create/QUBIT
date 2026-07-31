@@ -78,6 +78,9 @@ export function IntegrationsGrid({ projectId, canEdit }: { projectId: string; ca
   const [statuses, setStatuses] = useState<Record<string, string>>({});
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  // M7-B: the GitHub webhook secret, shown exactly ONCE after connect (it is stored
+  // encrypted and can never be displayed again — reconnect to mint a fresh one).
+  const [webhookSecretOnce, setWebhookSecretOnce] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const d = await fetch(`/api/projects/${projectId}/integrations`).then((r) => r.json());
@@ -96,12 +99,17 @@ export function IntegrationsGrid({ projectId, canEdit }: { projectId: string; ca
   }, [load]);
 
   const set = async (provider: string, body: ConnectPayload) => {
-    const ok = await fetch(`/api/projects/${projectId}/integrations/${provider}`, {
+    const res = await fetch(`/api/projects/${projectId}/integrations/${provider}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
-    }).then((r) => r.ok);
-    if (ok) void load();
+    });
+    if (res.ok) {
+      const d = await res.json().catch(() => ({}));
+      if (d.webhookSecretOnce) setWebhookSecretOnce(d.webhookSecretOnce);
+      if (provider === "github" && !body.connected) setWebhookSecretOnce(null);
+      void load();
+    }
   };
 
   const syncNow = async (full: boolean) => {
@@ -130,7 +138,37 @@ export function IntegrationsGrid({ projectId, canEdit }: { projectId: string; ca
   };
 
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+    <div className="flex flex-col gap-3">
+      {webhookSecretOnce && (
+        <div className="flex flex-col gap-2 rounded-[12px] border p-3" style={{ borderColor: "color-mix(in oklab, var(--warn) 45%, transparent)", background: "color-mix(in oklab, var(--warn) 7%, transparent)" }}>
+          <p className="text-[12px] font-semibold text-[var(--qink)]">
+            GitHub webhook secret — copy it NOW; it is shown only once.
+          </p>
+          <p className="text-[11.5px] leading-[1.5] text-[var(--ink3)]">
+            In the repo: Settings → Webhooks → Add webhook. Payload URL{" "}
+            <code className="rounded bg-[var(--wash2)] px-1 font-mono text-[10.5px]">{`${typeof window !== "undefined" ? window.location.origin : ""}/api/webhooks/github`}</code>
+            , content type <code className="rounded bg-[var(--wash2)] px-1 font-mono text-[10.5px]">application/json</code>, events: just pushes.
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="min-w-0 flex-1 truncate rounded-[8px] bg-[var(--wash2)] px-2 py-1.5 font-mono text-[11px] text-[var(--qink)]">{webhookSecretOnce}</code>
+            <button
+              type="button"
+              onClick={() => void navigator.clipboard?.writeText(webhookSecretOnce)}
+              className="rounded-[8px] border border-[var(--w12)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--ink2)] hover:border-brand hover:text-brand"
+            >
+              Copy
+            </button>
+            <button
+              type="button"
+              onClick={() => setWebhookSecretOnce(null)}
+              className="text-[11px] text-[var(--ink4)] underline-offset-2 hover:underline"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
       {cards.map((c) => (
         <div key={c.provider} className="flex flex-col gap-3 rounded-[16px] border border-[var(--w07)] bg-[var(--qcard)] p-[18px]">
           <div className="flex items-center gap-2.5">
@@ -216,6 +254,7 @@ export function IntegrationsGrid({ projectId, canEdit }: { projectId: string; ca
         </div>
       ))}
 
+      </div>
       {connect && (
         <ConnectDialog
           card={connect}

@@ -13,8 +13,9 @@ export async function PATCH(req: Request, { params }: Ctx) {
   }
   const { id, provider } = await params;
   try {
-    await setIntegration(guard.ctx, id, provider, parsed.data);
-    return NextResponse.json({ ok: true });
+    const { webhookSecretOnce } = await setIntegration(guard.ctx, id, provider, parsed.data);
+    // M7-B: the webhook secret's plaintext exists in a response exactly once — here.
+    return NextResponse.json({ ok: true, ...(webhookSecretOnce ? { webhookSecretOnce } : {}) });
   } catch {
     return NextResponse.json({ error: { code: "BAD_PROVIDER", message: "Unknown integration." } }, { status: 400 });
   }

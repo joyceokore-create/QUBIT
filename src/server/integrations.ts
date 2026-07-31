@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
@@ -114,6 +115,23 @@ export async function setIntegration(
   const resettingWatermark = config !== undefined || secret !== undefined || !input.connected;
   return withTenant(ctx, async (tx) => {
     await tx.project.findUniqueOrThrow({ where: { id: projectId } });
+    // M7-B: connecting GitHub mints a webhook secret ONCE (docs/15 §6.3). The plaintext
+    // is returned this one time so the admin can paste it into the GitHub webhook form;
+    // only the encrypted form is stored, and disconnecting clears it (a re-connect mints
+    // a fresh one — GitHub-side hooks must be updated anyway).
+    const existing = await tx.projectIntegration.findUnique({
+      where: { projectId_provider: { projectId, provider: key } },
+      select: { webhookSecret: true },
+    });
+    let webhookSecretOnce: string | undefined;
+    let webhookSecret: string | null | undefined;
+    if (key === "github") {
+      if (!input.connected) webhookSecret = null;
+      else if (!existing?.webhookSecret) {
+        webhookSecretOnce = randomBytes(32).toString("hex");
+        webhookSecret = encryptSecret(webhookSecretOnce);
+      }
+    }
     const row = await tx.projectIntegration.upsert({
       where: { projectId_provider: { projectId, provider: key } },
       create: {
@@ -124,6 +142,7 @@ export async function setIntegration(
         resource: input.resource ?? null,
         secret: secret ?? null,
         config: config ?? Prisma.DbNull,
+        webhookSecret: webhookSecret ?? null,
         ...(input.syncIntervalMinutes ? { syncIntervalMinutes: input.syncIntervalMinutes } : {}),
       },
       update: {
@@ -131,6 +150,7 @@ export async function setIntegration(
         resource: input.resource ?? null,
         ...(secret === undefined ? {} : { secret }),
         ...(config === undefined ? {} : { config: config ?? Prisma.DbNull }),
+        ...(webhookSecret === undefined ? {} : { webhookSecret }),
         ...(input.syncIntervalMinutes ? { syncIntervalMinutes: input.syncIntervalMinutes } : {}),
         ...(resettingWatermark ? { lastSyncAt: null, lastSyncError: null } : {}),
       },
@@ -141,8 +161,13 @@ export async function setIntegration(
       entityId: `${projectId}:${key}`,
       // Never audit the token or the config verbatim — the config is non-secret by policy,
       // but a mis-pasted token would end up in an immutable log.
-      after: { connected: row.connected, hasToken: Boolean(row.secret), hasConfig: Boolean(row.config) },
+      after: {
+        connected: row.connected,
+        hasToken: Boolean(row.secret),
+        hasConfig: Boolean(row.config),
+        hasWebhookSecret: Boolean(row.webhookSecret),
+      },
     });
-    return row;
+    return { row, webhookSecretOnce };
   });
 }

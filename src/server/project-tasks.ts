@@ -62,6 +62,8 @@ export interface ProjectTaskRow {
   /** M7-D (DM1.43) — the assignee's project-role category; decides the task's lane.
    *  Null = unassigned, or assigned to someone not onboarded onto this project. */
   assigneeCategory: ProjectRoleCategory | null;
+  /** M7-B — commits that referenced this task's key (docs/15 §6.3). */
+  commitCount: number;
   /** M7-C — set when the row mirrors an external tracker issue; the tracker owns the
    *  fields above and the board renders them read-only with a link out. */
   sourceSystem: string | null;
@@ -96,6 +98,13 @@ export async function listProjectTasks(ctx: TenantContext, projectId: string): P
       tx.projectMember.findMany({ where: { projectId }, select: { userId: true, role: true } }),
       tx.project.findUnique({ where: { id: projectId }, select: { leadUserId: true } }),
     ]);
+    // M7-B: linked-commit counts, one grouped query for the whole board.
+    const commitCounts = await tx.taskCommitLink.groupBy({
+      by: ["taskId"],
+      where: { task: { projectId } },
+      _count: { _all: true },
+    });
+    const commitsByTask = new Map(commitCounts.map((c) => [c.taskId, c._count._all]));
     const categoryByUser = new Map<string, ProjectRoleCategory>(
       members.map((m) => [m.userId, projectRoleCategory(m.role)]),
     );
@@ -110,6 +119,7 @@ export async function listProjectTasks(ctx: TenantContext, projectId: string): P
     return rows.map((t) => ({
       waitingOn: waitingByTask.get(t.id) ?? [],
       assigneeCategory: t.assigneeId ? (categoryByUser.get(t.assigneeId) ?? null) : null,
+      commitCount: commitsByTask.get(t.id) ?? 0,
       id: t.id,
       title: t.title,
       description: t.description,
@@ -650,7 +660,10 @@ export async function setTaskStatus(ctx: TenantContext, taskId: string, status: 
 export async function flagTaskBlocked(
   ctx: TenantContext,
   taskId: string,
-  input: { description: string; severity?: "Low" | "Medium" | "Critical" },
+  /** ownerId: undefined = the caller owns it; null = ownerless — the machine paths
+   *  (M7-B commit `#blocked` with no matched committer) pass null, because ctx.userId is
+   *  a sentinel there and Blocker.ownerId is a real FK. */
+  input: { description: string; severity?: "Low" | "Medium" | "Critical"; ownerId?: string | null },
 ) {
   if (!input.description.trim()) throw new TaskError("A blocked reason is required.", "BAD_INPUT");
   return withTenant(ctx, async (tx) => {
@@ -668,7 +681,7 @@ export async function flagTaskBlocked(
         description: input.description.trim(),
         severity: input.severity ?? "Medium",
         status: "Open",
-        ownerId: ctx.userId,
+        ownerId: input.ownerId === undefined ? ctx.userId : input.ownerId,
       },
     });
     await tx.projectTask.update({ where: { id: taskId }, data: { lastActivityAt: new Date() } });

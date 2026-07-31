@@ -1141,6 +1141,8 @@ async function resetTenant(slug: string) {
     await tx.notification.deleteMany({});
     await tx.projectDocument.deleteMany({});
     await tx.blocker.deleteMany({}); // before tasks — blocker.task_id references project_task
+    await tx.taskCommitLink.deleteMany({}); // M7-B — RESTRICT tenant FK, clear before tenant delete
+    await tx.webhookDelivery.deleteMany({}); // M7-B — no cascade path at all
     await tx.projectTask.deleteMany({});
     await tx.projectTaskCounter.deleteMany({}); // RESTRICT tenant FK — clear before tenant delete
     await tx.aiCallLog.deleteMany({});

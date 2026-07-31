@@ -24,6 +24,9 @@ export default auth((req) => {
 });
 
 export const config = {
-  // Skip static assets and the NextAuth API routes; everything else is auth-gated.
-  matcher: ["/((?!api/auth|_next/static|_next/image|favicon.ico).*)"],
+  // Skip static assets, the NextAuth API routes, and the MACHINE routes — the cron
+  // endpoint and inbound webhooks carry no session by design; their own guards
+  // (CRON_SECRET bearer, HMAC signature) are the real authentication, and a login
+  // redirect would just read as a mysterious 30x to the calling machine.
+  matcher: ["/((?!api/auth|api/internal|api/webhooks|_next/static|_next/image|favicon.ico).*)"],
 };
