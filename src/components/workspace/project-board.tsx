@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Flag, MessageSquare, Plus, Sparkles, TriangleAlert } from "lucide-react";
+import { ExternalLink, Flag, MessageSquare, Plus, Sparkles, TriangleAlert } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConversationDrawer } from "@/components/conversation/conversation-drawer";
 import { GenerateDialog } from "@/components/panels/project-tasks-section";
@@ -24,6 +24,13 @@ interface Task {
   assigneeName: string | null;
   dueDate: string | null;
   blocked: boolean;
+  /** M7-A — keys of the incomplete tasks this one waits on. */
+  waitingOn: string[];
+  /** M7-C — set when the card mirrors a YouTrack issue (read-only, links out). */
+  sourceSystem: string | null;
+  externalKey: string | null;
+  externalUrl: string | null;
+  externalAssigneeName: string | null;
   lastActivityAt: string;
 }
 interface Progress {
@@ -75,6 +82,9 @@ export function ProjectBoard({
 }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [progress, setProgress] = useState<Progress>({ total: 0, completed: 0, blocked: 0, pct: 0 });
+  // M7-C: YouTrack owns this project's work — the board becomes a read-only mirror plus
+  // QUBIT's own governance layer (blockers, dependencies, comments).
+  const [mirrored, setMirrored] = useState(false);
   const [genOpen, setGenOpen] = useState(false);
   const [lens, setLens] = useState<BoardLens>(() => initialLens ?? defaultLens(viewerCategory));
   // "Mine" filter (per Joyce: filtering of mine everywhere). Focus by default for makers,
@@ -96,6 +106,7 @@ export function ProjectBoard({
     const d = await fetch(`/api/projects/${projectId}/tasks`).then((r) => r.json());
     setTasks(d.tasks ?? []);
     setProgress(d.progress ?? { total: 0, completed: 0, blocked: 0, pct: 0 });
+    setMirrored(Boolean(d.mirrored));
   }, [projectId]);
   useEffect(() => {
     void load();
@@ -240,7 +251,7 @@ export function ProjectBoard({
             {progress.blocked > 0 && <span className="text-[var(--bad)]"> · {progress.blocked} blocked</span>}
           </div>
         </div>
-        {canEdit && (
+        {canEdit && !mirrored && (
           <BugDialog
             projectId={projectId}
             members={bugAssignees}
@@ -248,7 +259,7 @@ export function ProjectBoard({
             onAdded={() => void load()}
           />
         )}
-        {canEdit && (
+        {canEdit && !mirrored && (
           <button
             type="button"
             onClick={() => setGenOpen(true)}
@@ -411,7 +422,7 @@ export function ProjectBoard({
                   <div
                     key={t.id}
                     id={`task-${t.id}`}
-                    draggable={canEdit}
+                    draggable={canEdit && !t.sourceSystem}
                     onDragStart={(e) => {
                       e.dataTransfer.setData("text/plain", t.id);
                       setDragId(t.id);
@@ -420,7 +431,7 @@ export function ProjectBoard({
                     className="flex flex-col gap-1.5 rounded-[10px] border bg-[var(--qcard)] p-2.5 text-xs transition-shadow duration-500"
                     title={aging ? "No activity for over 5 business days" : undefined}
                     style={{
-                      cursor: canEdit ? "grab" : "default",
+                      cursor: canEdit && !t.sourceSystem ? "grab" : "default",
                       opacity: dragId === t.id ? 0.5 : 1,
                       borderColor: focused
                         ? "var(--brand)"
@@ -466,6 +477,17 @@ export function ProjectBoard({
                           Stale
                         </span>
                       )}
+                      {/* M7-A: nobody should start work that cannot move — the chip names
+                          what it waits on, so the answer isn't a click away. */}
+                      {t.waitingOn.length > 0 && t.status !== "Completed" && (
+                        <span
+                          className="ml-1.5 rounded-[4px] px-1.5 py-[1px] font-mono text-[8.5px] font-semibold uppercase tracking-[1px]"
+                          style={{ color: "var(--qinfo)", background: "color-mix(in oklab, var(--qinfo) 16%, transparent)" }}
+                          title={`Waiting on ${t.waitingOn.join(", ")}`}
+                        >
+                          Waiting on {t.waitingOn.length}
+                        </span>
+                      )}
                     </span>
                     <span className="flex items-center gap-1.5 text-[10.5px] text-[var(--ink4)]">
                       {t.taskKey && (
@@ -478,6 +500,20 @@ export function ProjectBoard({
                           {t.taskKey}
                         </button>
                       )}
+                      {/* M7-C: a mirrored issue shows its YouTrack key and links straight
+                          out — that is where it is edited, so make the trip one click. */}
+                      {t.externalKey && (
+                        <a
+                          href={t.externalUrl ?? undefined}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          title="Open in YouTrack — this issue is edited there"
+                          className="flex items-center gap-0.5 rounded-[4px] bg-[var(--wash2)] px-1.5 py-[1px] font-mono text-[9.5px] tracking-[0.5px] text-[var(--ink3)] transition-colors hover:text-brand"
+                        >
+                          {t.externalKey}
+                          <ExternalLink className="size-2.5" />
+                        </a>
+                      )}
                       <button
                         type="button"
                         onClick={() => setDiscussTask({ id: t.id, title: t.taskKey ?? t.title })}
@@ -488,13 +524,16 @@ export function ProjectBoard({
                         <MessageSquare className="size-3" />
                       </button>
                       <span className="min-w-0 truncate">
-                        {[t.type !== "Feature" ? t.type : null, t.phase, t.priority, t.assigneeName].filter(Boolean).join(" · ") || "—"}
+                        {[t.type !== "Feature" ? t.type : null, t.phase, t.priority, t.assigneeName ?? t.externalAssigneeName].filter(Boolean).join(" · ") || "—"}
                         {t.dueDate && (
                           <span style={{ color: overdue ? "var(--bad)" : undefined }}> · due {new Date(t.dueDate).toLocaleDateString()}</span>
                         )}
                       </span>
                     </span>
-                    {canEdit && (
+                    {canEdit && t.sourceSystem && (
+                      <span className="text-[10px] italic text-[var(--ink5)]">Status is set in YouTrack</span>
+                    )}
+                    {canEdit && !t.sourceSystem && (
                       <Select
                         value={t.status}
                         onValueChange={(v) => v && v !== t.status && move(t.id, v)}
@@ -548,7 +587,12 @@ export function ProjectBoard({
                 );
               })}
 
-              {canEdit && col.key === "NotStarted" && (
+              {canEdit && mirrored && col.key === "NotStarted" && (
+                <p className="pt-1 text-[10.5px] leading-[1.5] text-[var(--ink5)]">
+                  Issues are raised in YouTrack and appear here at the next sync.
+                </p>
+              )}
+              {canEdit && !mirrored && col.key === "NotStarted" && (
                 <div className="flex flex-col gap-1.5 pt-1">
                   <div className="flex items-center gap-1.5">
                     <input

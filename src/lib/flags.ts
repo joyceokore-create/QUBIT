@@ -11,6 +11,8 @@ const FLAG_ENV = {
   email: "FEATURE_EMAIL",
   /** GitHub commit → task automation (lands M7). */
   commitAutomation: "FEATURE_COMMIT_AUTOMATION",
+  /** YouTrack issue mirroring onto project boards (M7-C, BRD FR-INT-05). */
+  youtrack: "FEATURE_YOUTRACK",
 } as const;
 
 export type FeatureFlag = keyof typeof FLAG_ENV;

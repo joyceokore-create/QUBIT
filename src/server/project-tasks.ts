@@ -4,6 +4,7 @@ import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { projectRoleCategory } from "@/lib/roles";
 import { emitDomainEvent } from "@/server/events";
+import { SOURCE_SYSTEM } from "@/server/connectors/youtrack-sync";
 import { mockEnabled, mockPlanFromText } from "@/server/q/mock";
 import { llmChat, llmEnabled, llmModel } from "@/server/q/llm";
 
@@ -56,6 +57,15 @@ export interface ProjectTaskRow {
   /** Open linked Blocker, if any — the "blocked" flag (id lets the board resolve it). */
   openBlockerId: string | null;
   blocked: boolean;
+  /** M7-A — keys/titles of the INCOMPLETE tasks this one waits on (docs/16 §12). */
+  waitingOn: string[];
+  /** M7-C — set when the row mirrors an external tracker issue; the tracker owns the
+   *  fields above and the board renders them read-only with a link out. */
+  sourceSystem: string | null;
+  externalKey: string | null;
+  externalUrl: string | null;
+  /** Tracker assignee with no matching QUBIT user — shown when assigneeName is null. */
+  externalAssigneeName: string | null;
   /** Last mutation (any) — feeds the board's aging tint and the 6.4 nudger. */
   lastActivityAt: Date;
 }
@@ -68,12 +78,27 @@ const OPEN_BLOCKER_SELECT = {
 
 export async function listProjectTasks(ctx: TenantContext, projectId: string): Promise<ProjectTaskRow[]> {
   return withTenant(ctx, async (tx) => {
-    const rows = await tx.projectTask.findMany({
-      where: { projectId },
-      include: { assignee: { select: { name: true } }, blockers: OPEN_BLOCKER_SELECT },
-      orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }],
-    });
+    const [rows, deps] = await Promise.all([
+      tx.projectTask.findMany({
+        where: { projectId },
+        include: { assignee: { select: { name: true } }, blockers: OPEN_BLOCKER_SELECT },
+        orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }],
+      }),
+      // M7-A: what each card is waiting on, fetched once rather than per card.
+      tx.projectTaskDependency.findMany({
+        where: { task: { projectId } },
+        select: { taskId: true, dependsOnTask: { select: { title: true, taskKey: true, status: true } } },
+      }),
+    ]);
+    const waitingByTask = new Map<string, string[]>();
+    for (const d of deps) {
+      if (d.dependsOnTask.status === "Completed") continue; // the wait is over
+      const list = waitingByTask.get(d.taskId) ?? [];
+      list.push(d.dependsOnTask.taskKey ?? d.dependsOnTask.title);
+      waitingByTask.set(d.taskId, list);
+    }
     return rows.map((t) => ({
+      waitingOn: waitingByTask.get(t.id) ?? [],
       id: t.id,
       title: t.title,
       description: t.description,
@@ -92,6 +117,10 @@ export async function listProjectTasks(ctx: TenantContext, projectId: string): P
       orderIndex: t.orderIndex,
       openBlockerId: t.blockers[0]?.id ?? null,
       blocked: t.blockers.length > 0,
+      sourceSystem: t.sourceSystem,
+      externalKey: t.externalKey,
+      externalUrl: t.externalUrl,
+      externalAssigneeName: t.externalAssigneeName,
       lastActivityAt: t.lastActivityAt,
     }));
   });
@@ -111,6 +140,10 @@ export interface MyTaskRow {
   blockedReason: string | null;
   /** docs/18 §4 attribution: who put this on my board (null when self-created). */
   addedBy: string | null;
+  /** M7-C — mirrored from an external tracker: the card links out and is read-only. */
+  sourceSystem: string | null;
+  externalKey: string | null;
+  externalUrl: string | null;
   dueDate: Date | null;
   updatedAt: Date;
 }
@@ -146,6 +179,9 @@ function rowToMyTask(t: {
   priority: string;
   dueDate: Date | null;
   updatedAt: Date;
+  sourceSystem: string | null;
+  externalKey: string | null;
+  externalUrl: string | null;
   project: { code: string; name: string };
   blockers: { id: string; description: string }[];
 }): MyTaskRow {
@@ -161,6 +197,9 @@ function rowToMyTask(t: {
     blocked: t.blockers.length > 0,
     blockedReason: t.blockers[0]?.description ?? null,
     addedBy: null,
+    sourceSystem: t.sourceSystem,
+    externalKey: t.externalKey,
+    externalUrl: t.externalUrl,
     dueDate: t.dueDate,
     updatedAt: t.updatedAt,
   };
@@ -275,6 +314,45 @@ async function allocateTaskKeys(
   return Array.from({ length: count }, (_, i) => `${project.code}-${start + i}`);
 }
 
+// ── M7-C: external-tracker ownership (BRD FR-INT-05) ─────────────────────────────
+//
+// When a project's work lives in YouTrack, YouTrack owns it. Two guards keep that honest:
+//  1. A mirrored task refuses local edits to the fields the tracker owns. The next sync
+//     would overwrite them anyway, so refusing is the truthful answer rather than letting
+//     someone type into a field that silently reverts an hour later.
+//  2. A YouTrack-connected project refuses NEW native tasks, so the board can't drift into
+//     two half-truths. Tasks created before the connection stay put and stay editable.
+// QUBIT-owned context — milestone links, requirement links, dependencies, comments,
+// checkpoint gates — is untouched by both guards. That is the layer QUBIT adds on top.
+
+const TRACKER_OWNED_INPUT = new Set(["status", "type", "severity", "assigneeId", "dueDate", "approvalStatus"]);
+
+interface MirrorInfo {
+  sourceSystem: string | null;
+  externalKey: string | null;
+}
+
+function assertTrackerFieldsUntouched(task: MirrorInfo, attempted: string[]): void {
+  if (!task.sourceSystem) return;
+  const owned = attempted.filter((k) => TRACKER_OWNED_INPUT.has(k));
+  if (!owned.length) return;
+  const where = task.externalKey ? `${task.externalKey} in YouTrack` : "the source tracker";
+  throw new TaskError(`This issue is mirrored from YouTrack — change ${owned.join(", ")} on ${where} instead.`, "FORBIDDEN");
+}
+
+async function assertNativeTasksAllowed(tx: Prisma.TransactionClient, projectId: string): Promise<void> {
+  const row = await tx.projectIntegration.findUnique({
+    where: { projectId_provider: { projectId, provider: SOURCE_SYSTEM } },
+    select: { connected: true },
+  });
+  if (row?.connected) {
+    throw new TaskError(
+      "This project's work is tracked in YouTrack — raise the issue there and it will appear on the board at the next sync.",
+      "FORBIDDEN",
+    );
+  }
+}
+
 /** Bulk-add tasks (PM approving an AI-generated plan, or a manual add of one). Published
  * tasks get a task key immediately; Drafts get theirs on approval (§2.2). Audited. */
 export async function addTasks(
@@ -286,6 +364,7 @@ export async function addTasks(
   if (tasks.length === 0) throw new TaskError("No tasks to add.", "BAD_INPUT");
   return withTenant(ctx, async (tx) => {
     const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { id: true, name: true } });
+    await assertNativeTasksAllowed(tx, projectId);
     const assigneeIds = [...new Set(tasks.map((t) => t.assigneeId).filter((id): id is string => !!id))];
     if (assigneeIds.length) {
       const found = await tx.user.findMany({ where: { id: { in: assigneeIds } }, select: { id: true } });
@@ -409,10 +488,12 @@ export async function updateTask(ctx: TenantContext, taskId: string, input: Upda
       select: {
         title: true, status: true, approvalStatus: true, taskKey: true, projectId: true,
         assigneeId: true, type: true, reporterId: true,
+        sourceSystem: true, externalKey: true,
         project: { select: { name: true } },
       },
     });
     if (!before) throw new TaskError("Task not found.", "NOT_FOUND");
+    assertTrackerFieldsUntouched(before, Object.keys(input));
     if (input.status === "Completed" && before.status !== "Completed") {
       await assertCanComplete(tx, ctx, before); // docs/18 §4: QA owns Completed for Feature/Bug
     }
@@ -513,9 +594,10 @@ export async function setTaskStatus(ctx: TenantContext, taskId: string, status: 
   return withTenant(ctx, async (tx) => {
     const task = await tx.projectTask.findUnique({
       where: { id: taskId },
-      select: { status: true, projectId: true, approvalStatus: true, type: true, reporterId: true, title: true, taskKey: true, project: { select: { name: true } } },
+      select: { status: true, projectId: true, approvalStatus: true, type: true, reporterId: true, title: true, taskKey: true, sourceSystem: true, externalKey: true, project: { select: { name: true } } },
     });
     if (!task) throw new TaskError("Task not found.", "NOT_FOUND");
+    assertTrackerFieldsUntouched(task, ["status"]);
     if (status === "Completed" && task.status !== "Completed") {
       await assertCanComplete(tx, ctx, task);
     }
@@ -626,6 +708,17 @@ export async function unflagTaskBlocked(ctx: TenantContext, taskId: string, reso
 
 export async function removeTask(ctx: TenantContext, taskId: string) {
   return withTenant(ctx, async (tx) => {
+    const task = await tx.projectTask.findUnique({
+      where: { id: taskId },
+      select: { sourceSystem: true, externalKey: true },
+    });
+    // Deleting a mirrored issue would only bring it back on the next sync.
+    if (task?.sourceSystem) {
+      throw new TaskError(
+        `${task.externalKey ?? "This issue"} is mirrored from YouTrack — delete it there, or it returns at the next sync.`,
+        "FORBIDDEN",
+      );
+    }
     await tx.projectTask.deleteMany({ where: { id: taskId } });
     await audit(tx, ctx, { action: "delete", entityType: "project_task", entityId: taskId, before: { id: taskId } });
     return { id: taskId };
@@ -680,6 +773,8 @@ export async function generatePlan(
   if (!input.text?.trim() && !input.pdfBase64) {
     throw new TaskError("Provide a document or pasted requirements text.", "BAD_INPUT");
   }
+  // Refuse before spending an AI call: the resulting plan could not be saved anyway.
+  await withTenant(ctx, (tx) => assertNativeTasksAllowed(tx, projectId));
   // The internal box is a text model (no native PDF): PDF-only input uses the mock if on,
   // otherwise asks for pasted text. Text input works with the provider or the mock.
   if (!llmEnabled() || (!input.text?.trim() && input.pdfBase64)) {

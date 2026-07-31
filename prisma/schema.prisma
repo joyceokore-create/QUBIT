@@ -99,6 +99,7 @@ model Tenant {
   decisions               Decision[]
   absences                Absence[]
   notificationPreferences NotificationPreference[]
+  projectTaskDependencies ProjectTaskDependency[]
 
   @@map("tenant")
 }
@@ -154,6 +155,7 @@ model User {
   // direct lookup, so it's inert bad data rather than an active bug (unlike Department's
   // parentId, which IS walked for cycle prevention because hierarchy queries rely on it).
   /**
+   * /**
    * /**
    * /** Hours available in a normal week — the denominator leave is subtracted from.
    */
@@ -255,50 +257,77 @@ model SharedReport {
 // manually), their execution status, and the data auto-progress is computed from. Distinct
 // from the ClickUp `task` model (that surface is out of the MVP nav).
 model ProjectTask {
-  id               String                @id @default(uuid())
-  tenantId         String                @map("tenant_id")
-  tenant           Tenant                @relation(fields: [tenantId], references: [id])
-  projectId        String                @map("project_id")
-  project          Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id               String                  @id @default(uuid())
+  tenantId         String                  @map("tenant_id")
+  tenant           Tenant                  @relation(fields: [tenantId], references: [id])
+  projectId        String                  @map("project_id")
+  project          Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
   title            String
   description      String?
   phase            String? // Discovery / Requirements / Design / … (PRD Module 4)
-  ownerRole        String?               @map("owner_role") // suggested project role (PRD Module 5)
-  priority         String                @default("Medium") // Low | Medium | High | Critical
-  status           String                @default("NotStarted") // NotStarted | InProgress | Blocked | Completed
+  ownerRole        String?                 @map("owner_role") // suggested project role (PRD Module 5)
+  priority         String                  @default("Medium") // Low | Medium | High | Critical
+  status           String                  @default("NotStarted") // NotStarted | InProgress | Blocked | Completed
   // Draft = AI-generated, pending approval (excluded from progress/reports/member views);
   // Published = live. Manual tasks are Published; a plan is approved to publish (§2.2).
-  approvalStatus   String                @default("Published") @map("approval_status")
+  approvalStatus   String                  @default("Published") @map("approval_status")
   estimate         String? // free-form estimated effort, e.g. "3d"
-  assigneeId       String?               @map("assignee_id")
-  assignee         User?                 @relation("ProjectTaskAssignee", fields: [assigneeId], references: [id])
-  dueDate          DateTime?             @map("due_date")
-  orderIndex       Int                   @default(0) @map("order_index")
+  assigneeId       String?                 @map("assignee_id")
+  assignee         User?                   @relation("ProjectTaskAssignee", fields: [assigneeId], references: [id])
+  dueDate          DateTime?               @map("due_date")
+  orderIndex       Int                     @default(0) @map("order_index")
   // ── Phase 6.1 taxonomy (docs/15) ──
-  type             String                @default("Feature") // Feature | Bug | Chore | Spike | Improvement
+  type             String                  @default("Feature") // Feature | Bug | Chore | Spike | Improvement
   // Human-readable key "<project.code>-<n>" referenced in commit messages (6.3). Allocated
   // from ProjectTaskCounter on publish/manual create; Drafts carry NULL until approved.
-  taskKey          String?               @map("task_key")
+  taskKey          String?                 @map("task_key")
   severity         String? // Bugs only: Low | Medium | High | Critical
-  reporterId       String?               @map("reporter_id") // who filed it (QA authorship on bugs)
-  reporter         User?                 @relation("ProjectTaskReporter", fields: [reporterId], references: [id])
-  parentTaskId     String?               @map("parent_task_id") // e.g. the task a bug was found while testing
-  parentTask       ProjectTask?          @relation("ProjectTaskParent", fields: [parentTaskId], references: [id])
-  childTasks       ProjectTask[]         @relation("ProjectTaskParent")
-  requirementLinks RequirementTaskLink[] @relation("TaskRequirements")
-  sourceDocumentId String?               @map("source_document_id") // BRD the plan was generated from (traceability)
-  sourceDocument   ProjectDocument?      @relation("TaskSourceDocument", fields: [sourceDocumentId], references: [id])
-  milestoneId      String?               @map("milestone_id")
-  milestone        ProjectMilestone?     @relation("MilestoneTasks", fields: [milestoneId], references: [id])
+  reporterId       String?                 @map("reporter_id") // who filed it (QA authorship on bugs)
+  reporter         User?                   @relation("ProjectTaskReporter", fields: [reporterId], references: [id])
+  parentTaskId     String?                 @map("parent_task_id") // e.g. the task a bug was found while testing
+  parentTask       ProjectTask?            @relation("ProjectTaskParent", fields: [parentTaskId], references: [id])
+  childTasks       ProjectTask[]           @relation("ProjectTaskParent")
+  requirementLinks RequirementTaskLink[]   @relation("TaskRequirements")
+  blockedBy        ProjectTaskDependency[] @relation("TaskBlockedBy")
+  blocks           ProjectTaskDependency[] @relation("TaskBlocks")
+  sourceDocumentId String?                 @map("source_document_id") // BRD the plan was generated from (traceability)
+  sourceDocument   ProjectDocument?        @relation("TaskSourceDocument", fields: [sourceDocumentId], references: [id])
+  milestoneId      String?                 @map("milestone_id")
+  milestone        ProjectMilestone?       @relation("MilestoneTasks", fields: [milestoneId], references: [id])
   // Touched on every task mutation (incl. commit-driven ones in 6.3); feeds the nudger's
   // staleness check (6.4). Distinct from updatedAt only by intent — set explicitly.
-  lastActivityAt   DateTime              @default(now()) @map("last_activity_at")
+  lastActivityAt   DateTime                @default(now()) @map("last_activity_at")
   // "Blocked" is a flag, not a status: a task is blocked while an Open Blocker links to it.
-  blockers         Blocker[]             @relation("TaskBlockers")
-  createdAt        DateTime              @default(now()) @map("created_at")
-  updatedAt        DateTime              @updatedAt @map("updated_at")
+  blockers         Blocker[]               @relation("TaskBlockers")
+  // ── M7-C: mirrored from an external issue tracker (docs/16 §12, BRD FR-INT-05) ──
+  // NULL sourceSystem = a QUBIT-native task. When set, the tracker owns title/description/
+  // status/type/priority/assignee/dueDate and QUBIT refuses local edits to them; the
+  // governance layer on top (milestone, requirement links, dependencies, comments) stays
+  // ours. Mirroring into THIS table (rather than a parallel one) is the whole point:
+  // progress, boards, weekly reports and coverage already read project_task.
+  sourceSystem         String?             @map("source_system") // youtrack (only, today)
+  /**
+   * The tracker's own immutable id (YouTrack `id`, e.g. "2-1043") — the upsert key.
+   */
+  externalId           String?             @map("external_id")
+  /**
+   * Human-readable tracker key (YouTrack `idReadable`, e.g. "RBC-123"). Deliberately NOT
+   * taskKey: that key space is "<project.code>-<n>", allocated from ProjectTaskCounter and
+   * parsed by commit automation, so the two must not collide.
+   */
+  externalKey          String?             @map("external_key")
+  externalUrl          String?             @map("external_url")
+  /**
+   * Tracker assignee display name when no QUBIT user matches their email — shown as-is
+   * rather than inventing a user row.
+   */
+  externalAssigneeName String?             @map("external_assignee_name")
+  externalSyncedAt     DateTime?           @map("external_synced_at")
+  createdAt        DateTime                @default(now()) @map("created_at")
+  updatedAt        DateTime                @updatedAt @map("updated_at")
 
   @@unique([projectId, taskKey])
+  @@unique([projectId, sourceSystem, externalId])
   @@index([tenantId, projectId])
   @@index([tenantId, approvalStatus])
   @@map("project_task")
@@ -306,6 +335,32 @@ model ProjectTask {
 
 // Per-project task-key sequence (docs/15 §6.1). Keys are claimed with a transactional
 // UPDATE … RETURNING — never derived from a row count (that races under concurrency).
+// Task dependencies (docs/16 §12 M7). "This task is waiting on that one." Distinct from
+// the legacy ClickUp TaskDependency, which hangs off the retired Task model.
+// Cycles are refused at write time (src/server/dependencies.ts) — a dependency graph
+// that loops is a graph nobody can schedule.
+model ProjectTaskDependency {
+  id              String      @id @default(cuid())
+  tenantId        String      @map("tenant_id")
+  tenant          Tenant      @relation(fields: [tenantId], references: [id])
+  /**
+   * The task that is blocked.
+   */
+  taskId          String      @map("task_id")
+  task            ProjectTask @relation("TaskBlockedBy", fields: [taskId], references: [id], onDelete: Cascade)
+  /**
+   * The task it is waiting on.
+   */
+  dependsOnTaskId String      @map("depends_on_task_id")
+  dependsOnTask   ProjectTask @relation("TaskBlocks", fields: [dependsOnTaskId], references: [id], onDelete: Cascade)
+  createdById     String?     @map("created_by_id")
+  createdAt       DateTime    @default(now()) @map("created_at")
+
+  @@unique([taskId, dependsOnTaskId])
+  @@index([tenantId, taskId])
+  @@map("project_task_dependency")
+}
+
 model ProjectTaskCounter {
   tenantId  String  @map("tenant_id")
   tenant    Tenant  @relation(fields: [tenantId], references: [id])
@@ -436,6 +491,19 @@ model ProjectIntegration {
   connected Boolean  @default(false)
   resource  String? // repo / channel / project identifier
   secret    String? // encrypted access token (src/lib/secret-box.ts) — never plaintext
+  /**
+   * Provider-specific settings that are NOT secret — for YouTrack: baseUrl and the
+   * state/type/priority mapping overrides (workflows are configurable per instance, so a
+   * hardcoded map would be wrong for most customers). Never put a token in here.
+   */
+  config              Json?    @db.JsonB
+  lastSyncAt          DateTime? @map("last_sync_at")
+  /**
+   * Last failure message, cleared on the next success — the config panel shows it so a
+   * silently dead integration is visible instead of just stale.
+   */
+  lastSyncError       String?  @map("last_sync_error")
+  syncIntervalMinutes Int      @default(60) @map("sync_interval_minutes")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

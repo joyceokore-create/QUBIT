@@ -1,26 +1,31 @@
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { decryptSecret } from "@/lib/secret-box";
 import { fetchGithubSummary } from "@/server/connectors/github";
+import { fetchYoutrackSummary } from "@/server/connectors/youtrack";
+import { parseConfig } from "@/server/connectors/youtrack-sync";
 import type { IntegrationSummary } from "@/server/connectors/types";
 
 export type { IntegrationSummary };
 
 /**
  * Connector dispatch. Given a connected ProjectIntegration (with an encrypted token), fetch
- * a live summary from the provider. Only GitHub is wired live today; the others return null
- * until their connectors land — the seam is identical (decrypt token → provider call).
+ * a live summary from the provider. GitHub and YouTrack are wired live; the others return
+ * null until their connectors land — the seam is identical (decrypt token → provider call).
  */
 async function runConnector(
   provider: string,
   token: string,
   resource: string,
+  config: unknown,
 ): Promise<IntegrationSummary | null> {
   switch (provider) {
     case "github":
     case "github_actions":
       return fetchGithubSummary(token, resource);
+    case "youtrack":
+      return fetchYoutrackSummary(token, resource, parseConfig(config)?.baseUrl);
     default:
-      return null; // youtrack | teams | calendar | sentry — connectors pending
+      return null; // teams | calendar | sentry — connectors pending
   }
 }
 
@@ -33,7 +38,7 @@ export async function getIntegrationSummary(
   const row = await withTenant(ctx, (tx) =>
     tx.projectIntegration.findUnique({
       where: { projectId_provider: { projectId, provider } },
-      select: { connected: true, resource: true, secret: true },
+      select: { connected: true, resource: true, secret: true, config: true },
     }),
   );
   if (!row?.connected || !row.secret || !row.resource) return null;
@@ -43,7 +48,7 @@ export async function getIntegrationSummary(
   } catch {
     return null;
   }
-  return runConnector(provider, token, row.resource);
+  return runConnector(provider, token, row.resource, row.config);
 }
 
 /** All connected integrations' summaries — used to ground Q's project report. */
@@ -54,7 +59,7 @@ export async function getConnectedSummaries(
   const rows = await withTenant(ctx, (tx) =>
     tx.projectIntegration.findMany({
       where: { projectId, connected: true, secret: { not: null } },
-      select: { provider: true, resource: true, secret: true },
+      select: { provider: true, resource: true, secret: true, config: true },
     }),
   );
   const out: { provider: string; summary: IntegrationSummary }[] = [];
@@ -67,7 +72,7 @@ export async function getConnectedSummaries(
       } catch {
         return;
       }
-      const summary = await runConnector(r.provider, token, r.resource);
+      const summary = await runConnector(r.provider, token, r.resource, r.config);
       if (summary) out.push({ provider: r.provider, summary });
     }),
   );

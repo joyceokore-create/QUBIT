@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requirePermission, forbidden } from "@/lib/api-guard";
 import { canContributeToProject } from "@/lib/access";
 import { listProjectTasks, getProjectProgress, addTasks, TaskInput, TaskError } from "@/server/project-tasks";
+import { isYoutrackConnected } from "@/server/connectors/youtrack-sync";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -10,11 +11,14 @@ export async function GET(_req: Request, { params }: Ctx) {
   const guard = await requirePermission("project:read");
   if ("response" in guard) return guard.response;
   const { id } = await params;
-  const [tasks, progress] = await Promise.all([
+  const [tasks, progress, mirrored] = await Promise.all([
     listProjectTasks(guard.ctx, id),
     getProjectProgress(guard.ctx, id),
+    // M7-C: the board hides its own add/generate controls when YouTrack owns this project's
+    // work, so the refusal never has to be discovered by trying.
+    isYoutrackConnected(guard.ctx, id),
   ]);
-  return NextResponse.json({ tasks, progress });
+  return NextResponse.json({ tasks, progress, mirrored });
 }
 
 const PostBody = z.object({ tasks: z.array(TaskInput).min(1), draft: z.boolean().optional() });

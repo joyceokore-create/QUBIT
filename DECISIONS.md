@@ -1244,3 +1244,101 @@ flag+credentials gating, tenant isolation — plus a template unit suite coverin
 colour, pluralisation, HTML escaping and link-not-copy). Live on KCB: three pending
 notifications produced exactly ONE digest ("QUBIT: 2 updates for you" to Daniel) with the
 `checkin_ready` row correctly left in the bell, and a second run sent nothing.
+
+---
+
+## DM1.41 — Task dependencies refuse cycles at write time, and the board says what is waiting (M7-A)
+
+`ProjectTaskDependency` records "this task waits on that one". Two rules carry the weight:
+
+- **Acyclic, enforced on write.** A `CHECK (task_id <> depends_on_task_id)` stops the
+  trivial case in the database; the transitive case is walked in `wouldCycle()` before
+  every insert. A loop is a set of tasks none of which can ever start — leaving it for a
+  report to notice later would mean the graph is already wrong by the time anyone looks.
+  The walk is pure and separately unit-tested (direct, transitive, long chain, diamond,
+  and a graph that already contains a cycle, which must terminate rather than hang).
+  A refused cycle answers **409**, not 400: the request is well-formed, the graph simply
+  cannot accept it.
+- **Same project only.** A cross-project dependency hides coupling the portfolio view
+  cannot show, and every scheduling question it raises is really a programme question.
+  Refused with a message that says so.
+
+The board renders a "waiting on N" chip whose tooltip names the blockers, so nobody starts
+work that cannot move. **"Waiting" counts only INCOMPLETE blockers** — once the blocker is
+Completed the chip drops off, but the edge is kept: history is not rewritten, only the
+`blocking` flag flips.
+
+---
+
+## DM1.42 — YouTrack issues are MIRRORED onto ProjectTask, read-only, inbound only (M7-C)
+
+QA, developers and implementors file their work in YouTrack. QUBIT's job is reporting, so
+it has to read from where the work actually happens.
+
+- **Mirror into `ProjectTask`, not a parallel table.** Every surface that reports on
+  progress already reads `ProjectTask` — project %, the pipeline table, personal boards,
+  QA dashboards, member weekly reports, requirement coverage. A separate `ExternalIssue`
+  table would have meant rebuilding all of that a second time. Mirrored in, a bug filed in
+  YouTrack moves the project's RAG on Friday with nobody retyping anything.
+- **`externalKey` is NOT `taskKey`.** YouTrack's `RBC-123` lives in its own column. The
+  `taskKey` space is `<project.code>-<n>`, allocated from `ProjectTaskCounter` and parsed
+  by commit automation; letting a tracker key into it would collide two namespaces that
+  must stay separate. Mirrored rows carry no `taskKey` at all.
+- **Read-only for the fields the tracker owns** (title, description, status, type,
+  priority, severity, assignee, due date). A local edit is REFUSED with a message naming
+  the issue to change instead. The alternative — accepting the edit — would silently
+  revert it at the next sync, which is worse than saying no. Deleting a mirrored task is
+  refused for the same reason. QUBIT keeps owning the governance layer on top: milestone
+  links, requirement links, dependencies, blockers, comments, checkpoint gates.
+- **A connected project refuses NEW native tasks** (Joyce's call: YouTrack-only). Tasks
+  created before the connection stay visible and editable; only new ones are blocked, and
+  the board hides its own add/generate controls rather than letting the refusal be
+  discovered by trying. The known cost: PM-level chores and action items have nowhere to
+  live in QUBIT on a connected project. Reversible by flipping one guard.
+- **Inbound only.** Nothing writes back to YouTrack, so the token needs read scope alone.
+- **Rejected resolutions map to Completed.** "Won't fix"/"Duplicate"/"Declined" are not
+  delivered work, but they are not outstanding work either, and QUBIT's taxonomy has no
+  Cancelled status — leaving them open would permanently depress every project's progress.
+  Overridable per project, like every other mapping.
+- **The field mapping is per-project and defaults are a courtesy, not an assumption.**
+  YouTrack workflows are configurable, so no built-in map is right everywhere. Unknown
+  states fall back to the `resolved` timestamp — the one signal YouTrack guarantees
+  whatever the workflow looks like.
+- **No phantom users.** An assignee matches a QUBIT user by email INSIDE the tenant (RLS
+  makes another tenant's account invisible, so a shared email can never cross over); an
+  unmatched one is kept as a display name and reported in the sync result, so the gap is
+  visible rather than silently unassigned.
+- **The network call happens outside every transaction**, and writes go in chunks of 100.
+  Holding a Postgres transaction open across a third-party round trip would pin a
+  connection for the length of the sync, so `JobDefinition` grew a `NetworkJobDefinition`
+  variant that receives a `TenantContext` instead of a `tx` and opens its own short
+  transactions. DM1.18 is unchanged: every read and write still happens inside `withTenant`.
+- **Audit is honest, not noisy.** A row per created task, a row per task whose owned
+  fields ACTUALLY changed, plus one summary row per run. A no-op sync writes none — which
+  is also the test that proves idempotency.
+- **SSRF guard on the instance URL** (`docs/11` / OWASP). The base URL is customer-supplied
+  config, so without a guard this connector forwards requests anywhere: https-only, no
+  embedded credentials, and the resolved address must be public unless the host is named in
+  `INTEGRATION_ALLOWED_HOSTS` — which is how a self-hosted YouTrack on the corporate
+  network is permitted deliberately rather than by accident. Redirects are refused, closing
+  the common rebind vector. **Residual risk stated rather than implied**: a DNS rebind
+  between the check and the fetch is still possible; pinning the resolved IP to the socket
+  would close it and is deferred.
+- **`lastSyncAt` advances only on success.** A failed run must re-read the same window next
+  time, not skip past issues it never saw. The failure message is stored on the integration
+  row and shown in the panel, so a silently dead integration is visible instead of stale.
+- **Ships with `FEATURE_YOUTRACK` OFF.** No instance is connected yet; the job is a no-op
+  until a token and URL are configured.
+
+**Verified**: lint/typecheck/build green, 627/627 tests (85 files). Browser-checked on both
+tenants with a throwaway `YTDEMO` fixture (since removed): five mirrored issues rendered
+with their `RBC-…` keys linking out, the status picker replaced by "Status is set in
+YouTrack", the add-task box replaced by "Issues are raised in YouTrack and appear here at
+the next sync", an unmatched assignee shown by name, progress reading 1/5 · 20% from
+mirrored rows alone, and the M7-A "waiting on 1" chip correct (two edges declared, the
+Completed one dropped). The SSRF guard was exercised live: `http://169.254.169.254` refused
+for scheme, `https://169.254.169.254` refused as a private address.
+
+**Not done, deliberately**: the sync emits no notifications and no domain events. Mirroring
+a few hundred issues would otherwise fire a wave of bells on first connect. Assignment
+notifications from YouTrack are a follow-up, not an oversight.

@@ -5,7 +5,8 @@ import { fridayCheckinDrafts, fridayMemberDrafts, fridayReport } from "@/server/
 import { checkinChase, nudgerJob } from "@/server/jobs/nudger-jobs";
 import { nightlySnapshot } from "@/server/jobs/nightly-snapshot";
 import { dailyDigest } from "@/server/jobs/digest";
-import type { JobDefinition, JobRunResult } from "@/server/jobs/types";
+import { youtrackSync } from "@/server/jobs/youtrack-sync";
+import type { AnyJobDefinition, JobDefinition, JobRunResult } from "@/server/jobs/types";
 
 /**
  * Jobs runtime (docs/16-revamp-plan.md §10; transport per DM1.15 №4). The host crontab
@@ -24,13 +25,14 @@ const heartbeat: JobDefinition = {
   },
 };
 
-const REGISTRY = new Map<string, JobDefinition>(
-  [heartbeat, nightlySnapshot, fridayCheckinDrafts, fridayMemberDrafts, fridayReport, nudgerJob, checkinChase, dailyDigest].map(
-    (job) => [job.name, job],
-  ),
+const REGISTRY = new Map<string, AnyJobDefinition>(
+  [
+    heartbeat, nightlySnapshot, fridayCheckinDrafts, fridayMemberDrafts, fridayReport,
+    nudgerJob, checkinChase, dailyDigest, youtrackSync,
+  ].map((job) => [job.name, job as AnyJobDefinition]),
 );
 
-export function getJob(name: string): JobDefinition | undefined {
+export function getJob(name: string): AnyJobDefinition | undefined {
   return REGISTRY.get(name);
 }
 
@@ -66,9 +68,12 @@ export async function runJob(name: string, idempotencyKey: string): Promise<JobR
     try {
       // Machine actor: the sentinel user id never matches a row and is never used by RLS
       // (policies key on app.tenant_id only); it just keeps audit/actor trails honest.
-      const result = await withTenant({ tenantId: tenant.id, userId: `job:${name}` }, (tx) =>
-        job.run(tx, tenant),
-      );
+      const ctx = { tenantId: tenant.id, userId: `job:${name}` };
+      // A network job manages its own short transactions (see JobDefinition docs) — the
+      // dispatcher must not hold one open across a third-party round trip.
+      const result = job.ownsTransaction
+        ? await job.run(ctx, tenant)
+        : await withTenant(ctx, (tx) => job.run(tx, tenant));
       detail[tenant.slug] = result ?? { ok: true };
     } catch (err) {
       failed = true;

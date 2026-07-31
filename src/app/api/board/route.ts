@@ -21,6 +21,10 @@ export async function GET() {
       blocked: t.blocked,
       blockedReason: t.blockedReason,
       addedBy: t.addedBy,
+      // M7-C: a mirrored issue is read-only here and links out to YouTrack.
+      sourceSystem: t.sourceSystem,
+      externalKey: t.externalKey,
+      externalUrl: t.externalUrl,
       dueDate: t.dueDate ? t.dueDate.toISOString() : null,
       updatedAt: t.updatedAt.toISOString(),
     })),

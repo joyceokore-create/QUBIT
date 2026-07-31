@@ -15,6 +15,9 @@ const base: MyTaskRow = {
   blocked: false,
   blockedReason: null,
   addedBy: null,
+  sourceSystem: null,
+  externalKey: null,
+  externalUrl: null,
   dueDate: null,
   updatedAt: new Date("2026-07-27T00:00:00Z"),
 };

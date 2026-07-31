@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ShieldAlert, UserRound } from "lucide-react";
+import { ExternalLink, ShieldAlert, UserRound } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // The personal board (docs/18 §4): lanes To do · Doing · Done as VIEWS over the
@@ -23,6 +23,10 @@ interface BoardTask {
   blocked: boolean;
   blockedReason: string | null;
   addedBy: string | null;
+  /** M7-C — mirrored from YouTrack: read-only here, edited there. */
+  sourceSystem: string | null;
+  externalKey: string | null;
+  externalUrl: string | null;
   dueDate: string | null;
 }
 
@@ -143,13 +147,28 @@ export function PersonalBoard({ viewerName }: { viewerName: string }) {
                         <UserRound className="size-2.5" /> added by {t.addedBy}
                       </span>
                     )}
+                    {t.externalKey && (
+                      <a
+                        href={t.externalUrl ?? undefined}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        title="Open in YouTrack — this issue is moved there"
+                        className="flex items-center gap-0.5 rounded-[4px] bg-[var(--wash2)] px-1 py-0.5 text-[var(--ink3)] hover:text-brand"
+                      >
+                        {t.externalKey}
+                        <ExternalLink className="size-2.5" />
+                      </a>
+                    )}
                   </div>
                   {t.blocked && t.blockedReason && (
                     <p className="flex items-center gap-1 text-[10px] text-[var(--bad)]">
                       <ShieldAlert className="size-2.5 flex-none" /> {t.blockedReason}
                     </p>
                   )}
-                  {lane.key !== "done" && (
+                  {lane.key !== "done" && t.sourceSystem && (
+                    <p className="text-[10px] italic text-[var(--ink5)]">Move it in YouTrack.</p>
+                  )}
+                  {lane.key !== "done" && !t.sourceSystem && (
                     <Select value={t.status} onValueChange={(v) => v && v !== t.status && void move(t, v)}>
                       <SelectTrigger className="h-6 w-[160px] text-[10px]" aria-label={`Move ${t.title}`}><SelectValue /></SelectTrigger>
                       <SelectContent>
