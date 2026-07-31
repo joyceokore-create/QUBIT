@@ -19,8 +19,10 @@ export const CreateUserInput = z.object({
   teamId: z.string().min(1).nullable().optional(),
   projectId: z.string().min(1).nullable().optional(),
   projectRole: z.enum(PROJECT_ROLES).nullable().optional(),
-  // Declared dashboard groups (docs/17 §1.3) — presentation, never permission.
-  userGroups: z.array(z.enum(USER_GROUPS)).max(5).optional(),
+  // Declared dashboard group (docs/17 §1.3) — presentation, never permission. DM1.43:
+  // SINGLE choice — exec, pm, or member(dev/qa/implementor) — so "where they land" is
+  // unambiguous. Derived groups still union in at login; this caps what is DECLARED.
+  userGroups: z.array(z.enum(USER_GROUPS)).max(1).optional(),
   primaryGroup: z.enum(USER_GROUPS).nullable().optional(),
 });
 export type CreateUserInput = z.infer<typeof CreateUserInput>;
@@ -31,7 +33,9 @@ export const UpdateRolesInput = z.object({
 export type UpdateRolesInput = z.infer<typeof UpdateRolesInput>;
 
 export const SetUserGroupsInput = z.object({
-  userGroups: z.array(z.enum(USER_GROUPS)).max(5),
+  // DM1.43: single declared group (see CreateUserInput). Rows saved under the old
+  // multi-select rule stay valid in the DB; they collapse on the next edit.
+  userGroups: z.array(z.enum(USER_GROUPS)).max(1),
   primaryGroup: z.enum(USER_GROUPS).nullable(),
 });
 export type SetUserGroupsInput = z.infer<typeof SetUserGroupsInput>;

@@ -5,6 +5,7 @@
 // session + DB — NEVER from a client-supplied role or id claim.
 import type { Prisma } from "@prisma/client";
 import { can } from "@/lib/rbac";
+import { projectRoleCategory } from "@/lib/roles";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 
 type Tx = Prisma.TransactionClient;
@@ -68,9 +69,11 @@ export async function canWriteRiskOrBlocker(
   return withTenant(ctx, (tx) => isProjectMemberTx(tx, ctx.userId, opts.projectId!));
 }
 
-/** Can the viewer write this task? Full authority for lead/PM/roles; assignee for their own;
- * HeadOfQA for tasks in Testing/UAT phases, in a QA board status (InReview/InQA), or typed
- * Bug (Phase 6.1 extension, DM1.15). */
+/** Can the viewer write this task? DM1.43 (supersedes the "any member" fallback): boards
+ * are read-only for non-PMs. Write authority = lead/PM roles; the ASSIGNEE for their own
+ * task (the personal-board flow); HeadOfQA — and project QA members — within QA scope
+ * (Testing/UAT phase, InReview/InQA status, or typed Bug), because QA owns Completed for
+ * Feature/Bug work (docs/18 §4) and by definition doesn't own the task it verifies. */
 export async function canWriteTask(ctx: TenantContext, taskId: string): Promise<boolean> {
   if (can(ctx, "task:write")) return true; // PlatformSuperAdmin, HeadOfProjects, ProjectManager
   return withTenant(ctx, async (tx) => {
@@ -82,7 +85,16 @@ export async function canWriteTask(ctx: TenantContext, taskId: string): Promise<
     if (task.assigneeId === ctx.userId) return true; // assignee: status/progress/comments
     const inQaScope = isQaPhase(task.phase) || ["InReview", "InQA"].includes(task.status) || task.type === "Bug";
     if (ctx.roles.includes("HeadOfQA") && inQaScope) return true;
-    return isProjectMemberTx(tx, ctx.userId, task.projectId); // any member of the project
+    if (await isDeliveryOwnerTx(tx, ctx.userId, task.projectId)) return true; // lead / PM-role member
+    if (inQaScope) {
+      // A QA member may move QA-scope work they don't own — the verification handoff.
+      const membership = await tx.projectMember.findFirst({
+        where: { projectId: task.projectId, userId: ctx.userId },
+        select: { role: true },
+      });
+      if (membership && projectRoleCategory(membership.role) === "QA") return true;
+    }
+    return false;
   });
 }
 

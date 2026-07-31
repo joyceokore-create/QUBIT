@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
-import { projectRoleCategory } from "@/lib/roles";
+import { projectRoleCategory, type ProjectRoleCategory } from "@/lib/roles";
 import { emitDomainEvent } from "@/server/events";
 import { SOURCE_SYSTEM } from "@/server/connectors/youtrack-sync";
 import { mockEnabled, mockPlanFromText } from "@/server/q/mock";
@@ -59,6 +59,9 @@ export interface ProjectTaskRow {
   blocked: boolean;
   /** M7-A — keys/titles of the INCOMPLETE tasks this one waits on (docs/16 §12). */
   waitingOn: string[];
+  /** M7-D (DM1.43) — the assignee's project-role category; decides the task's lane.
+   *  Null = unassigned, or assigned to someone not onboarded onto this project. */
+  assigneeCategory: ProjectRoleCategory | null;
   /** M7-C — set when the row mirrors an external tracker issue; the tracker owns the
    *  fields above and the board renders them read-only with a link out. */
   sourceSystem: string | null;
@@ -78,7 +81,7 @@ const OPEN_BLOCKER_SELECT = {
 
 export async function listProjectTasks(ctx: TenantContext, projectId: string): Promise<ProjectTaskRow[]> {
   return withTenant(ctx, async (tx) => {
-    const [rows, deps] = await Promise.all([
+    const [rows, deps, members, project] = await Promise.all([
       tx.projectTask.findMany({
         where: { projectId },
         include: { assignee: { select: { name: true } }, blockers: OPEN_BLOCKER_SELECT },
@@ -89,7 +92,14 @@ export async function listProjectTasks(ctx: TenantContext, projectId: string): P
         where: { task: { projectId } },
         select: { taskId: true, dependsOnTask: { select: { title: true, taskKey: true, status: true } } },
       }),
+      // M7-D (DM1.43): membership roles decide each task's lane via its assignee.
+      tx.projectMember.findMany({ where: { projectId }, select: { userId: true, role: true } }),
+      tx.project.findUnique({ where: { id: projectId }, select: { leadUserId: true } }),
     ]);
+    const categoryByUser = new Map<string, ProjectRoleCategory>(
+      members.map((m) => [m.userId, projectRoleCategory(m.role)]),
+    );
+    if (project?.leadUserId) categoryByUser.set(project.leadUserId, "PM");
     const waitingByTask = new Map<string, string[]>();
     for (const d of deps) {
       if (d.dependsOnTask.status === "Completed") continue; // the wait is over
@@ -99,6 +109,7 @@ export async function listProjectTasks(ctx: TenantContext, projectId: string): P
     }
     return rows.map((t) => ({
       waitingOn: waitingByTask.get(t.id) ?? [],
+      assigneeCategory: t.assigneeId ? (categoryByUser.get(t.assigneeId) ?? null) : null,
       id: t.id,
       title: t.title,
       description: t.description,

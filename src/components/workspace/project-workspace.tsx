@@ -76,7 +76,7 @@ export function ProjectWorkspace({
   viewerId?: string;
   initialTab?: string;
   focusTaskId?: string | null;
-  initialLens?: "all" | "dev" | "qa" | null;
+  initialLens?: "all" | "dev" | "qa" | "impl" | null;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>(() =>

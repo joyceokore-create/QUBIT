@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { canViewProject } from "@/lib/project-access";
 import { canContributeToProject, canWriteProject } from "@/lib/access";
-import { projectRoleCategory, type ProjectRoleCategory } from "@/lib/roles";
+import { viewerBoardCategory } from "@/server/board-scope";
 import { withTenant } from "@/lib/tenant";
 import { getProjectPanelData } from "@/server/projects";
 import { listProjectMembers } from "@/server/resources";
@@ -28,7 +28,7 @@ export default async function ProjectWorkspacePage({
 
   if (!(await canViewProject(ctx, id))) return <Forbidden />;
 
-  const [p, members, canContribute, canPublish, membership, portfolios] = await Promise.all([
+  const [p, members, canContribute, canPublish, membership, portfolios, viewerCategory] = await Promise.all([
     getProjectPanelData(ctx, id),
     listProjectMembers(ctx, id),
     canContributeToProject(ctx, id),
@@ -38,21 +38,15 @@ export default async function ProjectWorkspacePage({
         tx.project.findFirst({ where: { id, leadUserId: ctx.userId }, select: { id: true } }),
         tx.projectMember.findFirst({ where: { projectId: id, userId: ctx.userId }, select: { id: true, role: true } }),
       ]);
-      return { isMember: Boolean(lead || m), isLead: Boolean(lead), memberRole: m?.role ?? null };
+      return { isMember: Boolean(lead || m), isLead: Boolean(lead) };
     }),
     // Portfolio choices for the governance editor's move control (docs/18 §0.5).
     withTenant(ctx, (tx) => tx.portfolio.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } })),
+    // DM1.43: ONE computation shared with the tasks API, so the toggles the page renders
+    // and the rows the server returns can never disagree.
+    viewerBoardCategory(ctx, id),
   ]);
   if (!p) notFound();
-
-  // The board lens the viewer lands on: PM for anyone with publish authority or the lead,
-  // else their membership role's category (Dev / QA / Stakeholder → the "all" lens).
-  const viewerCategory: ProjectRoleCategory =
-    canPublish || membership.isLead
-      ? "PM"
-      : membership.memberRole
-        ? projectRoleCategory(membership.memberRole)
-        : "Stakeholder";
 
   const data: ProjectPanelJson = {
     ...p,
@@ -74,7 +68,7 @@ export default async function ProjectWorkspacePage({
       viewerId={ctx.userId}
       initialTab={sp.tab}
       focusTaskId={sp.task ?? null}
-      initialLens={sp.lens === "qa" || sp.lens === "dev" || sp.lens === "all" ? sp.lens : null}
+      initialLens={sp.lens === "qa" || sp.lens === "dev" || sp.lens === "impl" || sp.lens === "all" ? sp.lens : null}
     />
   );
 }

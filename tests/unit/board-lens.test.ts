@@ -1,45 +1,93 @@
-// Phase 6.2 — board lenses are pure filters over one task list; tested exhaustively here
-// so the board component stays thin.
+// Phase 6.2 board lenses, reworked in M7-D (DM1.43): a task's lane is decided by WHO it
+// is assigned to (the assignee's project-role category), and a viewer's role decides
+// which lanes they may open at all. Pure filters, tested exhaustively so the board
+// component stays thin and the API filter is provably the same rule.
 import { describe, expect, it } from "vitest";
+import type { ProjectRoleCategory } from "@/lib/roles";
 import {
+  availableLenses,
   defaultLens,
+  laneFor,
   lensFilter,
+  taskVisibleTo,
   isTriageBug,
   businessDaysBetween,
   isAging,
   wipOverloads,
 } from "@/lib/board-lens";
 
-const task = (over: Partial<{ type: string; status: string; assigneeId: string | null }>) => ({
+const task = (
+  over: Partial<{ type: string; status: string; assigneeId: string | null; assigneeCategory: ProjectRoleCategory | null }>,
+) => ({
   type: "Feature",
   status: "InProgress",
   assigneeId: null,
+  assigneeCategory: null,
   ...over,
 });
 
-describe("board lenses (6.2)", () => {
-  it("lands each role category on its lens", () => {
+describe("board lenses (6.2 / DM1.43)", () => {
+  it("gives PMs every lens, disciplines exactly their lane, stakeholders the read-only whole", () => {
+    expect(availableLenses("PM")).toEqual(["all", "dev", "qa", "impl"]);
+    expect(availableLenses("Dev")).toEqual(["dev"]);
+    expect(availableLenses("QA")).toEqual(["qa"]);
+    expect(availableLenses("Implementor")).toEqual(["impl"]);
+    expect(availableLenses("Stakeholder")).toEqual(["all"]);
+  });
+
+  it("lands each role category on its only (or default) lens", () => {
     expect(defaultLens("Dev")).toBe("dev");
     expect(defaultLens("QA")).toBe("qa");
+    expect(defaultLens("Implementor")).toBe("impl");
     expect(defaultLens("PM")).toBe("all");
     expect(defaultLens("Stakeholder")).toBe("all");
   });
 
-  it("dev lens: build work plus assigned bugs, never unassigned bugs", () => {
-    expect(lensFilter("dev", task({ type: "Chore" }))).toBe(true);
-    expect(lensFilter("dev", task({ type: "Bug", assigneeId: "u1" }))).toBe(true);
-    expect(lensFilter("dev", task({ type: "Bug", assigneeId: null }))).toBe(false);
+  it("lanes a task by its assignee's role — 'assigned to Trevor (a dev) → Dev board'", () => {
+    expect(laneFor(task({ assigneeId: "trevor", assigneeCategory: "Dev" }))).toBe("dev");
+    expect(laneFor(task({ assigneeId: "t1", assigneeCategory: "QA" }))).toBe("qa");
+    expect(laneFor(task({ assigneeId: "i1", assigneeCategory: "Implementor" }))).toBe("impl");
+    // The assignee's role wins over the task's type: a bug being FIXED by a dev is dev work.
+    expect(laneFor(task({ type: "Bug", assigneeId: "trevor", assigneeCategory: "Dev" }))).toBe("dev");
   });
 
-  it("qa lens: verification statuses plus all bugs", () => {
-    expect(lensFilter("qa", task({ status: "InReview" }))).toBe(true);
-    expect(lensFilter("qa", task({ status: "InQA" }))).toBe(true);
-    expect(lensFilter("qa", task({ type: "Bug", status: "NotStarted" }))).toBe(true);
-    expect(lensFilter("qa", task({ type: "Feature", status: "InProgress" }))).toBe(false);
+  it("falls back to task type when nobody categorised is assigned", () => {
+    expect(laneFor(task({ type: "Bug" }))).toBe("qa"); // unassigned bug → triage
+    expect(laneFor(task({ type: "Feature" }))).toBe("dev");
+    expect(laneFor(task({ type: "Chore" }))).toBe("dev");
   });
 
-  it("all lens passes everything; triage = open unassigned bugs only", () => {
+  it("parks PM/stakeholder-assigned work on the all lane only", () => {
+    expect(laneFor(task({ assigneeId: "pm1", assigneeCategory: "PM" }))).toBe("all");
+    expect(laneFor(task({ assigneeId: "s1", assigneeCategory: "Stakeholder" }))).toBe("all");
+    expect(lensFilter("dev", task({ assigneeId: "pm1", assigneeCategory: "PM" }))).toBe(false);
+  });
+
+  it("lensFilter: 'all' passes everything, a discipline lens passes its lane", () => {
     expect(lensFilter("all", task({}))).toBe(true);
+    expect(lensFilter("dev", task({ assigneeCategory: "Dev", assigneeId: "d" }))).toBe(true);
+    expect(lensFilter("dev", task({ assigneeCategory: "QA", assigneeId: "q" }))).toBe(false);
+    expect(lensFilter("impl", task({ assigneeCategory: "Implementor", assigneeId: "i" }))).toBe(true);
+  });
+
+  it("taskVisibleTo: disciplines see their lane; PMs and stakeholders see everything", () => {
+    const devTask = task({ assigneeId: "d1", assigneeCategory: "Dev" });
+    const qaTask = task({ assigneeId: "q1", assigneeCategory: "QA" });
+    expect(taskVisibleTo("Dev", "viewer", devTask)).toBe(true);
+    expect(taskVisibleTo("Dev", "viewer", qaTask)).toBe(false);
+    expect(taskVisibleTo("QA", "viewer", devTask)).toBe(false);
+    expect(taskVisibleTo("PM", "viewer", qaTask)).toBe(true);
+    expect(taskVisibleTo("Stakeholder", "viewer", qaTask)).toBe(true);
+  });
+
+  it("taskVisibleTo: your own task is ALWAYS visible, whatever lane it sits in", () => {
+    // A dev assigned a QA-laned card must never be blind to their own work.
+    const mine = task({ assigneeId: "viewer", assigneeCategory: "QA" });
+    expect(taskVisibleTo("Dev", "viewer", mine)).toBe(true);
+    expect(taskVisibleTo("Implementor", "viewer", mine)).toBe(true);
+  });
+
+  it("triage = open unassigned bugs only", () => {
     expect(isTriageBug(task({ type: "Bug" }))).toBe(true);
     expect(isTriageBug(task({ type: "Bug", assigneeId: "u1" }))).toBe(false);
     expect(isTriageBug(task({ type: "Bug", status: "Completed" }))).toBe(false);

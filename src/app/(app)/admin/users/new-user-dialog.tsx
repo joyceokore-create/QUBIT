@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ONBOARDING_ROLE_TIERS, PROJECT_ROLES, projectRoleCategory, type OnboardingRoleKey } from "@/lib/roles";
-import { derivedGroups, effectiveGroups, landingPersona, USER_GROUPS, type UserGroup } from "@/lib/personas";
+import { derivedGroups, effectiveGroups, landingPersona, type UserGroup } from "@/lib/personas";
+import { GroupPicker } from "./group-picker";
 
 const GROUP_LABELS: Record<UserGroup, string> = {
   executive: "Executive",
@@ -69,8 +70,9 @@ export function NewUserDialog({
   const [teamId, setTeamId] = useState("none");
   const [projectId, setProjectId] = useState("none");
   const [projectRole, setProjectRole] = useState<string>("Developer");
-  const [groups, setGroups] = useState<UserGroup[]>([]);
-  const [primaryGroup, setPrimaryGroup] = useState<UserGroup | "auto">("auto");
+  // DM1.43: ONE declared group — exec, pm, or member(dev/qa/implementor). Null = decide
+  // from memberships (the derived half of docs/17 §1.1).
+  const [declaredGroup, setDeclaredGroup] = useState<UserGroup | null>(null);
   const [password, setPassword] = useState(generatePassword());
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -82,14 +84,14 @@ export function NewUserDialog({
   // ∪ what this invite's role/placement will derive — so the chip can't lie.
   const landing = landingPersona(
     effectiveGroups(
-      groups,
+      declaredGroup ? [declaredGroup] : [],
       derivedGroups({
         membershipCategories: projectId === "none" ? [] : [projectRoleCategory(projectRole)],
         tenantRoles: [role],
         leadsProjects: false,
       }),
     ),
-    primaryGroup === "auto" ? null : primaryGroup,
+    declaredGroup,
     null,
   );
   const deptName = departmentId === "none" ? "No org unit" : departments.find((d) => d.id === departmentId)?.name ?? "—";
@@ -107,8 +109,7 @@ export function NewUserDialog({
     setTeamId("none");
     setProjectId("none");
     setProjectRole("Developer");
-    setGroups([]);
-    setPrimaryGroup("auto");
+    setDeclaredGroup(null);
     setPassword(generatePassword());
     setError(null);
     setCopied(false);
@@ -140,8 +141,8 @@ export function NewUserDialog({
         teamId: teamId === "none" ? null : teamId,
         projectId: projectId === "none" ? null : projectId,
         projectRole: projectId === "none" ? null : projectRole,
-        userGroups: groups,
-        primaryGroup: primaryGroup === "auto" ? null : primaryGroup,
+        userGroups: declaredGroup ? [declaredGroup] : [],
+        primaryGroup: declaredGroup,
       }),
     });
     setLoading(false);
@@ -287,44 +288,11 @@ export function NewUserDialog({
                     )}
                   </div>
 
-                  {/* Dashboard groups (docs/17 §1.3) — presentation only, never permission. */}
+                  {/* Dashboard group (docs/17 §1.3, single-choice per DM1.43) —
+                      presentation only, never permission. */}
                   <div className="rounded-[10px] border border-[var(--w08)] p-3">
-                    <p className="mb-2 text-[11.5px] font-semibold text-ink-2">Dashboard groups (optional)</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {USER_GROUPS.map((g) => {
-                        const active = groups.includes(g);
-                        return (
-                          <button
-                            key={g}
-                            type="button"
-                            aria-pressed={active}
-                            onClick={() => {
-                              setGroups((prev) => (active ? prev.filter((x) => x !== g) : [...prev, g]));
-                              if (active && primaryGroup === g) setPrimaryGroup("auto");
-                            }}
-                            className="rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors"
-                            style={{
-                              borderColor: active ? "var(--brand)" : "var(--w10)",
-                              background: active ? "color-mix(in oklab, var(--brand) 10%, transparent)" : "transparent",
-                              color: active ? "var(--brand)" : "var(--ink-3, var(--ink3))",
-                            }}
-                          >
-                            {GROUP_LABELS[g]}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {groups.length > 1 && (
-                      <div className="mt-2">
-                        <Select value={primaryGroup} onValueChange={(v) => setPrimaryGroup((v as UserGroup | "auto") ?? "auto")}>
-                          <SelectTrigger><SelectValue placeholder="Primary group" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="auto">Primary: automatic</SelectItem>
-                            {groups.map((g) => <SelectItem key={g} value={g}>Primary: {GROUP_LABELS[g]}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
+                    <p className="mb-2 text-[11.5px] font-semibold text-ink-2">Dashboard group</p>
+                    <GroupPicker value={declaredGroup} onChange={setDeclaredGroup} />
                     <p className="mt-2 flex items-center gap-1.5 text-[11px] text-ink-3">
                       Will land on:
                       <span className="rounded-full bg-[color-mix(in_oklab,var(--brand)_10%,transparent)] px-2 py-0.5 font-semibold text-[var(--brand)]">

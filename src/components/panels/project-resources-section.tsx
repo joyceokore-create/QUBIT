@@ -12,7 +12,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { PROJECT_ROLES } from "@/lib/roles";
+import { PROJECT_ROLES, projectRoleCategory } from "@/lib/roles";
 
 interface Member {
   userId: string;
@@ -140,9 +140,26 @@ export function ProjectResourcesSection({ projectId, canEdit }: { projectId: str
             </SelectContent>
           </Select>
           <Input value={addPct} onChange={(e) => setAddPct(e.target.value.replace(/\D/g, ""))} placeholder="%" className="w-16" inputMode="numeric" title="Allocation % (optional)" />
-          <button type="button" onClick={addMember} className="flex items-center gap-1 rounded-[8px] bg-[color-mix(in_oklab,var(--brand)_14%,transparent)] px-3 py-2 text-xs font-semibold text-brand">
+          <button
+            type="button"
+            onClick={addMember}
+            disabled={!addUser || !addRole}
+            className="flex items-center gap-1 rounded-[8px] bg-[color-mix(in_oklab,var(--brand)_14%,transparent)] px-3 py-2 text-xs font-semibold text-brand disabled:opacity-40"
+          >
             <Plus className="size-3.5" /> Add
           </button>
+          {/* DM1.43: the role decides which board they land on, so say so at the moment
+              of choosing rather than letting them discover a locked lens later. */}
+          {addRole && (
+            <span className="text-[11px] text-ink-3">
+              {(() => {
+                const cat = projectRoleCategory(addRole);
+                if (cat === "PM") return "→ sees every board";
+                if (cat === "Stakeholder") return "→ read-only, whole board";
+                return `→ ${cat} board`;
+              })()}
+            </span>
+          )}
         </div>
       )}
 

@@ -1342,3 +1342,63 @@ for scheme, `https://169.254.169.254` refused as a private address.
 **Not done, deliberately**: the sync emits no notifications and no domain events. Mirroring
 a few hundred issues would otherwise fire a wave of bells on first connect. Assignment
 notifications from YouTrack are a follow-up, not an oversight.
+
+---
+
+## DM1.43 — Role-scoped project boards: PMs see everything, disciplines see their lane (M7-D)
+
+**Supersedes the visibility half of DM1.3/DM1.20** ("the personal board is the default
+view, never a wall"). Per Joyce (2026-07-31): everyone gets read-only project boards fed
+by YouTrack; PMs see all tasks across the project and keep the lens toggles; everyone
+else sees only their own board. The wall is now deliberate.
+
+- **A task's lane is decided by WHO it is assigned to** — the assignee's project-role
+  category — not by task type or phase. This is the one signal that survives YouTrack
+  mirroring (a mirrored issue has no phase/ownerRole, but its assignee has a project
+  role). "A task assigned to Trevor (a dev) lands on the Dev board." Fallbacks for work
+  with no categorised assignee: unassigned bugs → QA (triage), everything else → Dev, so
+  nothing vanishes. PM/stakeholder-assigned work lives on the "all" lane only.
+- **Lenses are role-locked**: PM → all four (All / Dev / QA / Implementor, plus Mine);
+  Dev/QA/Implementor → exactly their lane, toggles collapse to a label; stakeholder
+  project roles (Sponsor, Business Owner, Product Owner, BA) → the whole board read-only,
+  because they need the full picture and can act on none of it.
+- **Enforced in the API, not the component**: `/api/projects/[id]/tasks` filters rows
+  through the same pure `taskVisibleTo()` the client uses, with the viewer's category
+  computed by ONE shared function (`viewerBoardCategory`) used by both the page and the
+  route — the toggles rendered and the rows returned can never disagree. A rule enforced
+  only in the client is not a rule.
+- **Assigned-to-me always wins**: a person can never be blind to their own work,
+  whatever lane the card would otherwise sit in.
+- **Progress stays whole-project.** A dev who sees 2 cards still sees the project at its
+  real %. Scoping the denominator per persona would give every role a different
+  "project progress" and hollow out the single health engine.
+- **Write follows the same shape** (`canWriteTask`, tightened): the old "any member may
+  write any task" fallback is gone. Write = PM roles/lead, the ASSIGNEE for their own
+  task (the personal-board flow), and QA members within QA scope (InReview/InQA/Bug) —
+  kept because QA owns Completed for Feature/Bug (docs/18 §4) and by definition doesn't
+  own the task it verifies. Governance stays member-open: blockers, comments,
+  dependencies are QUBIT-owned facts YouTrack doesn't hold, and a dev who can't raise a
+  blocker means blockers arrive second-hand or not at all. Task CREATION also stays
+  member-open on native projects (DM1.11); YouTrack-connected projects already refuse it.
+- **Onboarding declares ONE group** — exec, pm, or member(dev/qa/implementor) — single
+  choice in the invite and edit dialogs, `.max(1)` in Zod. The choice constrains what an
+  admin DECLARES; derived groups still union in at login (a declared dev who leads a
+  project still derives `pm`), which is the existing docs/17 §1.1 machinery and correct.
+  Rows saved under the old multi-select rule stay valid and collapse on next edit.
+- **Project onboarding states where the role lands**: the member-add picker requires a
+  role (button disabled until chosen) and shows "Developer → Dev board" at the moment of
+  choosing, rather than letting someone discover a locked lens later.
+
+**The accepted trade, stated**: QA can no longer watch the Dev board to see what is
+coming toward them, and a discipline member cannot see a neighbouring lane at all. If
+that bites, the fix is a targeted read grant (QA → Dev lane), not reopening everything.
+
+**Verified**: lint/typecheck/build green, 641/641 tests (86 files; new `board-scope` RLS
+suite — viewer categorisation, the dev/QA walls against real rows, assigned-to-me
+override, write refusals and the QA carve-out — plus the lens unit suite rewritten for
+lane-by-assignee). Browser-checked on KCB: qa.demo saw a single "QA board" label with
+only the triage bug and whole-project progress (1/6 · 17%); Daniel (lead) saw all four
+toggles + Mine and every card; the invite wizard's Dashboard group collapsed to
+Executive / PM / Member→(Developer/QA/Implementor) with a live landing chip. One
+pre-existing suite (`project-contribution`) asserted the superseded member-writes-any
+rule and was updated to assert the new rule instead of weakening the gate.

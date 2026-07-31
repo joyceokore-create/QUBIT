@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ConversationDrawer } from "@/components/conversation/conversation-drawer";
 import { GenerateDialog } from "@/components/panels/project-tasks-section";
 import { BugDialog } from "@/components/workspace/bug-dialog";
-import { defaultLens, isAging, isTriageBug, lensFilter, wipOverloads, LENS_LABELS, type BoardLens } from "@/lib/board-lens";
+import { availableLenses, defaultLens, isAging, isTriageBug, lensFilter, wipOverloads, LENS_LABELS, type BoardLens } from "@/lib/board-lens";
 import type { ProjectRoleCategory } from "@/lib/roles";
 
 interface Task {
@@ -24,6 +24,8 @@ interface Task {
   assigneeName: string | null;
   dueDate: string | null;
   blocked: boolean;
+  /** M7-D (DM1.43) — assignee's project-role category; decides the card's lane. */
+  assigneeCategory: ProjectRoleCategory | null;
   /** M7-A — keys of the incomplete tasks this one waits on. */
   waitingOn: string[];
   /** M7-C — set when the card mirrors a YouTrack issue (read-only, links out). */
@@ -86,10 +88,16 @@ export function ProjectBoard({
   // QUBIT's own governance layer (blockers, dependencies, comments).
   const [mirrored, setMirrored] = useState(false);
   const [genOpen, setGenOpen] = useState(false);
-  const [lens, setLens] = useState<BoardLens>(() => initialLens ?? defaultLens(viewerCategory));
-  // "Mine" filter (per Joyce: filtering of mine everywhere). Focus by default for makers,
-  // whole board by default for PM/stakeholders. A filter the user controls — never a wall.
-  const [mine, setMine] = useState<boolean>(() => !!viewerId && (viewerCategory === "Dev" || viewerCategory === "QA"));
+  // DM1.43: the lenses this viewer may open at all. One for disciplines (their lane),
+  // all four for PMs, "all" read-only for stakeholders. The server filters the payload to
+  // the same rule — these toggles are convenience, never the enforcement.
+  const lenses = availableLenses(viewerCategory);
+  const [lens, setLens] = useState<BoardLens>(() =>
+    initialLens && lenses.includes(initialLens) ? initialLens : defaultLens(viewerCategory),
+  );
+  // "Mine" narrows within what the viewer already sees — a PM triage aid. Disciplines see
+  // their whole lane (DM1.43): no toggles, nothing to configure.
+  const [mine, setMine] = useState(false);
   const [discussTask, setDiscussTask] = useState<{ id: string; title: string } | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [members, setMembers] = useState<MemberOpt[]>([]);
@@ -101,6 +109,16 @@ export function ProjectBoard({
   const [dropCol, setDropCol] = useState<string | null>(null);
   const [flaggingId, setFlaggingId] = useState<string | null>(null);
   const [flagReason, setFlagReason] = useState("");
+
+  // DM1.43 write split, mirroring canWriteTask: PMs move anything; an assignee moves
+  // their own card (the personal-board flow); QA moves QA-scope work it verifies.
+  const manage = viewerCategory === "PM";
+  const canMove = (t: Task): boolean => {
+    if (!canEdit) return false;
+    if (manage) return true;
+    if (viewerId && t.assigneeId === viewerId) return true;
+    return viewerCategory === "QA" && (t.status === "InReview" || t.status === "InQA" || t.type === "Bug");
+  };
 
   const load = useCallback(async () => {
     const d = await fetch(`/api/projects/${projectId}/tasks`).then((r) => r.json());
@@ -125,7 +143,7 @@ export function ProjectBoard({
     if (!focusTaskId || tasks.length === 0) return;
     const target = tasks.find((t) => t.id === focusTaskId);
     if (!target) return;
-    if (!lensFilter(lens, target)) setLens("all");
+    if (!lensFilter(lens, target) && lenses.includes("all")) setLens("all");
     if (mine && target.assigneeId !== viewerId) setMine(false);
     setHighlightId(focusTaskId);
     const scroll = window.setTimeout(() => {
@@ -285,9 +303,15 @@ export function ProjectBoard({
         )}
       </div>
 
-      {/* Lens tabs (6.2): filters over one list — never separate boards. */}
+      {/* Lens tabs (6.2 / DM1.43): PM-only — a discipline member has exactly one lane,
+          so there is nothing to toggle and the bar collapses to a label. */}
       <div className="flex flex-wrap items-center gap-1.5">
-        {(Object.keys(LENS_LABELS) as BoardLens[]).map((l) => {
+        {lenses.length === 1 && (
+          <span className="rounded-full border border-[var(--hair)] px-3 py-1 text-[11.5px] font-semibold text-[var(--ink4)]">
+            {LENS_LABELS[lenses[0]]} <span className="font-mono text-[9.5px] opacity-70">{visible.length + (lens === "qa" ? triage.length : 0)}</span>
+          </span>
+        )}
+        {lenses.length > 1 && lenses.map((l) => {
           const active = lens === l;
           return (
             <button
@@ -305,7 +329,7 @@ export function ProjectBoard({
             </button>
           );
         })}
-        {viewerId && (
+        {viewerId && manage && (
           <>
             <span className="mx-1 h-4 w-px bg-[var(--hair)]" />
             <button
@@ -422,7 +446,7 @@ export function ProjectBoard({
                   <div
                     key={t.id}
                     id={`task-${t.id}`}
-                    draggable={canEdit && !t.sourceSystem}
+                    draggable={canMove(t) && !t.sourceSystem}
                     onDragStart={(e) => {
                       e.dataTransfer.setData("text/plain", t.id);
                       setDragId(t.id);
@@ -431,7 +455,7 @@ export function ProjectBoard({
                     className="flex flex-col gap-1.5 rounded-[10px] border bg-[var(--qcard)] p-2.5 text-xs transition-shadow duration-500"
                     title={aging ? "No activity for over 5 business days" : undefined}
                     style={{
-                      cursor: canEdit && !t.sourceSystem ? "grab" : "default",
+                      cursor: canMove(t) && !t.sourceSystem ? "grab" : "default",
                       opacity: dragId === t.id ? 0.5 : 1,
                       borderColor: focused
                         ? "var(--brand)"
@@ -530,10 +554,10 @@ export function ProjectBoard({
                         )}
                       </span>
                     </span>
-                    {canEdit && t.sourceSystem && (
+                    {canMove(t) && t.sourceSystem && (
                       <span className="text-[10px] italic text-[var(--ink5)]">Status is set in YouTrack</span>
                     )}
-                    {canEdit && !t.sourceSystem && (
+                    {canMove(t) && !t.sourceSystem && (
                       <Select
                         value={t.status}
                         onValueChange={(v) => v && v !== t.status && move(t.id, v)}

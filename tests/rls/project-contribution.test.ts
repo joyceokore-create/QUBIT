@@ -55,10 +55,18 @@ describe("project contribution — members can write, non-members can't", () => 
 
   const ctx = (userId: string, roles: string[]): TenantContext => ({ tenantId, userId, roles });
 
-  it("a plain Member OF the project may contribute (tasks/risks/blockers)", async () => {
+  it("a plain Member OF the project may contribute (risks/blockers) — but tasks are DM1.43-scoped", async () => {
     const member = ctx(memberId, ["Member"]);
     expect(await canContributeToProject(member, projectId)).toBe(true);
+    // DM1.43 (supersedes member-writes-any): boards are read-only for non-PMs. A dev may
+    // not edit a task that isn't theirs…
+    expect(await canWriteTask(member, taskId)).toBe(false);
+    // …but their OWN task stays writable (the personal-board flow).
+    await withTenant({ tenantId, userId: "seed" }, (tx) =>
+      tx.projectTask.update({ where: { id: taskId }, data: { assigneeId: memberId } }),
+    );
     expect(await canWriteTask(member, taskId)).toBe(true);
+    // Governance stays open to members: risks and blockers are theirs to raise.
     expect(await canWriteRisk(member, riskId)).toBe(true);
     expect(await canWriteBlocker(member, blockerId)).toBe(true);
   });
