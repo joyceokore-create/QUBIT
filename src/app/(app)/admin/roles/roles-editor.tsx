@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -34,10 +34,8 @@ export function RolesEditor({
 }
 
 function RoleCard({ view, catalogue, canManage }: { view: RoleView; catalogue: string[]; canManage: boolean }) {
-  const router = useRouter();
+  const { busy: saving, error, mutate } = useAdminMutation();
   const [selected, setSelected] = useState<Set<string>>(new Set(view.permissions));
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   const wildcard = view.permissions.includes("*");
@@ -55,22 +53,13 @@ function RoleCard({ view, catalogue, canManage }: { view: RoleView; catalogue: s
   }
 
   async function save(perms: string[]) {
-    setSaving(true);
-    setError(null);
     setSaved(false);
-    const res = await fetch(`/api/admin/roles/${encodeURIComponent(view.role)}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ permissions: perms }),
-    });
-    setSaving(false);
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      setError(body?.error?.message ?? "Could not save.");
-      return;
-    }
-    setSaved(true);
-    router.refresh();
+    await mutate(
+      `/api/admin/roles/${encodeURIComponent(view.role)}`,
+      "PATCH",
+      { permissions: perms },
+      { fallback: "Could not save.", onSuccess: () => setSaved(true) },
+    );
   }
 
   return (

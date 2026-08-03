@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { format } from "date-fns";
+import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 
 interface Row {
   id: string;
@@ -24,25 +24,31 @@ const STATUS_STYLE: Record<Row["status"], string> = {
 };
 
 export function AccessRequestsClient({ rows }: { rows: Row[] }) {
-  const router = useRouter();
+  const { error, mutate } = useAdminMutation();
+  // Which ROW is in flight — the hook's `busy` is a single boolean, and this table
+  // disables per row. Previously the response was ignored entirely, so a failed review
+  // looked identical to a successful one; the hook surfaces the server's message now.
   const [busy, setBusy] = useState<string | null>(null);
 
   async function review(id: string, status: "REVIEWED" | "DISMISSED") {
     setBusy(id);
     try {
-      await fetch(`/api/admin/access-requests/${id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status }),
+      await mutate(`/api/admin/access-requests/${id}`, "PATCH", { status }, {
+        fallback: "Could not update the request.",
       });
-      router.refresh();
     } finally {
       setBusy(null);
     }
   }
 
   return (
-    <div className={`overflow-hidden ${CARD}`} style={{ background: "var(--cardbg)" }}>
+    <div className="flex flex-col gap-2">
+      {error && (
+        <p role="alert" className="text-sm text-status-red">
+          {error}
+        </p>
+      )}
+      <div className={`overflow-hidden ${CARD}`} style={{ background: "var(--cardbg)" }}>
       <div className="overflow-x-auto">
         <div className="min-w-[720px]">
           <div className={`${ROW} border-b border-[var(--hair)] font-mono rv:font-sans text-[9px] rv:text-overline font-semibold uppercase tracking-[1.6px] text-[var(--ink4)]`}>
@@ -72,6 +78,7 @@ export function AccessRequestsClient({ rows }: { rows: Row[] }) {
           {rows.length === 0 && <div className="p-8 text-center text-[12px] rv:text-body-sm text-[var(--ink5)]">No access requests yet.</div>}
         </div>
       </div>
+    </div>
     </div>
   );
 }

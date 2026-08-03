@@ -173,7 +173,29 @@ consistency and the role-grant UI gating; typecheck + lint green.
   `canGrantSuperAdmin` through `page.tsx → UsersClient → UserRowActions → EditRolesDialog`
   and `page.tsx → NewUserDialog`.
 
-**Deferred to a follow-up slice (M-O2b):** extract `<AdminTable>` / `<AdminDialog>` shell
-primitives and adopt them in teams + departments (dedupe the near-identical
-new/edit-department dialogs, align the teams page shell). The mutation hook already gives
-those screens the pattern to adopt.
+## 9. M-O2b change log (this increment) — see docs/21
+
+Shipped the deferred slice. Pure structural refactor; no behaviour, permission, or schema
+change beyond two latent bug fixes noted below.
+
+- `src/components/admin/admin-table.tsx` — **new** generic directory table; tokens and
+  spacing lifted verbatim from the users directory so adopting screens are visually
+  identical.
+- `src/components/admin/admin-form-dialog.tsx` — **new** dialog chrome (title/description,
+  `role="alert"` error slot fed by `useAdminMutation().error`, Cancel + submit footer with
+  busy label). Fields stay with the caller.
+- `departments/department-dialog.tsx` — **new**, replaces `new-department-dialog.tsx` and
+  `departments/edit-department-dialog.tsx` (both **deleted**). Mode is a prop: create →
+  POST + own trigger, edit → PATCH + controlled open. Field markup exists once.
+- `teams/page.tsx` — now `AdminHeader` + the standard `max-w-[1360px]` wrapper +
+  `TeamsTable` (new client wrapper over `AdminTable`). Breadcrumb and local `CARD`/`ROW`
+  constants gone.
+- Migrated onto `useAdminMutation`: `team-form-dialog`, `team-row-actions`,
+  `department-row-actions`, `roles-editor`, `access-requests-client`. **No admin component
+  hand-rolls fetch state any more** (docs/21 §5 acceptance).
+- **Two latent bugs fixed in passing**: team delete and access-request review both awaited
+  `fetch` without checking `res.ok`, so a server-side failure closed the dialog and looked
+  successful. Both now surface the server's message through the hook's error slot.
+
+Note: `users/edit-department-dialog.tsx` is a DIFFERENT component (assigns a user to a
+department, already on the hook) and was correctly left alone.

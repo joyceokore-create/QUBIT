@@ -1596,3 +1596,32 @@ teams/departments adoption are M-O2b (docs/21).
 
 **Verified**: lint/typecheck green, 684/684 tests (4 new: non-superadmin cannot create or
 promote a superadmin via either path; a superadmin can). No schema change, no migration.
+
+---
+
+## DM1.48 — Admin shell primitives; every admin mutation goes through one hook (M-O2b)
+
+Executed docs/21. Pure structural refactor — the acceptance bar was "no admin component
+under `src/app/(app)/admin/**` hand-rolls fetch state", and that now holds.
+
+- **`<AdminTable>` and `<AdminFormDialog>`** extracted from the users screen, tokens
+  copied verbatim rather than re-derived: this is consolidation, so a visual diff would
+  have been a failure, not a bonus.
+- **The two department dialogs became one.** `new-department-dialog` and
+  `edit-department-dialog` were ~95% identical — same four fields, differing only in
+  initial state and POST-vs-PATCH. Mode is now a prop; the field markup exists once and
+  the paths cannot drift. Verified both live (201 / 200 / 200 across create, edit, delete).
+- **Teams adopted the standard shell** — `AdminHeader` + the shared main wrapper +
+  `AdminTable`, replacing a Breadcrumb and its own `CARD`/`ROW` constants.
+- **Scope widened by one step, deliberately.** docs/21 §3.3 listed teams/departments row
+  actions as optional, but its §5 acceptance says "no admin component". `roles-editor` and
+  `access-requests-client` were the last two holdouts, so they were migrated too — leaving
+  them would have made the criterion false.
+- **Two latent bugs fell out of the migration.** Team delete and access-request review
+  both did `await fetch(...)` and never checked `res.ok`: a server-side refusal closed the
+  dialog and read as success. Both now surface the server's message. This is the argument
+  for the shared hook in one line — the duplicated pattern wasn't just repetitive, it was
+  repetitively *wrong* in places nobody had noticed.
+
+**Verified**: lint/typecheck/build green, 684/684 tests, both screens browser-checked
+under Riverbank theming, department create/edit/delete exercised live.

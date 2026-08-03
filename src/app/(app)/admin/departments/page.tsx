@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { listDepartments, listOrgUnitOptions } from "@/server/departments";
 import { listUsers } from "@/server/users";
 import { AdminHeader } from "../admin-header";
-import { NewDepartmentDialog } from "./new-department-dialog";
+import { DepartmentDialog } from "./department-dialog";
 import { DepartmentRowActions } from "./department-row-actions";
 
 const CARD = "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]";
@@ -24,7 +24,7 @@ export default async function AdminDepartmentsPage() {
     <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
       <AdminHeader
         subtitle={`${departments.length} ${departments.length === 1 ? "department" : "departments"} · org structure ships empty by design (no seeded PII)`}
-        action={<NewDepartmentDialog departments={departments} orgUnits={orgUnits} users={users} />}
+        action={<DepartmentDialog mode="create" departments={departments} orgUnits={orgUnits} users={users} />}
       />
 
       {departments.length === 0 ? (

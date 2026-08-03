@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { MoreHorizontal, SquarePen, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,7 +19,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { EditDepartmentDialog } from "./edit-department-dialog";
+import { useAdminMutation } from "@/components/admin/use-admin-mutation";
+import { DepartmentDialog } from "./department-dialog";
 import type { DepartmentSummary } from "@/server/departments";
 import type { AdminUserSummary } from "@/server/users";
 
@@ -32,26 +32,17 @@ interface DepartmentRowActionsProps {
 }
 
 export function DepartmentRowActions({ department, departments, orgUnits, users }: DepartmentRowActionsProps) {
-  const router = useRouter();
+  // The delete guard's message (children / assigned members) comes from the server and is
+  // surfaced through the hook's error — keep it visible, it's the useful half of the flow.
+  const { busy, error: deleteError, setError, mutate } = useAdminMutation();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   async function confirmDelete() {
-    setBusy(true);
-    setDeleteError(null);
-    const res = await fetch(`/api/admin/departments/${department.id}`, { method: "DELETE" });
-    setBusy(false);
-
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      setDeleteError(body?.error?.message ?? "Could not delete department.");
-      return;
-    }
-
-    setDeleteOpen(false);
-    router.refresh();
+    await mutate(`/api/admin/departments/${department.id}`, "DELETE", undefined, {
+      fallback: "Could not delete department.",
+      onSuccess: () => setDeleteOpen(false),
+    });
   }
 
   return (
@@ -70,7 +61,7 @@ export function DepartmentRowActions({ department, departments, orgUnits, users 
           <DropdownMenuItem
             variant="destructive"
             onSelect={() => {
-              setDeleteError(null);
+              setError(null);
               setDeleteOpen(true);
             }}
           >
@@ -80,7 +71,8 @@ export function DepartmentRowActions({ department, departments, orgUnits, users 
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <EditDepartmentDialog
+      <DepartmentDialog
+        mode="edit"
         department={department}
         departments={departments}
         orgUnits={orgUnits}

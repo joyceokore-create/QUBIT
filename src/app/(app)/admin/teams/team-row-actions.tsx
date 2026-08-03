@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { MoreHorizontal, SquarePen, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,20 +21,21 @@ import {
 } from "@/components/ui/alert-dialog";
 import { TeamFormDialog } from "./team-form-dialog";
 import type { AdminUserSummary } from "@/server/users";
+import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import type { TeamSummary } from "@/server/teams";
 
 export function TeamRowActions({ team, users }: { team: TeamSummary; users: AdminUserSummary[] }) {
-  const router = useRouter();
+  const { busy, error, mutate } = useAdminMutation();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
 
   async function remove() {
-    setBusy(true);
-    await fetch(`/api/admin/teams/${team.id}`, { method: "DELETE" });
-    setBusy(false);
-    setDeleteOpen(false);
-    router.refresh();
+    // Previously this ignored the response entirely — a failed delete closed the dialog
+    // and looked successful. The hook surfaces the server's message instead.
+    await mutate(`/api/admin/teams/${team.id}`, "DELETE", undefined, {
+      fallback: "Could not delete team.",
+      onSuccess: () => setDeleteOpen(false),
+    });
   }
 
   return (
@@ -66,6 +66,11 @@ export function TeamRowActions({ team, users }: { team: TeamSummary; users: Admi
               This removes the team and its project assignments. People and projects are not deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {error && (
+            <p role="alert" className="text-sm text-status-red">
+              {error}
+            </p>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={remove} disabled={busy}>
