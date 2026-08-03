@@ -10,7 +10,12 @@ export const authConfig = {
     maxAge: 60 * 60 * 24, // 24h — NFR-04
   },
   callbacks: {
-    jwt({ token, user, trigger, session }) {
+    // Edge-safe: hydrate the token from the user on initial sign-in only. The
+    // `mustChangePassword` gate must NOT be lifted from client-supplied session data — a
+    // browser could otherwise clear it without ever resetting the temp password. The
+    // authoritative re-read from the DB on `trigger === "update"` lives in the Node-runtime
+    // instance in src/lib/auth.ts (Prisma can't load on the Edge runtime this file targets).
+    jwt({ token, user }) {
       if (user) {
         token.tenantId = user.tenantId;
         token.tenantSlug = user.tenantSlug;
@@ -22,11 +27,6 @@ export const authConfig = {
         token.brandColor = user.brandColor;
         token.brandLight = user.brandLight;
         token.mustChangePassword = user.mustChangePassword;
-      }
-      // Client calls update({ mustChangePassword: false }) after completing the reset;
-      // clearing the flag here lifts the /onboarding gate without a re-login.
-      if (trigger === "update" && (session as { mustChangePassword?: boolean } | undefined)?.mustChangePassword === false) {
-        token.mustChangePassword = false;
       }
       return token;
     },

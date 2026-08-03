@@ -64,6 +64,7 @@ export default async function AdminUsersPage() {
   if (!can(ctx, "admin:access")) return <Forbidden />;
   const canManageUsers = can(ctx, "users:roles"); // full CRUD — PlatformSuperAdmin only
   const canInvite = can(ctx, "users:invite"); // PlatformSuperAdmin + heads
+  const canGrantSuperAdmin = ctx.roles.includes("PlatformSuperAdmin"); // mirrors the server guard (M-O1)
 
   const [users, departments, teams, projects] = await Promise.all([
     listUsers(ctx),
@@ -83,11 +84,12 @@ export default async function AdminUsersPage() {
               departments={departments.map((d) => ({ id: d.id, name: d.name }))}
               teams={teams.map((t) => ({ id: t.id, name: t.name }))}
               projects={projects.map((p) => ({ id: p.id, code: p.code, name: p.name }))}
+              canGrantSuperAdmin={canGrantSuperAdmin}
             />
           ) : undefined
         }
       />
-      <UsersClient users={users} departments={departments} currentUserId={session.user.id} insights={insights} canManage={canManageUsers} />
+      <UsersClient users={users} departments={departments} currentUserId={session.user.id} insights={insights} canManage={canManageUsers} canGrantSuperAdmin={canGrantSuperAdmin} />
     </main>
   );
 }

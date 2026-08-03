@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, Copy, Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,15 +15,9 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ONBOARDING_ROLE_TIERS, PROJECT_ROLES, projectRoleCategory, type OnboardingRoleKey } from "@/lib/roles";
 import { derivedGroups, effectiveGroups, landingPersona, type UserGroup } from "@/lib/personas";
+import { useAdminMutation } from "@/components/admin/use-admin-mutation";
+import { GROUP_LABELS } from "@/components/admin/labels";
 import { GroupPicker } from "./group-picker";
-
-const GROUP_LABELS: Record<UserGroup, string> = {
-  executive: "Executive",
-  pm: "PM",
-  developer: "Developer",
-  qa: "QA",
-  implementor: "Implementor",
-};
 
 interface DeptOpt {
   id: string;
@@ -54,12 +47,15 @@ export function NewUserDialog({
   departments = [],
   teams = [],
   projects = [],
+  canGrantSuperAdmin = false,
 }: {
   departments?: DeptOpt[];
   teams?: TeamOpt[];
   projects?: ProjectOpt[];
+  /** Only a Super Admin may invite another Super Admin (mirrors the server guard, M-O1). */
+  canGrantSuperAdmin?: boolean;
 }) {
-  const router = useRouter();
+  const { busy, error, setError, mutate } = useAdminMutation();
   const [open, setOpen] = useState(false);
   const [phase, setPhase] = useState<"wizard" | "done">("wizard");
   const [step, setStep] = useState(0);
@@ -74,11 +70,11 @@ export function NewUserDialog({
   // from memberships (the derived half of docs/17 §1.1).
   const [declaredGroup, setDeclaredGroup] = useState<UserGroup | null>(null);
   const [password, setPassword] = useState(generatePassword());
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [created, setCreated] = useState<{ email: string; password: string } | null>(null);
 
+  // Hide the "Administrator" tier (= PlatformSuperAdmin) from admins who can't grant it.
+  const roleTiers = ONBOARDING_ROLE_TIERS.filter((t) => canGrantSuperAdmin || t.key !== "PlatformSuperAdmin");
   const roleTier = ONBOARDING_ROLE_TIERS.find((t) => t.key === role)!;
   // Live landing preview (docs/17 §1.3): the SAME resolver login uses — declared groups
   // ∪ what this invite's role/placement will derive — so the chip can't lie.
@@ -127,12 +123,10 @@ export function NewUserDialog({
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setError(null);
-    setLoading(true);
-    const res = await fetch("/api/admin/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    await mutate(
+      "/api/admin/users",
+      "POST",
+      {
         name,
         email,
         password,
@@ -143,16 +137,15 @@ export function NewUserDialog({
         projectRole: projectId === "none" ? null : projectRole,
         userGroups: declaredGroup ? [declaredGroup] : [],
         primaryGroup: declaredGroup,
-      }),
-    });
-    setLoading(false);
-    if (!res.ok) {
-      setError((await res.json().catch(() => null))?.error?.message ?? "Could not create the user.");
-      return;
-    }
-    setCreated({ email, password });
-    setPhase("done");
-    router.refresh();
+      },
+      {
+        fallback: "Could not create the user.",
+        onSuccess: () => {
+          setCreated({ email, password });
+          setPhase("done");
+        },
+      },
+    );
   }
 
   async function copyPassword() {
@@ -212,7 +205,7 @@ export function NewUserDialog({
                   <div className="flex flex-col gap-1.5">
                     <span className="text-sm font-medium text-ink-2">Role</span>
                     <div className="grid gap-2">
-                      {ONBOARDING_ROLE_TIERS.map((t) => {
+                      {roleTiers.map((t) => {
                         const active = role === t.key;
                         return (
                           <button
@@ -335,7 +328,7 @@ export function NewUserDialog({
                 {step < STEPS.length - 1 ? (
                   <Button type="button" onClick={next}>Next <ArrowRight className="size-4" /></Button>
                 ) : (
-                  <Button type="submit" disabled={loading}>{loading ? "Inviting…" : "Send invite"}</Button>
+                  <Button type="submit" disabled={busy}>{busy ? "Inviting…" : "Send invite"}</Button>
                 )}
               </div>
             </form>

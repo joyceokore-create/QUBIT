@@ -1,4 +1,5 @@
 import NextAuth from "next-auth";
+import type { JWT } from "next-auth/jwt";
 import Credentials from "next-auth/providers/credentials";
 import { z } from "zod";
 import { authConfig } from "@/lib/auth.config";
@@ -17,8 +18,32 @@ const CredentialsSchema = z.object({
   totpCode: z.string().optional(),
 });
 
+// The edge-safe callbacks live in authConfig; compose over them here (Node runtime) so we
+// can read the DB. Preserves the initial-sign-in hydration and adds the authoritative
+// re-read of the onboarding gate.
+const baseCallbacks = authConfig.callbacks!;
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
+  callbacks: {
+    ...baseCallbacks,
+    async jwt(params) {
+      const token = (await baseCallbacks.jwt!(params)) as JWT | null;
+      if (!token) return token;
+      // Security: never trust client-supplied session data to lift the onboarding gate.
+      // On an explicit session refresh, re-read `mustChangePassword` from the DB — this is
+      // what the onboarding form triggers after a real password reset, and what a forged
+      // update() cannot fake. RLS-scoped to the user's own row.
+      if (params.trigger === "update" && token.sub && token.tenantId) {
+        const fresh = await withTenant(
+          { tenantId: token.tenantId, userId: token.sub },
+          (tx) => tx.user.findUnique({ where: { id: token.sub! }, select: { mustChangePassword: true } }),
+        ).catch(() => null);
+        if (fresh) token.mustChangePassword = fresh.mustChangePassword;
+      }
+      return token;
+    },
+  },
   providers: [
     Credentials({
       credentials: {

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -13,28 +12,37 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ROLE_PERMISSIONS } from "@/lib/rbac";
+import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import type { AdminUserSummary } from "@/server/users";
 
 const ROLE_KEYS = Object.keys(ROLE_PERMISSIONS);
+const SUPER_ADMIN_ROLE = "PlatformSuperAdmin";
 
 interface EditRolesDialogProps {
   user: AdminUserSummary;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Only a Super Admin may grant the Super Admin role (mirrors the server guard, M-O1). */
+  canGrantSuperAdmin?: boolean;
 }
 
-export function EditRolesDialog({ user, open, onOpenChange }: EditRolesDialogProps) {
-  const router = useRouter();
+export function EditRolesDialog({ user, open, onOpenChange, canGrantSuperAdmin = false }: EditRolesDialogProps) {
+  const { busy, error, setError, mutate } = useAdminMutation();
   const [roles, setRoles] = useState<string[]>(user.roles);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (open) {
       setRoles(user.roles);
       setError(null);
     }
-  }, [open, user.roles]);
+  }, [open, user.roles, setError]);
+
+  // Hide Super Admin from anyone who can't grant it — unless the user already holds it, in
+  // which case show it locked so its presence is visible but not editable.
+  const alreadySuper = user.roles.includes(SUPER_ADMIN_ROLE);
+  const visibleRoles = ROLE_KEYS.filter(
+    (r) => r !== SUPER_ADMIN_ROLE || canGrantSuperAdmin || alreadySuper,
+  );
 
   function toggleRole(role: string, checked: boolean) {
     setRoles((prev) => (checked ? [...prev, role] : prev.filter((r) => r !== role)));
@@ -45,23 +53,10 @@ export function EditRolesDialog({ user, open, onOpenChange }: EditRolesDialogPro
       setError("Select at least one role.");
       return;
     }
-    setLoading(true);
-    setError(null);
-    const res = await fetch(`/api/admin/users/${user.id}/roles`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ roles }),
+    await mutate(`/api/admin/users/${user.id}/roles`, "PATCH", { roles }, {
+      fallback: "Could not update roles.",
+      onSuccess: () => onOpenChange(false),
     });
-    setLoading(false);
-
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      setError(body?.error?.message ?? "Could not update roles.");
-      return;
-    }
-
-    onOpenChange(false);
-    router.refresh();
   }
 
   return (
@@ -72,15 +67,24 @@ export function EditRolesDialog({ user, open, onOpenChange }: EditRolesDialogPro
           <DialogDescription>Changes take effect immediately and are audited.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-2">
-          {ROLE_KEYS.map((role) => (
-            <label key={role} className="flex items-center gap-2 text-sm text-foreground">
-              <Checkbox
-                checked={roles.includes(role)}
-                onCheckedChange={(checked) => toggleRole(role, checked === true)}
-              />
-              {role}
-            </label>
-          ))}
+          {visibleRoles.map((role) => {
+            const locked = role === SUPER_ADMIN_ROLE && !canGrantSuperAdmin;
+            return (
+              <label
+                key={role}
+                className="flex items-center gap-2 text-sm text-foreground data-[locked=true]:opacity-60"
+                data-locked={locked}
+              >
+                <Checkbox
+                  checked={roles.includes(role)}
+                  disabled={locked}
+                  onCheckedChange={(checked) => toggleRole(role, checked === true)}
+                />
+                {role}
+                {locked && <span className="text-xs text-ink-3">(Super Admin only)</span>}
+              </label>
+            );
+          })}
         </div>
         {error && (
           <p role="alert" className="text-sm text-status-red">
@@ -88,8 +92,8 @@ export function EditRolesDialog({ user, open, onOpenChange }: EditRolesDialogPro
           </p>
         )}
         <DialogFooter>
-          <Button onClick={handleSave} disabled={loading}>
-            {loading ? "Saving…" : "Save"}
+          <Button onClick={handleSave} disabled={busy}>
+            {busy ? "Saving…" : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>

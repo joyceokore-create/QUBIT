@@ -22,6 +22,22 @@ This is the entry point. Read documents in this order.
 15. **15-phase6-delivery-workflow-plan.md** — Phase 6 milestone plan: PM → Dev → QA
     delivery workflow (task taxonomy, role-lens boards, GitHub commit automation,
     nudger + scheduled reports, requirements traceability).
+16. **19-consolidation-and-module-revamp-plan.md** — **current active plan** (2026-08-03):
+    audit-driven consolidation + module-by-module revamp of the ideation→rollout reporting
+    spine (onboarding, YouTrack sync, member→PM→Head of PMs→Exec reporting), operational
+    hardening, and the new Head-of-PMs roll-up layer. Read after 16/17/18.
+17. **20-onboarding-rebuild-spec.md** — onboarding & IAM rebuild design + milestones
+    (M-O1…M-O4). M-O1 (security fixes) and M-O2 (shared CRUD foundation) are **implemented
+    in the tree**; §7/§8 are their change logs.
+18. **21-mo2b-admin-shell-execution.md** — execution spec: shared AdminTable/AdminFormDialog,
+    unify teams + departments (structural, no schema).
+19. **22-mo3-invite-tokens-email-execution.md** — execution spec: token-based email invites,
+    resend/reset (Prisma migration + Graph mailer).
+20. **23-mo4-guided-first-login-execution.md** — execution spec: guided first-login
+    (password → MFA enrolment → confirm role → land) + recovery codes (Prisma migration).
+
+    Execution specs 21–23 are written for Claude Code: read the spec, implement, verify with
+    the listed commands, stop for review. Order: 21 → 22 → 23.
 
 ## Document readiness checklist
 

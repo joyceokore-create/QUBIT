@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Ban, Building2, LayoutDashboard, MoreHorizontal, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
+import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -33,15 +33,16 @@ interface UserRowActionsProps {
   users: AdminUserSummary[];
   /** Full CRUD (roles/suspend/delete) — PlatformSuperAdmin. Heads only get department membership. */
   canManage: boolean;
+  /** Only a Super Admin may grant the Super Admin role (mirrors the server guard, M-O1). */
+  canGrantSuperAdmin?: boolean;
 }
 
-export function UserRowActions({ user, currentUserId, departments, users, canManage }: UserRowActionsProps) {
-  const router = useRouter();
+export function UserRowActions({ user, currentUserId, departments, users, canManage, canGrantSuperAdmin = false }: UserRowActionsProps) {
+  const { busy, mutate } = useAdminMutation();
   const [editOpen, setEditOpen] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(false);
   const [departmentOpen, setDepartmentOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
   const isSelf = user.id === currentUserId;
 
   if (user.status === "DELETED") {
@@ -49,19 +50,14 @@ export function UserRowActions({ user, currentUserId, departments, users, canMan
   }
 
   async function toggleSuspend() {
-    setBusy(true);
     const action = user.status === "ACTIVE" ? "suspend" : "reactivate";
-    await fetch(`/api/admin/users/${user.id}/${action}`, { method: "POST" });
-    setBusy(false);
-    router.refresh();
+    await mutate(`/api/admin/users/${user.id}/${action}`, "POST");
   }
 
   async function confirmDelete() {
-    setBusy(true);
-    await fetch(`/api/admin/users/${user.id}`, { method: "DELETE" });
-    setBusy(false);
-    setDeleteOpen(false);
-    router.refresh();
+    await mutate(`/api/admin/users/${user.id}`, "DELETE", undefined, {
+      onSuccess: () => setDeleteOpen(false),
+    });
   }
 
   return (
@@ -102,7 +98,7 @@ export function UserRowActions({ user, currentUserId, departments, users, canMan
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <EditRolesDialog user={user} open={editOpen} onOpenChange={setEditOpen} />
+      <EditRolesDialog user={user} open={editOpen} onOpenChange={setEditOpen} canGrantSuperAdmin={canGrantSuperAdmin} />
       <EditGroupsDialog user={user} open={groupsOpen} onOpenChange={setGroupsOpen} />
       <EditDepartmentDialog
         user={user}

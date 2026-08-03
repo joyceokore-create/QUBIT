@@ -49,6 +49,20 @@ export class UserAdminError extends Error {
   }
 }
 
+const SUPER_ADMIN_ROLE = "PlatformSuperAdmin";
+
+/**
+ * Privilege-escalation guard: nobody may hand out the most powerful role unless they hold
+ * it themselves. Applied wherever role sets are assigned (create + update), so a route
+ * gated only on `users:invite` (HeadOfProjects/HeadOfQA) cannot be used to mint a Super
+ * Admin. Roles come from the session (TenantContext), never from the client.
+ */
+function assertMayGrantSuperAdmin(ctx: TenantContext, roles: string[]): void {
+  if (roles.includes(SUPER_ADMIN_ROLE) && !ctx.roles.includes(SUPER_ADMIN_ROLE)) {
+    throw new UserAdminError("Only a Super Admin can grant the Super Admin role.", "FORBIDDEN_GRANT");
+  }
+}
+
 export interface AdminUserSummary {
   id: string;
   name: string;
@@ -160,6 +174,10 @@ export async function createUser(ctx: TenantContext, input: CreateUserInput) {
   const policyError = validatePasswordPolicy(input.password);
   if (policyError) throw new UserAdminError(policyError, "WEAK_PASSWORD");
 
+  // Privilege-escalation guard: only a Super Admin may mint another Super Admin. Without
+  // this, a HeadOfProjects/HeadOfQA (who hold `users:invite`) could create one.
+  assertMayGrantSuperAdmin(ctx, input.roles);
+
   const email = input.email.toLowerCase();
   const passwordHash = await hashPassword(input.password);
 
@@ -249,6 +267,12 @@ export async function updateUserRoles(
   await withTenant(ctx, async (tx) => {
     const current = await tx.roleAssignment.findMany({ where: { userId } });
     const currentRoles = current.map((r) => r.role);
+
+    // Privilege-escalation guard: only a Super Admin may promote someone TO Super Admin.
+    // (Revoking an existing grant, or a no-op, is unaffected.)
+    if (!currentRoles.includes("PlatformSuperAdmin")) {
+      assertMayGrantSuperAdmin(ctx, roles);
+    }
 
     const toAdd = roles.filter((role) => !currentRoles.includes(role));
     const toRemove = current.filter((assignment) => !roles.includes(assignment.role));

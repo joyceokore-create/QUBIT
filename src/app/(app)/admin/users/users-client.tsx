@@ -35,6 +35,7 @@ export function UsersClient({
   currentUserId,
   insights,
   canManage,
+  canGrantSuperAdmin = false,
 }: {
   users: AdminUserSummary[];
   departments: DepartmentSummary[];
@@ -43,6 +44,8 @@ export function UsersClient({
   /** Full user CRUD (roles/suspend/delete) — PlatformSuperAdmin only. Heads see a read-only
    * directory (the row-action menu collapses to department membership). */
   canManage: boolean;
+  /** Only a Super Admin may grant the Super Admin role (mirrors the server guard, M-O1). */
+  canGrantSuperAdmin?: boolean;
 }) {
   const [seg, setSeg] = useState<Segment>("all");
 
@@ -155,7 +158,7 @@ export function UsersClient({
                       {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : <span className="font-semibold text-[var(--warn)]">Never</span>}
                     </span>
                     <span className="flex justify-end">
-                      <UserRowActions user={u} currentUserId={currentUserId} departments={departments} users={users} canManage={canManage} />
+                      <UserRowActions user={u} currentUserId={currentUserId} departments={departments} users={users} canManage={canManage} canGrantSuperAdmin={canGrantSuperAdmin} />
                     </span>
                   </div>
                 );

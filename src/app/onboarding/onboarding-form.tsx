@@ -40,8 +40,10 @@ function OnboardingFormInner() {
       setError((await res.json().catch(() => null))?.error?.message ?? "Could not set your password.");
       return;
     }
-    // Lift the onboarding gate in the session token, then continue into the app.
-    await update({ mustChangePassword: false });
+    // Trigger a session refresh; the JWT callback re-reads mustChangePassword from the DB
+    // (now false after the reset above), lifting the /onboarding gate. The value is NOT
+    // asserted by the client — a forged update cannot bypass the gate.
+    await update({});
     router.replace("/dashboard");
     router.refresh();
   }

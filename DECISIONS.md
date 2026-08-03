@@ -1552,3 +1552,47 @@ on Demo Org B's full-shaped fixture; the Riverbank login test covers the real te
 Browser-checked: landing trust strip names only Riverbank, login shows a single Riverbank
 quick sign-in resolving "Signing in to Riverbank Group", Joyce's exec dashboard renders
 the red re-skin over the RBS portfolio. Deployed with no schema change.
+
+---
+
+## DM1.47 — Onboarding/IAM: two real security holes closed; admin CRUD gets one primitive (M-O1 + M-O2)
+
+Per the 2026-08-03 audit (docs/19) and the rebuild spec (docs/20). The audit's verdict for
+this module was **"keep + security fix"**, not rebuild — the role→permission→persona model
+is sound; two defects in how it was ENFORCED were not.
+
+**M-O1 — the fixes that gate everything else:**
+
+- **`mustChangePassword` could be lifted by the browser.** The JWT callback trusted
+  `update({ mustChangePassword: false })` from the client, so anyone holding an
+  admin-issued temp password could clear their own onboarding gate from the console and
+  enter the app without ever changing it. Now: the client asserts NOTHING (`update({})`
+  is a bare refresh trigger) and the callback re-reads the flag from the database.
+  Structural wrinkle worth remembering: `auth.config.ts` targets the EDGE runtime and
+  cannot load Prisma, so the DB-reading callback is composed over the edge one in the
+  Node-runtime `auth.ts`. The edge config now only hydrates on initial sign-in.
+- **Privilege escalation via `users:invite`.** `HeadOfProjects`/`HeadOfQA` hold that
+  permission, and `createUser` accepted any `roles` array — including
+  `PlatformSuperAdmin`. `updateUserRoles` guarded self-demotion but not granting. Now
+  `assertMayGrantSuperAdmin` rejects both paths unless the ACTOR holds the role
+  (`FORBIDDEN_GRANT`), read from the session context, never the request body.
+- **Verified as an attack, not a diff.** Against a gated fixture user on the dev server:
+  signed in → gated; forged `update({mustChangePassword:false})` → **still gated**; real
+  reset via `/api/onboarding/complete` → 200; bare session refresh → gate lifted. That
+  sequence is the regression test in prose.
+
+**Known residual, deliberately deferred** (docs/20 §4): the guard reads `ctx.roles` from
+the session, so a demoted Super Admin keeps grant power until their 24h token expires.
+The same callback should re-read `status` and treat non-ACTIVE as signed out — one fix,
+one place, tracked as the suspended-user follow-up.
+
+**M-O2 — structure, no behaviour change:** `useAdminMutation` replaces the
+`useState(loading/error) + fetch + res.ok ? refresh : setError` block that was copied into
+every admin dialog; `GROUP_LABELS` moves to one module. Role-grant UI gating mirrors the
+M-O1 server guard as defence in depth — the Administrator tier is hidden from admins who
+can't grant it, and an EXISTING Super Admin renders locked rather than vanishing, so you
+can still see who holds it. `<AdminTable>`/`<AdminDialog>` extraction and the
+teams/departments adoption are M-O2b (docs/21).
+
+**Verified**: lint/typecheck green, 684/684 tests (4 new: non-superadmin cannot create or
+promote a superadmin via either path; a superadmin can). No schema change, no migration.

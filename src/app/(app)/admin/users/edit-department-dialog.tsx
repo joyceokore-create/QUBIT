@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -18,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import type { DepartmentSummary } from "@/server/departments";
 import type { AdminUserSummary } from "@/server/users";
 
@@ -30,11 +30,9 @@ interface EditDepartmentDialogProps {
 }
 
 export function EditDepartmentDialog({ user, departments, users, open, onOpenChange }: EditDepartmentDialogProps) {
-  const router = useRouter();
+  const { busy, error, setError, mutate } = useAdminMutation();
   const [departmentId, setDepartmentId] = useState(user.departmentId ?? "none");
   const [managerId, setManagerId] = useState(user.managerId ?? "none");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -42,31 +40,20 @@ export function EditDepartmentDialog({ user, departments, users, open, onOpenCha
       setManagerId(user.managerId ?? "none");
       setError(null);
     }
-  }, [open, user]);
+  }, [open, user, setError]);
 
   const managerOptions = users.filter((u) => u.id !== user.id);
 
   async function handleSave() {
-    setLoading(true);
-    setError(null);
-    const res = await fetch(`/api/admin/users/${user.id}/department`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    await mutate(
+      `/api/admin/users/${user.id}/department`,
+      "PATCH",
+      {
         departmentId: departmentId === "none" ? null : departmentId,
         managerId: managerId === "none" ? null : managerId,
-      }),
-    });
-    setLoading(false);
-
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      setError(body?.error?.message ?? "Could not update department.");
-      return;
-    }
-
-    onOpenChange(false);
-    router.refresh();
+      },
+      { fallback: "Could not update department.", onSuccess: () => onOpenChange(false) },
+    );
   }
 
   return (
@@ -127,8 +114,8 @@ export function EditDepartmentDialog({ user, departments, users, open, onOpenCha
         )}
 
         <DialogFooter>
-          <Button onClick={handleSave} disabled={loading}>
-            {loading ? "Saving…" : "Save"}
+          <Button onClick={handleSave} disabled={busy}>
+            {busy ? "Saving…" : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>
