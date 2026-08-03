@@ -1709,6 +1709,16 @@ and the two security holes it existed to close are closed.
   (`must_change_password = false`), required by finish, and pinned by a regression test.
   `needsPassword` on the stepper keys off the same column, so temp-password users are
   routed through the password step instead of being stranded at MFA.
+- **The backfill itself hit the DM1.18 trap — and post-deploy verification caught it.**
+  The original migration argued "whole-table truth, no tenant loop needed" and ran a
+  plain `UPDATE` — which matched zero rows in every environment, because FORCE RLS hides
+  the rows from the migration role no matter what the semantics are. DM1.18 is about
+  VISIBILITY, not meaning; there is no exemption for "additive" DML. Fix-up migration
+  `20260803160000_mo4_password_set_at_backfill_rls` re-runs it in the tenant loop
+  (idempotent: only rows still NULL). Verified 3/3 settled users stamped per tenant in
+  dev, and re-verified on prod after deploy. Corollary: NEVER trust a bare row count on
+  a FORCE-RLS table — `SELECT count(*)` outside a tenant context reads 0 and looks like
+  an empty table.
 - **Theming**: `/onboarding` mounts `TenantScope`, so `bg-primary` controls (the
   buttons) resolve to the tenant brand at the document root. Previously only components
   reading `var(--brand)` directly (the step dots) went red — `--primary` resolves at

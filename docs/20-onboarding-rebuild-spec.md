@@ -243,6 +243,11 @@ finish. The A5 MFA hole (client-supplied secret) is closed.
   (`password_hash IS NOT NULL AND must_change_password = false`). This column is the
   proof "the user chose this password themselves" — a hash alone is not proof, because
   legacy admin-issued temp passwords also hash.
+  **Fix-up `20260803160000_mo4_password_set_at_backfill_rls`**: the first backfill ran a
+  plain `UPDATE` on the FORCE-RLS `user` table outside any tenant context and matched
+  ZERO rows everywhere (DM1.18 — the trap applies to migration DML regardless of whether
+  the semantics are "whole-table"). Caught by verifying row counts on prod after deploy;
+  the fix-up re-runs it inside the tenant loop, idempotently.
 - `src/lib/mfa-recovery.ts` — 10 single-use recovery codes (`a1b2c-3d4e5`), SHA-256
   hashes stored, tolerant matching (case/spaces). `src/lib/mfa-policy.ts` —
   `mfaRequired(roles)`: PlatformSuperAdmin, HeadOfProjects, HeadOfQA, Executive.
