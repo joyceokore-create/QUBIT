@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QUBIT — Delivery & Reporting Workflow Wireframes</title>
+<style>
+  :root{
+    --ink:#1f2328; --ink2:#3a4149; --ink3:#697079; --ink4:#98a0a8; --ink5:#c2c8ce;
+    --line:#d7dce1; --line2:#e7ebee; --paper:#ffffff; --wash:#f5f7f8; --wash2:#eef1f3;
+    --brand:#ED1C24; --brandwash:#fdecec; --annot:#8250df; --annotwash:#f3eefc;
+    --ok:#1a7f43; --okw:#e7f4ec; --warn:#9a6700; --warnw:#fbf3e0; --bad:#b42318; --badw:#fdeceb;
+    --r:10px; --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--wash);font-size:13.5px;line-height:1.45}
+  a{color:inherit;text-decoration:none;cursor:pointer}
+  .app{display:grid;grid-template-columns:210px 1fr;min-height:100vh}
+  /* Sidebar */
+  .side{background:var(--paper);border-right:1px solid var(--line);padding:14px 10px;position:sticky;top:0;height:100vh;overflow:auto}
+  .logo{display:flex;align-items:center;gap:8px;padding:6px 8px 12px;font-weight:800;letter-spacing:-.4px;font-size:16px}
+  .logo .dot{width:16px;height:16px;border-radius:5px;background:var(--brand)}
+  .nav a{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;color:var(--ink2);font-weight:600;font-size:12.5px;margin-bottom:1px}
+  .nav a .ic{width:15px;height:15px;border:1.5px solid var(--ink4);border-radius:4px;flex:none}
+  .nav a.on{background:var(--brandwash);color:var(--brand)}
+  .nav a.on .ic{border-color:var(--brand)}
+  .nav a.dim{opacity:.4}
+  .nav .grp{font-size:9.5px;text-transform:uppercase;letter-spacing:1.4px;color:var(--ink4);padding:12px 10px 5px;font-weight:700}
+  /* Topbar */
+  .top{display:flex;align-items:center;gap:14px;padding:10px 22px;background:var(--paper);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+  .crumbs{font-size:12px;color:var(--ink3);font-weight:600}
+  .crumbs b{color:var(--ink)}
+  .spacer{flex:1}
+  .roleswitch{display:flex;gap:3px;background:var(--wash2);padding:3px;border-radius:9px}
+  .roleswitch button{border:0;background:transparent;font:inherit;font-size:11.5px;font-weight:700;color:var(--ink3);padding:5px 10px;border-radius:6px;cursor:pointer}
+  .roleswitch button.on{background:var(--paper);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .who{font-size:11px;color:var(--ink4);font-weight:600}
+  /* Main */
+  main{padding:22px 26px 80px;max-width:1180px}
+  h1{font-size:22px;letter-spacing:-.5px;margin:0 0 3px}
+  .sub{color:var(--ink3);font-size:12.5px;margin:0 0 18px}
+  h2{font-size:14px;letter-spacing:-.2px;margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+  h2 .pill{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--ink4);border:1px solid var(--line);border-radius:20px;padding:2px 8px}
+  /* Cards & primitives */
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:var(--r);padding:15px}
+  .grid{display:grid;gap:12px}
+  .g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
+  .muted{color:var(--ink3)}
+  .ph{background:var(--wash2);border:1px dashed var(--line);border-radius:7px;color:var(--ink4);display:flex;align-items:center;justify-content:center;font-size:11px;text-align:center}
+  .bar{height:7px;border-radius:20px;background:var(--wash2);overflow:hidden}
+  .bar > i{display:block;height:100%;background:var(--ink3)}
+  .kpi{font-size:26px;font-weight:800;letter-spacing:-1px}
+  .lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:1.2px;color:var(--ink4);font-weight:700}
+  .rag{display:inline-block;width:9px;height:9px;border-radius:50%}
+  .rag.g{background:var(--ok)}.rag.a{background:var(--warn)}.rag.r{background:var(--bad)}
+  .tag{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;border:1px solid var(--line);color:var(--ink3);background:var(--wash)}
+  .tag.ok{background:var(--okw);color:var(--ok);border-color:transparent}
+  .tag.warn{background:var(--warnw);color:var(--warn);border-color:transparent}
+  .tag.bad{background:var(--badw);color:var(--bad);border-color:transparent}
+  .tag.info{background:var(--annotwash);color:var(--annot);border-color:transparent}
+  .btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;color:var(--ink2);cursor:pointer}
+  .btn.pri{background:var(--brand);border-color:var(--brand);color:#fff}
+  .btn.sm{padding:5px 9px;font-size:11px}
+  .row{display:flex;align-items:center;gap:10px}
+  .between{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:1px;color:var(--ink4);font-weight:700;padding:8px 10px;border-bottom:1px solid var(--line)}
+  td{padding:10px;border-bottom:1px solid var(--line2)}
+  tr:last-child td{border-bottom:0}
+  tr.clk:hover{background:var(--wash);cursor:pointer}
+  .tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:4px 0 16px;flex-wrap:wrap}
+  .tabs button{border:0;background:transparent;font:inherit;font-weight:700;font-size:12.5px;color:var(--ink3);padding:9px 13px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tabs button.on{color:var(--brand);border-bottom-color:var(--brand)}
+  .tabs button:disabled{opacity:.35;cursor:not-allowed}
+  /* Annotation callouts explain the workflow rules */
+  .annot{border-left:3px solid var(--annot);background:var(--annotwash);border-radius:0 8px 8px 0;padding:9px 12px;font-size:11.5px;color:#54308c;margin:10px 0}
+  .annot b{color:var(--annot)}
+  .annot::before{content:"◆ design note — ";font-weight:800;color:var(--annot)}
+  .empty{border:1px dashed var(--line);border-radius:var(--r);padding:24px;text-align:center;color:var(--ink4);font-size:12px}
+  .swim{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .lane{background:var(--wash);border:1px solid var(--line);border-radius:var(--r);padding:10px;min-height:170px}
+  .lane .h{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--ink3);margin-bottom:8px;display:flex;justify-content:space-between}
+  .tkt{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:9px;margin-bottom:8px;font-size:12px}
+  .tkt .m{font-size:10.5px;color:var(--ink4);margin-top:5px;display:flex;gap:8px;align-items:center}
+  .av{width:18px;height:18px;border-radius:50%;background:var(--wash2);border:1px solid var(--line);font-size:9px;display:inline-flex;align-items:center;justify-content:center;color:var(--ink3);font-weight:700}
+  .banner{display:flex;align-items:center;gap:12px;background:var(--warnw);border:1px solid #f0dca6;border-radius:var(--r);padding:11px 14px;margin-bottom:14px;font-size:12.5px;color:#6b4a00}
+  .banner .btn{margin-left:auto}
+  .heat{display:grid;gap:4px}
+  .heat .hr{display:grid;grid-template-columns:150px repeat(7,1fr);gap:4px;align-items:center}
+  .heat .hc{height:30px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff}
+  .heat .hh{font-size:9.5px;color:var(--ink4);font-weight:700;text-align:center}
+  .heat .rl{font-size:11.5px;font-weight:600}
+  textarea,.inp{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px;font:inherit;font-size:12.5px;color:var(--ink)}
+  .legend{font-size:10.5px;color:var(--ink4);display:flex;gap:14px;flex-wrap:wrap;margin-top:6px}
+  .step{display:flex;gap:0;margin:0 0 16px;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+  .step div{flex:1;padding:9px 12px;font-size:11.5px;font-weight:700;color:var(--ink4);border-right:1px solid var(--line);text-align:center}
+  .step div.on{background:var(--brandwash);color:var(--brand)}
+  .step div:last-child{border-right:0}
+  /* Wizard chrome (docs/26 §5): left rail of steps, one question per step, draft autosave */
+  .wiz{display:grid;grid-template-columns:190px 1fr;gap:18px;align-items:start}
+  .wrail{position:sticky;top:64px;display:flex;flex-direction:column;gap:2px}
+  .wrail a{display:flex;gap:9px;align-items:center;padding:8px 10px;border-radius:8px;font-size:12px;font-weight:600;color:var(--ink3)}
+  .wrail a .n{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--ink5);font-size:10px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex:none}
+  .wrail a.on{background:var(--brandwash);color:var(--brand)}
+  .wrail a.on .n{border-color:var(--brand);color:var(--brand)}
+  .wrail a.done{color:var(--ok)}
+  .wrail a.done .n{border-color:var(--ok);background:var(--okw)}
+  .wrail a.skip{opacity:.4}
+  .wrail .draft{margin-top:10px;font-size:10.5px;color:var(--ink4);padding:0 10px;line-height:1.5}
+  .opt{border:1.5px solid var(--line);border-radius:var(--r);padding:13px;cursor:pointer;background:var(--paper)}
+  .opt.on{border-color:var(--brand);background:var(--brandwash)}
+  .opt .t{font-weight:800;margin-bottom:3px}
+  .opt .d{font-size:11.5px;color:var(--ink3)}
+  .chip{display:inline-flex;align-items:center;gap:5px;border:1.5px solid var(--line);border-radius:20px;padding:4px 11px;font-size:11.5px;font-weight:700;color:var(--ink3);cursor:pointer;margin:0 6px 6px 0;background:var(--paper)}
+  .chip.on{border-color:var(--brand);color:var(--brand);background:var(--brandwash)}
+  .warnrow{display:flex;gap:8px;align-items:flex-start;background:var(--warnw);border:1px solid #f0dca6;border-radius:8px;padding:8px 10px;font-size:11.5px;color:#6b4a00;margin-top:8px}
+  .okrow{display:flex;gap:8px;align-items:flex-start;background:var(--okw);border:1px solid #bfe3cd;border-radius:8px;padding:8px 10px;font-size:11.5px;color:var(--ok);margin-top:8px}
+  .err{font-size:11px;color:var(--bad);margin-top:4px}
+  . role-hide{display:none}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo"><span class="dot"></span> QUBIT</div>
+    <nav class="nav" id="nav"></nav>
+    <div style="margin-top:18px;font-size:10px;color:var(--ink4);padding:0 10px;line-height:1.5">
+      Low-fi wireframe · Riverbank tenant<br>docs/24–25 + docs/26 §4.3 · §5 wizards
+    </div>
+  </aside>
+  <div>
+    <div class="top">
+      <div class="crumbs" id="crumbs"></div>
+      <div class="spacer"></div>
+      <span class="who">Viewing as</span>
+      <div class="roleswitch" id="roles"></div>
+    </div>
+    <main id="main"></main>
+  </div>
+</div>
+
+<script>
+/* ---------- state ---------- */
+const ROLES = [
+  ["exec","Executive"],["pm","Project Manager"],["member","Dev · QA · Impl"],["head","Head of PMs"]
+];
+const NAV = [
+  ["dashboard","Dashboard"],["portfolio","Portfolio"],["programme","Programme"],
+  ["projects","Projects"],["reports","Reports"],["people","Teams & People"]
+];
+const state = { role:"pm", screen:"dashboard", tab:"overview" };
+/* Wizard step state (docs/26 §5): pf = portfolio, pj = project. Draft autosave is the
+   contract — a wizard abandoned mid-way resumes at its last step. */
+const WIZ = { pf:1, pj:1 };
+function wgo(w,s){ WIZ[w]=s; window.scrollTo(0,0); render(); }
+
+/* ---------- helpers ---------- */
+const el = (id)=>document.getElementById(id);
+const annot = (t)=>`<div class="annot">${t}</div>`;
+function go(screen,tab){ state.screen=screen; if(tab)state.tab=tab; window.scrollTo(0,0); render(); }
+function setRole(r){ state.role=r; if(state.screen==="board"||state.screen==="memberReport") {} render(); }
+function bars(v){ return `<div class="bar"><i style="width:${v}%"></i></div>`; }
+const roleName = ()=>Object.fromEntries(ROLES)[state.role];
+/* Shared wizard chrome (docs/26 §5): left rail, ticked steps, draft note. skipIdx marks a
+   conditionally-skipped step (e.g. Markets on a Pipeline portfolio). */
+function rail(w, steps, skipIdx){
+  return `<div class="wrail">${steps.map((l,i)=>{
+    const n=i+1;
+    const cls = (skipIdx===n) ? "skip" : n===WIZ[w] ? "on" : n<WIZ[w] ? "done" : "";
+    return `<a class="${cls}" onclick="wgo('${w}',${n})"><span class="n">${n<WIZ[w]&&skipIdx!==n?"✓":n}</span>${l}</a>`;
+  }).join("")}
+  <div class="draft">✎ Draft auto-saves at every step — leave and resume anytime.</div></div>`;
+}
+function wfoot(w, step, last, createLabel, doneScreen){
+  return `<div class="row" style="margin-top:16px">
+    ${step>1?`<span class="btn" onclick="wgo('${w}',${step-1})">← Back</span>`:""}
+    ${step<last?`<span class="btn pri" onclick="wgo('${w}',${step+1})">Continue →</span>`
+               :`<span class="btn pri" onclick="WIZ['${w}']=1;go('${doneScreen}')">${createLabel}</span><span class="btn" onclick="WIZ['${w}']=1;render()">Create another</span>`}
+  </div>`;
+}
+
+/* ---------- screens ---------- */
+const S = {};
+
+S.dashboard = ()=>{
+  if(state.role==="exec") return `
+    <h1>Dashboard</h1><p class="sub">Executive view · everything, read-only</p>
+    ${annot("From your notes: <b>(i) an AI brief of actions needed + urgent look-outs</b>, then <b>(ii) cards on overall portfolios / programmes / projects</b> that link through to their pages, then the <b>(iv) market rollout heat map</b>.")}
+    <div class="card" style="border-left:3px solid var(--brand)">
+      <div class="lbl">AI brief · generated ${'8:00'} today</div>
+      <p style="margin:6px 0 8px">2 decisions need you: <b>ZED ERP</b> stage-gate approval is waiting, and the <b>Swipe Agent Banking</b> UAT sign-off is overdue.</p>
+      <div class="row"><span class="tag bad">⚠ Mobile Banking running behind — milestone slipped 6d</span><span class="tag warn">Fikra AI · QA capacity −40% next week</span></div>
+    </div>
+    <h2>Portfolios <span class="pill">click a card → its page</span></h2>
+    <div class="grid g3">
+      ${["AI Initiatives·Pipeline·8 projects","ZED ERP·Rollout·5 modules","Swipe Agent Banking·Rollout·4 modules"].map(x=>{const[a,b,c]=x.split("·");return `
+      <a class="card" onclick="go('portfolioDetail')">
+        <div class="between"><b>${a}</b><span class="rag ${a[0]==='S'?'r':a[0]==='Z'?'a':'g'}"></span></div>
+        <div class="muted" style="font-size:11.5px;margin:3px 0 10px">${b} · ${c}</div>
+        ${bars(a[0]==='S'?48:a[0]==='Z'?66:81)}
+        <div class="row" style="margin-top:8px"><span class="tag ok">Approved</span><span class="muted" style="font-size:11px">▲ 3% WoW</span></div>
+      </a>`}).join("")}
+    </div>
+    <h2>Market rollout heat map <span class="pill">portfolio-projects × subsidiaries</span></h2>
+    <div class="card">${heatmap()}</div>`;
+
+  if(state.role==="head") return `
+    <h1>Dashboard</h1><p class="sub">Head of PMs · delivery governance across all portfolios</p>
+    ${annot("The Head's home is the <b>cross-PM roll-up review queue</b> (docs/19 §6): confirmed PM check-ins roll up here to review + approve before they reach the executive. Plus one-click export.")}
+    <div class="grid g4">
+      ${[["6","PM check-ins in","ok"],["2","Unconfirmed","warn"],["3","Red projects","bad"],["1","Awaiting my approval","info"]].map(([n,l,t])=>`
+      <div class="card"><div class="kpi">${n}</div><div class="lbl">${l}</div><div style="margin-top:6px"><span class="tag ${t}">week 32</span></div></div>`).join("")}
+    </div>
+    <h2>Roll-up review queue</h2>
+    <div class="card" style="padding:0">
+      <table><thead><tr><th>Portfolio / Programme</th><th>PM</th><th>RAG</th><th>Status</th><th></th></tr></thead><tbody>
+      ${[["ZED ERP","A. Mwangi","a","Submitted"],["Swipe Agent Banking","J. Otieno","r","Submitted"],["AI Initiatives","P. Kamau","g","Unconfirmed"]].map(([p,pm,r,s])=>`
+      <tr class="clk" onclick="go('pmReport')"><td><b>${p}</b></td><td>${pm}</td><td><span class="rag ${r}"></span></td><td><span class="tag ${s==='Submitted'?'info':'warn'}">${s}</span></td><td style="text-align:right"><span class="btn sm">Review →</span></td></tr>`).join("")}
+      </tbody></table>
+    </div>
+    <div class="row" style="margin-top:12px"><span class="btn">⤓ Export portfolio pack (PDF)</span><span class="btn">⤓ Export resource allocations</span></div>`;
+
+  if(state.role==="member") return `
+    <h1>Dashboard</h1><p class="sub">Dev · QA · Implementor · your work across projects</p>
+    ${annot("Members don't manage projects. Their home nudges them toward <b>this week's updates</b> and shows their tasks (read-only, from YouTrack) and the queries they've raised.")}
+    <div class="banner">⏰ <b>2 weekly updates due</b> for Mobile Banking and Fikra AI — send or edit your draft before Fri 5pm.<a class="btn sm" onclick="go('memberReport')">Review drafts →</a></div>
+    <div class="grid g3">
+      <div class="card"><div class="lbl">My open tasks (YouTrack)</div><div class="kpi">7</div><div class="muted" style="font-size:11px">3 in review · 1 blocked</div></div>
+      <div class="card"><div class="lbl">Done this week</div><div class="kpi">8</div><div class="muted" style="font-size:11px">feeds your weekly update</div></div>
+      <div class="card"><div class="lbl">Queries I raised</div><div class="kpi">2</div><div class="muted" style="font-size:11px">1 answered by PM</div></div>
+    </div>
+    <h2>My projects</h2>
+    <div class="grid g2">
+      ${["Mobile Banking·Developer","Fikra AI·QA Engineer"].map(x=>{const[a,b]=x.split("·");return `
+      <a class="card" onclick="go('workspace','board')"><div class="between"><b>${a}</b><span class="tag">${b}</span></div><div class="muted" style="font-size:11.5px;margin-top:4px">Open project workspace →</div></a>`}).join("")}
+    </div>`;
+
+  // PM
+  return `
+    <h1>Dashboard</h1><p class="sub">Project Manager · your projects this week</p>
+    ${annot("PM home (the one spot your notes left open) — proposed: <b>check-in status</b>, <b>my projects (RAG + Δ)</b>, an <b>action queue</b>, and <b>team load</b>. Confirm or tweak.")}
+    <div class="banner">📝 <b>Friday check-in due</b> for 3 projects. Drafts are ready from this week's board activity — confirm each in ~2 min.<a class="btn sm pri" onclick="go('pmReport')">Open check-ins →</a></div>
+    <h2>My projects</h2>
+    <div class="card" style="padding:0"><table>
+      <thead><tr><th>Project</th><th>RAG</th><th>Progress</th><th>Next milestone</th><th>Blockers</th><th></th></tr></thead><tbody>
+      ${[["Mobile Banking","r","62","UAT · 12 Aug","2"],["Fikra AI","g","81","Go-Live · 20 Aug","0"],["ZED Card","a","55","SIT · 15 Aug","1"]].map(([p,r,pg,m,b])=>`
+      <tr class="clk" onclick="go('workspace','overview')"><td><b>${p}</b></td><td><span class="rag ${r}"></span></td><td style="width:120px">${bars(pg)}</td><td>${m}</td><td>${b==='0'?'<span class="tag ok">none</span>':'<span class="tag bad">'+b+' open</span>'}</td><td style="text-align:right"><span class="btn sm">Open →</span></td></tr>`).join("")}
+    </tbody></table></div>
+    <h2>Action queue</h2>
+    <div class="grid g2">
+      <div class="card"><b>Approvals & handoffs</b><ul style="margin:8px 0 0;padding-left:16px;color:var(--ink2)"><li>Member report from D. Wanjiru — acknowledge</li><li>Blocker &gt;3 days on Mobile Banking</li></ul></div>
+      <div class="card"><b>Team load</b><div class="muted" style="font-size:11.5px;margin:6px 0 8px">across my projects · leave-aware</div>${bars(92)}<div class="muted" style="font-size:11px;margin-top:6px">2 people &gt;90% next week · 1 on leave</div></div>
+    </div>`;
+};
+
+S.portfolio = ()=>`
+  <div class="between"><div><h1>Portfolio</h1><p class="sub">Square cards of every portfolio · categorized Approved / Exploring / Shelved</p></div>
+  ${(state.role==="exec"||state.role==="head")?'<span class="btn pri" onclick="go(\'newPortfolio\')">+ New portfolio</span>':''}</div>
+  ${annot("From your notes: <b>Portfolio page = square cards with an “Add New Portfolio” button</b>. Only Exec / Head see the add button; PM & members see cards only.")}
+  ${["Approved","Exploring","Shelved"].map(cat=>`
+    <h2>${cat} <span class="pill">${cat==='Approved'?3:cat==='Exploring'?2:1}</span></h2>
+    <div class="grid g3">
+    ${(cat==='Approved'?["AI Initiatives","ZED ERP","Swipe Agent Banking"]:cat==='Exploring'?["Data Platform","Open Banking"]:["Legacy Cards"]).map(p=>`
+      <a class="card" onclick="go('portfolioDetail')" style="aspect-ratio:1.6/1;display:flex;flex-direction:column;justify-content:space-between">
+        <div class="between"><b>${p}</b><span class="rag ${cat==='Shelved'?'r':cat==='Exploring'?'a':'g'}"></span></div>
+        <div><div class="lbl">Projects</div><div class="kpi" style="font-size:20px">${cat==='Approved'?'5':cat==='Exploring'?'2':'3'}</div></div>
+        <div class="row"><span class="tag ${cat==='Approved'?'ok':cat==='Exploring'?'warn':''}">${cat}</span><span class="muted" style="font-size:11px">2 programmes</span></div>
+      </a>`).join("")}
+    </div>`).join("")}`;
+
+S.portfolioDetail = ()=>`
+  <div class="crumbs" style="margin-bottom:6px"><a onclick="go('portfolio')">Portfolio</a> › <b>ZED ERP</b></div>
+  <div class="between"><div><h1>ZED ERP</h1><p class="sub">Rollout portfolio · programmes & projects grouped in their portfolio</p></div>
+  ${(state.role==="exec"||state.role==="head")?'<span class="btn">+ New project / programme</span>':''}</div>
+  ${annot("Notes (iii): a portfolio lists its <b>programmes and projects grouped correctly</b>, each project showing <b>checkpoints, budget, resources, risks, milestones</b>. Money/budget shows only where typed (Phase C) — placeholder here.")}
+  <div class="grid g4">
+    ${[["RAG","<span class='rag a'></span> Amber"],["Progress","66%"],["Open blockers","3"],["Owner","A. Mwangi"]].map(([l,v])=>`<div class="card"><div class="lbl">${l}</div><div style="font-size:16px;font-weight:800;margin-top:4px">${v}</div></div>`).join("")}
+  </div>
+  <h2>Programme · Core Banking</h2>
+  <div class="card" style="padding:0"><table>
+    <thead><tr><th>Project / module</th><th>Stage</th><th>Checkpoints</th><th>%</th><th>Risks</th><th>Next milestone</th></tr></thead><tbody>
+    ${[["ZED Card","Approved","✓✓✓◐○○","55","2","SIT · 15 Aug"],["ZED Teller","Approved","✓✓◐○○○","40","1","MVP1 · 22 Aug"]].map(([p,s,c,pg,r,m])=>`
+    <tr class="clk" onclick="go('workspace','overview')"><td><b>${p}</b></td><td><span class="tag ok">${s}</span></td><td style="font-family:var(--mono);letter-spacing:2px">${c}</td><td>${pg}%</td><td><span class="tag bad">${r}</span></td><td>${m}</td></tr>`).join("")}
+  </tbody></table></div>
+  <h2>Market rollout — this portfolio × subsidiaries</h2>
+  <div class="card">${heatmap()}</div>`;
+
+S.programme = ()=>`
+  <h1>Programme</h1><p class="sub">Programmes across portfolios · same grouping, one level down</p>
+  ${annot("Programmes sit between Portfolio and Project. Same three categories (Approved / Exploring / Shelved) and the same roll-up math; a programme report is generated the same way as a project report, one level up.")}
+  <div class="grid g3">
+  ${["Core Banking·ZED ERP·2","Payments·Swipe·3","GenAI·AI Initiatives·4"].map(x=>{const[a,b,c]=x.split("·");return `
+    <a class="card" onclick="go('portfolioDetail')"><div class="between"><b>${a}</b><span class="rag g"></span></div><div class="muted" style="font-size:11.5px;margin:3px 0 8px">in ${b} · ${c} projects</div>${bars(70)}</a>`}).join("")}
+  </div>`;
+
+S.projects = ()=>`
+  <h1>Projects</h1><p class="sub">List all projects · at-a-glance progress, status, team</p>
+  ${annot("Notes: <b>filters by delivery status (Prototype, UAT…)</b> and <b>by pipeline status (Approved, Shelved…)</b>. Clicking a row opens the project workspace.")}
+  <div class="row" style="margin-bottom:12px">
+    <span class="tag info">Pipeline: Approved ▾</span><span class="tag info">Delivery: UAT ▾</span><span class="tag">Portfolio: All ▾</span><span class="spacer"></span>
+    ${state.role==="head"?'<span class="btn sm">⤓ Export list</span>':''}
+  </div>
+  <div class="card" style="padding:0"><table>
+    <thead><tr><th>Project</th><th>Portfolio</th><th>Stage</th><th>Delivery</th><th>Progress</th><th>Team</th><th>RAG</th></tr></thead><tbody>
+    ${[["Mobile Banking","Swipe","Approved","UAT","62","r"],["Fikra AI","AI Initiatives","Approved","Go-Live","81","g"],["ZED Card","ZED ERP","Approved","SIT","55","a"],["Checksmart","AI Initiatives","Exploring","Prototype","20","a"]].map(([p,pf,st,dl,pg,r])=>`
+    <tr class="clk" onclick="go('workspace','overview')"><td><b>${p}</b></td><td class="muted">${pf}</td><td><span class="tag ok">${st}</span></td><td><span class="tag">${dl}</span></td><td style="width:120px">${bars(pg)}</td><td><span class="av">A</span><span class="av">M</span><span class="av">+3</span></td><td><span class="rag ${r}"></span></td></tr>`).join("")}
+  </tbody></table></div>`;
+
+/* ---- Project workspace: the heart of the redesign ---- */
+S.workspace = ()=>{
+  const r = state.role;
+  const tabs = [
+    ["overview","Overview"],["board","Board"],["docs","Documents"],
+    ["delivery","Checkpoints & Rollout"],["reports","Reports"],["team","Team"]
+  ];
+  const tabBtns = tabs.map(([k,l])=>`<button class="${state.tab===k?'on':''}" onclick="go('workspace','${k}')">${l}</button>`).join("");
+  let body = "";
+  if(state.tab==="overview") body = wsOverview(r);
+  else if(state.tab==="board") body = wsBoard(r);
+  else if(state.tab==="docs") body = wsDocs(r);
+  else if(state.tab==="delivery") body = wsDelivery(r);
+  else if(state.tab==="reports") body = wsReports(r);
+  else body = wsTeam(r);
+  return `
+    <div class="crumbs" style="margin-bottom:6px"><a onclick="go('projects')">Projects</a> › <b>Mobile Banking</b> <span class="tag" style="margin-left:6px">${roleName()} view</span></div>
+    <div class="between"><div><h1>Mobile Banking</h1><p class="sub">Swipe Agent Banking · Approved · UAT · PM: A. Mwangi</p></div>
+      <div class="row"><span class="rag r"></span><span class="tag bad">At risk</span></div></div>
+    <div class="tabs">${tabBtns}</div>
+    ${body}`;
+};
+
+function wsOverview(r){
+  return `
+  ${r==="exec"?annot("Exec workspace is <b>view-only</b> and shows exactly your notes: Project Details, Docs, Budget, and the <b>Summary Report from the PM</b> (weekly update)."):""}
+  <div class="grid g4">
+    ${[["Progress","62%"],["Stage","Approved"],["Delivery","UAT"],["Health","<span class='rag r'></span> Red"]].map(([l,v])=>`<div class="card"><div class="lbl">${l}</div><div style="font-size:16px;font-weight:800;margin-top:4px">${v}</div></div>`).join("")}
+  </div>
+  <div class="grid g2" style="margin-top:12px">
+    <div class="card"><b>Project details</b>
+      <div style="margin-top:8px;font-size:12px;color:var(--ink2);line-height:1.9">
+      Portfolio: Swipe Agent Banking<br>Programme: Payments<br>Checkpoint template: Product build (BRD→Go-Live)<br>Markets: KE, TZ, UG<br>Budget: <span class="tag">typed in Phase C</span></div>
+    </div>
+    <div class="card"><b>Latest summary report (from PM)</b> <span class="tag info">week 32</span>
+      <p style="font-size:12px;color:var(--ink2);margin:8px 0 0">Computed RAG <b>Red</b>: UAT slipped 6 days; 2 blockers open on payments reconciliation. QA cleared 8 tasks. Next: vendor fix ETA Thu.</p>
+      ${r==="exec"?'<div class="row" style="margin-top:10px"><span class="btn sm">⤓ Export PDF</span></div>':''}
+    </div>
+  </div>
+  ${r!=="exec"?`<div class="grid g2" style="margin-top:12px">
+    <div class="card"><b>Milestones</b><ul style="margin:8px 0 0;padding-left:16px;color:var(--ink2)"><li>UAT — 12 Aug <span class="tag bad">slipped</span></li><li>Go-Live — 30 Aug</li></ul></div>
+    <div class="card"><b>Risks & blockers (RAID)</b><ul style="margin:8px 0 0;padding-left:16px;color:var(--ink2)"><li><span class="rag r"></span> Recon mismatch — vendor</li><li><span class="rag a"></span> QA capacity next week</li></ul></div>
+  </div>`:""}`;
+}
+
+function wsBoard(r){
+  const readonly = true; // nobody authors tasks in QUBIT
+  const tkt = (t,who,tag)=>`<div class="tkt">${t}<div class="m"><span class="av">${who[0]}</span>${who} ${tag?`<span class="tag ${tag[1]}">${tag[0]}</span>`:''}</div></div>`;
+  return `
+  ${annot("<b>One board per project.</b> Tasks are <b>read-only, mirrored from YouTrack</b> — nobody (dev/QA/impl or PM) creates or edits tasks in QUBIT. PM sees <b>everyone's</b> tasks; a member can toggle <b>Mine / All</b>. Lanes To do / Doing / Done are views over the YouTrack statuses.")}
+  <div class="between" style="margin-bottom:10px">
+    <div class="row"><span class="tag info">🔗 Synced from YouTrack · 8 min ago</span><span class="tag">read-only</span></div>
+    <div class="row">${r==="member"?'<span class="tag info">Mine ▾</span>':'<span class="tag">All assignees ▾</span>'}<span class="tag">Type: All ▾</span></div>
+  </div>
+  <div class="swim">
+    <div class="lane"><div class="h">To do <span>4</span></div>
+      ${tkt("MB-142 · Reconcile edge cases","D. Wanjiru")}${tkt("MB-150 · USSD timeout copy","P. Njoroge")}</div>
+    <div class="lane"><div class="h">Doing <span>3</span></div>
+      ${tkt("MB-138 · Payments recon fix","A. Otieno",["In review","info"])}${tkt("MB-145 · Statement export","S. Kim",["Blocked","bad"])}</div>
+    <div class="lane"><div class="h">Done <span>8</span></div>
+      ${tkt("MB-131 · Login rate-limit","D. Wanjiru",["QA passed","ok"])}${tkt("MB-129 · KYC screen","J. Muli",["QA passed","ok"])}</div>
+  </div>
+  <div class="legend"><span>◆ To do = YouTrack “Open”</span><span>Doing = In Progress / In Review / In QA</span><span>Done = QA-passed</span></div>`;
+}
+
+function wsDocs(r){
+  const canManage = (r==="pm"||r==="head");
+  return `
+  ${annot("Everyone can <b>download</b> docs; only PM/lead can upload/approve. Members: <b>download docs</b> is one of their four project actions (view tasks · download docs · report · raise queries).")}
+  <div class="between" style="margin-bottom:10px"><b>Document register</b>${canManage?'<span class="btn sm">+ Upload</span>':''}</div>
+  <div class="card" style="padding:0"><table>
+    <thead><tr><th>Document</th><th>Type</th><th>Version</th><th>Status</th><th></th></tr></thead><tbody>
+    ${[["BRD — Mobile Banking","BRD","v3","Approved"],["URS — Payments","URS","v2","Approved"],["Test Plan — UAT","TestPlan","v1","In review"],["Go-Live runbook","Other","v1","Draft"]].map(([d,t,v,s])=>`
+    <tr><td><b>${d}</b></td><td><span class="tag">${t}</span></td><td>${v}</td><td><span class="tag ${s==='Approved'?'ok':s==='Draft'?'':'warn'}">${s}</span></td><td style="text-align:right"><span class="btn sm">⤓ Download</span></td></tr>`).join("")}
+  </tbody></table></div>`;
+}
+
+function wsDelivery(r){
+  const editable = (r==="pm"||r==="head");
+  return `
+  ${annot(editable?"<b>PM edits here.</b> Checkpoints (click a cell to set Done / In progress / Not started / Blocked) and the per-market rollout tracking. % is <b>derived</b> from checkpoint states — never typed.":"View-only for this role — the numbers are derived from the PM's checkpoint updates.")}
+  <h2>Checkpoints <span class="pill">template: Product build</span></h2>
+  <div class="card" style="padding:0;overflow:auto"><table>
+    <thead><tr><th>Checkpoint</th><th>State</th><th>Owner</th><th>Updated</th></tr></thead><tbody>
+    ${[["BRD","Done","g"],["Prototype","Done","g"],["MVP1","Done","g"],["SIT","In progress","a"],["UAT","Not started",""],["Go-Live","Not started",""]].map(([c,s,r2])=>`
+    <tr class="${editable?'clk':''}"><td><b>${c}</b></td><td>${editable?'<span class="tag '+(s==='Done'?'ok':s==='In progress'?'warn':'')+'">'+s+' ▾</span>':'<span class="tag '+(s==='Done'?'ok':s==='In progress'?'warn':'')+'">'+s+'</span>'}</td><td class="muted">A. Mwangi</td><td class="muted">2d ago</td></tr>`).join("")}
+  </tbody></table></div>
+  <h2>Market rollout tracking</h2>
+  ${annot("Per-market track (KE/TZ/UG…): checkpoint states + a weekly <b>market check-in</b> (narrative + RAG). Editable by PM / implementation lead; feeds the executive rollout heat map.")}
+  <div class="card">${heatmap()}
+    ${editable?'<div class="row" style="margin-top:12px"><span class="btn sm">✎ Edit KE check-in</span><span class="btn sm">✎ Edit TZ check-in</span></div>':''}
+  </div>`;
+}
+
+function wsReports(r){
+  if(r==="member") return `
+    ${annot("Member’s report surface (in-workspace). Their week is <b>auto-drafted from the board</b> (Done / Doing / blockers); they <b>edit / add detail</b> and <b>raise queries & concerns</b>, then <b>submit to the PM</b>. They never touch tasks.")}
+    <div class="banner">⏰ Your weekly update for <b>Mobile Banking</b> is due Fri 5pm. Draft ready.<a class="btn sm pri" onclick="go('memberReport')">Open my update →</a></div>
+    <div class="card"><b>My submitted updates</b>
+      <table style="margin-top:8px"><tbody>
+      <tr><td>Week 31</td><td><span class="tag ok">Acknowledged by PM</span></td><td style="text-align:right"><span class="btn sm">View</span></td></tr>
+      <tr><td>Week 30</td><td><span class="tag ok">Acknowledged</span></td><td style="text-align:right"><span class="btn sm">View</span></td></tr>
+      </tbody></table></div>`;
+  // PM / exec / head
+  return `
+    ${annot("Reports are <b>generated & edited inside the workspace</b> (per project). The PM confirms the computed check-in, edits the narrative, and <b>sends it to the Head of PMs</b>. Exec/Head can generate + <b>export PDF</b>; all reports are editable.")}
+    <div class="between" style="margin-bottom:12px"><b>Project reports</b>
+      <div class="row"><span class="btn sm">⤓ Export PDF</span>${r==="pm"?'<span class="btn pri sm" onclick="go(\'pmReport\')">Generate weekly report</span>':''}</div></div>
+    <div class="card" style="padding:0"><table>
+      <thead><tr><th>Report</th><th>Period</th><th>Status</th><th></th></tr></thead><tbody>
+      ${[["Weekly project report","Week 32","Draft — needs confirm"],["Weekly project report","Week 31","Sent to Head of PMs"],["UAT gate report","—","Sent"]].map(([n,p,s])=>`
+      <tr class="clk" onclick="go('pmReport')"><td><b>${n}</b></td><td>${p}</td><td><span class="tag ${s.includes('Draft')?'warn':'ok'}">${s}</span></td><td style="text-align:right"><span class="btn sm">Open</span></td></tr>`).join("")}
+    </tbody></table></div>
+    ${r==="member"?"":annot("Members’ acknowledged weekly updates <b>roll up into this project report</b> automatically — the PM edits the narrative, not the raw data.")}`;
+}
+
+function wsTeam(r){
+  const canManage = (r==="pm"||r==="head");
+  return `
+  ${annot("Team = the project's people and their <b>project role hats</b> (which drive board lens + report routing). Leave-aware allocation. PM manages membership.")}
+  <div class="between" style="margin-bottom:10px"><b>Project team</b><div class="row">${canManage?'<span class="btn sm pri" onclick="go(\'assign\')">+ Add member</span>':''}${r==="pm"?'<span class="btn sm" onclick="go(\'resourceReq\')">Request a resource</span>':''}</div></div>
+  <div class="card" style="padding:0"><table>
+    <thead><tr><th>Person</th><th>Project role</th><th>Allocation</th><th>Availability</th></tr></thead><tbody>
+    ${[["A. Mwangi","Project Manager","—","Available"],["D. Wanjiru","Developer","80%","Available"],["S. Kim","QA Engineer","60%","On leave to 12 Aug"],["P. Njoroge","Implementor","50%","Available"]].map(([n,ro,al,av])=>`
+    <tr><td><b>${n}</b></td><td><span class="tag">${ro}</span></td><td>${al}</td><td>${av.includes('leave')?'<span class="tag warn">'+av+'</span>':'<span class="tag ok">'+av+'</span>'}</td></tr>`).join("")}
+  </tbody></table></div>`;
+}
+
+/* ---- Member weekly update authoring + nudge ---- */
+S.memberReport = ()=>`
+  <div class="crumbs" style="margin-bottom:6px"><a onclick="go('workspace','reports')">Mobile Banking</a> › <b>My weekly update</b></div>
+  <h1>My weekly update — Week 32</h1><p class="sub">Mobile Banking · Dev · auto-drafted from your board</p>
+  <div class="banner">⏰ Due <b>Fri 5pm</b>. This is a <b>draft from your board activity</b> — edit, add detail, then submit to your PM. <span class="tag" style="margin-left:6px">You cannot edit tasks here</span></div>
+  ${annot("The nudge (docs/19) fires when a draft is unsent. The draft is generated from YouTrack board activity; the member’s job is to <b>edit / add</b> and <b>raise queries/concerns</b>, then <b>send</b>. Not submitted by Mon 10am → escalate to PM.")}
+  <div class="grid g2">
+    <div class="card"><b>Done this week</b> <span class="tag">auto</span>
+      <ul style="margin:8px 0 0;padding-left:16px;color:var(--ink2)"><li>MB-131 Login rate-limit</li><li>MB-129 KYC screen</li><li>+6 more from board</li></ul></div>
+    <div class="card"><b>In progress / blocked</b> <span class="tag">auto</span>
+      <ul style="margin:8px 0 0;padding-left:16px;color:var(--ink2)"><li>MB-138 Payments recon fix — in review</li><li>MB-145 Statement export — <span class="tag bad">blocked</span></li></ul></div>
+  </div>
+  <div class="card" style="margin-top:12px"><b>My notes (editable)</b>
+    <textarea rows="3" style="margin-top:8px">Recon fix pending vendor patch (ETA Thu). Statement export blocked on test data from KE ops.</textarea></div>
+  <div class="card" style="margin-top:12px"><b>Queries & concerns to PM</b> <span class="tag info">routed to A. Mwangi</span>
+    <textarea rows="2" style="margin-top:8px" placeholder="Raise a question or flag a risk for the PM…">Need clarity on whether TZ launch date moved — affects my test plan.</textarea></div>
+  <div class="row" style="margin-top:14px"><span class="btn">Save draft</span><span class="btn pri">Submit to PM →</span><span class="muted" style="font-size:11px">PM acknowledges &amp; it rolls into the project report</span></div>`;
+
+/* ---- PM report → Head of PMs ---- */
+S.pmReport = ()=>`
+  <div class="crumbs" style="margin-bottom:6px"><a onclick="go('workspace','reports')">Mobile Banking</a> › <b>Weekly project report</b></div>
+  <h1>Weekly project report — Week 32</h1><p class="sub">Computed → confirm → send to Head of PMs</p>
+  ${annot("The report is <b>computed, narrated, confirmed</b> (docs/19 §7). Members’ acknowledged updates + board + checkpoints produce the draft; the PM edits the one narrative line and <b>sends to the Head of PMs</b>. RAG override needs a reason and expires in 7 days.")}
+  <div class="step"><div>Draft (computed)</div><div class="on">PM confirm</div><div>Sent to Head</div><div>In Head roll-up</div></div>
+  <div class="grid g4">
+    ${[["Computed RAG","<span class='rag r'></span> Red"],["Progress","62% (+2)"],["Blockers","2 open"],["Members reported","4 / 5"]].map(([l,v])=>`<div class="card"><div class="lbl">${l}</div><div style="font-size:15px;font-weight:800;margin-top:4px">${v}</div></div>`).join("")}
+  </div>
+  <div class="card" style="margin-top:12px"><b>Narrative (editable)</b>
+    <textarea rows="3" style="margin-top:8px">UAT slipped 6 days on a payments-reconciliation defect; vendor patch expected Thu. QA cleared 8 tasks. One member (S. Kim) on leave next week — QA capacity −40%.</textarea>
+    <div class="row" style="margin-top:8px"><span class="tag warn">RAG override: reason required</span><span class="muted" style="font-size:11px">expires in 7 days</span></div></div>
+  <div class="card" style="margin-top:12px"><b>Rolls up from</b>
+    <div class="muted" style="font-size:11.5px;margin-top:6px">4 member updates (D. Wanjiru, A. Otieno, J. Muli, P. Njoroge) · 1 unconfirmed (S. Kim) · checkpoints · RAID</div></div>
+  <div class="row" style="margin-top:14px"><span class="btn">Save</span><span class="btn">⤓ Export PDF</span><span class="btn pri">Confirm &amp; send to Head of PMs →</span></div>`;
+
+/* ---- Reports / export index (Head of PMs) ---- */
+S.reports = ()=>{
+  if(state.role==="member") return `
+    <h1>Reports</h1><p class="sub">Your reports across projects</p>
+    ${annot("Members only see their own weekly updates + queries — authored inside each project workspace. No cross-project report hub for them.")}
+    <div class="card" style="padding:0"><table><thead><tr><th>Project</th><th>Week</th><th>Status</th><th></th></tr></thead><tbody>
+    <tr class="clk" onclick="go('memberReport')"><td><b>Mobile Banking</b></td><td>32</td><td><span class="tag warn">Draft due Fri</span></td><td style="text-align:right"><span class="btn sm">Open</span></td></tr>
+    <tr><td><b>Fikra AI</b></td><td>32</td><td><span class="tag warn">Draft due Fri</span></td><td style="text-align:right"><span class="btn sm">Open</span></td></tr>
+    </tbody></table></div>`;
+  return `
+    <div class="between"><div><h1>Reports</h1><p class="sub">${state.role==="head"?"All-reports index · find &amp; export across everything":"Generate a report per project · export PDF · all reports editable"}</p></div>
+    ${state.role==="head"?'<div class="row"><span class="btn">⤓ Portfolio pack</span><span class="btn">⤓ Resource allocations</span></div>':''}</div>
+    ${annot(state.role==="head"?"The standalone reports centre is retired; this is a <b>thin index</b> the Head of PMs uses to find and <b>export</b> project / programme / portfolio reports + <b>resource allocations</b> (PDF). Authoring still happens in the workspaces.":"Notes: <b>list all projects with a “Generate report” button per row</b>; export to PDF; all reports editable. Generation opens the report inside that project's workspace.")}
+    <div class="row" style="margin-bottom:12px"><span class="tag info">Scope: Projects ▾</span><span class="tag">Portfolio: All ▾</span><span class="tag">Period: Week 32 ▾</span></div>
+    <div class="card" style="padding:0"><table>
+      <thead><tr><th>Project</th><th>Portfolio</th><th>Latest report</th><th>Status</th><th></th></tr></thead><tbody>
+      ${[["Mobile Banking","Swipe","Week 32","Sent to Head"],["Fikra AI","AI Initiatives","Week 32","Draft"],["ZED Card","ZED ERP","Week 32","Sent"]].map(([p,pf,w,s])=>`
+      <tr class="clk" onclick="go('pmReport')"><td><b>${p}</b></td><td class="muted">${pf}</td><td>${w}</td><td><span class="tag ${s==='Draft'?'warn':'ok'}">${s}</span></td>
+      <td style="text-align:right"><span class="btn sm">Generate</span> <span class="btn sm">⤓ PDF</span></td></tr>`).join("")}
+    </tbody></table></div>
+    ${state.role==="head"?'<h2>Export</h2><div class="grid g3"><div class="card"><b>Portfolio report pack</b><p class="muted" style="font-size:11.5px;margin:6px 0 10px">All portfolios · status + rollout</p><span class="btn sm">⤓ PDF</span></div><div class="card"><b>Resource allocations</b><p class="muted" style="font-size:11.5px;margin:6px 0 10px">People × projects · leave-aware</p><span class="btn sm">⤓ PDF</span></div><div class="card"><b>Programme reports</b><p class="muted" style="font-size:11.5px;margin:6px 0 10px">Per programme roll-up</p><span class="btn sm">⤓ PDF</span></div></div>':''}`;
+};
+
+S.people = ()=>`
+  <h1>Teams &amp; People</h1><p class="sub">Directory · teams · allocations</p>
+  ${annot("Shared page. PM/Head see allocation + leave; the Head can export resource allocations from here or from Reports.")}
+  <div class="card" style="padding:0"><table><thead><tr><th>Person</th><th>Role</th><th>Projects</th><th>Load</th><th>Availability</th></tr></thead><tbody>
+  ${[["A. Mwangi","Project Manager","3","—","Available"],["D. Wanjiru","Developer","2","80%","Available"],["S. Kim","QA Engineer","2","60%","On leave to 12 Aug"]].map(([n,r,p,l,a])=>`
+  <tr><td><b>${n}</b></td><td><span class="tag">${r}</span></td><td>${p}</td><td>${l}</td><td>${a.includes('leave')?'<span class="tag warn">'+a+'</span>':'<span class="tag ok">'+a+'</span>'}</td></tr>`).join("")}
+  </tbody></table></div>`;
+
+/* ---- Creation wizards (docs/26 §5): shared chrome — rail · smart defaults · inline
+        validation · draft autosave · Review · "create another" ---- */
+
+const PF_STEPS = ["Identity","Lens","Markets","Governance","Review"];
+S.newPortfolio = ()=>{
+  const s = WIZ.pf;
+  let body = "";
+  if(s===1) body = `
+    <div class="card"><b>Who is this portfolio, and who answers for it?</b>
+      <div class="lbl" style="margin-top:12px">Name</div><input class="inp" style="margin:5px 0 2px" value="Open Banking" />
+      <div class="muted" style="font-size:11px">Shown on cards, reports and the exec dashboard.</div>
+      <div class="grid g2" style="margin-top:12px">
+        <div><div class="lbl">Owner</div><input class="inp" style="margin-top:5px" value="P. Kamau" /></div>
+        <div><div class="lbl">Category</div><div style="margin-top:7px"><span class="chip on">Approved</span><span class="chip">Exploring</span><span class="chip">Shelved</span></div></div>
+      </div>
+      <div class="err">Name is required · owner must be a Head or Executive</div>
+    </div>
+    ${annot("One question per step (docs/26 §5): identity first. Category is the business pipeline axis (Approved / Exploring / Shelved) — delivery status never lives here.")}`;
+  if(s===2) body = `
+    <div class="card"><b>How does this portfolio want to be looked at?</b>
+      <div class="grid g2" style="margin-top:12px">
+        <div class="opt"><div class="t">Pipeline</div><div class="d">Stage-grouped list — best for build portfolios moving through gates.</div>
+          <div style="margin-top:10px">${bars(62)}<div style="height:6px"></div>${bars(38)}</div></div>
+        <div class="opt on"><div class="t">Rollout ✓</div><div class="d">Project × market heat map — best for products going live across subsidiaries.</div>
+          <div class="row" style="margin-top:10px;gap:4px">${["g","g","a","r"].map(x=>`<span class="hc" style="width:34px;height:22px;border-radius:5px;background:var(${x==='g'?'--ok':x==='a'?'--warn':'--bad'})"></span>`).join("")}</div></div>
+      </div>
+    </div>
+    ${annot("<b>This one choice</b> sets the portfolio's default view and whether the market heat map shows (docs/26 §5.1). Choosing <b>Pipeline</b> skips the Markets step entirely — the rail greys it out.")}`;
+  if(s===3) body = `
+    <div class="card"><b>Which subsidiaries does this portfolio roll out to?</b>
+      <div style="margin-top:12px">${["KE","TZ","UG","RW","BI","SS","DRC"].map((m,i)=>`<span class="chip ${i<3?'on':''}">${m}</span>`).join("")}</div>
+      <div class="muted" style="font-size:11px;margin-top:6px">Projects created inside inherit these — editable per project.</div>
+    </div>
+    ${annot("Rollout-only step. Markets are <b>OrgUnit.kind=Market</b> rows seeded at org setup (docs/26 §4.1) — this picker never invents new ones.")}`;
+  if(s===4) body = `
+    <div class="card"><b>Who governs it, and who gets its reports?</b>
+      <div class="lbl" style="margin-top:12px">May edit stage / priority</div>
+      <div style="margin-top:7px"><span class="chip on">Head of PMs</span><span class="chip on">Executive sponsor</span><span class="chip">Portfolio PMs</span></div>
+      <div class="lbl" style="margin-top:12px">Report recipients</div>
+      <div style="margin-top:7px"><span class="chip on">Head of PMs (weekly)</span><span class="chip on">Exec digest (Friday)</span><span class="chip">Custom…</span></div>
+    </div>
+    ${annot("Defaults come from roles — an empty-headed portfolio is impossible. Recipients feed the §7 reporting chain; nothing here creates a new permission system.")}`;
+  if(s===5) body = `
+    <div class="card"><b>Review — create when it reads right</b>
+      <table style="margin-top:10px"><tbody>
+        ${[["Name","Open Banking"],["Owner","P. Kamau"],["Category","Approved"],["Lens","Rollout (heat map on)"],["Markets","KE · TZ · UG"],["Governance","Head + sponsor edit · Head weekly + exec digest"]].map(([l,v])=>`<tr><td class="lbl" style="width:130px">${l}</td><td><b>${v}</b></td></tr>`).join("")}
+      </tbody></table>
+      <div class="okrow">✓ Everything can be changed later from the portfolio's settings — creating is not a commitment ceremony.</div>
+    </div>
+    ${annot("The empty portfolio lands on an <b>“add your first programme / project”</b> state (docs/26 §5.1) — never a blank page.")}`;
+  return `
+    <div class="crumbs" style="margin-bottom:6px"><a onclick="go('portfolio')">Portfolio</a> › <b>New portfolio</b></div>
+    <h1>New portfolio</h1><p class="sub">Exec / Head only · wizard, not a wall of fields</p>
+    <div class="wiz">${rail("pf",PF_STEPS)}<div>${body}${wfoot("pf",s,5,"Create portfolio","portfolio")}</div></div>`;
+};
+
+/* Programme wizard is deliberately light (docs/26 §5.2): it exists to group. */
+S.newProgramme = ()=>`
+  <div class="crumbs" style="margin-bottom:6px"><a onclick="go('programme')">Programme</a> › <b>New programme</b></div>
+  <h1>New programme</h1><p class="sub">Light by design — a grouping, not a second project form</p>
+  ${annot("A programme <b>inherits the portfolio's markets and report recipients</b> unless overridden (docs/26 §5.2). If you're reaching for more fields here, the thing you want is a project.")}
+  <div class="card" style="max-width:560px">
+    <div class="lbl">Name</div><input class="inp" style="margin:5px 0 12px" value="Core Banking" />
+    <div class="grid g2">
+      <div><div class="lbl">Parent portfolio</div><input class="inp" style="margin-top:5px" value="ZED ERP" /></div>
+      <div><div class="lbl">Owner</div><input class="inp" style="margin-top:5px" value="A. Mwangi" /></div>
+    </div>
+    <div class="lbl" style="margin-top:12px">Category</div>
+    <div style="margin-top:7px"><span class="chip on">Approved</span><span class="chip">Exploring</span><span class="chip">Shelved</span></div>
+    <div class="row" style="margin-top:14px"><span class="btn pri" onclick="go('programme')">Create programme</span><span class="btn" onclick="go('programme')">Cancel</span></div>
+  </div>`;
+
+const PJ_STEPS = ["Basics","Type & delivery","Markets","Team","Docs & requirements","Integration","Review"];
+S.newProject = ()=>{
+  const s = WIZ.pj;
+  let body = "";
+  if(s===1) body = `
+    <div class="card"><b>What is it, and where does it live?</b>
+      <div class="grid g2" style="margin-top:12px">
+        <div><div class="lbl">Project name</div><input class="inp" style="margin-top:5px" value="Mobile Banking v2" /></div>
+        <div><div class="lbl">Code <span style="text-transform:none;letter-spacing:0">· auto-suggested</span></div><input class="inp" style="margin-top:5px" value="RBS-MB2" /></div>
+      </div>
+      <div class="grid g2" style="margin-top:12px">
+        <div><div class="lbl">Portfolio (required)</div><input class="inp" style="margin-top:5px" value="Swipe Agent Banking" /></div>
+        <div><div class="lbl">Programme (optional)</div><input class="inp" style="margin-top:5px" value="Payments" /></div>
+      </div>
+      <div class="err">Every project belongs to a portfolio — “Unassigned” exists only for backfill (docs/18 §0)</div>
+    </div>`;
+  if(s===2) body = `
+    <div class="card"><b>What kind of delivery is this?</b>
+      <div class="grid g2" style="margin-top:12px">
+        <div class="opt on"><div class="t">Product build ✓</div><div class="d">Checkpoint template <b>BRD → Prototype → MVP1 → SIT → UAT → Go-Live</b>. The Delivery tab's gates come from this.</div></div>
+        <div class="opt"><div class="t">Market rollout</div><div class="d">Per-market gate track — for products already built, going live across subsidiaries.</div></div>
+      </div>
+      <div class="muted" style="font-size:11px;margin-top:10px">Pipeline stage defaults to <b>Exploring</b> — promotion to Approved is a logged decision, not a form field.</div>
+    </div>
+    ${annot("The template choice <b>decides the Delivery tab</b> (docs/26 §5.3). Templates ship seeded (§4.1) and stay editable in admin — the wizard never hardcodes gates.")}`;
+  if(s===3) body = `
+    <div class="card"><b>Where will it go live?</b>
+      <div style="margin-top:12px">${["KE","TZ","UG","RW","BI","SS","DRC"].map((m,i)=>`<span class="chip ${i<3?'on':''}">${m}</span>`).join("")}</div>
+      <div class="muted" style="font-size:11px;margin-top:6px">Pre-filled from the portfolio — trim or extend per project.</div>
+    </div>`;
+  if(s===4) body = `
+    <div class="between" style="margin-bottom:10px"><b>Who builds it?</b>
+      <span class="tag info">Team template: Standard build ▾</span></div>
+    ${annot("A team template pre-suggests the shape (<b>PM · Tech Lead · 2 Devs · QA · Implementor</b>) so staffing is one click, then adjusted (docs/26 §4.3). Every row is a real assignment: <b>role hat + allocation % + dates</b>, capacity- and leave-checked live.")}
+    <div class="card" style="padding:0"><table>
+      <thead><tr><th>Person</th><th>Role hat</th><th>Allocation</th><th>Dates</th><th>Capacity check</th></tr></thead><tbody>
+      ${[["A. Mwangi","Project Manager","20%","Aug–Nov","ok·62% loaded"],["D. Wanjiru","Developer","60%","Aug–Nov","ok·74% loaded"],["J. Muli","Developer","40%","Aug–Nov","warn·96% — over-allocated"],["S. Kim","QA Engineer","60%","Sep–Nov","warn·on leave to 12 Aug"],["P. Njoroge","Implementor","50%","Oct–Nov","ok·55% loaded"]].map(([n,r,a,d,c])=>{const[t,m]=c.split("·");return `
+      <tr><td><b>${n}</b></td><td><span class="tag">${r}</span></td><td>${a}</td><td class="muted">${d}</td><td><span class="tag ${t}">${m}</span></td></tr>`;}).join("")}
+    </tbody></table></div>
+    <div class="warnrow">⚠ J. Muli is at 96% next month. Suggested alternates (same role, lowest utilisation): <b>K. Baraka (41%)</b> · <b>T. Achieng (48%)</b> — swap in one click.</div>`;
+  if(s===5) body = `
+    <div class="card"><b>Anything to read before the build?</b>
+      <div class="ph" style="height:70px;margin-top:12px">Drop BRD / URS here — or skip; the register accepts documents any time</div>
+      <div class="okrow">Q can read an attached BRD and propose <b>candidate requirements, milestones and tasks</b> — every candidate needs a human accept, nothing is auto-applied (docs/26 §5.3, §9).</div>
+    </div>`;
+  if(s===6) body = `
+    <div class="card"><b>Where does the truth come from?</b>
+      <div class="grid g2" style="margin-top:12px">
+        <div class="opt on"><div class="t">YouTrack project ✓</div><div class="d">Board mirrors <b>MB-v2</b> read-only. Without this the Board tab shows an honest “not connected” state — never an empty lie.</div></div>
+        <div class="opt"><div class="t">Repository (optional)</div><div class="d">Commit grammar (#done / #blocked) links commits to mirrored tasks.</div></div>
+      </div>
+      <div class="muted" style="font-size:11px;margin-top:10px">Both flag-gated, both skippable — connectable later from workspace → Integrations.</div>
+    </div>`;
+  if(s===7) body = `
+    <div class="card"><b>Review — the whole project on one card</b>
+      <table style="margin-top:10px"><tbody>
+        ${[["Project","Mobile Banking v2 · RBS-MB2"],["Home","Swipe Agent Banking › Payments"],["Delivery","Product build (BRD→Go-Live) · stage Exploring"],["Markets","KE · TZ · UG"],["Team","5 people · 1 over-allocation warning accepted"],["Docs","BRD v1 attached · 12 Q candidates awaiting review"],["Integrations","YouTrack MB-v2 · repo skipped"]].map(([l,v])=>`<tr><td class="lbl" style="width:120px">${l}</td><td><b>${v}</b></td></tr>`).join("")}
+      </tbody></table>
+    </div>
+    ${annot("Draft-save throughout means a half-planned project is never lost (docs/26 §5.3). Creating lands in the workspace Overview with the checklist of what's still unset.")}`;
+  return `
+    <div class="crumbs" style="margin-bottom:6px"><a onclick="go('projects')">Projects</a> › <b>New project</b></div>
+    <h1>New project</h1><p class="sub">The centrepiece wizard — seven questions, one per screen</p>
+    <div class="wiz">${rail("pj",PJ_STEPS)}<div>${body}${wfoot("pj",s,7,"Create project","projects")}</div></div>`;
+};
+
+/* ---- Assignment & staffing (docs/26 §4.3): the missing middle ---- */
+S.assign = ()=>`
+  <div class="crumbs" style="margin-bottom:6px"><a onclick="go('workspace','team')">Mobile Banking · Team</a> › <b>Add to team</b></div>
+  <h1>Add to team — Mobile Banking</h1><p class="sub">An assignment is person + role hat + allocation + dates — never a bare membership row</p>
+  ${annot("The assign panel is <b>capacity-aware</b> (docs/26 §4.3): each candidate shows current load and leave from <code>Absence</code>; over-allocation and leave-window collisions warn before save, and alternates are suggested. Bulk mode adds several people at once — same checks per row.")}
+  <div class="grid g2">
+    <div class="card"><b>1 · Pick people</b> <span class="tag">bulk: on</span>
+      <table style="margin-top:8px"><tbody>
+      ${[["K. Baraka","Developer","41%","",1],["T. Achieng","Developer","48%","",1],["J. Muli","Developer","96%","over-allocated",0],["S. Kim","QA Engineer","60%","on leave to 12 Aug",0]].map(([n,r,l,w,sel])=>`
+      <tr><td style="width:20px">${sel?"☑":"☐"}</td><td><b>${n}</b><div class="muted" style="font-size:10.5px">${r}</div></td><td>${bars(parseInt(l))}<div class="muted" style="font-size:10px;margin-top:2px">${l} loaded</div></td><td>${w?`<span class="tag warn">${w}</span>`:'<span class="tag ok">available</span>'}</td></tr>`).join("")}
+      </tbody></table></div>
+    <div class="card"><b>2 · Shape the assignment</b>
+      <div class="lbl" style="margin-top:10px">Role hat <span style="text-transform:none;letter-spacing:0">· drives board lens, QA scope, report routing</span></div>
+      <div style="margin-top:7px"><span class="chip on">Developer</span><span class="chip">QA Engineer</span><span class="chip">Implementor</span><span class="chip">Tech Lead</span></div>
+      <div class="grid g2" style="margin-top:12px">
+        <div><div class="lbl">Allocation</div><input class="inp" style="margin-top:5px" value="60%" /></div>
+        <div><div class="lbl">Dates</div><input class="inp" style="margin-top:5px" value="18 Aug → 30 Nov" /></div>
+      </div>
+      <div class="warnrow">⚠ T. Achieng has approved leave 2–6 Sep inside this window — the nudger will skip them; the PM sees it on team load.</div>
+      <div class="row" style="margin-top:14px"><span class="btn pri" onclick="go('workspace','team')">Assign 2 people</span><span class="btn" onclick="go('resourceReq')">Can't find capacity? Raise a request →</span></div>
+    </div>
+  </div>`;
+
+/* ---- Resource requests (docs/26 §4.3): staffing out of Teams chats ---- */
+S.resourceReq = ()=>{
+  const head = state.role==="head";
+  return `
+  <h1>Resource requests</h1><p class="sub">${head?"Fill requests from the capacity view — you own the bench":"Ask for capacity; the Head fills it from the bench"}</p>
+  ${annot("A PM asks for a <b>shape</b> (“1 QA · 60% · Aug–Sep”), not a person. The Head fills it from a capacity view — staffing becomes a tracked flow with an audit trail instead of a side-channel chat (docs/26 §4.3).")}
+  ${head?"":`<div class="card" style="max-width:640px;margin-bottom:14px"><b>New request — Mobile Banking</b>
+    <div class="grid g3" style="margin-top:10px">
+      <div><div class="lbl">Role</div><div style="margin-top:7px"><span class="chip on">QA Engineer</span></div></div>
+      <div><div class="lbl">Allocation</div><input class="inp" style="margin-top:5px" value="60%" /></div>
+      <div><div class="lbl">Window</div><input class="inp" style="margin-top:5px" value="Aug → Sep" /></div>
+    </div>
+    <div class="lbl" style="margin-top:10px">Why</div><textarea rows="2" style="margin-top:5px">S. Kim on leave to 12 Aug; UAT regression pack needs a second QA.</textarea>
+    <div class="row" style="margin-top:12px"><span class="btn pri">Send to Head of PMs</span></div></div>`}
+  <div class="card" style="padding:0"><table>
+    <thead><tr><th>Request</th><th>Project</th><th>Raised by</th><th>Status</th><th></th></tr></thead><tbody>
+    ${[["1 QA · 60% · Aug–Sep","Mobile Banking","A. Mwangi","Open"],["1 Impl · 50% · Sep","ZED Card","A. Mwangi","Filled — P. Njoroge"],["1 Dev · 40% · Aug","Fikra AI","P. Kamau","Declined — no bench"]].map(([q,p,by,st])=>`
+    <tr><td><b>${q}</b></td><td>${p}</td><td class="muted">${by}</td><td><span class="tag ${st.startsWith('Open')?'warn':st.startsWith('Filled')?'ok':'bad'}">${st}</span></td>
+    <td style="text-align:right">${head&&st==='Open'?'<span class="btn sm pri">Fill from bench →</span>':'<span class="btn sm">View</span>'}</td></tr>`).join("")}
+  </tbody></table></div>
+  ${head?`<h2>Bench — QA Engineers in the window</h2><div class="card" style="padding:0"><table><tbody>
+    ${[["N. Wafula","38% loaded","no leave in window"],["R. Odhiambo","55% loaded","leave 28–29 Aug"]].map(([n,l,lv])=>`
+    <tr><td><b>${n}</b></td><td>${l}</td><td class="muted">${lv}</td><td style="text-align:right"><span class="btn sm">Assign →</span></td></tr>`).join("")}
+  </tbody></table></div>`:""}`;
+};
+
+/* ---------- shared heatmap ---------- */
+function heatmap(){
+  const cols=["KE","TZ","UG","RW","BI","SS","DRC"];
+  const rows=[["POS",["g","g","a","r","o","o","o"]],["USSD",["g","a","a","o","o","o","o"]],["Agent Portal",["g","g","g","a","r","o","o"]],["Mobile App",["a","a","o","o","o","o","o"]]];
+  const c={g:"var(--ok)",a:"var(--warn)",r:"var(--bad)",o:"var(--ink5)"};
+  const t={g:"Live",a:"WIP",r:"Blocked",o:"—"};
+  return `<div class="heat">
+    <div class="hr"><div></div>${cols.map(x=>`<div class="hh">${x}</div>`).join("")}</div>
+    ${rows.map(([r,cells])=>`<div class="hr"><div class="rl">${r}</div>${cells.map(x=>`<div class="hc" style="background:${c[x]}">${t[x]}</div>`).join("")}</div>`).join("")}
+  </div>
+  <div class="legend"><span><span class="rag g"></span> Live</span><span><span class="rag a"></span> In progress</span><span><span class="rag r"></span> Blocked</span><span style="color:var(--ink5)">— not started</span> · click a cell → that project-market's checkpoints + check-in</div>`;
+}
+
+/* ---------- chrome ---------- */
+function render(){
+  // roles
+  el("roles").innerHTML = ROLES.map(([k,l])=>`<button class="${state.role===k?'on':''}" onclick="setRole('${k}')">${l}</button>`).join("");
+  // nav (member gets a slimmer, dimmed nav to show scope)
+  const memberHidden = new Set(["portfolio","programme","people"]);
+  el("nav").innerHTML = `<div class="grp">Workspace</div>` + NAV.map(([k,l])=>{
+    const dim = state.role==="member" && memberHidden.has(k);
+    const on = state.screen===k || (k==="projects" && ["workspace"].includes(state.screen)) || (k==="portfolio" && ["portfolioDetail","newPortfolio"].includes(state.screen)) || (k==="reports" && ["pmReport","memberReport"].includes(state.screen));
+    return `<a class="${on?'on':''} ${dim?'dim':''}" onclick="go('${k}')"><span class="ic"></span>${l}</a>`;
+  }).join("") +
+  ((state.role==="exec"||state.role==="head")?`<div class="grp">Create</div><a class="${state.screen==='newPortfolio'?'on':''}" onclick="go('newPortfolio')"><span class="ic"></span>New portfolio</a><a class="${state.screen==='newProgramme'?'on':''}" onclick="go('newProgramme')"><span class="ic"></span>New programme</a><a class="${state.screen==='newProject'?'on':''}" onclick="go('newProject')"><span class="ic"></span>New project</a>`:"") +
+  ((state.role==="pm"||state.role==="head")?`<div class="grp">Staffing</div><a class="${state.screen==='resourceReq'?'on':''}" onclick="go('resourceReq')"><span class="ic"></span>Resource requests</a>`:"");
+  // crumbs
+  el("crumbs").innerHTML = `QUBIT · <b>${Object.fromEntries(NAV)[state.screen]||({workspace:'Project workspace',portfolioDetail:'Portfolio',pmReport:'Report',memberReport:'My update',newPortfolio:'New portfolio',newProgramme:'New programme',newProject:'New project',assign:'Add to team',resourceReq:'Resource requests'})[state.screen]||state.screen}</b>`;
+  // body
+  const fn = S[state.screen] || S.dashboard;
+  el("main").innerHTML = fn();
+}
+render();
+</script>
+</body>
+</html>

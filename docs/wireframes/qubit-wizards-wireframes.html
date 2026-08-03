@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QUBIT — Onboarding, Creation & Assignment Wizards</title>
+<style>
+  :root{
+    --ink:#1f2328;--ink2:#3a4149;--ink3:#697079;--ink4:#98a0a8;--ink5:#c2c8ce;
+    --line:#d7dce1;--line2:#e7ebee;--paper:#fff;--wash:#f5f7f8;--wash2:#eef1f3;
+    --brand:#ED1C24;--brandwash:#fdecec;--annot:#8250df;--annotwash:#f3eefc;
+    --ok:#1a7f43;--okw:#e7f4ec;--warn:#9a6700;--warnw:#fbf3e0;--bad:#b42318;--badw:#fdeceb;
+    --r:10px;--mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;--sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--wash);font-size:13.5px;line-height:1.45}
+  .top{display:flex;align-items:center;gap:14px;padding:12px 22px;background:var(--paper);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+  .logo{display:flex;align-items:center;gap:8px;font-weight:800;letter-spacing:-.4px;font-size:16px}
+  .logo .dot{width:16px;height:16px;border-radius:5px;background:var(--brand)}
+  .spacer{flex:1}
+  .switch{display:flex;gap:3px;background:var(--wash2);padding:3px;border-radius:9px;flex-wrap:wrap}
+  .switch button{border:0;background:transparent;font:inherit;font-size:11.5px;font-weight:700;color:var(--ink3);padding:6px 11px;border-radius:6px;cursor:pointer}
+  .switch button.on{background:var(--paper);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  main{padding:22px 26px 80px;max-width:1080px;margin:0 auto}
+  h1{font-size:21px;letter-spacing:-.5px;margin:0 0 3px}
+  .sub{color:var(--ink3);font-size:12.5px;margin:0 0 16px}
+  h3{font-size:14px;margin:0 0 12px}
+  .annot{border-left:3px solid var(--annot);background:var(--annotwash);border-radius:0 8px 8px 0;padding:9px 12px;font-size:11.5px;color:#54308c;margin:0 0 16px}
+  .annot b{color:var(--annot)}
+  .annot::before{content:"◆ design note — ";font-weight:800;color:var(--annot)}
+  /* wizard chrome */
+  .wiz{display:grid;grid-template-columns:210px 1fr;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--paper)}
+  .wsteps{background:var(--wash);border-right:1px solid var(--line);padding:16px 12px}
+  .wstep{display:flex;gap:10px;align-items:center;padding:9px 8px;font-size:12px;color:var(--ink3);border-radius:8px;font-weight:600}
+  .wstep .n{width:20px;height:20px;flex:none;border-radius:50%;border:1.5px solid var(--ink4);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800}
+  .wstep.on{color:var(--brand)} .wstep.on .n{border-color:var(--brand);background:var(--brandwash);color:var(--brand)}
+  .wstep.done{color:var(--ink2)} .wstep.done .n{border-color:var(--ok);background:var(--ok);color:#fff}
+  .wbody{padding:22px 24px;min-height:380px}
+  .wfoot{grid-column:1/3;display:flex;justify-content:space-between;align-items:center;padding:13px 24px;border-top:1px solid var(--line);background:var(--paper)}
+  .stepttl{font-size:15px;font-weight:800;margin:0 0 3px}
+  .stephint{color:var(--ink3);font-size:12px;margin:0 0 16px}
+  /* fields */
+  .lbl{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--ink4);font-weight:700;margin-bottom:5px;display:block}
+  .inp{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:inherit;font-size:12.5px;background:var(--paper)}
+  textarea.inp{resize:vertical}
+  .fld{margin-bottom:15px}
+  .grid{display:grid;gap:12px}.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}
+  .choices{display:grid;gap:10px}
+  .choice{border:1.5px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;display:flex;gap:10px;align-items:flex-start}
+  .choice.on{border-color:var(--brand);background:var(--brandwash)}
+  .choice .rad{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--ink4);flex:none;margin-top:1px}
+  .choice.on .rad{border-color:var(--brand);background:radial-gradient(circle,var(--brand) 42%,transparent 46%)}
+  .choice b{font-size:13px}.choice .d{font-size:11.5px;color:var(--ink3);margin-top:2px}
+  .chips{display:flex;gap:7px;flex-wrap:wrap}
+  .chip{border:1.5px solid var(--line);border-radius:20px;padding:5px 11px;font-size:11.5px;font-weight:700;color:var(--ink3);cursor:pointer;background:var(--paper)}
+  .chip.on{border-color:var(--brand);background:var(--brandwash);color:var(--brand)}
+  .btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:700;color:var(--ink2);cursor:pointer}
+  .btn.pri{background:var(--brand);border-color:var(--brand);color:#fff}
+  .btn.sm{padding:5px 9px;font-size:11px}
+  .btn.gho{border-color:transparent;background:transparent}
+  .btn[disabled]{opacity:.4;cursor:not-allowed}
+  .tag{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;border:1px solid var(--line);color:var(--ink3);background:var(--wash)}
+  .tag.ok{background:var(--okw);color:var(--ok);border-color:transparent}.tag.warn{background:var(--warnw);color:var(--warn);border-color:transparent}.tag.bad{background:var(--badw);color:var(--bad);border-color:transparent}.tag.info{background:var(--annotwash);color:var(--annot);border-color:transparent}
+  .rev{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .rev .r{display:flex;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--line2);font-size:12.5px}
+  .rev .r:last-child{border-bottom:0}.rev .r span:first-child{color:var(--ink4)}
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:var(--r);padding:14px}
+  .bar{height:7px;border-radius:20px;background:var(--wash2);overflow:hidden}.bar>i{display:block;height:100%}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:1px;color:var(--ink4);font-weight:700;padding:8px 10px;border-bottom:1px solid var(--line)}
+  td{padding:9px 10px;border-bottom:1px solid var(--line2)}
+  .banner{display:flex;gap:10px;align-items:center;background:var(--warnw);border:1px solid #f0dca6;border-radius:8px;padding:9px 12px;font-size:12px;color:#6b4a00;margin-top:10px}
+  .done{text-align:center;padding:40px 20px}
+  .done .ck{width:52px;height:52px;border-radius:50%;background:var(--okw);color:var(--ok);font-size:26px;display:flex;align-items:center;justify-content:center;margin:0 auto 14px}
+  .muted{color:var(--ink3)} .mini{font-size:11px;color:var(--ink4)}
+  .swim{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .lane{background:var(--wash);border:1px solid var(--line);border-radius:10px;padding:9px;min-height:220px}
+  .lane .h{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--ink3);margin-bottom:8px;display:flex;justify-content:space-between}
+  .idea{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:9px;margin-bottom:8px;font-size:12px}
+  .idea .m{font-size:10.5px;color:var(--ink4);margin-top:5px}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="logo"><span class="dot"></span> QUBIT</div>
+  <span class="mini">Wireframe · onboarding &amp; creation flows · docs/26</span>
+  <div class="spacer"></div>
+  <div class="switch" id="switch"></div>
+</div>
+<main id="main"></main>
+
+<script>
+const WIZES = [
+  ["org","Org setup"],["portfolio","Portfolio"],["programme","Programme"],
+  ["project","Project"],["assign","Assign people"],["idea","Idea intake"]
+];
+const state = { wiz:"project", step:0, done:false };
+
+/* ------- step definitions per wizard ------- */
+const STEPS = {
+  org:["Brand","Markets & depts","Checkpoint templates","Import people","First portfolio"],
+  portfolio:["Identity","Lens","Markets","Governance","Review"],
+  programme:["Details"],
+  project:["Basics","Type & delivery","Markets","Team","Docs & requirements","Integration","Review"],
+};
+
+function sw(w){ state.wiz=w; state.step=0; state.done=false; render(); }
+function next(){ const n=(STEPS[state.wiz]||[]).length; if(state.step<n-1){state.step++;} else {state.done=true;} render(); }
+function back(){ if(state.step>0){state.step--; state.done=false; render();} }
+function goStep(i){ state.step=i; state.done=false; render(); }
+function reset(){ state.step=0; state.done=false; render(); }
+
+/* ------- field helpers ------- */
+const fld=(l,inner)=>`<div class="fld"><label class="lbl">${l}</label>${inner}</div>`;
+const inp=(v,ph)=>`<input class="inp" value="${v||''}" placeholder="${ph||''}" />`;
+const ta=(v,ph,rows)=>`<textarea class="inp" rows="${rows||3}" placeholder="${ph||''}">${v||''}</textarea>`;
+const chips=(arr,on)=>`<div class="chips">${arr.map(x=>`<span class="chip ${on&&on.includes(x)?'on':''}">${x}</span>`).join("")}</div>`;
+function choice(items){ // items: [ {on,title,desc} ]
+  return `<div class="choices">${items.map(i=>`<div class="choice ${i.on?'on':''}"><span class="rad"></span><span><b>${i.title}</b><span class="d">${i.desc}</span></span></div>`).join("")}</div>`;
+}
+const rev=(rows)=>`<div class="rev">${rows.map(([a,b])=>`<div class="r"><span>${a}</span><span><b>${b}</b></span></div>`).join("")}</div>`;
+
+/* ------- per-wizard step bodies ------- */
+function stepBody(){
+  const w=state.wiz, s=state.step;
+  if(w==="portfolio") return PORTFOLIO(s);
+  if(w==="programme") return PROGRAMME(s);
+  if(w==="project") return PROJECT(s);
+  if(w==="org") return ORG(s);
+  return "";
+}
+
+function head(t,h){ return `<div class="stepttl">${t}</div><p class="stephint">${h}</p>`; }
+
+/* --- Portfolio wizard --- */
+function PORTFOLIO(s){
+  if(s===0) return head("Identity","What is this portfolio, and who owns it?")+
+    fld("Portfolio name", inp("Open Banking"))+
+    `<div class="grid g2">${fld("Owner", inp("P. Kamau"))}${fld("Category", chips(["Approved","Exploring","Shelved"],["Exploring"]))}</div>`;
+  if(s===1) return head("Lens","How should this portfolio be viewed by default? One choice decides the whole layout.")+
+    choice([
+      {on:false,title:"Pipeline",desc:"Stage-grouped table (Exploring / Evaluating / Approved). Best for portfolios of distinct initiatives, e.g. AI Initiatives."},
+      {on:true,title:"Rollout",desc:"Project × market heat map. Best for portfolios rolled out across subsidiaries, e.g. ZED ERP, Swipe."},
+    ])+
+    `<div class="annot">The lens sets the default portfolio view and whether the <b>market rollout heat map</b> appears. Both lenses stay available on drill-down.</div>`;
+  if(s===2) return head("Markets","Rollout lens → which subsidiaries does this portfolio reach?")+
+    chips(["KE","TZ","UG","RW","BI","SS","DRC"],["KE","TZ","UG"])+
+    `<div class="annot">Only shown for the <b>Rollout</b> lens. Markets are <code>OrgUnit.kind=Market</code>; projects inherit these as defaults.</div>`;
+  if(s===3) return head("Governance","Who can change governance fields, and who gets the reports?")+
+    fld("Can edit stage / priority", chips(["Head of PMs","Executive","Portfolio owner"],["Head of PMs","Portfolio owner"]))+
+    fld("Weekly report recipients", chips(["Head of PMs","Executive team","Portfolio owner"],["Head of PMs","Executive team"]));
+  return head("Review","Confirm and create. You can edit any of this later.")+
+    rev([["Name","Open Banking"],["Owner","P. Kamau"],["Category","Exploring"],["Lens","Rollout"],["Markets","KE, TZ, UG"],["Recipients","Head of PMs, Exec team"]])+
+    `<div class="annot">On create, the portfolio opens on an empty state prompting <b>“add your first programme or project.”</b></div>`;
+}
+
+/* --- Programme wizard --- */
+function PROGRAMME(){
+  return head("Programme details","A programme groups projects inside a portfolio.")+
+    fld("Programme name", inp("Payments"))+
+    `<div class="grid g2">${fld("Parent portfolio", inp("Swipe Agent Banking"))}${fld("Owner", inp("A. Mwangi"))}</div>`+
+    fld("Category", chips(["Approved","Exploring","Shelved"],["Approved"]))+
+    `<div class="annot">Inherits the portfolio’s markets + report recipients unless overridden. Roll-up math is the same, one level up.</div>`;
+}
+
+/* --- Project wizard (centerpiece) --- */
+function PROJECT(s){
+  if(s===0) return head("Basics","Name it and place it. Every project belongs to a portfolio.")+
+    `<div class="grid g2">${fld("Project name", inp("Mobile Banking v2"))}${fld("Code", inp("MB2","auto-suggested"))}</div>`+
+    `<div class="grid g2">${fld("Portfolio (required)", inp("Swipe Agent Banking"))}${fld("Programme (optional)", inp("Payments"))}</div>`;
+  if(s===1) return head("Type & delivery","The project type picks the checkpoint template — the gates its Delivery tab tracks.")+
+    choice([
+      {on:true,title:"Product build",desc:"BRD → Prototype → MVP1 → SIT → UAT → Go-Live"},
+      {on:false,title:"Market rollout",desc:"Business Case → Contract → Solution Build → Integrations → Testing → GTM/Pilot → Rollout"},
+      {on:false,title:"Status-only track",desc:"A single ‘Rollout’ checkpoint — for light tracking"},
+    ])+
+    fld("Starting pipeline stage", chips(["Exploring","Evaluating","Approved"],["Exploring"]));
+  if(s===2) return head("Markets","Which subsidiaries does this project roll out to?")+
+    chips(["KE","TZ","UG","RW","BI","SS","DRC"],["KE","TZ","UG"])+
+    `<div class="annot">Pre-filled from the portfolio; editable here. Each becomes a <b>market track</b> with its own checkpoints + weekly check-in.</div>`;
+  if(s===3) return head("Team","Staff it now — apply a template or add people. Capacity- and leave-aware.")+
+    `<div class="banner">Team template <b>“Product build”</b> applied: PM, Tech Lead, 2 Developers, QA, Implementor. Adjust below.</div>`+
+    `<div class="card" style="padding:0;margin-top:10px"><table><thead><tr><th>Person</th><th>Role hat</th><th>Allocation</th><th>Dates</th><th>Availability</th></tr></thead><tbody>
+      ${[["A. Mwangi","Project Manager","—","Aug–Dec","ok:Available"],["D. Wanjiru","Developer","80%","Aug–Nov","ok:Available"],["S. Kim","QA Engineer","60%","Aug–Oct","warn:On leave to 12 Aug"],["+ vacancy","Implementor","50%","—","info:Resource request"]].map(r=>{const[n,ro,al,dt,av]=r;const[t,txt]=av.split(":");return `<tr><td><b>${n}</b></td><td><span class="tag">${ro}</span></td><td>${al}</td><td class="muted">${dt}</td><td><span class="tag ${t}">${txt}</span></td></tr>`;}).join("")}
+    </tbody></table></div>`+
+    `<div class="annot">Over-allocation and assigning into a <b>leave window</b> warn inline; QUBIT suggests alternates (same role, lowest load). Unfilled seats become a <b>resource request</b> to the Head/resource owner (docs/26 §4.3).</div>`;
+  if(s===4) return head("Documents & requirements","Attach a BRD/URS now — optional, but it unlocks Q ingest.")+
+    `<div class="card"><b>Attach documents</b><div style="margin-top:8px" class="chips"><span class="tag">BRD — Mobile Banking v2.docx ✓</span><span class="tag">URS — Payments.pdf ✓</span><span class="btn sm">+ Add</span></div></div>`+
+    `<div class="card" style="margin-top:10px;border-color:var(--annot)"><b>✨ Q ingest (human-gated)</b><p class="mini" style="margin:6px 0 8px">Q read your BRD and proposes <b>7 requirements</b>, <b>4 milestones</b>, <b>12 candidate tasks</b>. Nothing is applied until you approve.</p><span class="btn sm">Review Q’s suggestions →</span></div>`+
+    `<div class="annot">Ingest never auto-applies. Approved requirements keep <b>source anchors</b> (doc + section) for traceability → tasks → QA coverage.</div>`;
+  if(s===5) return head("Integration","Connect the tools that feed the workspace. Both optional, both skippable.")+
+    `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><span><b>YouTrack</b><span class="d mini"> — mirrors tasks onto the read-only project board</span></span><span class="tag ok">Flag: on</span></div>
+      <div style="margin-top:10px" class="grid g2">${fld("Base URL", inp("https://riverbank.youtrack.cloud"))}${fld("YouTrack project", inp("MB2"))}</div>
+      <div class="mini">Field map (YouTrack → QUBIT) is set here; tasks stay read-only in QUBIT.</div></div>`+
+    `<div class="card" style="margin-top:10px"><div style="display:flex;justify-content:space-between;align-items:center"><span><b>Git repository</b><span class="d mini"> — commit → task automation</span></span><span class="tag">Flag: off</span></div></div>`+
+    `<div class="annot">Tasks are <b>read-only, pulled from YouTrack</b>. No task authoring in QUBIT (docs/25 §1).</div>`;
+  return head("Review","Confirm and create. Draft is auto-saved — you can leave and finish later.")+
+    rev([["Name","Mobile Banking v2 (MB2)"],["Portfolio · Programme","Swipe Agent Banking · Payments"],["Type","Product build · Exploring"],["Markets","KE, TZ, UG"],["Team","5 people + 1 resource request"],["Docs","BRD, URS (7 reqs pending approval)"],["YouTrack","riverbank.youtrack.cloud · MB2"]]);
+}
+
+/* --- Org setup wizard --- */
+function ORG(s){
+  if(s===0) return head("Brand","Make QUBIT look like Riverbank.")+
+    `<div class="grid g2">${fld("Primary colour", `<div style="display:flex;gap:8px;align-items:center"><span style="width:26px;height:26px;border-radius:6px;background:var(--brand)"></span>${inp("#ED1C24")}</div>`)}${fld("Logo", `<div class="card" style="text-align:center;padding:16px;border-style:dashed">Drop logo (SVG/PNG)</div>`)}</div>`;
+  if(s===1) return head("Markets & departments","Seed the org shape once.")+
+    fld("Markets (subsidiaries)", chips(["KE","TZ","UG","RW","BI","SS","DRC"],["KE","TZ","UG","RW","BI","SS","DRC"]))+
+    fld("Internal departments", chips(["Engineering","Product","QA","Implementation","PMO"],["Engineering","Product","QA","Implementation","PMO"]))+
+    `<div class="annot">Markets seed as <code>OrgUnit.kind=Market</code>; departments as <code>Internal</code>. Riverbank stays flat internally but gains market tracks.</div>`;
+  if(s===2) return head("Checkpoint templates","Ship the two Riverbank uses; edit later.")+
+    `<div class="card"><b>Product build</b><div class="mini" style="margin-top:4px">BRD → Prototype → MVP1 → SIT → UAT → Go-Live</div></div>
+     <div class="card" style="margin-top:8px"><b>Market rollout</b><div class="mini" style="margin-top:4px">Business Case → Contract → Solution Build → Bank Integration → Telco Integration → Testing → GTM/Pilot → Rollout</div></div>
+     <div style="margin-top:8px"><span class="btn sm">+ New template</span></div>`;
+  if(s===3) return head("Import people","Bulk-invite via CSV — everyone gets the M-O3 email invite.")+
+    `<div class="card" style="text-align:center;padding:22px;border-style:dashed">Drop a CSV: name, email, role, group<br><span class="mini">or add people one at a time later</span></div>`+
+    `<div class="banner">42 rows detected · 42 invites will be emailed with a secure set-password link (docs/22).</div>`;
+  return head("First portfolio","Create one now, or skip and do it from the Portfolio page.")+
+    `<div class="grid g2">${fld("Name", inp("AI Initiatives"))}${fld("Lens", chips(["Pipeline","Rollout"],["Pipeline"]))}</div>`+
+    `<div class="annot">On finish, the Super-Admin lands on the dashboard with markets, templates, invited people and a first portfolio already in place — usable in minutes, no scripts.</div>`;
+}
+
+/* ------- non-linear screens ------- */
+function ASSIGN(){
+  const cand=(n,role,load,leave)=>`<tr><td><span style="display:inline-flex;gap:8px;align-items:center"><span style="width:22px;height:22px;border-radius:50%;background:var(--wash2);border:1px solid var(--line);font-size:9px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;color:var(--ink3)">${n[0]}</span><b>${n}</b></span></td><td><span class="tag">${role}</span></td><td style="width:150px"><div class="bar"><i style="width:${load}%;background:${load>90?'var(--bad)':load>75?'var(--warn)':'var(--ok)'}"></i></div><span class="mini">${load}% allocated</span></td><td>${leave?`<span class="tag warn">${leave}</span>`:'<span class="tag ok">Available</span>'}</td><td style="text-align:right"><span class="btn sm ${load>90?'':'pri'}">${load>90?'Assign anyway':'Assign'}</span></td></tr>`;
+  return `<h1>Assign people</h1><p class="sub">Staff a project — capacity- and leave-aware</p>
+  <div class="annot">Assignment = person + <b>role hat</b> + <b>allocation %</b> + <b>dates</b>, not a bare membership row. Over-allocation and leave-window conflicts warn inline; QUBIT suggests alternates. Unfilled needs become a <b>resource request</b>.</div>
+  <div class="card" style="margin-bottom:12px"><div class="grid g3">
+    ${fld("Project", inp("Mobile Banking v2"))}${fld("Role needed", chips(["Developer","QA","Implementor"],["QA"]))}${fld("Allocation & dates", inp("60% · Aug–Oct"))}
+  </div></div>
+  <h3>Candidates <span class="tag info">sorted by lowest load</span></h3>
+  <div class="card" style="padding:0"><table><thead><tr><th>Person</th><th>Fit (role)</th><th>Current load</th><th>Availability</th><th></th></tr></thead><tbody>
+    ${cand("J. Muli","QA Engineer",45,"")}
+    ${cand("S. Kim","QA Engineer",60,"On leave to 12 Aug")}
+    ${cand("R. Achieng","QA Lead",96,"")}
+  </tbody></table></div>
+  <div class="banner">⚠ Assigning <b>R. Achieng</b> would push them to 106% next week. Assigning <b>S. Kim</b> overlaps a leave window (to 12 Aug). Suggested: <b>J. Muli</b> (45%, available).</div>
+  <div style="margin-top:14px;display:flex;gap:10px"><span class="btn pri">Assign J. Muli</span><span class="btn">Raise as resource request →</span></div>
+  <div class="annot" style="margin-top:14px">Bulk mode: add several people to one project, or one person to several, in a single action.</div>`;
+}
+
+function IDEA(){
+  const card=(t,who,val)=>`<div class="idea">${t}<div class="m">${who} · value: ${val}</div></div>`;
+  return `<h1>Idea intake &amp; triage</h1><p class="sub">The front of the funnel — where projects are born</p>
+  <div class="annot">New in the redesign (docs/26 §5.4): an idea enters, gets triaged, and either becomes a project in <b>Exploring</b> (pre-filled) or is parked with a reason. Q pre-summarises and suggests a portfolio.</div>
+  <div class="grid g2" style="align-items:start">
+    <div class="card"><h3>Submit an idea</h3>
+      ${fld("Title", inp("Instant merchant settlement"))}
+      ${fld("Sponsor", inp("Head of Merchant Banking"))}
+      ${fld("Problem it solves", ta("Merchants wait T+1 for settlement; competitors offer instant.",""))}
+      ${fld("Expected value", inp("Retain 200+ merchants; fee upside"))}
+      <span class="btn pri">Submit idea</span></div>
+    <div>
+      <h3>Triage board <span class="tag info">Head / PMO</span></h3>
+      <div class="swim" style="grid-template-columns:1fr 1fr">
+        <div class="lane"><div class="h">New <span>3</span></div>
+          ${card("Instant merchant settlement","Merchant Banking","High")}
+          ${card("Agent liquidity dashboard","Agency","Med")}
+          ${card("USSD in French (BI/DRC)","Regional","Med")}</div>
+        <div class="lane"><div class="h">Reviewing <span>1</span></div>
+          ${card("Card tokenisation","Cards","High")}</div>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><span class="btn sm pri">Accept → new project</span><span class="btn sm">Park (with reason)</span><span class="btn sm">Merge into existing</span></div>
+      <div class="annot" style="margin-top:12px">“Accept” launches the <b>Project wizard</b> pre-filled from the idea (title, sponsor, suggested portfolio). Nothing is lost between intake and delivery.</div>
+    </div>
+  </div>`;
+}
+
+/* ------- render ------- */
+function render(){
+  document.getElementById("switch").innerHTML = WIZES.map(([k,l])=>`<button class="${state.wiz===k?'on':''}" onclick="sw('${k}')">${l}</button>`).join("");
+  const m=document.getElementById("main");
+  if(state.wiz==="assign"){ m.innerHTML=ASSIGN(); return; }
+  if(state.wiz==="idea"){ m.innerHTML=IDEA(); return; }
+
+  const steps=STEPS[state.wiz]||[];
+  const titles={org:"Set up QUBIT",portfolio:"New portfolio",programme:"New programme",project:"New project"};
+  const subs={org:"One-time organisation setup · Super Admin",portfolio:"Exec / Head of PMs",programme:"Inside a portfolio",project:"Inside a portfolio · draft auto-saved"};
+
+  if(state.done){
+    m.innerHTML=`<h1>${titles[state.wiz]}</h1><p class="sub">${subs[state.wiz]}</p>
+      <div class="wiz"><div class="wbody" style="grid-column:1/3"><div class="done"><div class="ck">✓</div>
+      <div class="stepttl">${titles[state.wiz]} created</div>
+      <p class="stephint">${state.wiz==='project'?'Opens the project workspace on the Overview tab. YouTrack sync starts; team invites sent.':state.wiz==='org'?'Landing on your dashboard — markets, templates, invites and a first portfolio are in place.':'Opens on an empty state prompting the next step.'}</p>
+      <div style="display:flex;gap:10px;justify-content:center;margin-top:8px"><span class="btn pri">Open ${state.wiz}</span><span class="btn" onclick="reset()">Create another</span></div>
+      </div></div></div>`;
+    return;
+  }
+
+  const rail=steps.map((l,i)=>`<div class="wstep ${i===state.step?'on':i<state.step?'done':''}" onclick="goStep(${i})"><span class="n">${i<state.step?'✓':i+1}</span>${l}</div>`).join("");
+  const last=state.step===steps.length-1;
+  m.innerHTML=`<h1>${titles[state.wiz]}</h1><p class="sub">${subs[state.wiz]}</p>
+    <div class="wiz">
+      <div class="wsteps">${rail}</div>
+      <div class="wbody">${stepBody()}</div>
+      <div class="wfoot">
+        <span class="btn gho" onclick="back()" ${state.step===0?'disabled':''}>← Back</span>
+        <span class="mini">Step ${state.step+1} of ${steps.length}${state.wiz==='project'?' · draft saved':''}</span>
+        <span class="btn pri" onclick="next()">${last?'Create '+state.wiz:'Next →'}</span>
+      </div>
+    </div>`;
+}
+render();
+</script>
+</body>
+</html>
