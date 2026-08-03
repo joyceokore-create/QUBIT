@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { FileBarChart } from "lucide-react";
 import { auth } from "@/lib/auth";
+import { withTenant } from "@/lib/tenant";
 import { can } from "@/lib/rbac";
 import { isUserGroup } from "@/lib/personas";
 import { getDevDashboard } from "@/server/dashboard-dev";
@@ -42,6 +43,16 @@ export default async function DashboardPage({
   const today = new Date().toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" }).toUpperCase();
   const firstName = (session.user.name ?? "there").split(/\s+/)[0];
 
+  // First-login checklist (docs/23 §7): only for users who completed the guided flow and
+  // haven't dismissed it. DB-read, not session — the dismissal must hold across devices.
+  const me = await withTenant(ctx, (tx) =>
+    tx.user.findUniqueOrThrow({
+      where: { id: ctx.userId },
+      select: { onboardedAt: true, checklistDismissedAt: true },
+    }),
+  );
+  const showChecklist = me.onboardedAt !== null && me.checklistDismissedAt === null;
+
   return (
     <div>
       {/* Header strip: identity + persona switcher + Reports tab (§6 — link, not a copy) */}
@@ -65,13 +76,13 @@ export default async function DashboardPage({
         {persona === "executive" ? (
           <ExecutivePreset d={await getExecutiveDashboard(ctx)} firstName={firstName} />
         ) : persona === "developer" ? (
-          <DeveloperPreset d={await getDevDashboard(ctx)} sections={await getPortfolioSections(ctx)} userId={ctx.userId} />
+          <DeveloperPreset d={await getDevDashboard(ctx)} sections={await getPortfolioSections(ctx)} showChecklist={showChecklist} />
         ) : persona === "pm" ? (
-          <PmPreset d={await getPmDashboard(ctx)} sections={await getPortfolioSections(ctx)} userId={ctx.userId} scope={scope} />
+          <PmPreset d={await getPmDashboard(ctx)} sections={await getPortfolioSections(ctx)} showChecklist={showChecklist} scope={scope} />
         ) : persona === "qa" ? (
-          <QaPreset d={await getQaDashboard(ctx)} sections={await getPortfolioSections(ctx)} userId={ctx.userId} scope={scope} />
+          <QaPreset d={await getQaDashboard(ctx)} sections={await getPortfolioSections(ctx)} showChecklist={showChecklist} scope={scope} />
         ) : (
-          <ImplementorPreset d={await getImplDashboard(ctx)} sections={await getPortfolioSections(ctx)} userId={ctx.userId} scope={scope} />
+          <ImplementorPreset d={await getImplDashboard(ctx)} sections={await getPortfolioSections(ctx)} showChecklist={showChecklist} scope={scope} />
         )}
       </main>
     </div>

@@ -268,6 +268,11 @@ finish. The A5 MFA hole (client-supplied secret) is closed.
   privileged roles cannot. The page mounts `TenantScope` so `bg-primary` controls render
   in the tenant brand (they were product-green before).
 
+- First-login checklist (docs/23 §7): dismissal moved from localStorage to
+  `checklistDismissedAt` via `POST /api/me/checklist` (audited, idempotent), so it holds
+  across devices. Shown only when `onboardedAt` is set and the flag is null — users who
+  completed the guided flow see it exactly once; legacy users are not greeted weeks in.
+
 **Regression caught in browser verify, then closed with a test**: the first cut of
 `finishOnboarding` accepted "a password hash exists" as the password proof, which a
 legacy user holding an ADMIN-issued temp password satisfies — they could lift their own

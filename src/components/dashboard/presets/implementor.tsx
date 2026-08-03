@@ -190,19 +190,19 @@ function HandoverDocs({ d }: { d: ImplDashboard }) {
 export function ImplementorPreset({
   d,
   sections,
-  userId,
+  showChecklist,
   scope,
   now = new Date(),
 }: {
   d: ImplDashboard;
   sections: PortfolioSectionsData;
-  userId: string;
+  showChecklist: boolean;
   scope: "mine" | "all";
   now?: Date;
 }) {
   return (
     <>
-      <FirstLoginChecklist group="implementor" userId={userId} />
+      <FirstLoginChecklist group="implementor" show={showChecklist} />
       <section className="grid grid-cols-1 gap-3.5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <GoLiveHero d={d} />
         <OpenGates d={d} />

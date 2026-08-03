@@ -1723,6 +1723,11 @@ and the two security holes it existed to close are closed.
   buttons) resolve to the tenant brand at the document root. Previously only components
   reading `var(--brand)` directly (the step dots) went red — `--primary` resolves at
   `:root`, which the wrapper's inline `--brand` never reached.
+- **First-login checklist is column-backed, not localStorage** (docs/23 §7). The
+  dashboard shows it only when `onboardedAt` is set and `checklistDismissedAt` is null;
+  dismissal is `POST /api/me/checklist` (audited, `updateMany` guarded on null so
+  replays don't re-audit). Legacy users — who never went through the guided flow — are
+  deliberately NOT shown a welcome card weeks into using the product.
 
 **Verified**: lint/typecheck/build green, 723/723 tests (21 new: recovery-code unit
 suite + MFA/finish RLS suite). Live on the dev server as a gated fixture Member with an

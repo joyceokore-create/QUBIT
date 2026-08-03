@@ -97,15 +97,15 @@ function QueueBuckets({ d }: { d: DevDashboard }) {
 export function DeveloperPreset({
   d,
   sections,
-  userId,
+  showChecklist,
 }: {
   d: DevDashboard;
   sections: PortfolioSectionsData;
-  userId: string;
+  showChecklist: boolean;
 }) {
   return (
     <>
-      <FirstLoginChecklist group="developer" userId={userId} />
+      <FirstLoginChecklist group="developer" show={showChecklist} />
       <FocusHero d={d} />
       <QueueBuckets d={d} />
       {/* Amended docs/18 §6: the shared portfolio sections scoped to MY projects. */}

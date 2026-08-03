@@ -17,10 +17,10 @@ function taskHref(t: { projectId: string; id: string }): string {
   return `/projects/${t.projectId}?tab=Board&task=${t.id}&lens=qa`;
 }
 
-function Hero({ d, userId }: { d: QaDashboard; userId: string }) {
+function Hero({ d, showChecklist }: { d: QaDashboard; showChecklist: boolean }) {
   return (
     <div className={`${CARD} flex flex-col gap-2 p-4`} style={{ background: "var(--cardbg)" }}>
-      <FirstLoginChecklist group="qa" userId={userId} />
+      <FirstLoginChecklist group="qa" show={showChecklist} />
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5">
         <span className="text-[13.5px] font-bold text-[var(--qink)]">
           {d.hero.inQa === 0 ? "Nothing waiting on QA right now." : `${d.hero.inQa} item${d.hero.inQa === 1 ? "" : "s"} ready for you to test`}
@@ -186,17 +186,17 @@ function Quality({ d }: { d: QaDashboard }) {
 export function QaPreset({
   d,
   sections,
-  userId,
+  showChecklist,
   scope,
 }: {
   d: QaDashboard;
   sections: PortfolioSectionsData;
-  userId: string;
+  showChecklist: boolean;
   scope: "mine" | "all";
 }) {
   return (
     <>
-      <Hero d={d} userId={userId} />
+      <Hero d={d} showChecklist={showChecklist} />
       <section className="grid grid-cols-1 gap-3.5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <TestQueue d={d} />
         <div className="flex flex-col gap-3.5">

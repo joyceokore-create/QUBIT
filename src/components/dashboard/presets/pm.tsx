@@ -12,12 +12,12 @@ import { CARD, Empty, Panel } from "@/components/dashboard/presets/v2-sections";
 // projects by default, with an ALL toggle that is a filter, never a wall (DM1.20) —
 // then what's stuck on me.
 
-function Hero({ d, userId }: { d: PmDashboard; userId: string }) {
+function Hero({ d, showChecklist }: { d: PmDashboard; showChecklist: boolean }) {
   const { checkins, agedBlockers, draftsPending } = d.hero;
   const unconfirmed = checkins.total - checkins.confirmed;
   return (
     <div className={`${CARD} flex flex-col gap-2 p-4`} style={{ background: "var(--cardbg)" }}>
-      <FirstLoginChecklist group="pm" userId={userId} />
+      <FirstLoginChecklist group="pm" show={showChecklist} />
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5">
         <span className="text-[13.5px] font-bold text-[var(--qink)]">
           {checkins.total === 0
@@ -52,17 +52,17 @@ const QUEUE_KIND: Record<string, { label: string; tok: string }> = {
 export function PmPreset({
   d,
   sections,
-  userId,
+  showChecklist,
   scope,
 }: {
   d: PmDashboard;
   sections: PortfolioSectionsData;
-  userId: string;
+  showChecklist: boolean;
   scope: "mine" | "all";
 }) {
   return (
     <>
-      <Hero d={d} userId={userId} />
+      <Hero d={d} showChecklist={showChecklist} />
 
       {/* Scope toggle (DM1.20): default mine, never a wall. */}
       <ScopeToggle persona="pm" scope={scope} />

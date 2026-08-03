@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { CheckCheck, X } from "lucide-react";
 
-// One-time onboarding checklist per primary group (docs/17 §1.3). Pure UI nudge —
-// dismissal lives in localStorage (per browser), which is honest enough for a welcome
-// card; nothing here is state of record. Executives get none (§1.3: straight to value).
+// One-time onboarding checklist per primary group (docs/17 §1.3, docs/23 §7). Shown only
+// to users who completed the guided first-login (onboardedAt set) and haven't dismissed
+// it; the server decides via `show`. Dismissal writes user.checklistDismissedAt — the
+// column, not localStorage, so it holds across devices. Executives get none (§1.3:
+// straight to value).
 
 const ITEMS: Record<string, { text: string; href: string }[]> = {
   developer: [
@@ -30,26 +32,15 @@ const ITEMS: Record<string, { text: string; href: string }[]> = {
   ],
 };
 
-export function FirstLoginChecklist({ group, userId }: { group: string; userId: string }) {
-  const [visible, setVisible] = useState(false);
-  const key = `qubit.checklist.${group}.${userId}`;
-
-  useEffect(() => {
-    try {
-      setVisible(!window.localStorage.getItem(key) && !!ITEMS[group]);
-    } catch {
-      /* storage unavailable — skip the nicety */
-    }
-  }, [key, group]);
+export function FirstLoginChecklist({ group, show }: { group: string; show: boolean }) {
+  const [visible, setVisible] = useState(show && !!ITEMS[group]);
 
   if (!visible) return null;
   const dismiss = () => {
-    try {
-      window.localStorage.setItem(key, new Date().toISOString());
-    } catch {
-      /* ignore */
-    }
+    // Optimistic: hide now, persist in the background. Worst case (request lost) the
+    // card reappears next visit — a nudge, not state anyone depends on mid-session.
     setVisible(false);
+    void fetch("/api/me/checklist", { method: "POST" }).catch(() => {});
   };
 
   return (
