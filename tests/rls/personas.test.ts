@@ -48,10 +48,9 @@ describe("M1a personas", () => {
   });
 
   it("invite stores declared groups and folds a stray primary in", async () => {
-    const user = await createUser(adminCtx, {
+    const { user: user } = await createUser(adminCtx, {
       name: "Persona Invitee",
       email: inviteeEmail,
-      password: "Str0ng!Passw0rd42",
       roles: ["Member"],
       userGroups: ["qa"],
       primaryGroup: "implementor", // not in the declared set — must be folded in, not lost

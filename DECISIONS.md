@@ -1625,3 +1625,53 @@ under `src/app/(app)/admin/**` hand-rolls fetch state", and that now holds.
 
 **Verified**: lint/typecheck/build green, 684/684 tests, both screens browser-checked
 under Riverbank theming, department create/edit/delete exercised live.
+
+---
+
+## DM1.49 — Token invites replace temp passwords; the accept path keeps RLS (M-O3)
+
+Executed docs/22. An invite is now a one-time link, not a password an admin types, reads
+aloud, and pastes into chat.
+
+- **No password is ever created for an invitee.** `createUser` makes them `INVITED` with
+  `passwordHash: null` — the account cannot be signed into at all until they consume
+  their token. That closes the whole category of "temp password shared over Slack",
+  because there is nothing to share.
+- **Only the token's SHA-256 is stored.** The raw 256-bit value exists in the emailed
+  link and the mint call's return, never in the database and never in an audit row
+  (asserted by a test that greps the audit blob for the raw token).
+- **The spec's RLS-exempt read was rejected.** docs/22 §4.2 modelled the accept lookup on
+  `access_request`'s documented exemption. That reasoning does not transfer:
+  `access_request` is exempt because it has NO `tenant_id`, whereas `invite_token` is a
+  tenant table under FORCE RLS — a direct `findUnique` outside `withTenant` matches zero
+  rows (exactly the DM1.18 trap, which is how the tests caught it). The only way to make
+  the spec's approach work would be to drop isolation on a table holding
+  credentials-grade capabilities. Instead `consumeInviteToken` probes each tenant's RLS
+  context — the same pattern `resolveGithubIntegration` uses for unauthenticated webhooks
+  — costing one indexed lookup per tenant and keeping CLAUDE.md rule 1 intact.
+- **Every failure reads identically.** Missing, expired, and already-consumed all return
+  "This link is invalid or has expired", so the public endpoint can't be used to discover
+  which tokens exist. Bad tokens count against the per-IP limiter; a weak or reused
+  password does not — that's a legitimate user getting it wrong, not someone probing.
+- **Resend invalidates what it replaces**, so "resend" narrows the window rather than
+  leaving two live links.
+- **A suspended user accepting a reset link stays suspended.** The link sets a password;
+  it does not reinstate access.
+- **`prisma/rls.sql` was 15 tables behind** and is now resynced (72/72). Every table since
+  M4 applies RLS inline in its own migration, so the live database was never unprotected
+  — but the file read as authoritative while being materially incomplete, which is how a
+  future disaster-recovery run would have quietly under-protected the newer tables.
+
+**Contract change**: `createUser` returns `{ user, emailed, acceptUrl? }` and no longer
+accepts a password — six test files updated. `useAdminMutation.onSuccess` now receives
+the parsed response body, which the invite result needs.
+
+**Verified**: lint/typecheck/build green, 703/703 tests (19 new across the token unit
+suite and the invite RLS suite). Live end-to-end on the dev server: invited a user →
+copyable link (email off) → the PUBLIC accept page rendered with no session → set a
+password through the real form → signed in as the invitee with `mustChangePassword`
+false → replaying the same link returned 400. Fixture removed afterwards.
+
+**Ops note**: until `FEATURE_EMAIL` + the four `GRAPH_*` vars are set on the box,
+`emailEnabled()` is false and every invite/reset returns the copyable link instead of
+sending — the flow works today, it just doesn't email yet.

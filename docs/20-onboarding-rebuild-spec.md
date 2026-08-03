@@ -199,3 +199,34 @@ change beyond two latent bug fixes noted below.
 
 Note: `users/edit-department-dialog.tsx` is a DIFFERENT component (assigns a user to a
 department, already on the hook) and was correctly left alone.
+
+## 10. M-O3 change log (this increment) — see docs/22
+
+Token invites shipped. `createUser`'s contract CHANGED: no admin-supplied password.
+
+- `prisma/schema.prisma` + `migrations/20260803120000_mo3_invite_tokens` — `InviteToken`
+  (unique `tokenHash`, purpose, expiry, `consumedAt`), RLS enabled + forced inline.
+  `User.status` gains `INVITED`.
+- `prisma/rls.sql` — **resynced**: the array had drifted 15 tables behind (every table
+  since M4 applies RLS in its own migration, so the live DB was never unprotected, but
+  this file had stopped being a complete statement of policy). Now 72/72 + a drift note.
+- `src/lib/invite-token.ts` — 256-bit `base64url` raw token, SHA-256 stored, 72h TTL.
+- `src/server/invites.ts` — `mintInvite` (retires prior unconsumed tokens), `resendInvite`,
+  `startPasswordReset`, `consumeInviteToken`.
+- `src/server/users.ts` — `createUser` now returns `{ user, emailed, acceptUrl? }`; the
+  user is `INVITED` with `passwordHash: null`. **Six test files updated** for the new
+  envelope — the contract change docs/22 §4.1 called for.
+- Routes: public `/onboarding/accept` (page + API, rate-limited, middleware-excluded),
+  `POST /api/admin/users/[id]/resend`, `POST .../reset-password` (gated `users:reset`).
+- UI: temp-password field and `generatePassword` deleted; the done screen shows "invite
+  emailed" or the copyable link; row actions gained Resend invite / Send password reset;
+  an `INVITED` pill in the directory. `useAdminMutation.onSuccess` now receives the
+  response body (the invite result needs it).
+
+**One spec deviation, deliberate** (docs/22 §4.2 said to read the token via an RLS-exempt
+`prisma.inviteToken.findUnique`): `invite_token` is a tenant table under FORCE RLS, so a
+direct read outside `withTenant` matches ZERO rows — the DM1.18 trap. `access_request` is
+exempt only because it has no `tenant_id` at all. Making `invite_token` exempt would have
+meant weakening isolation on a table holding credentials-grade capabilities, so
+`consumeInviteToken` instead probes each tenant's RLS context, the pattern
+`resolveGithubIntegration` already uses for unauthenticated webhooks.

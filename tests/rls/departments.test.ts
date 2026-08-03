@@ -100,10 +100,9 @@ describe("Department lifecycle", () => {
 
   it("rejects deleting a department with member users", async () => {
     const department = await createDepartment(ctx, { name: `${TEST_PREFIX} Staffed` });
-    const user = await createUser(ctx, {
+    const { user: user } = await createUser(ctx, {
       name: "Test Dept Report",
       email: TEST_EMAIL_REPORT,
-      password: "Passw0rd!23",
       roles: ["Viewer"],
     });
 
@@ -114,16 +113,14 @@ describe("Department lifecycle", () => {
 
   it("assigns a user's department + manager and audits the change, rejecting self-as-manager", async () => {
     const department = await createDepartment(ctx, { name: `${TEST_PREFIX} Staffed` });
-    const manager = await createUser(ctx, {
+    const { user: manager } = await createUser(ctx, {
       name: "Test Dept Manager",
       email: TEST_EMAIL_MANAGER,
-      password: "Passw0rd!23",
       roles: ["Viewer"],
     });
-    const report = await createUser(ctx, {
+    const { user: report } = await createUser(ctx, {
       name: "Test Dept Report",
       email: TEST_EMAIL_REPORT,
-      password: "Passw0rd!23",
       roles: ["Viewer"],
     });
 
@@ -144,16 +141,14 @@ describe("Department lifecycle", () => {
   });
 
   it("nulls out dependents' managerId/headUserId when the manager/head is soft-deleted", async () => {
-    const manager = await createUser(ctx, {
+    const { user: manager } = await createUser(ctx, {
       name: "Test Dept Manager",
       email: TEST_EMAIL_MANAGER,
-      password: "Passw0rd!23",
       roles: ["Viewer"],
     });
-    const report = await createUser(ctx, {
+    const { user: report } = await createUser(ctx, {
       name: "Test Dept Report",
       email: TEST_EMAIL_REPORT,
-      password: "Passw0rd!23",
       roles: ["Viewer"],
     });
     await updateUserDepartment(ctx, report.id, { departmentId: null, managerId: manager.id });

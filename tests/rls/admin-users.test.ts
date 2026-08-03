@@ -50,10 +50,9 @@ describe("Admin/IAM user lifecycle", () => {
   });
 
   it("creates a user with roles and writes create + role_grant audit rows", async () => {
-    const user = await createUser(adminCtx, {
+    const { user: user } = await createUser(adminCtx, {
       name: "Test Lifecycle User",
       email: TEST_EMAIL,
-      password: "Passw0rd!23",
       roles: ["Contributor", "Viewer"],
     });
 
@@ -70,10 +69,9 @@ describe("Admin/IAM user lifecycle", () => {
   });
 
   it("diffs role changes and audits grants/revokes separately", async () => {
-    const user = await createUser(adminCtx, {
+    const { user: user } = await createUser(adminCtx, {
       name: "Test Lifecycle User",
       email: TEST_EMAIL,
-      password: "Passw0rd!23",
       roles: ["Viewer"],
     });
 
@@ -92,10 +90,9 @@ describe("Admin/IAM user lifecycle", () => {
   });
 
   it("suspend flips status so login would be rejected, and reactivate restores it", async () => {
-    const user = await createUser(adminCtx, {
+    const { user: user } = await createUser(adminCtx, {
       name: "Test Lifecycle User",
       email: TEST_EMAIL,
-      password: "Passw0rd!23",
       roles: ["Viewer"],
     });
 
@@ -109,10 +106,9 @@ describe("Admin/IAM user lifecycle", () => {
   });
 
   it("soft-delete scrubs PII, blocks re-login eligibility, and retains history for audit", async () => {
-    const user = await createUser(adminCtx, {
+    const { user: user } = await createUser(adminCtx, {
       name: "Test Lifecycle User",
       email: TEST_EMAIL,
-      password: "Passw0rd!23",
       roles: ["Viewer"],
     });
 
@@ -147,10 +143,9 @@ describe("Admin/IAM user lifecycle", () => {
   });
 
   it("keeps admin-managed users tenant-isolated", async () => {
-    const user = await createUser(adminCtx, {
+    const { user: user } = await createUser(adminCtx, {
       name: "Test Lifecycle User",
       email: TEST_EMAIL,
-      password: "Passw0rd!23",
       roles: ["Viewer"],
     });
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { ArrowLeft, ArrowRight, Check, Copy, Plus, RefreshCw } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Copy, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -35,14 +35,6 @@ interface ProjectOpt {
 
 const STEPS = ["Details", "Access", "Review"] as const;
 
-// Strong temp password the invitee resets on first sign-in (see the onboarding flow).
-function generatePassword(): string {
-  const bytes = new Uint8Array(12);
-  crypto.getRandomValues(bytes);
-  const body = btoa(String.fromCharCode(...bytes)).replace(/[^a-zA-Z0-9]/g, "").slice(0, 12);
-  return `Qbt!${body}9A`;
-}
-
 export function NewUserDialog({
   departments = [],
   teams = [],
@@ -69,9 +61,10 @@ export function NewUserDialog({
   // DM1.43: ONE declared group — exec, pm, or member(dev/qa/implementor). Null = decide
   // from memberships (the derived half of docs/17 §1.1).
   const [declaredGroup, setDeclaredGroup] = useState<UserGroup | null>(null);
-  const [password, setPassword] = useState(generatePassword());
   const [copied, setCopied] = useState(false);
-  const [created, setCreated] = useState<{ email: string; password: string } | null>(null);
+  // M-O3: the invite result, not a password. `acceptUrl` is present only when email isn't
+  // configured — then the admin copies the link instead of the mailer sending it.
+  const [created, setCreated] = useState<{ email: string; emailed: boolean; acceptUrl?: string } | null>(null);
 
   // Hide the "Administrator" tier (= PlatformSuperAdmin) from admins who can't grant it.
   const roleTiers = ONBOARDING_ROLE_TIERS.filter((t) => canGrantSuperAdmin || t.key !== "PlatformSuperAdmin");
@@ -106,7 +99,6 @@ export function NewUserDialog({
     setProjectId("none");
     setProjectRole("Developer");
     setDeclaredGroup(null);
-    setPassword(generatePassword());
     setError(null);
     setCopied(false);
     setCreated(null);
@@ -129,7 +121,6 @@ export function NewUserDialog({
       {
         name,
         email,
-        password,
         roles: [role],
         departmentId: departmentId === "none" ? null : departmentId,
         teamId: teamId === "none" ? null : teamId,
@@ -140,17 +131,18 @@ export function NewUserDialog({
       },
       {
         fallback: "Could not create the user.",
-        onSuccess: () => {
-          setCreated({ email, password });
+        onSuccess: (data) => {
+          const d = (data ?? {}) as { emailed?: boolean; acceptUrl?: string };
+          setCreated({ email, emailed: Boolean(d.emailed), acceptUrl: d.acceptUrl });
           setPhase("done");
         },
       },
     );
   }
 
-  async function copyPassword() {
-    if (!created) return;
-    await navigator.clipboard.writeText(created.password).catch(() => {});
+  async function copyLink() {
+    if (!created?.acceptUrl) return;
+    await navigator.clipboard.writeText(created.acceptUrl).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
   }
@@ -165,7 +157,7 @@ export function NewUserDialog({
           <>
             <DialogHeader>
               <DialogTitle>Invite a user</DialogTitle>
-              <DialogDescription>Three quick steps — they finish setup by resetting the password on first sign-in.</DialogDescription>
+              <DialogDescription>Three quick steps — they set their own password from an emailed link.</DialogDescription>
             </DialogHeader>
 
             {/* Step indicator */}
@@ -307,15 +299,10 @@ export function NewUserDialog({
                     <Row label="Project" value={projectId === "none" ? "—" : `${projName} · ${projectRole}`} />
                     <Row label="Lands on" value={`${GROUP_LABELS[landing]} dashboard`} />
                   </div>
-                  <Field label="Temporary password" htmlFor="nu-pw">
-                    <div className="flex gap-2">
-                      <Input id="nu-pw" required value={password} onChange={(e) => setPassword(e.target.value)} className="font-mono" />
-                      <Button type="button" variant="outline" onClick={() => setPassword(generatePassword())} title="Generate">
-                        <RefreshCw className="size-4" />
-                      </Button>
-                    </div>
-                    <p className="text-xs text-ink-3">You hand this off securely; they reset it on first sign-in.</p>
-                  </Field>
+                  <p className="text-xs text-ink-3">
+                    They&apos;ll get an email with a one-time link to set their own password. No
+                    temporary password is created.
+                  </p>
                 </>
               )}
 
@@ -338,17 +325,29 @@ export function NewUserDialog({
             <DialogHeader>
               <DialogTitle>User invited</DialogTitle>
               <DialogDescription>
-                Share this temporary password with <span className="font-medium text-ink-2">{created?.email}</span> over a secure
-                channel. They set their own password on first sign-in.
+                {created?.emailed ? (
+                  <>
+                    An invite email is on its way to{" "}
+                    <span className="font-medium text-ink-2">{created?.email}</span>. The link expires in 72 hours.
+                  </>
+                ) : (
+                  <>
+                    Email isn&apos;t configured on this deployment, so send{" "}
+                    <span className="font-medium text-ink-2">{created?.email}</span> this one-time link yourself. It
+                    expires in 72 hours and works once.
+                  </>
+                )}
               </DialogDescription>
             </DialogHeader>
-            <div className="flex items-center gap-2 rounded-[10px] border border-ink-4 bg-background p-3">
-              <code className="flex-1 truncate font-mono text-sm text-foreground">{created?.password}</code>
-              <Button type="button" variant="outline" onClick={copyPassword}>
-                {copied ? <Check className="size-4 text-status-green" /> : <Copy className="size-4" />}
-                {copied ? "Copied" : "Copy"}
-              </Button>
-            </div>
+            {created?.acceptUrl && (
+              <div className="flex items-center gap-2 rounded-[10px] border border-ink-4 bg-background p-3">
+                <code className="flex-1 truncate font-mono text-xs text-foreground">{created.acceptUrl}</code>
+                <Button type="button" variant="outline" onClick={copyLink}>
+                  {copied ? <Check className="size-4 text-status-green" /> : <Copy className="size-4" />}
+                  {copied ? "Copied" : "Copy"}
+                </Button>
+              </div>
+            )}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={reset}>Invite another</Button>
               <Button type="button" onClick={() => setOpen(false)}>Done</Button>

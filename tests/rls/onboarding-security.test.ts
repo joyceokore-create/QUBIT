@@ -47,7 +47,6 @@ describe("Onboarding IAM — SuperAdmin grant guard", () => {
       createUser(headCtx, {
         name: "Escalation Attempt",
         email: EMAIL,
-        password: "Passw0rd!23xyz",
         roles: ["PlatformSuperAdmin"],
       }),
     ).rejects.toMatchObject({ code: "FORBIDDEN_GRANT" });
@@ -60,20 +59,18 @@ describe("Onboarding IAM — SuperAdmin grant guard", () => {
   });
 
   it("lets a non-superadmin create an ordinary user", async () => {
-    const user = await createUser(headCtx, {
+    const { user: user } = await createUser(headCtx, {
       name: "Ordinary Invitee",
       email: EMAIL,
-      password: "Passw0rd!23xyz",
       roles: ["Member"],
     });
     expect(user.id).toBeTruthy();
   });
 
   it("blocks a non-superadmin from PROMOTING a user to PlatformSuperAdmin", async () => {
-    const user = await createUser(superAdminCtx, {
+    const { user: user } = await createUser(superAdminCtx, {
       name: "Promotion Target",
       email: EMAIL,
-      password: "Passw0rd!23xyz",
       roles: ["Member"],
     });
     await expect(
@@ -87,10 +84,9 @@ describe("Onboarding IAM — SuperAdmin grant guard", () => {
   });
 
   it("lets a Super Admin grant PlatformSuperAdmin", async () => {
-    const user = await createUser(superAdminCtx, {
+    const { user: user } = await createUser(superAdminCtx, {
       name: "Legit Promotion",
       email: EMAIL,
-      password: "Passw0rd!23xyz",
       roles: ["Member"],
     });
     await updateUserRoles(superAdminCtx, user.id, ["Member", "PlatformSuperAdmin"]);

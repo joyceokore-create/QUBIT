@@ -100,3 +100,57 @@ export function weeklyReportEmail(opts: {
   ].join("\n");
   return { subject, html, text };
 }
+
+/**
+ * The invite / password-reset email (docs/22 §5). One CTA to the accept link, a plain-text
+ * copy of the URL for clients that mangle buttons, and an explicit expiry so a stale link
+ * is self-explaining. NEVER contains a password — that is the whole point of M-O3.
+ */
+export function inviteEmail(opts: {
+  name: string;
+  tenantName: string;
+  brandColor: string;
+  acceptUrl: string;
+  ttlHours: number;
+  purpose?: "invite" | "reset";
+}): BrandedEmail {
+  const isReset = opts.purpose === "reset";
+  const title = isReset ? "Reset your QUBIT password" : "You're invited to QUBIT";
+  const lead = isReset
+    ? `A password reset was requested for your ${opts.tenantName} account.`
+    : `You've been invited to ${opts.tenantName} on QUBIT.`;
+  const cta = isReset ? "Set a new password" : "Set your password";
+  const expiry = `This link expires in ${opts.ttlHours} hours and can be used once.`;
+
+  const body = [
+    `<p style="font-size:14px;line-height:1.6;margin:0 0 16px">Hi ${escapeHtml(opts.name.split(/\s+/)[0] || "there")},</p>`,
+    `<p style="font-size:14px;line-height:1.6;margin:0 0 20px">${escapeHtml(lead)} ${escapeHtml(cta)} to get started.</p>`,
+    `<p style="margin:0 0 20px"><a href="${escapeHtml(opts.acceptUrl)}" style="display:inline-block;background:${escapeHtml(opts.brandColor)};color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:11px 20px;border-radius:8px">${escapeHtml(cta)}</a></p>`,
+    `<p style="font-size:12px;line-height:1.6;color:#6b6b6b;margin:0 0 8px">Or paste this into your browser:</p>`,
+    `<p style="font-size:12px;line-height:1.5;word-break:break-all;margin:0 0 16px"><a href="${escapeHtml(opts.acceptUrl)}" style="color:${escapeHtml(opts.brandColor)}">${escapeHtml(opts.acceptUrl)}</a></p>`,
+    `<p style="font-size:12px;line-height:1.6;color:#6b6b6b;margin:0">${escapeHtml(expiry)}</p>`,
+  ].join("");
+
+  const text = [
+    `Hi ${opts.name.split(/\s+/)[0] || "there"},`,
+    "",
+    `${lead} ${cta} here:`,
+    opts.acceptUrl,
+    "",
+    expiry,
+    "",
+    `If you weren't expecting this, you can ignore this email.`,
+  ].join("\n");
+
+  return {
+    subject: title,
+    html: shell({
+      tenantName: opts.tenantName,
+      brandColor: opts.brandColor,
+      title,
+      body,
+      footer: "If you weren't expecting this, you can ignore this email — the link will expire on its own.",
+    }),
+    text,
+  };
+}

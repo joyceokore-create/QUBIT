@@ -102,6 +102,7 @@ model Tenant {
   projectTaskDependencies ProjectTaskDependency[]
   taskCommitLinks         TaskCommitLink[]
   webhookDeliveries       WebhookDelivery[]
+  inviteTokens            InviteToken[]
 
   @@map("tenant")
 }
@@ -138,7 +139,7 @@ model User {
   passwordHash           String?     @map("password_hash")
   previousPasswordHashes String[]    @default([]) @map("previous_password_hashes")
   mfaSecret              String?     @map("mfa_secret") // encrypted at rest, see src/lib/mfa.ts
-  status                 String      @default("ACTIVE") // "ACTIVE" | "SUSPENDED" | "DELETED"
+  status                 String      @default("ACTIVE") // "ACTIVE" | "INVITED" | "SUSPENDED" | "DELETED"
   deletedAt              DateTime?   @map("deleted_at")
   lastLoginAt            DateTime?   @map("last_login_at") // null = invited but never signed in
   mustChangePassword     Boolean     @default(false) @map("must_change_password") // invited users reset on first sign-in
@@ -157,6 +158,7 @@ model User {
   // direct lookup, so it's inert bad data rather than an active bug (unlike Department's
   // parentId, which IS walked for cycle prevention because hierarchy queries rely on it).
   /**
+   * /**
    * /**
    * /**
    * /**
@@ -187,6 +189,7 @@ model User {
   assignedProjectTasks ProjectTask[]            @relation("ProjectTaskAssignee")
   reportedProjectTasks ProjectTask[]            @relation("ProjectTaskReporter")
   authoredCommitLinks  TaskCommitLink[]         @relation("CommitAuthor")
+  inviteTokens         InviteToken[]            @relation("UserInviteTokens")
   ownedBlockers        Blocker[]                @relation("BlockerOwner")
   authoredDocuments    ProjectDocument[]        @relation("DocumentAuthor")
   statusUpdatesPosted  ProjectStatusUpdate[]    @relation("StatusAuthor")
@@ -391,6 +394,35 @@ model TaskCommitLink {
   @@unique([taskId, sha])
   @@index([tenantId, taskId])
   @@map("task_commit_link")
+}
+
+// M-O3 (docs/22) — single-use, expiring invite / password-reset tokens. The RAW token
+// exists only in the emailed link: we store its SHA-256, so a leaked database row cannot
+// be replayed. 256 bits of entropy makes the token_hash lookup enumeration-safe, which is
+// what lets the accept route run unauthenticated — the token IS the capability.
+model InviteToken {
+  id          String    @id @default(uuid())
+  tenantId    String    @map("tenant_id")
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId      String    @map("user_id")
+  user        User      @relation("UserInviteTokens", fields: [userId], references: [id], onDelete: Cascade)
+  /**
+   * SHA-256 of the raw token. Never the raw value.
+   */
+  tokenHash   String    @unique @map("token_hash")
+  purpose     String    @default("invite") // invite | reset
+  expiresAt   DateTime  @map("expires_at")
+  /**
+   * Stamped on use — single-use is enforced by this, not by deletion, so an audit can
+   * still see that a token existed and when it was consumed.
+   */
+  consumedAt  DateTime? @map("consumed_at")
+  createdById String    @map("created_by_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([tenantId, userId])
+  @@index([userId, consumedAt])
+  @@map("invite_token")
 }
 
 // Webhook replay guard (docs/15 §6.3 №3). GitHub redelivers on timeouts; the delivery id

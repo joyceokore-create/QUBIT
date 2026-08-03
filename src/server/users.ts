@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { hashPassword, validatePasswordPolicy, isPasswordReused, pushPasswordHistory } from "@/lib/password";
+import { mintInvite } from "@/server/invites";
 import { ROLE_PERMISSIONS } from "@/lib/rbac";
 import { derivedGroups, USER_GROUPS } from "@/lib/personas";
 import { PROJECT_ROLES, projectRoleCategory } from "@/lib/roles";
@@ -12,7 +13,8 @@ const ROLE_KEYS = Object.keys(ROLE_PERMISSIONS) as [string, ...string[]];
 export const CreateUserInput = z.object({
   name: z.string().min(1),
   email: z.string().email(),
-  password: z.string().min(1),
+  // M-O3 (docs/22): no admin-supplied password. The invitee sets their own via an emailed
+  // one-time link, so a temp password is never generated, displayed, or transported.
   roles: z.array(z.enum(ROLE_KEYS)).min(1),
   departmentId: z.string().min(1).nullable().optional(),
   // Optional placement at invite time — so PMs/developers land on a team + project.
@@ -170,18 +172,27 @@ export async function completeOnboarding(ctx: TenantContext, newPassword: string
   });
 }
 
-export async function createUser(ctx: TenantContext, input: CreateUserInput) {
-  const policyError = validatePasswordPolicy(input.password);
-  if (policyError) throw new UserAdminError(policyError, "WEAK_PASSWORD");
+export interface CreateUserResult {
+  user: { id: string; name: string; email: string };
+  /** The one-time accept link — present only when email is NOT configured (docs/22 §4.1). */
+  acceptUrl?: string;
+  emailed: boolean;
+}
 
+/**
+ * Invite a user (M-O3, docs/22). Creates them as INVITED with **no usable password**, then
+ * mints a one-time token and emails the set-password link. When the mailer isn't
+ * configured the link comes back for the admin to copy, so the flow works before Graph is
+ * wired on the box — but a temp password is never created either way.
+ */
+export async function createUser(ctx: TenantContext, input: CreateUserInput): Promise<CreateUserResult> {
   // Privilege-escalation guard: only a Super Admin may mint another Super Admin. Without
   // this, a HeadOfProjects/HeadOfQA (who hold `users:invite`) could create one.
   assertMayGrantSuperAdmin(ctx, input.roles);
 
   const email = input.email.toLowerCase();
-  const passwordHash = await hashPassword(input.password);
 
-  return withTenant(ctx, async (tx) => {
+  const user = await withTenant(ctx, async (tx) => {
     const existing = await tx.user.findUnique({
       where: { tenantId_email: { tenantId: ctx.tenantId, email } },
     });
@@ -207,12 +218,14 @@ export async function createUser(ctx: TenantContext, input: CreateUserInput) {
         tenantId: ctx.tenantId,
         email,
         name: input.name,
-        status: "ACTIVE",
-        passwordHash,
+        // INVITED + null hash: the account cannot be signed into until the invitee
+        // consumes their token and sets a password (consumeInviteToken flips it ACTIVE).
+        status: "INVITED",
+        passwordHash: null,
         departmentId: input.departmentId ?? null,
         userGroups: declaredGroups,
         primaryGroup: input.primaryGroup ?? null,
-        mustChangePassword: true, // invited with a temp password — reset on first sign-in
+        mustChangePassword: true,
       },
     });
 
@@ -249,6 +262,15 @@ export async function createUser(ctx: TenantContext, input: CreateUserInput) {
 
     return user;
   });
+
+  // Minted AFTER the user transaction commits: the token references user.id, and a failed
+  // send must not roll back a successfully created account (the admin can resend).
+  const { acceptUrl, emailed } = await mintInvite(ctx, user.id, "invite");
+  return {
+    user: { id: user.id, name: user.name, email: user.email },
+    emailed,
+    ...(emailed ? {} : { acceptUrl }),
+  };
 }
 
 export async function updateUserRoles(

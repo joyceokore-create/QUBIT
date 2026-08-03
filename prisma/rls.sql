@@ -3,6 +3,12 @@
 -- current_setting('app.tenant_id', true) returns NULL when unset, which denies all rows —
 -- the safe default when a query runs outside withTenant().
 
+-- DRIFT NOTE (M-O3, 2026-08-03): this array had fallen 15 tables behind — every table
+-- created since M4 applies its own ENABLE/FORCE + policy inline in its migration (the
+-- DM1.18 pattern), so the live database was never unprotected, but this file had stopped
+-- being a complete statement of policy. It is now back in sync; a new table must be added
+-- BOTH in its migration and here.
+
 -- NOT tenant-scoped (intentional, like "tenant"): access_request captures pre-tenant
 -- intake ("Get started" lead capture), so it carries no tenant_id and is deliberately
 -- excluded from the table array below. Access is gated by RBAC (iam:manage) in the app
@@ -83,7 +89,30 @@ BEGIN
     'nudge_snooze',
     -- Revamp M4 — conversation attached to work.
     'work_comment',
-    'decision'
+    'decision',
+    -- Revamp M5 — digest-first email preferences.
+    'notification_preference',
+    -- Revamp M6 — absence & leave-aware capacity.
+    'absence',
+    -- Revamp M2-B — member weekly reports.
+    'member_report',
+    'member_report_ack',
+    -- docs/18 M-D — checkpoint templates, gate states, market check-ins.
+    'checkpoint_template',
+    'checkpoint',
+    'checkpoint_status',
+    'market_check_in',
+    -- Revamp M8 — document approvals, requirements traceability, closure lessons.
+    'document_approval',
+    'requirement',
+    'requirement_task_link',
+    'lesson_learned',
+    -- Revamp M7 — task dependencies + GitHub commit automation.
+    'project_task_dependency',
+    'task_commit_link',
+    'webhook_delivery',
+    -- M-O3 — invite/reset tokens (docs/22).
+    'invite_token'
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);

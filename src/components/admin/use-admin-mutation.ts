@@ -6,8 +6,12 @@ import { useRouter } from "next/navigation";
 type JsonBody = Record<string, unknown> | unknown[];
 
 interface MutateOptions {
-  /** Runs after a successful (res.ok) response — e.g. close the dialog, switch phase. */
-  onSuccess?: () => void;
+  /**
+   * Runs after a successful (res.ok) response — e.g. close the dialog, switch phase.
+   * Receives the parsed JSON body when there is one (M-O3 needs the invite result), or
+   * undefined for empty/non-JSON responses.
+   */
+  onSuccess?: (data?: unknown) => void;
   /** Refresh the route tree on success so server components re-render (default true). */
   refresh?: boolean;
   /** Message shown when the server returns no `{ error: { message } }` body. */
@@ -42,13 +46,18 @@ export function useAdminMutation() {
           headers: body === undefined ? undefined : { "Content-Type": "application/json" },
           body: body === undefined ? undefined : JSON.stringify(body),
         });
+        // Read the body once: it carries either the error envelope or the success payload.
+        const payload = await res.json().catch(() => null);
         if (!res.ok) {
-          const payload = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-          setError(payload?.error?.message ?? options.fallback ?? "Something went wrong.");
+          setError(
+            (payload as { error?: { message?: string } } | null)?.error?.message ??
+              options.fallback ??
+              "Something went wrong.",
+          );
           return false;
         }
         if (options.refresh !== false) router.refresh();
-        options.onSuccess?.();
+        options.onSuccess?.(payload ?? undefined);
         return true;
       } catch {
         setError(options.fallback ?? "Network error — please try again.");

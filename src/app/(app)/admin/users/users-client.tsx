@@ -36,6 +36,7 @@ export function UsersClient({
   insights,
   canManage,
   canGrantSuperAdmin = false,
+  canResetPassword = false,
 }: {
   users: AdminUserSummary[];
   departments: DepartmentSummary[];
@@ -46,6 +47,8 @@ export function UsersClient({
   canManage: boolean;
   /** Only a Super Admin may grant the Super Admin role (mirrors the server guard, M-O1). */
   canGrantSuperAdmin?: boolean;
+  /** users:reset — admin-initiated password reset links (M-O3). */
+  canResetPassword?: boolean;
 }) {
   const [seg, setSeg] = useState<Segment>("all");
 
@@ -139,6 +142,7 @@ export function UsersClient({
                         <span className="flex items-center gap-1.5">
                           <span className="truncate text-[13px] font-semibold text-[var(--qink)]">{u.name}</span>
                           {u.status === "SUSPENDED" && <span className="rounded px-1 py-0.5 font-mono text-[8px] font-bold uppercase tracking-[.5px]" style={{ color: "var(--bad)", background: "color-mix(in oklab, var(--bad) 14%, transparent)" }}>Susp</span>}
+                          {u.status === "INVITED" && <span className="rounded px-1 py-0.5 font-mono text-[8px] font-bold uppercase tracking-[.5px]" style={{ color: "var(--qinfo)", background: "color-mix(in oklab, var(--qinfo) 14%, transparent)" }}>Invited</span>}
                         </span>
                         <span className="block truncate text-[11px] rv:text-body-xs text-[var(--ink4)]">{u.email}</span>
                       </span>
@@ -158,7 +162,7 @@ export function UsersClient({
                       {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : <span className="font-semibold text-[var(--warn)]">Never</span>}
                     </span>
                     <span className="flex justify-end">
-                      <UserRowActions user={u} currentUserId={currentUserId} departments={departments} users={users} canManage={canManage} canGrantSuperAdmin={canGrantSuperAdmin} />
+                      <UserRowActions user={u} currentUserId={currentUserId} departments={departments} users={users} canManage={canManage} canGrantSuperAdmin={canGrantSuperAdmin} canResetPassword={canResetPassword} />
                     </span>
                   </div>
                 );

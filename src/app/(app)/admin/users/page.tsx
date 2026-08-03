@@ -65,6 +65,7 @@ export default async function AdminUsersPage() {
   const canManageUsers = can(ctx, "users:roles"); // full CRUD — PlatformSuperAdmin only
   const canInvite = can(ctx, "users:invite"); // PlatformSuperAdmin + heads
   const canGrantSuperAdmin = ctx.roles.includes("PlatformSuperAdmin"); // mirrors the server guard (M-O1)
+  const canResetPassword = can(ctx, "users:reset"); // M-O3 — stricter than users:invite
 
   const [users, departments, teams, projects] = await Promise.all([
     listUsers(ctx),
@@ -89,7 +90,7 @@ export default async function AdminUsersPage() {
           ) : undefined
         }
       />
-      <UsersClient users={users} departments={departments} currentUserId={session.user.id} insights={insights} canManage={canManageUsers} canGrantSuperAdmin={canGrantSuperAdmin} />
+      <UsersClient users={users} departments={departments} currentUserId={session.user.id} insights={insights} canManage={canManageUsers} canGrantSuperAdmin={canGrantSuperAdmin} canResetPassword={canResetPassword} />
     </main>
   );
 }
