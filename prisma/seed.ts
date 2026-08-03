@@ -1188,6 +1188,10 @@ async function resetTenant(slug: string) {
     // so a reseed must clear them here or the tenant delete trips the constraint.
     await tx.checkpoint.deleteMany({});
     await tx.checkpointTemplate.deleteMany({});
+    // M-P1a: both hold RESTRICT tenant FKs (resource_request rows go with their project's
+    // cascade, but a reseed clears them explicitly so ordering never matters).
+    await tx.resourceRequest.deleteMany({});
+    await tx.teamTemplate.deleteMany({});
     await tx.programme.deleteMany({});
     await tx.portfolio.deleteMany({});
     // shared_report + department both hold a RESTRICT tenant FK and must be cleared before
@@ -1288,6 +1292,8 @@ async function seedTenant(seed: TenantSeed) {
           description: p.description,
           targetBudget: p.budget,
           viewKind: p.viewKind ?? "Pipeline",
+          // M-P1a: seeded portfolios are live delivery work (mirrors the prod backfill).
+          category: "Approved",
         },
       });
       portfolioIdByKey.set(p.key, created.id);
@@ -1299,6 +1305,7 @@ async function seedTenant(seed: TenantSeed) {
         name: "Unassigned",
         description: "Default portfolio — projects awaiting a portfolio decision (docs/18 §0.5).",
         viewKind: "Pipeline",
+        category: "Approved",
       },
     });
 
@@ -1311,6 +1318,7 @@ async function seedTenant(seed: TenantSeed) {
           name: pr.name,
           description: pr.description,
           status: mapStatus(pr.status),
+          category: "Approved", // M-P1a: seeded programmes are live delivery work
           budget: pr.budget,
         },
       });
@@ -1579,6 +1587,22 @@ async function seedTenant(seed: TenantSeed) {
         },
       });
     }
+
+    // M-P1a (docs/27) — the team shape the project wizard applies in one click.
+    await tx.teamTemplate.create({
+      data: {
+        tenantId: tenant.id,
+        name: "Standard build",
+        shape: [
+          { role: "Project Manager", allocationPct: 20 },
+          { role: "Technical Lead", allocationPct: 40 },
+          { role: "Developer", allocationPct: 60 },
+          { role: "Developer", allocationPct: 60 },
+          { role: "QA Engineer", allocationPct: 60 },
+          { role: "Implementor", allocationPct: 50 },
+        ],
+      },
+    });
 
     // Attach "Product build" to the demo project and walk its first gates so the derived
     // % and the pipeline gate ticks have real data to show.

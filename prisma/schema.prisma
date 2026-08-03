@@ -103,6 +103,8 @@ model Tenant {
   taskCommitLinks         TaskCommitLink[]
   webhookDeliveries       WebhookDelivery[]
   inviteTokens            InviteToken[]
+  resourceRequests        ResourceRequest[]
+  teamTemplates           TeamTemplate[]
 
   @@map("tenant")
 }
@@ -189,6 +191,7 @@ model User {
    * /**
    * /**
    * /**
+   * /**
    * /** Hours available in a normal week — the denominator leave is subtracted from.
    */
   capacityHoursPerWeek   Int         @default(40) @map("capacity_hours_per_week")
@@ -208,37 +211,39 @@ model User {
   commentsAuthored Comment[]
 
   // ── MVP1 — Riverbank teams & resource allocation ──
-  teamsLed             Team[]                   @relation("TeamLead")
-  teamMemberships      TeamMember[]
-  projectAllocations   ProjectMember[]
-  projectsLed          Project[]                @relation("ProjectLead")
-  aiCallLogs           AiCallLog[]
-  assignedProjectTasks ProjectTask[]            @relation("ProjectTaskAssignee")
-  reportedProjectTasks ProjectTask[]            @relation("ProjectTaskReporter")
-  authoredCommitLinks  TaskCommitLink[]         @relation("CommitAuthor")
-  inviteTokens         InviteToken[]            @relation("UserInviteTokens")
-  ownedBlockers        Blocker[]                @relation("BlockerOwner")
-  authoredDocuments    ProjectDocument[]        @relation("DocumentAuthor")
-  statusUpdatesPosted  ProjectStatusUpdate[]    @relation("StatusAuthor")
-  notifications        Notification[]           @relation("UserNotifications")
-  sharedReports        SharedReport[]           @relation("SharedReportAuthor")
-  joinRequests         JoinRequest[]            @relation("JoinRequestUser")
-  joinRequestsDecided  JoinRequest[]            @relation("JoinRequestDecider")
-  checkInsConfirmed    CheckIn[]                @relation("CheckInConfirmer")
-  reportSubscriptions  ReportSubscription[]     @relation("ReportSubscriptions")
-  notificationPrefs    NotificationPreference[] @relation("NotificationPreferences")
-  memberReports        MemberReport[]           @relation("MemberReports")
-  memberReportAcks     MemberReportAck[]        @relation("MemberReportAcks")
-  marketCheckIns       MarketCheckIn[]          @relation("MarketCheckInAuthor")
-  lessonsAuthored      LessonLearned[]          @relation("LessonAuthor")
-  documentApprovals    DocumentApproval[]       @relation("DocumentApprover")
-  requirementsAuthored Requirement[]            @relation("RequirementAuthor")
-  absences             Absence[]                @relation("UserAbsences")
-  absencesRecorded     Absence[]                @relation("AbsenceAuthor")
-  checkpointOverrides  CheckpointStatus[]       @relation("CheckpointOverrider")
-  nudgeSnoozes         NudgeSnooze[]            @relation("UserNudgeSnoozes")
-  workComments         WorkComment[]            @relation("WorkCommentAuthor")
-  decisionsMade        Decision[]               @relation("DecisionDecider")
+  teamsLed                 Team[]                   @relation("TeamLead")
+  teamMemberships          TeamMember[]
+  projectAllocations       ProjectMember[]
+  projectsLed              Project[]                @relation("ProjectLead")
+  aiCallLogs               AiCallLog[]
+  assignedProjectTasks     ProjectTask[]            @relation("ProjectTaskAssignee")
+  reportedProjectTasks     ProjectTask[]            @relation("ProjectTaskReporter")
+  authoredCommitLinks      TaskCommitLink[]         @relation("CommitAuthor")
+  inviteTokens             InviteToken[]            @relation("UserInviteTokens")
+  ownedBlockers            Blocker[]                @relation("BlockerOwner")
+  authoredDocuments        ProjectDocument[]        @relation("DocumentAuthor")
+  statusUpdatesPosted      ProjectStatusUpdate[]    @relation("StatusAuthor")
+  notifications            Notification[]           @relation("UserNotifications")
+  sharedReports            SharedReport[]           @relation("SharedReportAuthor")
+  joinRequests             JoinRequest[]            @relation("JoinRequestUser")
+  joinRequestsDecided      JoinRequest[]            @relation("JoinRequestDecider")
+  checkInsConfirmed        CheckIn[]                @relation("CheckInConfirmer")
+  reportSubscriptions      ReportSubscription[]     @relation("ReportSubscriptions")
+  notificationPrefs        NotificationPreference[] @relation("NotificationPreferences")
+  memberReports            MemberReport[]           @relation("MemberReports")
+  memberReportAcks         MemberReportAck[]        @relation("MemberReportAcks")
+  marketCheckIns           MarketCheckIn[]          @relation("MarketCheckInAuthor")
+  lessonsAuthored          LessonLearned[]          @relation("LessonAuthor")
+  documentApprovals        DocumentApproval[]       @relation("DocumentApprover")
+  requirementsAuthored     Requirement[]            @relation("RequirementAuthor")
+  absences                 Absence[]                @relation("UserAbsences")
+  absencesRecorded         Absence[]                @relation("AbsenceAuthor")
+  checkpointOverrides      CheckpointStatus[]       @relation("CheckpointOverrider")
+  nudgeSnoozes             NudgeSnooze[]            @relation("UserNudgeSnoozes")
+  workComments             WorkComment[]            @relation("WorkCommentAuthor")
+  decisionsMade            Decision[]               @relation("DecisionDecider")
+  resourceRequestsRaised   ResourceRequest[]        @relation("ResourceRequestRaiser")
+  resourceRequestsResolved ResourceRequest[]        @relation("ResourceRequestResolver")
 
   @@unique([tenantId, email])
   @@map("user")
@@ -815,6 +820,10 @@ model Portfolio {
   // table) or Rollout (project × market heatmap, lands with M-D). Default lens only;
   // both are reachable on drill-down.
   viewKind     String   @default("Pipeline") @map("view_kind")
+  // docs/26 §2 (M-P1a) — the business pipeline axis: Approved | Exploring | Shelved.
+  // Distinct from viewKind (how it's shown) and from delivery status (derived from
+  // checkpoints). Existing portfolios were backfilled to Approved (docs/27 §1.2).
+  category     String   @default("Exploring")
   ownerId      String?  @map("owner_id")
   targetBudget String?  @map("target_budget")
   createdAt    DateTime @default(now()) @map("created_at")
@@ -835,6 +844,8 @@ model Programme {
   name        String
   description String?
   status      String
+  // docs/26 §2 (M-P1a) — same business-pipeline axis as Portfolio.category.
+  category    String     @default("Exploring")
   budget      String?
   createdAt   DateTime   @default(now()) @map("created_at")
   updatedAt   DateTime   @updatedAt @map("updated_at")
@@ -905,6 +916,7 @@ model Project {
   marketCheckIns       MarketCheckIn[]
   lessonsLearned       LessonLearned[]
   requirements         Requirement[]
+  resourceRequests     ResourceRequest[]
 
   @@unique([tenantId, code])
   @@map("project")
@@ -1669,17 +1681,21 @@ model TeamMember {
 }
 
 model ProjectMember {
-  id            String   @id @default(uuid())
-  tenantId      String   @map("tenant_id")
-  tenant        Tenant   @relation(fields: [tenantId], references: [id])
-  projectId     String   @map("project_id")
-  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  userId        String   @map("user_id")
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String    @id @default(uuid())
+  tenantId      String    @map("tenant_id")
+  tenant        Tenant    @relation(fields: [tenantId], references: [id])
+  projectId     String    @map("project_id")
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId        String    @map("user_id")
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   role          String // e.g. "Project Lead", "Developer", "Analyst"
-  allocationPct Int?     @map("allocation_pct") // 0–100, optional
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  allocationPct Int?      @map("allocation_pct") // 0–100, optional
+  // docs/26 §4.3 (M-P1a) — an assignment has a window, not just a percentage. NULL on
+  // both ends = open-ended (all pre-P1 rows; no backfill lie).
+  startDate     DateTime? @map("start_date")
+  endDate       DateTime? @map("end_date")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
   @@unique([projectId, userId])
   @@index([tenantId, userId])
@@ -1697,6 +1713,53 @@ model ProjectTeam {
   @@id([projectId, teamId])
   @@index([tenantId])
   @@map("project_team")
+}
+
+// docs/26 §4.3 (M-P1a) — a PM asks for a SHAPE ("1 QA · 60% · Aug–Sep"), not a person;
+// the Head fills it from the bench. Staffing becomes a tracked, audited flow instead of
+// a side-channel chat. Raised by a project's lead/PM (access.ts), resolved by
+// staffing:manage.
+model ResourceRequest {
+  id             String    @id @default(uuid())
+  tenantId       String    @map("tenant_id")
+  tenant         Tenant    @relation(fields: [tenantId], references: [id])
+  projectId      String    @map("project_id")
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  raisedById     String    @map("raised_by_id")
+  raisedBy       User      @relation("ResourceRequestRaiser", fields: [raisedById], references: [id])
+  role           String // project role hat (PROJECT_ROLES)
+  allocationPct  Int       @map("allocation_pct")
+  windowStart    DateTime  @map("window_start")
+  windowEnd      DateTime  @map("window_end")
+  note           String?
+  status         String    @default("Open") // Open | Filled | Declined
+  resolvedById   String?   @map("resolved_by_id")
+  resolvedBy     User?     @relation("ResourceRequestResolver", fields: [resolvedById], references: [id])
+  resolvedNote   String?   @map("resolved_note")
+  // The ProjectMember created when the request was filled — the receipt.
+  filledMemberId String?   @map("filled_member_id")
+  resolvedAt     DateTime? @map("resolved_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([tenantId, status])
+  @@index([projectId])
+  @@map("resource_request")
+}
+
+// docs/26 §4.3 (M-P1a) — a project type's suggested team shape, applied in one click on
+// the project wizard's Team step then adjusted. shape = [{ role, allocationPct }].
+model TeamTemplate {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  name      String
+  shape     Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, name])
+  @@map("team_template")
 }
 
 // ── Access requests ("Get started" lead capture) ───────────────────────────

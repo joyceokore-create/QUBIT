@@ -1736,3 +1736,34 @@ Password → set own password (gate still on, `passwordSetAt` stamped) → enrol
 from the real QR flow (pending → live only after a valid code; wrong code rejected) →
 10 recovery codes shown once → finish lifted the gate, stamped `onboardedAt`, landed on
 the Developer dashboard. Fixture removed afterwards.
+
+## DM1.51 — Create & assign schema: category axis, assignment windows, staffing tables (M-P1a)
+
+First milestone of docs/27 (the docs/26 P1 track). Schema + keys only — no UI yet.
+
+- **`category` (Approved|Exploring|Shelved) lands on Portfolio and Programme**, default
+  Exploring. It is the business-pipeline axis from Joyce's notes (docs/24), distinct from
+  `viewKind` (how a portfolio is shown) and from delivery status (derived from
+  checkpoints). Projects keep `pipelineStage` — same axis one level down; no remap.
+- **Backfill ran INSIDE the tenant loop** — portfolio/programme are FORCE-RLS, and the
+  DM1.50 lesson is now a checklist item, not a memory. Everything existing at migration
+  time → Approved (it is live delivery work); the dev seed sets `category: "Approved"`
+  explicitly so a reseeded DB matches what the backfill produced in prod. The suite's
+  first assertion exists precisely to scream if a future loop silently no-ops.
+- **`ProjectMember` gains `startDate`/`endDate`** — an assignment is person + role hat +
+  allocation + window (docs/26 §4.3). Pre-P1 rows stay NULL/NULL (open-ended): no
+  invented dates.
+- **`resource_request`** — a PM asks for a SHAPE ("1 QA · 60% · Aug–Sep"), the Head
+  resolves it; `filledMemberId` is the receipt linking the request to the assignment it
+  produced. **`team_template`** — one-click team shapes; "Standard build" seeded
+  (PM 20 · Tech Lead 40 · 2×Dev 60 · QA 60 · Impl 50). Both tables FORCE-RLS inline in
+  the migration; `prisma/rls.sql` resynced (72→74).
+- **Keys** (docs/27 §1.4): `portfolio:create` + `programme:create` → Executive and
+  HeadOfProjects (the notes put the Add button on the exec's Portfolio page);
+  `staffing:manage` → HeadOfProjects only. `canRaiseResourceRequest` = the project's
+  delivery owner or `staffing:manage` — the asker never resolves their own ask.
+
+**Verified**: lint/typecheck/build green, 732/732 tests (8 new: backfill semantics,
+assignment window, cross-tenant read AND write denial on both new tables, seeded shape,
+key grants/denials, raise-scope). Schema-only — browser verification deferred to M-P1b
+when the first surface lands.

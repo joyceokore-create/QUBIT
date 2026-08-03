@@ -95,6 +95,9 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     "admin:access",
     "users:invite",
     "teams:manage:all",
+    "portfolio:create", // docs/27 §1.4 — New portfolio is Exec/Head territory
+    "programme:create",
+    "staffing:manage", // docs/26 §4.3 — fill/decline resource requests, see the bench
     "project:create",
     "project:write", // may edit any project (governance)
     "project:update", // transitional coarse write key for existing routes (see file header)
@@ -123,13 +126,17 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     ...MANAGE_RAID,
   ],
 
-  // Read-everything executive. No admin, no user management, no authoring.
+  // Read-everything executive. No admin, no user management; the ONE authoring surface
+  // is portfolio/programme creation (docs/24 notes: the Add button on their Portfolio
+  // page is theirs).
   Executive: [
     ...BASE,
     "reports:read",
     "budget:read",
     "report:resource:others", // may query any person's workload / any project report
     "project:stage", // docs/18 §7 — execs edit governance fields (stage/priority/note)
+    "portfolio:create", // docs/27 §1.4
+    "programme:create",
   ],
 
   // Runs their own projects. project:write / budget:read / report:resource:others are

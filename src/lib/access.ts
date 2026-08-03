@@ -50,6 +50,14 @@ export async function canWriteProject(ctx: TenantContext, projectId: string): Pr
   return withTenant(ctx, (tx) => isDeliveryOwnerTx(tx, ctx.userId, projectId));
 }
 
+/** Can the viewer raise a resource request for this project (docs/27 §1.4)? The project's
+ * delivery owner (lead / PM-role member), or anyone holding staffing:manage. Filling and
+ * declining stay behind staffing:manage alone — the asker never resolves their own ask. */
+export async function canRaiseResourceRequest(ctx: TenantContext, projectId: string): Promise<boolean> {
+  if (can(ctx, "staffing:manage")) return true; // PlatformSuperAdmin, HeadOfProjects
+  return withTenant(ctx, (tx) => isDeliveryOwnerTx(tx, ctx.userId, projectId));
+}
+
 /** Can the viewer see budget figures? Hidden from Members; PM sees only their own project. */
 export async function canReadBudget(ctx: TenantContext, projectId?: string): Promise<boolean> {
   if (can(ctx, "budget:read")) return true; // PlatformSuperAdmin, Executive, both heads

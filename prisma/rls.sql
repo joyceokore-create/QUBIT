@@ -112,7 +112,10 @@ BEGIN
     'task_commit_link',
     'webhook_delivery',
     -- M-O3 — invite/reset tokens (docs/22).
-    'invite_token'
+    'invite_token',
+    -- M-P1a (docs/27) — staffing as a tracked flow.
+    'resource_request',
+    'team_template'
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);
