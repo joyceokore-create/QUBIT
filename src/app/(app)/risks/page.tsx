@@ -4,6 +4,7 @@ import { Forbidden } from "@/components/forbidden";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { listRisks } from "@/server/risks";
+import { ExportButton } from "@/components/export-button";
 import { listIssues } from "@/server/issues";
 import { getGapReport } from "@/server/raid";
 import { listUsers } from "@/server/users";
@@ -57,6 +58,7 @@ export default async function RisksPage() {
           </h1>
           <p className="mt-[3px] text-xs rv:text-body-sm text-ink-3">{risks.length} risks in this organization</p>
         </div>
+        <ExportButton href="/api/export?kind=risks" />
         {canCreateRisk && (
           <NewRiskDialog users={users} projects={projects.map((p) => ({ id: p.id, code: p.code, name: p.name }))} />
         )}

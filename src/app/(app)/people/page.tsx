@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { listWorkload } from "@/server/resources";
+import { ExportButton } from "@/components/export-button";
 import { Forbidden } from "@/components/forbidden";
 
 // Same bespoke table treatment as the admin surfaces (Teams/Audit): elevated card
@@ -22,9 +23,12 @@ export default async function PeoplePage() {
 
   return (
     <div className="flex w-full flex-1 flex-col gap-4 p-[26px]">
-      <div>
-        <h1 className="font-heading text-[21px] rv:text-heading-md font-bold tracking-[-0.5px] text-foreground">People</h1>
-        <p className="mt-[3px] text-xs rv:text-body-sm text-ink-3">{people.length} people · resource allocation across projects</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-heading text-[21px] rv:text-heading-md font-bold tracking-[-0.5px] text-foreground">People</h1>
+          <p className="mt-[3px] text-xs rv:text-body-sm text-ink-3">{people.length} people · resource allocation across projects</p>
+        </div>
+        <ExportButton href="/api/export?kind=allocations" />
       </div>
 
       <div className={`overflow-hidden ${CARD}`} style={{ background: "var(--cardbg)" }}>

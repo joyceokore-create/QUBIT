@@ -1,97 +1,99 @@
 # 09 — UI / Screen Specification
 
-Screens and interactions are taken directly from `qubit_exec_dashboard.html`. Reproduce the
-behaviour; back it with live, tenant-scoped API data instead of the in-file constants.
+> Refreshed at M9 (docs/16 §12). This replaces the pre-revamp spec that described the v1
+> exec-dashboard HTML (sidebar shell, /standalone, heatmap-first overview) — those
+> surfaces were removed or reshaped across M0–M8. Behavioural detail lives in the specs
+> this file points at; this is the map of what renders where, and why.
 
 ## App shell
 
-- **Topbar:** logo (4-square mark + "QUBIT"), nav tabs (Dashboard, Executive View, My Tasks,
-  Reports), right side: **TenantChip** (e.g. "KCB Group — All Subsidiaries ▾") + user avatar.
-- **Sidebar groups:** Navigation (Group Overview), Portfolios (list with item counts),
-  Standalone (Independent Items), Subsidiaries (one per org unit with flag), footer (Risks &
-  Issues with a red count badge).
-- Active nav item uses `--brand-light` bg + `--brand` text. Items hidden if no permission.
+- **Topbar:** tenant-branded logo + QUBIT mark, nav — Dashboard · My Board · Projects ·
+  Risks · Time · Teams · People · Reports (+ Admin for admins), right side: notifications
+  bell (SSE live), theme toggle, tenant chip, account menu, **Ask Q**.
+- Theme is per tenant (Riverbank red / KCB green, docs/08); every surface below renders
+  under both.
+- Machine routes (`/api/internal/*`, `/api/webhooks/*`) sit OUTSIDE the auth middleware;
+  everything else redirects to `/login` without a session.
 
-## Screen 1 — Group Overview (default)
+## Dashboard — persona presets (docs/17)
 
-Route `/(app)/dashboard`. Eyebrow "Executive Overview", title "<Tenant> — Project & Programme
-Portfolio", sub-line summarising counts + quarter. Actions: Export PPT (stub), Refresh.
+Route `/dashboard`. The persona resolver (declared ∪ derived groups, DM1.43: one declared
+group) picks a preset; a switcher lets multi-group people change hats:
 
-Blocks, in order:
-1. **KPI strip (6):** Total Items, Portfolios, On Track (green), At Risk (amber), Overdue (red),
-   Budget Used (% + amount). Each has a thin progress bar. Data: `/api/dashboard/summary`.
-2. **Portfolio × Subsidiary Health Map:** rows = portfolios, columns = subsidiaries. Each cell
-   shows avg % , item count, and status word; colour = worst status among items (Overdue >
-   At Risk > On Track); empty pairing = dashed `—`. Click a **cell** → subsidiary-filtered
-   portfolio view; click a **portfolio name** → portfolio detail. Data: `/api/dashboard/heatmap`.
-3. **Portfolios grid (2-col):** PortfolioCard each — RAG counts, avg progress bar, subsidiary
-   pips. Click → portfolio detail. Data: `/api/portfolios`.
-4. **Standalone grid (3-col):** independent projects/programmes. Click → slide panel.
-   Data: `/api/standalone`.
-5. **Bottom split:** left "Escalations & Risks" feed (dot colour by severity, text, meta:
-   type · id · age) from `/api/dashboard/escalations`; right "Upcoming Milestones" feed from
-   `/api/dashboard/milestones/upcoming`.
+- **Executive** — greeting strip with escalations, portfolio health number + 8-week trend
+  ("why?" drill-down), decision queue, portfolio-grouped sections (docs/18 §6): each
+  portfolio a collapsible section, Rollout portfolios render the market heatmap, others
+  the pipeline table.
+- **PM** — their projects' pipeline rows, check-in queue, member-report acknowledgements,
+  workload/leave exposure.
+- **Developer / QA / Implementor** — focus card (ranked: overdue → due → in-review →
+  freshest), their lane of work, QA gets the triage strip, Implementor gets next-go-live
+  gates + rollout calendar (docs/17 §5–§7).
 
-## Screen 2 — Portfolio Detail
+## My Board (docs/18 §4)
 
-Route `/(app)/portfolios/[id]`. Breadcrumb: Group Overview › <Portfolio>. Header card: name,
-description, and stat row (Total Items, On Track, At Risk, Overdue, Avg Progress, Budget).
+Route `/board`. Personal Trello-style lanes **To do · Doing · Done** as views over the
+5-status taxonomy; "added by" attribution; Done feeds the Friday member report; QA owns
+Completed for Feature/Bug (hand over with "In QA"). YouTrack-mirrored cards link out and
+say "Move it in YouTrack."
 
-Body:
-- **Programmes** section: one expandable ProgrammeCard per programme — header (name, id,
-  budget, project count, status pill, avg progress) opens the **programme panel**; body lists
-  its projects as rows (name, id, priority, subsidiary pips, progress, status pill, due). Row
-  click → **project panel**.
-- **Standalone Projects in this Portfolio** (projects with no programme): StandaloneCard grid.
+## Projects
 
-Optional `?sub=` filter highlights a subsidiary's pips (set when arriving from a heatmap cell).
+Route `/projects` — flat filterable list (ALL/status chips/MINE), **Export CSV**, New
+project (permission-gated). Row → project workspace.
 
-## Screen 3 — Standalone Items
+### Project workspace `/projects/[id]`
 
-Route `/(app)/standalone`. Breadcrumb: Group Overview › Standalone Items. StandaloneCard grid of
-all items with no portfolio.
+Header: portfolio · programme · code eyebrow, RAG pill, gate progress (checkpoint
+template, docs/18 §2), members, Ask Q. Tabs:
 
-## Screen 4 — Subsidiary View
+- **Overview** — status updates, comments/decisions, project panel data.
+- **Board** — kanban over the five statuses. **DM1.43 rules:** PMs see all four lenses
+  (All/Dev/QA/Implementor) + Mine; a discipline member sees exactly their lane (server
+  enforced, not just hidden); stakeholders read-only whole board. Cards carry: blocked
+  flag, waiting-on chip (M7-A), commit count (M7-B), YouTrack key linking out (M7-C);
+  drag/status limited to PM / own task / QA-in-scope. **Export CSV** respects the same
+  visibility wall. YouTrack-connected projects hide task creation ("Issues are raised in
+  YouTrack…").
+- **Documents** — register with type/version/status (Draft→InReview→Approved via named
+  approvers, docs/16 §6), requirements extraction review, traceability coverage.
+- **Deadlines** — milestones; checkpoint editor with gate rules + audited override (M8-A).
+- **Team** — members (role REQUIRED, picker shows where the role lands: "Developer → Dev
+  board"), teams, allocation %.
+- **Integrations** — provider cards; GitHub (webhook secret shown once + commit
+  automation) and YouTrack (instance URL, project, token, field mapping, sync now) are
+  live; others config-only.
 
-Route `/(app)/subsidiaries/[orgUnitId]`. Breadcrumb: Group Overview › <Subsidiary>. Eyebrow with
-flag + name. KPI strip (4): Total Items, On Track, At Risk, Overdue (scoped to that subsidiary).
-ProjectTable with filter chips (All / On Track / At Risk / Overdue) + search. Rows show the
-project's status **for that subsidiary** (from `project_org_status`), subsidiary pips (current
-highlighted), progress, portfolio name (or "Standalone"), due (red if overdue). Row → project
-panel. Data: `/api/subsidiaries/:orgUnitId/projects`.
+## Risks `/risks`
 
-## Slide-in panels (right sheet, 660px)
+Tabs Risks | Issues | Gap Report (unchanged from Phase A), plus **Export CSV**.
+Materialise keeps the origin link.
 
-Opened by clicking any project/programme; dimmed overlay; close via ✕, overlay click, or Esc.
+## Time `/time`
 
-**Project panel:** eyebrow (id · type · priority), title, sub-line (portfolio · programme · due
-· budget). Body: 4 stat tiles (Overall Progress, Status, #Subsidiaries, Budget); **Progress by
-Subsidiary** list (per-sub status pill, %, bar, milestone chips); **Milestone Matrix** table
-(subsidiary rows × milestone columns; cell = state block or `—`). Data: `/api/projects/:id`.
+Current user's weekly report, CSV export via `/api/time/report?format=csv`.
 
-**Programme panel:** stat tiles (Avg Progress, Status, #Projects, Budget); RAG summary tiles;
-"Projects in this Programme" list (row click drills into a project panel). Data:
-`/api/programmes/:id`.
+## People `/people`
 
-## RAID screen (Phase A)
+Workload table — allocation %, **leave-aware effective %** (docs/16 §5), on-leave badges,
+absence entry (manual + CSV import). **Export CSV** (allocations).
 
-Route `/(app)/risks`. Tabs: Risks | Issues | Gap Report.
-- **Risks:** table (title, project, category, prob×impact heat, owner, status). Create/edit via
-  dialog. Action "Materialise" converts to an issue (keeps origin link).
-- **Issues:** table (title, severity, owner, status, origin risk link).
-- **Gap Report:** occurred issues vs originally owned risks — highlights issues with no prior
-  owned/mitigated risk (supports PIR). Data: `/api/raid/gap-report`.
+## Reports `/reports` (docs/18 §5)
 
-## Derived values (keep consistent with the reference)
+- **R1** pipeline table (everyone), grouped by stage with gate ticks.
+- **R2** project × market matrix, **R3** market focus/blockers (Rollout portfolios).
+- Member weekly reports: Friday draft → edit (mandatory UX) → submit → PM acknowledges →
+  rolls into the check-in. Share links (`/reports/s/[token]`) are read-only snapshots.
 
-- Project overall progress = average of its subsidiaries' `progress`.
-- Portfolio avg progress = average of its projects' overall progress.
-- Heatmap cell % = average progress of that portfolio's items present in that subsidiary.
-- Cell/roll-up status = worst status present (Overdue > At Risk > On Track).
+## Exports (M9)
+
+One serializer (`src/lib/csv.ts`: BOM, CRLF, quoting, formula-injection guard) behind
+`/api/export?kind=projects|tasks|risks|allocations` — every export reuses the exact
+engine and permission scope of the screen it sits on. XLSX and server PDF are deferred
+(DM1.45).
 
 ## Empty / loading / error states
 
-- Loading: skeletons for KPI cards, heatmap rows, tables.
-- Empty: friendly message + primary action (e.g. "No portfolios yet — create one").
-- Error: inline error card; never leak server/stack details to the client.
-- No-permission: the nav item is hidden and the route returns 403 handled with a friendly page.
+Unchanged principles: skeletons while loading; friendly empties with a primary action;
+inline error cards that never leak server detail; no-permission renders the Forbidden
+page and the nav item is hidden.

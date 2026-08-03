@@ -1,6 +1,7 @@
 import { requirePermission } from "@/lib/api-guard";
 import { ok, toErrorResponse, UnprocessableError } from "@/server/errors";
 import { timeReport } from "@/server/time";
+import { csvFilename, toCsv } from "@/lib/csv";
 
 // GET /api/time/report?from=&to=&userId=&format=csv — completed entries rolled up per
 // task (relocated from /api/v1 in the M0 cull).
@@ -18,14 +19,19 @@ export async function GET(req: Request) {
     const report = await timeReport(guard.ctx, { from, to, userId });
 
     if (url.searchParams.get("format") === "csv") {
-      const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
-      const header = ["ID", "Task", "Tracked (min)", "Billable (min)"].map(esc).join(",");
-      const lines = report.rows.map((r) =>
-        [`QBT-${r.taskSeq}`, r.taskName, String(r.totalMin), String(r.billableMin)].map(esc).join(","),
-      );
-      const csv = [header, ...lines].join("\n");
+      // M9: the shared serializer (BOM, CRLF, quoting, formula-injection guard) replaces
+      // the hand-rolled escaping this route grew before the utility existed.
+      const csv = toCsv(report.rows, [
+        { header: "ID", value: (r) => `QBT-${r.taskSeq}` },
+        { header: "Task", value: (r) => r.taskName },
+        { header: "Tracked (min)", value: (r) => r.totalMin },
+        { header: "Billable (min)", value: (r) => r.billableMin },
+      ]);
       return new Response(csv, {
-        headers: { "Content-Type": "text/csv", "Content-Disposition": 'attachment; filename="time-report.csv"' },
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename="${csvFilename("time-report")}"`,
+        },
       });
     }
     return ok(report.rows, { totalMin: report.totalMin });

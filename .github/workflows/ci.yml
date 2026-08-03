@@ -1,0 +1,84 @@
+# M9 CI (docs/16 §12) — the same gates the Definition of Done runs locally:
+# lint, typecheck, unit + RLS tests against a real Postgres 17 with migrations and seed,
+# a production build, and the Playwright smoke. Secrets below are SYNTHETIC test values
+# (the RLS suites need *a* 32-byte key, not a real one); production secrets never enter CI.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  DATABASE_URL: postgresql://qubit:qubit@localhost:5432/qubit_ci?schema=public
+  # Synthetic 32-byte base64 key for encryptSecret()/MFA in tests — not a real secret.
+  MFA_ENCRYPTION_KEY: QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE=
+  AUTH_SECRET: ci-only-auth-secret-not-production
+  AUTH_TRUST_HOST: "true"
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: qubit
+          POSTGRES_PASSWORD: qubit
+          POSTGRES_DB: qubit_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U qubit"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # version comes from packageManager in package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm prisma migrate deploy
+      - run: pnpm prisma db seed
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: qubit
+          POSTGRES_PASSWORD: qubit
+          POSTGRES_DB: qubit_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U qubit"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm prisma migrate deploy
+      - run: pnpm prisma db seed
+      - run: npx playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

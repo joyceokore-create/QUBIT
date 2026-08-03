@@ -1459,3 +1459,51 @@ ping 200, bad signature 401, unknown repo 204, signed `fixes P001-2` push moved 
 to In Review with the commit chip rendering on the board card, replay returned
 `{replay:true}` and changed nothing. Demo wiring removed afterwards; `resetTenant` in
 the seed now clears both new tables (webhook_delivery has no cascade path).
+
+---
+
+## DM1.45 — Exports, e2e smoke, CI (M9-A)
+
+First half of M9 (docs/16 §12): the parts that harden what exists without touching the
+data model. The ClickUp table drop and server PDF are M9-B — each blocked on a decision
+that deserves daylight, not a footnote (see deferrals below).
+
+- **One CSV serializer** (`src/lib/csv.ts`): UTF-8 BOM (Excel guesses encodings without
+  it), CRLF per RFC 4180, quote-doubling, and a **formula-injection guard** — a task
+  titled `=HYPERLINK(...)` must open as text, never execute (OWASP CSV injection). The
+  guard fires on any leading `= + - @`, which means a negative number renders as `'-5`;
+  asserted in a test as a CHOSEN trade — safety over cosmetics — so a future "fix" is a
+  conscious decision. The time report's hand-rolled CSV was refactored onto it: the
+  utility exists precisely so escaping decisions stop being made per route.
+- **One export route** (`/api/export?kind=projects|tasks|risks|allocations`): each kind
+  reuses the EXACT engine and permission its screen renders from — the file you download
+  is the table you were looking at. Tasks go through the DM1.43 board wall
+  (`viewerBoardCategory` + `taskVisibleTo`), not around it: a dev's export contains their
+  lane, nothing else. Buttons are plain anchors — the server is the only data path, so
+  screen and file cannot drift.
+- **e2e smoke** (`tests/e2e/smoke.spec.ts`): the golden path on a seeded DB — login,
+  persona dashboard, personal board lanes, project board with all four PM lenses and a
+  REAL CSV download asserted by filename, reports page, risks page, and a Riverbank
+  login for the second tenant's shell. Deliberately shallow: it catches "auth broke / a
+  surface 500s", and leaves behaviour to the 680 unit/RLS tests.
+- **CI** (`.github/workflows/ci.yml`): the same gates the Definition of Done runs
+  locally — Postgres 17 service, migrate + seed, lint/typecheck/vitest, production
+  build, and a separate Playwright job with the report uploaded on failure. All secrets
+  in CI are SYNTHETIC (a base64 test key so `encryptSecret` works); production values
+  never enter the workflow.
+- **docs/09-ui-spec.md rewritten**: it still described the v1 exec-dashboard HTML
+  (sidebar shell, /standalone, heatmap-first overview) — surfaces removed across M0–M8.
+  It now maps the real app and points at the specs that own each behaviour.
+
+**Deferred, stated**:
+- **XLSX** — a true `.xlsx` writer needs a dependency not in docs/03; BOM'd CSV opens
+  cleanly in Excel, which was the actual ask. Revisit if someone needs formatted sheets.
+- **Server PDF** — Playwright-rendered print HTML per the spec, but shipping Chromium in
+  the production image is a ~400 MB image change and an OS-deps decision for the box;
+  M9-B makes that call explicitly.
+
+**Verified**: lint/typecheck/build green, 680/680 unit+RLS (89 files) and 6/6 e2e
+locally; all four export kinds fetched live with real rows (15 projects / 6 tasks / 6
+risks / 4 allocations) and correct attachment headers. One process lesson repeated
+itself: an earlier verification ran against a PRE-reseed project id and read "empty" —
+the fixture id, not the code. Re-derive ids after any reseed.

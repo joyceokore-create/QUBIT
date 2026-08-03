@@ -7,6 +7,7 @@ import { ConversationDrawer } from "@/components/conversation/conversation-drawe
 import { GenerateDialog } from "@/components/panels/project-tasks-section";
 import { BugDialog } from "@/components/workspace/bug-dialog";
 import { availableLenses, defaultLens, isAging, isTriageBug, lensFilter, wipOverloads, LENS_LABELS, type BoardLens } from "@/lib/board-lens";
+import { ExportButton } from "@/components/export-button";
 import type { ProjectRoleCategory } from "@/lib/roles";
 
 interface Task {
@@ -271,6 +272,7 @@ export function ProjectBoard({
             {progress.blocked > 0 && <span className="text-[var(--bad)]"> · {progress.blocked} blocked</span>}
           </div>
         </div>
+        <ExportButton href={`/api/export?kind=tasks&projectId=${projectId}`} />
         {canEdit && !mirrored && (
           <BugDialog
             projectId={projectId}

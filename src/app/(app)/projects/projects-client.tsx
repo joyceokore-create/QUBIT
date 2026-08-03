@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, Plus, Search } from "lucide-react";
 import { usePanel } from "@/components/panels/panel-context";
+import { ExportButton } from "@/components/export-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -129,6 +130,7 @@ export function ProjectsClient({
         >
           MINE <span className="opacity-55">{mineCount}</span>
         </button>
+        <ExportButton href="/api/export?kind=projects" />
         <span className="flex-1" />
         <span className="font-mono text-[10px] tracking-[1px] text-[var(--ink4)]">{filtered.length} SHOWN</span>
       </div>
