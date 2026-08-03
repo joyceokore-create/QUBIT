@@ -230,3 +230,42 @@ exempt only because it has no `tenant_id` at all. Making `invite_token` exempt w
 meant weakening isolation on a table holding credentials-grade capabilities, so
 `consumeInviteToken` instead probes each tenant's RLS context, the pattern
 `resolveGithubIntegration` already uses for unauthenticated webhooks.
+
+## 11. M-O4 change log (this increment) — see docs/23
+
+Guided first-login shipped: password → MFA → confirm, with the gate lifted only at
+finish. The A5 MFA hole (client-supplied secret) is closed.
+
+- `prisma/schema.prisma` + `migrations/20260803140000_mo4_mfa_enrolment` — `User` gains
+  `pendingMfaSecret`, `mfaRecoveryCodes String[]`, `onboardedAt`, `checklistDismissedAt`.
+- `migrations/20260803150000_mo4_password_set_at` — `passwordSetAt`, backfilled from
+  `COALESCE(last_login_at, created_at)` for users who already hold a self-set password
+  (`password_hash IS NOT NULL AND must_change_password = false`). This column is the
+  proof "the user chose this password themselves" — a hash alone is not proof, because
+  legacy admin-issued temp passwords also hash.
+- `src/lib/mfa-recovery.ts` — 10 single-use recovery codes (`a1b2c-3d4e5`), SHA-256
+  hashes stored, tolerant matching (case/spaces). `src/lib/mfa-policy.ts` —
+  `mfaRequired(roles)`: PlatformSuperAdmin, HeadOfProjects, HeadOfQA, Executive.
+- **A5 fix** — `/api/auth/mfa/enroll` stores the secret ENCRYPTED in `pendingMfaSecret`
+  and returns only the QR; `/api/auth/mfa/verify` accepts `{ token }` alone, reads the
+  pending secret from the DB, promotes it to `mfaSecret`, and returns the recovery codes
+  exactly once. A client can no longer supply the secret it will be verified against.
+- `/api/auth/mfa/reset` (gated `users:reset`) — clears live + pending secret and codes
+  so a locked-out user can re-enrol.
+- `src/lib/auth.ts` `authorize()` — a recovery code is accepted in place of a TOTP code
+  and its hash is consumed in the same transaction.
+- `src/server/users.ts` — `completeOnboarding` → `setOnboardingPassword` (stamps
+  `passwordSetAt`, does NOT lift the gate); new `finishOnboarding` re-checks password +
+  role-conditional MFA from the DB and only then clears `mustChangePassword` and stamps
+  `onboardedAt`. `OnboardingIncomplete.missing` tells the UI which step to show.
+- UI: `/onboarding` is a stepper (password → two-factor → confirm). `needsPassword` keys
+  off `passwordSetAt`, not `passwordHash`. Non-privileged roles may skip MFA once;
+  privileged roles cannot. The page mounts `TenantScope` so `bg-primary` controls render
+  in the tenant brand (they were product-green before).
+
+**Regression caught in browser verify, then closed with a test**: the first cut of
+`finishOnboarding` accepted "a password hash exists" as the password proof, which a
+legacy user holding an ADMIN-issued temp password satisfies — they could lift their own
+gate without ever changing the password (the M-O1 bypass through another door). Fixed by
+requiring `passwordSetAt` (see the migration above);
+`tests/rls/mfa-enrolment.test.ts` pins it.

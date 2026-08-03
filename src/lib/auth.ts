@@ -7,6 +7,8 @@ import { withTenant } from "@/lib/tenant";
 import { resolveTenantByEmailDomain } from "@/lib/tenant-domain";
 import { verifyPassword } from "@/lib/password";
 import { decryptMfaSecret, verifyTotp } from "@/lib/mfa";
+import { matchRecoveryCode } from "@/lib/mfa-recovery";
+import { audit } from "@/lib/audit";
 import { checkRateLimit, recordFailure, resetRateLimit } from "@/lib/rate-limit";
 import { derivedGroups, effectiveGroups, landingPersona } from "@/lib/personas";
 import { projectRoleCategory } from "@/lib/roles";
@@ -94,11 +96,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
 
         if (user.mfaSecret) {
-          // Uniform failure for a missing or wrong code — never reveal which factor failed.
+          // Uniform failure for a missing or wrong code — never reveal which factor failed,
+          // nor whether the input was read as a TOTP or a recovery code.
           const secret = decryptMfaSecret(user.mfaSecret);
-          if (!totpCode || !(await verifyTotp(secret, totpCode))) {
-            recordFailure(rateLimitKey);
-            return null;
+          const totpOk = Boolean(totpCode) && (await verifyTotp(secret, totpCode!));
+          if (!totpOk) {
+            // M-O4: fall back to a single-use recovery code, for the user who still has
+            // the codes but not the phone.
+            const idx = totpCode ? matchRecoveryCode(totpCode, user.mfaRecoveryCodes) : -1;
+            if (idx < 0) {
+              recordFailure(rateLimitKey);
+              return null;
+            }
+            // CONSUME it in the same breath as accepting it: a recovery code that survived
+            // its own use would be a permanent bypass of the second factor.
+            const remaining = user.mfaRecoveryCodes.filter((_, i) => i !== idx);
+            await withTenant({ tenantId: tenant.id, userId: user.id }, async (tx) => {
+              await tx.user.update({ where: { id: user.id }, data: { mfaRecoveryCodes: remaining } });
+              await audit(tx, { tenantId: tenant.id, userId: user.id }, {
+                action: "update",
+                entityType: "user",
+                entityId: user.id,
+                after: { mfa_recovery_used: true, remainingCodes: remaining.length },
+              });
+            });
           }
         }
 

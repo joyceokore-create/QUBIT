@@ -139,6 +139,32 @@ model User {
   passwordHash           String?     @map("password_hash")
   previousPasswordHashes String[]    @default([]) @map("previous_password_hashes")
   mfaSecret              String?     @map("mfa_secret") // encrypted at rest, see src/lib/mfa.ts
+  /**
+   * M-O4: encrypted TOTP secret held between "start enrolment" and "confirm a code".
+   * The secret is SERVER-BOUND — never round-tripped through the client at verify time
+   * (docs/23 §3, audit finding A5) — and is cleared when it graduates to mfaSecret.
+   */
+  pendingMfaSecret       String?     @map("pending_mfa_secret")
+  /**
+   * SHA-256 hashes of single-use recovery codes. Plaintext is shown ONCE at enrolment;
+   * a used code's hash is removed, so possession can't be replayed.
+   */
+  mfaRecoveryCodes       String[]    @default([]) @map("mfa_recovery_codes")
+  /**
+   * When the user last set their OWN password. Null means the current hash was issued by
+   * someone else (an admin temp password) or doesn't exist yet — which is exactly what
+   * finishOnboarding must refuse, or a gated user could lift their own gate by calling
+   * finish without ever changing the admin-issued password.
+   */
+  passwordSetAt          DateTime?   @map("password_set_at")
+  /**
+   * Set when the guided first-login finishes — the honest "this person is set up" mark.
+   */
+  onboardedAt            DateTime?   @map("onboarded_at")
+  /**
+   * First-login checklist dismissal; a column (not localStorage) so it holds across devices.
+   */
+  checklistDismissedAt   DateTime?   @map("checklist_dismissed_at")
   status                 String      @default("ACTIVE") // "ACTIVE" | "INVITED" | "SUSPENDED" | "DELETED"
   deletedAt              DateTime?   @map("deleted_at")
   lastLoginAt            DateTime?   @map("last_login_at") // null = invited but never signed in
@@ -158,6 +184,7 @@ model User {
   // direct lookup, so it's inert bad data rather than an active bug (unlike Department's
   // parentId, which IS walked for cycle prevention because hierarchy queries rely on it).
   /**
+   * /**
    * /**
    * /**
    * /**

@@ -1675,3 +1675,49 @@ false → replaying the same link returned 400. Fixture removed afterwards.
 **Ops note**: until `FEATURE_EMAIL` + the four `GRAPH_*` vars are set on the box,
 `emailEnabled()` is false and every invite/reset returns the copyable link instead of
 sending — the flow works today, it just doesn't email yet.
+
+## DM1.50 — MFA enrolment is server-bound; the onboarding gate lifts only at finish (M-O4)
+
+Executed docs/23. First login is now a guided flow — password → two-factor → confirm —
+and the two security holes it existed to close are closed.
+
+- **A5 fix: the client can no longer choose the secret it is verified against.**
+  `/enroll` generates the secret server-side, stores it ENCRYPTED in `pendingMfaSecret`,
+  and returns only the QR data-URL. `/verify` accepts `{ token }` alone (`z.string().length(6)`
+  — the old schema's `secret` field is gone), reads the pending secret from the DB,
+  and promotes it to `mfaSecret` on a good code. Enrolling an attacker-known secret now
+  requires writing the database, not calling an API. Pinned by an RLS-suite regression test.
+- **Recovery codes, hashes only.** Ten single-use codes are returned exactly once, at
+  confirm time; SHA-256 hashes are stored, and `authorize()` consumes a matched hash in
+  the same transaction that admits the login — no reuse window. An admin reset
+  (`users:reset`) clears live + pending secret and all codes.
+- **MFA is required by role, enforced server-side.** `mfaRequired()` — PlatformSuperAdmin,
+  HeadOfProjects, HeadOfQA, Executive. The skip link is only rendered for non-privileged
+  roles, but the real enforcement is in `finishOnboarding`, which re-reads roles and
+  `mfaSecret` from the DB.
+- **The gate lifts in exactly one place.** Setting a password no longer clears
+  `mustChangePassword` (`setOnboardingPassword` just stamps the fact); only
+  `/api/onboarding/finish` clears it, after re-checking every prerequisite from the DB.
+  Closing the tab mid-flow resumes where the user left off; no client assertion is
+  trusted (M-O1's rule, extended to the whole flow).
+- **Regression I introduced and closed: a password HASH is not proof of a CHOSEN
+  password.** The first cut of `finishOnboarding` checked `passwordHash !== null`, which
+  a legacy user holding an admin-issued temp password satisfies — they could lift their
+  own gate without changing the password (the M-O1 bypass through another door). Browser
+  verification caught it; the fix is a `passwordSetAt` column stamped only by
+  `setOnboardingPassword`/accept, backfilled for users who already chose their password
+  (`must_change_password = false`), required by finish, and pinned by a regression test.
+  `needsPassword` on the stepper keys off the same column, so temp-password users are
+  routed through the password step instead of being stranded at MFA.
+- **Theming**: `/onboarding` mounts `TenantScope`, so `bg-primary` controls (the
+  buttons) resolve to the tenant brand at the document root. Previously only components
+  reading `var(--brand)` directly (the step dots) went red — `--primary` resolves at
+  `:root`, which the wrapper's inline `--brand` never reached.
+
+**Verified**: lint/typecheck/build green, 723/723 tests (21 new: recovery-code unit
+suite + MFA/finish RLS suite). Live on the dev server as a gated fixture Member with an
+admin temp password: early `/finish` returned `{missing:"password"}` → stepper opened on
+Password → set own password (gate still on, `passwordSetAt` stamped) → enrolled TOTP
+from the real QR flow (pending → live only after a valid code; wrong code rejected) →
+10 recovery codes shown once → finish lifted the gate, stamped `onboardedAt`, landed on
+the Developer dashboard. Fixture removed afterwards.

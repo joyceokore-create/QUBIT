@@ -7,6 +7,7 @@ import { mintInvite } from "@/server/invites";
 import { ROLE_PERMISSIONS } from "@/lib/rbac";
 import { derivedGroups, USER_GROUPS } from "@/lib/personas";
 import { PROJECT_ROLES, projectRoleCategory } from "@/lib/roles";
+import { mfaRequired } from "@/lib/mfa-policy";
 
 const ROLE_KEYS = Object.keys(ROLE_PERMISSIONS) as [string, ...string[]];
 
@@ -149,9 +150,13 @@ export async function setUserGroups(ctx: TenantContext, userId: string, input: S
   });
 }
 
-/** First-login acceptance — the signed-in user sets their own password, lifting the
- *  mustChangePassword gate. Enforces the policy + no-reuse of recent passwords. */
-export async function completeOnboarding(ctx: TenantContext, newPassword: string): Promise<void> {
+/**
+ * First-login password step. M-O4 (docs/23 §6.1): this sets the password and NOTHING else
+ * — the `mustChangePassword` gate is lifted only by /api/onboarding/finish, after the MFA
+ * and confirm-role steps. Renamed from `completeOnboarding` because it no longer completes
+ * anything; it is one step of a flow.
+ */
+export async function setOnboardingPassword(ctx: TenantContext, newPassword: string): Promise<void> {
   const policyError = validatePasswordPolicy(newPassword);
   if (policyError) throw new UserAdminError(policyError, "WEAK_PASSWORD");
   await withTenant(ctx, async (tx) => {
@@ -165,10 +170,12 @@ export async function completeOnboarding(ctx: TenantContext, newPassword: string
       data: {
         passwordHash: await hashPassword(newPassword),
         previousPasswordHashes: user.passwordHash ? pushPasswordHistory(user.previousPasswordHashes, user.passwordHash) : user.previousPasswordHashes,
-        mustChangePassword: false,
+        // Proof the user chose this password themselves — finishOnboarding requires it.
+        passwordSetAt: new Date(),
+        // NOT clearing mustChangePassword here — finishOnboarding owns the gate.
       },
     });
-    await audit(tx, ctx, { action: "update", entityType: "user", entityId: ctx.userId, after: { onboarded: true } });
+    await audit(tx, ctx, { action: "update", entityType: "user", entityId: ctx.userId, after: { onboarding_password_set: true } });
   });
 }
 
@@ -426,6 +433,51 @@ export async function softDeleteUser(ctx: TenantContext, userId: string): Promis
       entityType: "user",
       entityId: userId,
       before: { name: before.name, email: before.email, status: before.status },
+    });
+  });
+}
+
+export class OnboardingIncomplete extends Error {
+  constructor(
+    message: string,
+    public missing: "password" | "mfa",
+  ) {
+    super(message);
+    this.name = "OnboardingIncomplete";
+  }
+}
+
+/**
+ * Finish the guided first-login (docs/23 §6.1) — the ONLY place `mustChangePassword` is
+ * cleared. Prerequisites are re-checked server-side from the database: the UI advancing a
+ * step is never the control, and a privileged role must not reach the dashboard without a
+ * second factor just because a client skipped the screen.
+ */
+export async function finishOnboarding(ctx: TenantContext): Promise<void> {
+  await withTenant(ctx, async (tx) => {
+    const user = await tx.user.findUniqueOrThrow({
+      where: { id: ctx.userId },
+      select: { passwordHash: true, passwordSetAt: true, mfaSecret: true, roles: { select: { role: true } } },
+    });
+    // NOT `passwordHash != null`: a legacy user holding an ADMIN-ISSUED temp password has
+    // one, and would otherwise lift their own gate here without ever changing it —
+    // reopening the M-O1 bypass through a different door. passwordSetAt is only stamped
+    // when the USER sets it (setOnboardingPassword / consumeInviteToken).
+    if (!user.passwordHash || !user.passwordSetAt) {
+      throw new OnboardingIncomplete("Set a password first.", "password");
+    }
+    if (mfaRequired(user.roles.map((r) => r.role)) && !user.mfaSecret) {
+      throw new OnboardingIncomplete("Your role requires two-factor authentication.", "mfa");
+    }
+    await tx.user.update({
+      where: { id: ctx.userId },
+      data: { mustChangePassword: false, onboardedAt: new Date() },
+    });
+    await audit(tx, ctx, {
+      action: "update",
+      entityType: "user",
+      entityId: ctx.userId,
+      after: { onboarding_complete: true },
     });
   });
 }

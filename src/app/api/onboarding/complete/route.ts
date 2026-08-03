@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getTenantContext } from "@/lib/tenant";
-import { completeOnboarding, UserAdminError } from "@/server/users";
+import { setOnboardingPassword, UserAdminError } from "@/server/users";
 
 const Body = z.object({ password: z.string().min(1) });
 
-// First-login acceptance — the signed-in user sets their own password.
+// First-login PASSWORD step (M-O4). Sets the password only — /api/onboarding/finish
+// lifts the gate once MFA and confirm-role are done.
 export async function POST(req: Request) {
   let ctx;
   try {
@@ -18,7 +19,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: { code: "VALIDATION", message: "Enter a new password." } }, { status: 400 });
   }
   try {
-    await completeOnboarding(ctx, parsed.data.password);
+    await setOnboardingPassword(ctx, parsed.data.password);
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e instanceof UserAdminError) {

@@ -194,6 +194,8 @@ export async function consumeInviteToken(rawToken: string, newPassword: string):
         previousPasswordHashes: user.passwordHash
           ? pushPasswordHistory(user.previousPasswordHashes, user.passwordHash)
           : user.previousPasswordHashes,
+        // The user chose this one — see finishOnboarding's check.
+        passwordSetAt: new Date(),
         // A suspended user accepting a reset link stays suspended — the link sets a
         // password, it does not reinstate access.
         status: user.status === "INVITED" ? "ACTIVE" : user.status,
