@@ -5,16 +5,16 @@ import type { TenantContext } from "@/lib/tenant";
 import { getBriefing } from "@/server/relevance";
 
 describe("getBriefing (fetch) — Phase 2", () => {
-  let kcbId: string;
+  let demoBId: string;
   let riverbankId: string;
 
   beforeAll(async () => {
-    const [kcb, rb] = await Promise.all([
-      prisma.tenant.findUnique({ where: { slug: "kcb" } }),
+    const [demoB, rb] = await Promise.all([
+      prisma.tenant.findUnique({ where: { slug: "demo-b" } }),
       prisma.tenant.findUnique({ where: { slug: "riverbank" } }),
     ]);
-    if (!kcb || !rb) throw new Error("getBriefing tests require seeded data — run `pnpm prisma:seed` first.");
-    kcbId = kcb.id;
+    if (!demoB || !rb) throw new Error("getBriefing tests require seeded data — run `pnpm prisma:seed` first.");
+    demoBId = demoB.id;
     riverbankId = rb.id;
   });
 
@@ -37,9 +37,9 @@ describe("getBriefing (fetch) — Phase 2", () => {
 
   it("computes each tenant's briefing independently (RLS-scoped fetch)", async () => {
     const rb = await getBriefing({ tenantId: riverbankId, userId: "v", roles: ["Executive"] }, 5);
-    const kcb = await getBriefing({ tenantId: kcbId, userId: "v", roles: ["Executive"] }, 5);
+    const demoB = await getBriefing({ tenantId: demoBId, userId: "v", roles: ["Executive"] }, 5);
     // Different tenants → disjoint entity ids (RLS scopes every query in the fetch).
-    const overlap = rb.map((i) => i.id).some((id) => kcb.map((k) => k.id).includes(id));
+    const overlap = rb.map((i) => i.id).some((id) => demoB.map((k) => k.id).includes(id));
     expect(overlap).toBe(false);
   });
 });

@@ -14,9 +14,9 @@ describe("project contribution — members can write, non-members can't", () => 
   let blockerId: string;
 
   beforeAll(async () => {
-    const kcb = await prisma.tenant.findUnique({ where: { slug: "kcb" } });
-    if (!kcb) throw new Error("project-contribution tests require seeded data — run `pnpm prisma:seed` first.");
-    tenantId = kcb.id;
+    const demoB = await prisma.tenant.findUnique({ where: { slug: "demo-b" } });
+    if (!demoB) throw new Error("project-contribution tests require seeded data — run `pnpm prisma:seed` first.");
+    tenantId = demoB.id;
     await withTenant({ tenantId, userId: "seed" }, async (tx) => {
       const [member, outsider] = await Promise.all([
         tx.user.create({ data: { tenantId, email: "contrib-member@fixture.invalid", name: "Contrib Member", status: "ACTIVE" } }),

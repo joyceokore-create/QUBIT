@@ -26,7 +26,6 @@ function looksLikeCompleteDomain(email: string): boolean {
 // (still requires pressing "Sign in"). Demo credentials only; remove before production.
 const QUICK_SIGN_INS = [
   { name: "Riverbank", email: "joyce.okore@riverbank.solutions", password: "Passw0rd!23", initial: "R", brand: "#c8151b" },
-  { name: "KCB", email: "daniel.kiptoo@kcb.example.invalid", password: "Passw0rd!23", initial: "K", brand: "#1b7a3e" },
 ];
 
 const INPUT_CLASS =

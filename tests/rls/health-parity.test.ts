@@ -20,7 +20,7 @@ describe("health parity — dashboard vs Q", () => {
   const tenants: { slug: string; ctx: TenantContext; name: string }[] = [];
 
   beforeAll(async () => {
-    for (const slug of ["kcb", "riverbank"]) {
+    for (const slug of ["demo-b", "riverbank"]) {
       const tenant = await prisma.tenant.findUnique({ where: { slug } });
       if (!tenant) throw new Error("Parity tests require seeded tenants — run `pnpm prisma:seed`.");
       const [user] = await ensureUsers(tenant.id, 1);

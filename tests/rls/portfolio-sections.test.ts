@@ -12,7 +12,7 @@ import { ensureUsers, cleanupFixtureUsers } from "./_users";
 const ragRank = (r: PortfolioSection["rag"]) => (r === "Red" ? 0 : r === "Amber" ? 1 : 2);
 
 describe("M18-B portfolio-grouped sections", () => {
-  let kcbId: string;
+  let demoBId: string;
   let riverbankId: string;
   let leadId: string;
   let ctx: TenantContext;
@@ -22,27 +22,27 @@ describe("M18-B portfolio-grouped sections", () => {
   let createdProjectId: string;
 
   beforeAll(async () => {
-    const [kcb, riverbank] = await Promise.all([
-      prisma.tenant.findUnique({ where: { slug: "kcb" } }),
+    const [demoB, riverbank] = await Promise.all([
+      prisma.tenant.findUnique({ where: { slug: "demo-b" } }),
       prisma.tenant.findUnique({ where: { slug: "riverbank" } }),
     ]);
-    if (!kcb || !riverbank) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
-    kcbId = kcb.id;
+    if (!demoB || !riverbank) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    demoBId = demoB.id;
     riverbankId = riverbank.id;
-    const [lead] = await ensureUsers(kcbId, 1);
+    const [lead] = await ensureUsers(demoBId, 1);
     leadId = lead.id;
-    ctx = { tenantId: kcbId, userId: leadId, roles: ["Member"] };
+    ctx = { tenantId: demoBId, userId: leadId, roles: ["Member"] };
     const [rvUser] = await ensureUsers(riverbankId, 1);
     rvCtx = { tenantId: riverbankId, userId: rvUser.id, roles: ["Member"] };
 
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       const portfolio = await tx.portfolio.create({
-        data: { tenantId: kcbId, name: "ZZZ Sections Fixture", viewKind: "Rollout" },
+        data: { tenantId: demoBId, name: "ZZZ Sections Fixture", viewKind: "Rollout" },
       });
       fixturePortfolioId = portfolio.id;
       const red = await tx.project.create({
         data: {
-          tenantId: kcbId,
+          tenantId: demoBId,
           code: `SEC${Date.now() % 100000}`,
           name: "Sections Red Fixture",
           type: "Project",
@@ -57,17 +57,17 @@ describe("M18-B portfolio-grouped sections", () => {
   });
 
   afterAll(async () => {
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       await tx.project.deleteMany({ where: { id: { in: [redProjectId, createdProjectId].filter(Boolean) } } });
       await tx.portfolio.deleteMany({ where: { id: fixturePortfolioId } });
     });
-    await cleanupFixtureUsers(kcbId);
+    await cleanupFixtureUsers(demoBId);
     await cleanupFixtureUsers(riverbankId);
     await prisma.$disconnect();
   });
 
   it("§10: zero portfolio-less projects in either tenant after the DM1.18 backfill", async () => {
-    for (const tenantId of [kcbId, riverbankId]) {
+    for (const tenantId of [demoBId, riverbankId]) {
       const orphans = await withTenant({ tenantId, userId: "test" }, (tx) =>
         tx.project.count({ where: { portfolioId: null } }),
       );
@@ -83,7 +83,7 @@ describe("M18-B portfolio-grouped sections", () => {
       status: "Planning",
     });
     createdProjectId = project.id;
-    const row = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const row = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.project.findUniqueOrThrow({
         where: { id: project.id },
         select: { portfolioId: true, portfolio: { select: { name: true } } },
@@ -122,7 +122,7 @@ describe("M18-B portfolio-grouped sections", () => {
   it("§7: a portfolio move is audited with before/after, and validates the target", async () => {
     await updateProject(ctx, createdProjectId, { portfolioId: fixturePortfolioId });
 
-    const [row, audit] = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const [row, audit] = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       Promise.all([
         tx.project.findUniqueOrThrow({ where: { id: createdProjectId }, select: { portfolioId: true } }),
         tx.auditLog.findFirst({

@@ -13,9 +13,9 @@ describe("scoped admin access (Phase 4)", () => {
   let teamId: string;
 
   beforeAll(async () => {
-    const kcb = await prisma.tenant.findUnique({ where: { slug: "kcb" } });
-    if (!kcb) throw new Error("scoped-access tests require seeded data — run `pnpm prisma:seed` first.");
-    tenantId = kcb.id;
+    const demoB = await prisma.tenant.findUnique({ where: { slug: "demo-b" } });
+    if (!demoB) throw new Error("scoped-access tests require seeded data — run `pnpm prisma:seed` first.");
+    tenantId = demoB.id;
     await withTenant({ tenantId, userId: "seed" }, async (tx) => {
       const [head, other, lead] = await Promise.all([
         tx.user.create({ data: { tenantId, email: "p4head@fixture.invalid", name: "P4 Head", status: "ACTIVE" } }),

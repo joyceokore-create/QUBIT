@@ -11,9 +11,9 @@ import { expect, test } from "@playwright/test";
  * playwright.config.ts boots the app.
  */
 
-const ADMIN = { email: "daniel.kiptoo@kcb.example.invalid", password: "Passw0rd!23" };
+const ADMIN = { email: "demo.admin@demo-b.example.invalid", password: "Passw0rd!23" };
 
-test.describe("golden path (KCB super-admin)", () => {
+test.describe("golden path (Demo Org B fixture super-admin)", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/login");
     await page.getByPlaceholder("you@company.com").fill(ADMIN.email);
@@ -24,7 +24,7 @@ test.describe("golden path (KCB super-admin)", () => {
 
   test("dashboard renders a persona with live content", async ({ page }) => {
     await expect(page.getByText(/Good (morning|afternoon|evening|day)/)).toBeVisible();
-    await expect(page.getByText("KCB", { exact: false }).first()).toBeVisible();
+    await expect(page.getByText("Demo Org B", { exact: false }).first()).toBeVisible();
   });
 
   test("personal board shows the three lanes", async ({ page }) => {

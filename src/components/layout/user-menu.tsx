@@ -32,7 +32,7 @@ interface UserMenuProps {
   canSwitchTenant?: boolean;
   currentSlug?: string;
   /**
-   * "avatar" (default) — bare initials circle (sidebar footer, KCB topbar).
+   * "avatar" (default) — bare initials circle (sidebar footer, default topbar).
    * "chip" — a profile pill with avatar + name + chevron, for the branded
    *          Riverbank header where it stands in for the old tenant chip.
    */

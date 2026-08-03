@@ -1,7 +1,7 @@
 # 08 — Design System
 
 The visual North Star is `qubit_exec_dashboard.html`. Reproduce its look with Tailwind + CSS
-variables, but make the **brand colour a per-tenant token** so KCB renders green and Riverbank
+variables, but make the **brand colour a per-tenant token** so Riverbank renders red and any
 renders red without any other change.
 
 ## Brand tokens (per tenant)
@@ -9,7 +9,7 @@ renders red without any other change.
 The tenant record supplies `--brand` and `--brand-light`. The authenticated layout injects them
 as inline CSS variables on a wrapper element; everything else references the variables.
 
-| Token | KCB Group | Riverbank Group | Role |
+| Token | Product default | Riverbank Group | Role |
 |-------|-----------|-----------------|------|
 | `--brand` | `#1B7A3E` | `#ED1C24` | primary actions, active nav, accents |
 | `--brand-mid` | `#2EA055` | `#F4434A` | hover on primary |
@@ -34,7 +34,7 @@ as inline CSS variables on a wrapper element; everything else references the var
 
 > Important: **RAG status colours are semantic and DO NOT change per tenant.** On Track is
 > always green, At Risk amber, Overdue red, Planning blue. Only the *brand* accent (nav,
-> buttons, links) swaps. For KCB the brand green and the On-Track green coincide; for Riverbank
+> buttons, links) swaps. For the product default the brand green and the On-Track green coincide; for Riverbank
 > they intentionally differ (red brand, green "On Track") — keep them as separate tokens.
 
 ## Typography

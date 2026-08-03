@@ -6,8 +6,9 @@ operate for two tenants with sub-organisations and gives database-guaranteed iso
 
 ## Concepts
 
-- **Tenant** — a top-level isolated organisation. Launch tenants: `KCB Group`, `Riverbank Group`.
-- **Sub-organisation / subsidiary** — a division within a tenant (e.g. KCB Kenya). Modelled as
+- **Tenant** — a top-level isolated organisation. Real tenant: `Riverbank Group` (M10, DM1.46).
+  The dev seed also creates a synthetic `Demo Org B` tenant purely for isolation tests.
+- **Sub-organisation / subsidiary** — a division within a tenant. Modelled as
   an `org_unit` row with `tenant_id`; NOT a separate tenant.
 - **User** — belongs to exactly one tenant (except platform super-admins).
 - **Tenant context** — the current `tenant_id` for a request, derived from the session.
@@ -86,7 +87,7 @@ tokens; the authenticated layout applies them as CSS variables. See `08-design-s
 
 | Tenant | `--brand` | `--brand-light` | Display name |
 |--------|-----------|-----------------|--------------|
-| KCB Group | `#1B7A3E` | `#E8F5EE` | KCB Group |
+| Demo Org B | `#475569` | `#E2E8F0` | Demo Org B (synthetic fixture) |
 | Riverbank Group | `#ED1C24` | `#FDECEC` | Riverbank Group |
 
 ## Tenant switching (super-admin only)

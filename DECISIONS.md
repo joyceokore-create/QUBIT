@@ -1507,3 +1507,48 @@ locally; all four export kinds fetched live with real rows (15 projects / 6 task
 risks / 4 allocations) and correct attachment headers. One process lesson repeated
 itself: an earlier verification ran against a PRE-reseed project id and read "empty" —
 the fixture id, not the code. Re-derive ids after any reseed.
+
+---
+
+## DM1.46 — KCB the customer is gone; the architecture and its proof stay (M10)
+
+Per Joyce (2026-08-03): strip the KCB tenant, remain Riverbank-only.
+
+**What "strip" means here, precisely:**
+- **Multitenancy stays.** RLS on every table is rule 1 of CLAUDE.md and is not customer
+  config — it is how the system proves isolation at all. What was removed is a CUSTOMER,
+  not the architecture.
+- **The old KCB demo dataset was renamed, not deleted.** ~50 RLS/persona suites and the
+  e2e smoke depend on its SHAPE (portfolios, programmes, markets, checkpoint templates,
+  the first-project task fixtures, qa.demo/impl.demo users). It now seeds as **Demo Org
+  B** (`demo-b`, neutral slate branding, `.invalid` domains, "Demo Kenya"-style org
+  units, demo.admin@demo-b.example.invalid) — unmistakably synthetic, never a customer.
+  A first pass tried a MINIMAL tenant B instead; it was reverted within the hour because
+  it silently invalidated every suite that reads seeded content. Rename beats rebuild.
+- **Riverbank keeps KCB references that are Riverbank's own data**: the
+  "Business Case Approval (KCB)" stage name and the rollout-portfolio description come
+  from `docs/Riverbank Projects.docx` — KCB is Riverbank's CLIENT in those, and deleting
+  the words would falsify the business record.
+- **Production needed nothing**: it has only ever held the `riverbank` tenant (verified
+  on the box — tenant list is real; the zero row-counts in the same query were the
+  unscoped-psql RLS trap, again). The seed still calls `resetTenant("kcb")` so any
+  pre-M10 DEV database comes out clean on its next reseed.
+
+**App strip:** KCB quick sign-in card; the topbar KCB emblem special-case; KCB's licensed
+Lufga font files (`src/assets/KCB/` deleted — the landing/auth surfaces repoint to Plus
+Jakarta Sans) and the `[data-tenant="kcb"]` theme blocks; marketing copy naming KCB Group
+as a customer ("Built for Riverbank Group", one trust chip); `--kcb-blue` renamed
+`--navy` (it is QUBIT's own accent). Theming remains data-driven per tenant row — any
+future tenant brings its own colours; only Riverbank has a bespoke re-skin.
+
+**Tests:** the fixture tenant renamed across 56 files (slug, domains, admin email,
+identifiers); the three UI unit suites now assert KCB's ABSENCE on the login and landing
+pages. CLAUDE.md's Definition of Done reworded: "works for Riverbank with correct
+theming, and breaks nothing under the synthetic fixture tenant" — the isolation test
+requirement is unchanged.
+
+**Verified**: lint/typecheck/build green, 680/680 unit+RLS, 6/6 e2e (golden path now runs
+on Demo Org B's full-shaped fixture; the Riverbank login test covers the real tenant).
+Browser-checked: landing trust strip names only Riverbank, login shows a single Riverbank
+quick sign-in resolving "Signing in to Riverbank Group", Joyce's exec dashboard renders
+the red re-skin over the RBS portfolio. Deployed with no schema change.

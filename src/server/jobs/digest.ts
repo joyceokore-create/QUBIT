@@ -43,7 +43,7 @@ export const dailyDigest: JobDefinition = {
     }
 
     // The job's tenant handle carries id/slug only; branding comes from the row so the
-    // email reads green for KCB and red for Riverbank, exactly like the app.
+    // email carries the tenant's own colour — red for Riverbank — exactly like the app.
     const brand = await tx.tenant.findUnique({ where: { id: tenant.id }, select: { name: true, brandColor: true } });
     const users = await tx.user.findMany({
       where: { id: { in: [...byUser.keys()] }, status: "ACTIVE" },

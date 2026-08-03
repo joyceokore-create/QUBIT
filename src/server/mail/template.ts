@@ -3,7 +3,7 @@
  * clients are hostile to modern CSS, so this is table-free, inline-styled HTML with a
  * real plain-text alternative rather than a design-system port.
  *
- * Every template takes the tenant's brand colour so KCB reads green and Riverbank red,
+ * Every template takes the tenant's brand colour so Riverbank reads red (and any other tenant its own colour),
  * exactly like the app (docs/08 hard rule — theming is per tenant, never hardcoded).
  */
 

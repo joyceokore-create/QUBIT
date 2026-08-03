@@ -16,7 +16,7 @@ import { getPortfolioSections } from "@/server/pipeline";
 import { createUsers, cleanupFixtureUsers } from "./_users";
 
 describe("M-D-A delivery checkpoints", () => {
-  let kcbId: string;
+  let demoBId: string;
   let riverbankId: string;
   let leadId: string;
   let ctx: TenantContext;
@@ -25,21 +25,21 @@ describe("M-D-A delivery checkpoints", () => {
   let gateIds: string[] = [];
 
   beforeAll(async () => {
-    const [kcb, riverbank] = await Promise.all([
-      prisma.tenant.findUnique({ where: { slug: "kcb" } }),
+    const [demoB, riverbank] = await Promise.all([
+      prisma.tenant.findUnique({ where: { slug: "demo-b" } }),
       prisma.tenant.findUnique({ where: { slug: "riverbank" } }),
     ]);
-    if (!kcb || !riverbank) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
-    kcbId = kcb.id;
+    if (!demoB || !riverbank) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    demoBId = demoB.id;
     riverbankId = riverbank.id;
-    const [lead] = await createUsers(kcbId, 1, "cp");
+    const [lead] = await createUsers(demoBId, 1, "cp");
     leadId = lead.id;
-    ctx = { tenantId: kcbId, userId: leadId, roles: ["Member"] };
+    ctx = { tenantId: demoBId, userId: leadId, roles: ["Member"] };
 
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       const project = await tx.project.create({
         data: {
-          tenantId: kcbId,
+          tenantId: demoBId,
           code: `CP${Date.now() % 100000}`,
           name: "Checkpoint Fixture",
           type: "Project",
@@ -59,19 +59,19 @@ describe("M-D-A delivery checkpoints", () => {
       // M8-A: closing the BRD gate now runs its checklist (docs/16 §6). This suite is
       // about the derived-% maths, so give the fixture what that gate asks for — an
       // allocated member and an approved BRD — rather than overriding past it.
-      await tx.projectMember.create({ data: { tenantId: kcbId, projectId, userId: leadId, role: "Project Manager" } });
+      await tx.projectMember.create({ data: { tenantId: demoBId, projectId, userId: leadId, role: "Project Manager" } });
       await tx.projectDocument.create({
-        data: { tenantId: kcbId, projectId, title: "Business requirements", kind: "BRD", status: "Approved" },
+        data: { tenantId: demoBId, projectId, title: "Business requirements", kind: "BRD", status: "Approved" },
       });
     });
   });
 
   afterAll(async () => {
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       await tx.domainEvent.deleteMany({ where: { type: "checkpoint.state_changed" } });
       await tx.project.deleteMany({ where: { id: projectId } }); // statuses cascade
     });
-    await cleanupFixtureUsers(kcbId);
+    await cleanupFixtureUsers(demoBId);
     await prisma.$disconnect();
   });
 
@@ -112,10 +112,10 @@ describe("M-D-A delivery checkpoints", () => {
       CheckpointError,
     );
     // A blocker from another project is refused too.
-    const otherBlockerId = await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    const otherBlockerId = await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       const other = await tx.project.findFirstOrThrow({ where: { id: { not: projectId } }, select: { id: true } });
       const b = await tx.blocker.create({
-        data: { tenantId: kcbId, projectId: other.id, description: "Someone else's problem", severity: "Medium", status: "Open" },
+        data: { tenantId: demoBId, projectId: other.id, description: "Someone else's problem", severity: "Medium", status: "Open" },
       });
       return b.id;
     });
@@ -123,9 +123,9 @@ describe("M-D-A delivery checkpoints", () => {
       setCheckpointState(ctx, projectId, { checkpointId: gateIds[3], state: "Blocked", blockerId: otherBlockerId }),
     ).rejects.toThrowError(CheckpointError);
 
-    const mine = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const mine = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.blocker.create({
-        data: { tenantId: kcbId, projectId, description: "Vendor contract unsigned", severity: "Critical", status: "Open" },
+        data: { tenantId: demoBId, projectId, description: "Vendor contract unsigned", severity: "Critical", status: "Open" },
         select: { id: true },
       }),
     );
@@ -137,7 +137,7 @@ describe("M-D-A delivery checkpoints", () => {
   });
 
   it("rejects a checkpoint from a different template", async () => {
-    const strayId = await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    const strayId = await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       const other = await tx.checkpointTemplate.findFirstOrThrow({
         where: { name: "Market rollout" },
         select: { checkpoints: { select: { id: true }, take: 1 } },
@@ -150,7 +150,7 @@ describe("M-D-A delivery checkpoints", () => {
   });
 
   it("audits and events every state change", async () => {
-    const [audit, event] = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const [audit, event] = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       Promise.all([
         tx.auditLog.findFirst({
           where: { entityType: "checkpoint_status", actorId: leadId },
@@ -174,12 +174,12 @@ describe("M-D-A delivery checkpoints", () => {
         internal: await tx.orgUnit.count({ where: { kind: "Internal" } }),
       }));
     const rv = await counts(riverbankId);
-    const kcb = await counts(kcbId);
+    const demoB = await counts(demoBId);
     expect(rv.markets).toBe(7); // KE TZ UG RW BI SS DRC
     expect(rv.internal).toBeGreaterThanOrEqual(1); // Riverbank stays flat internally
-    // KCB's subsidiaries are Internal — the markets belong to the Riverbank tenant.
-    expect(kcb.markets).toBe(0);
-    expect(kcb.internal).toBeGreaterThanOrEqual(5);
+    // the fixture tenant's subsidiaries are Internal — the markets belong to the Riverbank tenant.
+    expect(demoB.markets).toBe(0);
+    expect(demoB.internal).toBeGreaterThanOrEqual(5);
   });
 
   it("RLS: tenant B sees neither this project's gates nor tenant A's templates", async () => {

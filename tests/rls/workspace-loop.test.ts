@@ -20,12 +20,12 @@ describe("Workspace — status notifications + integrations", () => {
 
   beforeAll(async () => {
     const [k, r] = await Promise.all([
-      prisma.tenant.findUnique({ where: { slug: "kcb" } }),
+      prisma.tenant.findUnique({ where: { slug: "demo-b" } }),
       prisma.tenant.findUnique({ where: { slug: "riverbank" } }),
     ]);
     if (!k || !r) throw new Error("Seed required.");
     const kUsers = await ensureUsers(k.id, 3);
-    if (kUsers.length < 3) throw new Error("Need 3 KCB users.");
+    if (kUsers.length < 3) throw new Error("Need 3 the fixture tenant users.");
     const rUser = await withTenant({ tenantId: r.id, userId: "seed" }, (tx) => tx.user.findFirstOrThrow({ where: { status: "ACTIVE" } }));
     poster = { tenantId: k.id, userId: kUsers[0].id, roles: [] };
     riverbank = { tenantId: r.id, userId: rUser.id, roles: [] };
@@ -78,16 +78,16 @@ describe("Workspace — status notifications + integrations", () => {
     expect(before).toHaveLength(6);
     expect(before.every((c) => !c.connected)).toBe(true);
 
-    await setIntegration(poster, projectId, "github", { connected: true, resource: "kcb/qubit" });
+    await setIntegration(poster, projectId, "github", { connected: true, resource: "demoB/qubit" });
     const after = await listIntegrations(poster, projectId);
     const gh = after.find((c) => c.provider === "github")!;
     expect(gh.connected).toBe(true);
-    expect(gh.resource).toBe("kcb/qubit");
+    expect(gh.resource).toBe("demoB/qubit");
   });
 
   it("keeps integrations + notifications tenant-isolated", async () => {
     const rv = await listIntegrations(riverbank, projectId);
-    expect(rv.every((c) => !c.connected)).toBe(true); // Riverbank can't see KCB's github connection
+    expect(rv.every((c) => !c.connected)).toBe(true); // Riverbank can't see the fixture tenant's github connection
     expect(await listNotifications(riverbank)).toEqual(
       (await listNotifications(riverbank)).filter((n) => n.link !== `/projects/${projectId}`),
     );

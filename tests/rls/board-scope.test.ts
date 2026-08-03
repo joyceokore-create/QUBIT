@@ -13,20 +13,20 @@ import { listProjectTasks } from "@/server/project-tasks";
 import { createUsers, cleanupFixtureUsers } from "./_users";
 
 describe("M7-D board scope", () => {
-  let kcbId: string;
+  let demoBId: string;
   let projectId: string;
   let leadId: string;
   let devId: string;
   let qaId: string;
   let implId: string;
-  const asUser = (userId: string): TenantContext => ({ tenantId: kcbId, userId, roles: ["Member"] });
+  const asUser = (userId: string): TenantContext => ({ tenantId: demoBId, userId, roles: ["Member"] });
   const task: Record<string, string> = {};
 
   beforeAll(async () => {
-    const kcb = await prisma.tenant.findUnique({ where: { slug: "kcb" } });
-    if (!kcb) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
-    kcbId = kcb.id;
-    const [lead, dev, qa, impl] = await createUsers(kcbId, 4, "scope");
+    const demoB = await prisma.tenant.findUnique({ where: { slug: "demo-b" } });
+    if (!demoB) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    demoBId = demoB.id;
+    const [lead, dev, qa, impl] = await createUsers(demoBId, 4, "scope");
     leadId = lead.id;
     devId = dev.id;
     qaId = qa.id;
@@ -35,7 +35,7 @@ describe("M7-D board scope", () => {
     await withTenant(asUser(leadId), async (tx) => {
       const project = await tx.project.create({
         data: {
-          tenantId: kcbId, code: `BS${Date.now() % 100000}`, name: "Board Scope Fixture",
+          tenantId: demoBId, code: `BS${Date.now() % 100000}`, name: "Board Scope Fixture",
           type: "Project", priority: "High", status: "OnTrack", leadUserId: leadId,
         },
         select: { id: true },
@@ -43,9 +43,9 @@ describe("M7-D board scope", () => {
       projectId = project.id;
       await tx.projectMember.createMany({
         data: [
-          { tenantId: kcbId, projectId, userId: devId, role: "Developer" },
-          { tenantId: kcbId, projectId, userId: qaId, role: "QA Engineer" },
-          { tenantId: kcbId, projectId, userId: implId, role: "Implementor" },
+          { tenantId: demoBId, projectId, userId: devId, role: "Developer" },
+          { tenantId: demoBId, projectId, userId: qaId, role: "QA Engineer" },
+          { tenantId: demoBId, projectId, userId: implId, role: "Implementor" },
         ],
       });
       for (const [key, data] of [
@@ -56,7 +56,7 @@ describe("M7-D board scope", () => {
         ["pmWork", { title: "Steering pack", type: "Chore", assigneeId: leadId }],
       ] as const) {
         const t = await tx.projectTask.create({
-          data: { tenantId: kcbId, projectId, ...data },
+          data: { tenantId: demoBId, projectId, ...data },
           select: { id: true },
         });
         task[key] = t.id;
@@ -70,7 +70,7 @@ describe("M7-D board scope", () => {
       await tx.projectMember.deleteMany({ where: { projectId } });
       await tx.project.deleteMany({ where: { id: projectId } });
     });
-    await cleanupFixtureUsers(kcbId);
+    await cleanupFixtureUsers(demoBId);
     await prisma.$disconnect();
   });
 
@@ -82,7 +82,7 @@ describe("M7-D board scope", () => {
   });
 
   it("a non-member is a stakeholder — whole picture, no write", async () => {
-    const [outsider] = await createUsers(kcbId, 1, "scope-out");
+    const [outsider] = await createUsers(demoBId, 1, "scope-out");
     expect(await viewerBoardCategory(asUser(outsider.id), projectId)).toBe("Stakeholder");
   });
 

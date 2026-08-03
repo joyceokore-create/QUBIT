@@ -1,7 +1,9 @@
 # CLAUDE.md — QUBIT project memory
 
 You are building **QUBIT**, a multitenant enterprise PPM (Portfolio & Programme
-Management) web application for **Riverbank Group** and **KCB Group**. Read
+Management) web application for **Riverbank Group** — the only real tenant since M10
+(DM1.46). A synthetic **Demo Org B** tenant exists in the dev seed purely so RLS
+isolation tests always have a tenant B; it is never a customer. Read
 `docs/00-index.md` before starting, and follow `docs/10-build-plan.md` milestone by
 milestone. Implement ONE milestone at a time and stop for review.
 
@@ -18,7 +20,8 @@ milestone. Implement ONE milestone at a time and stop for review.
    health data in the app's free-text fields or seed data.
 4. **Type-safe end to end.** TypeScript `strict` mode. No `any` without a written reason.
 5. **Follow the design system exactly.** Brand tokens, spacing and components come from
-   `docs/08-design-system.md`. Theme switches per tenant (Riverbank = red, KCB = green).
+   `docs/08-design-system.md`. Theming is per-tenant data (Riverbank = red #ED1C24); the
+   product default green covers pre-auth and any non-Riverbank tenant.
 6. **Every mutation is audited.** Writes to tracked entities create an `audit_log` row
    (actor, tenant, entity, before/after). See `docs/07-auth-rbac.md`.
 
@@ -84,7 +87,8 @@ extra step.
 
 ## Definition of done (per milestone)
 
-- Feature works for BOTH tenants with correct theming.
+- Feature works for Riverbank with correct theming (and breaks nothing under the
+  synthetic Demo Org B fixture tenant).
 - RLS verified: a user in tenant A cannot see tenant B data (there is a test for this).
 - `pnpm lint`, `pnpm typecheck` and `pnpm test` all pass.
 - New mutations write audit rows.

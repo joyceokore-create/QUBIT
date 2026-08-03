@@ -1,10 +1,8 @@
 import Link from "next/link";
-import Image from "next/image";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
 import { QubitLogo } from "@/components/brand/qubit-logo";
-import kcbMark from "@/assets/KCB/kcb-fav.svg";
 import { NavPills } from "@/components/layout/nav-pills";
 import { TenantChip } from "@/components/layout/tenant-chip";
 import { UserMenu } from "@/components/layout/user-menu";
@@ -49,13 +47,7 @@ export async function Topbar() {
       </span>
 
       <Link href="/dashboard" className="relative flex items-center gap-[11px]">
-        {/* Per-tenant mark: KCB shows its emblem; other tenants + pre-auth keep the
-            QUBIT product glyph. The QUBIT wordmark stays (product identity). */}
-        {session.user.tenantSlug === "kcb" ? (
-          <Image src={kcbMark} alt="KCB" width={26} height={26} className="rounded-[5px]" priority />
-        ) : (
-          <QubitLogo square={9} gap={2.5} radius={2.5} color="var(--tbglyph)" />
-        )}
+        <QubitLogo square={9} gap={2.5} radius={2.5} color="var(--tbglyph)" />
         <span className="font-heading text-[16.5px] font-bold tracking-[2.5px] text-[var(--tbinkS)]">QUBIT</span>
       </Link>
 

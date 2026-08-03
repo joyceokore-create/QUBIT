@@ -16,9 +16,9 @@ describe("delivery workflow (6.2) — publish gate + notifications", () => {
   const ctx = (userId: string, roles: string[] = ["Member"]): TenantContext => ({ tenantId, userId, roles });
 
   beforeAll(async () => {
-    const kcb = await prisma.tenant.findUnique({ where: { slug: "kcb" } });
-    if (!kcb) throw new Error("delivery-workflow tests require seeded data — run `pnpm prisma db seed` first.");
-    tenantId = kcb.id;
+    const demoB = await prisma.tenant.findUnique({ where: { slug: "demo-b" } });
+    if (!demoB) throw new Error("delivery-workflow tests require seeded data — run `pnpm prisma db seed` first.");
+    tenantId = demoB.id;
     await withTenant({ tenantId, userId: "seed" }, async (tx) => {
       const [pm, dev, qa] = await Promise.all([
         tx.user.create({ data: { tenantId, email: "dw-pm@fixture.invalid", name: "DW PM", status: "ACTIVE" } }),

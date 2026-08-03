@@ -45,7 +45,7 @@ const respond = (issues: YoutrackIssue[], truncated = false) => {
 };
 
 describe("M7-C YouTrack sync", () => {
-  let kcbId: string;
+  let demoBId: string;
   let riverbankId: string;
   let projectId: string;
   let leadId: string;
@@ -54,24 +54,24 @@ describe("M7-C YouTrack sync", () => {
   let ctx: TenantContext;
 
   beforeAll(async () => {
-    const [kcb, riverbank] = await Promise.all([
-      prisma.tenant.findUnique({ where: { slug: "kcb" } }),
+    const [demoB, riverbank] = await Promise.all([
+      prisma.tenant.findUnique({ where: { slug: "demo-b" } }),
       prisma.tenant.findUnique({ where: { slug: "riverbank" } }),
     ]);
-    if (!kcb || !riverbank) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
-    kcbId = kcb.id;
+    if (!demoB || !riverbank) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    demoBId = demoB.id;
     riverbankId = riverbank.id;
 
-    const [lead, dev] = await createUsers(kcbId, 2, "yt");
+    const [lead, dev] = await createUsers(demoBId, 2, "yt");
     leadId = lead.id;
     devId = dev.id;
-    ctx = { tenantId: kcbId, userId: leadId, roles: ["Member"] };
+    ctx = { tenantId: demoBId, userId: leadId, roles: ["Member"] };
 
     await withTenant(ctx, async (tx) => {
       devEmail = (await tx.user.findUniqueOrThrow({ where: { id: devId }, select: { email: true } })).email;
       const project = await tx.project.create({
         data: {
-          tenantId: kcbId,
+          tenantId: demoBId,
           code: `YT${Date.now() % 100000}`,
           name: "YouTrack Fixture",
           type: "Project",
@@ -83,7 +83,7 @@ describe("M7-C YouTrack sync", () => {
       projectId = project.id;
       await tx.projectIntegration.create({
         data: {
-          tenantId: kcbId,
+          tenantId: demoBId,
           projectId,
           provider: "youtrack",
           connected: true,
@@ -106,7 +106,7 @@ describe("M7-C YouTrack sync", () => {
       await tx.projectTask.deleteMany({ where: { projectId } });
       await tx.project.deleteMany({ where: { id: projectId } });
     });
-    await cleanupFixtureUsers(kcbId);
+    await cleanupFixtureUsers(demoBId);
     await prisma.$disconnect();
   });
 
@@ -185,7 +185,7 @@ describe("M7-C YouTrack sync", () => {
   });
 
   it("never matches an assignee whose account lives in another tenant", async () => {
-    // A real Riverbank user, offered to a KCB project's sync. RLS must make them invisible.
+    // A real Riverbank user, offered to a the fixture tenant project's sync. RLS must make them invisible.
     const [outsider] = await createUsers(riverbankId, 1, "ytx");
     const outsiderEmail = await withTenant({ tenantId: riverbankId, userId: "test" }, async (tx) =>
       (await tx.user.findUniqueOrThrow({ where: { id: outsider.id }, select: { email: true } })).email,
@@ -266,7 +266,7 @@ describe("M7-C YouTrack sync", () => {
     const other = await withTenant(ctx, (tx) =>
       tx.project.create({
         data: {
-          tenantId: kcbId, code: `YN${Date.now() % 100000}`, name: "Not connected",
+          tenantId: demoBId, code: `YN${Date.now() % 100000}`, name: "Not connected",
           type: "Project", priority: "Low", status: "OnTrack", leadUserId: leadId,
         },
         select: { id: true },

@@ -18,7 +18,7 @@ import { getProjectCheckpoints } from "@/server/checkpoints";
 import { createUsers, cleanupFixtureUsers } from "./_users";
 
 describe("M8-B document register", () => {
-  let kcbId: string;
+  let demoBId: string;
   let authorId: string;
   let approverAId: string;
   let approverBId: string;
@@ -31,23 +31,23 @@ describe("M8-B document register", () => {
   let docId: string;
 
   beforeAll(async () => {
-    const kcb = await prisma.tenant.findUnique({ where: { slug: "kcb" } });
-    if (!kcb) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
-    kcbId = kcb.id;
-    const [author, a, b, outsider] = await createUsers(kcbId, 4, "doc");
+    const demoB = await prisma.tenant.findUnique({ where: { slug: "demo-b" } });
+    if (!demoB) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    demoBId = demoB.id;
+    const [author, a, b, outsider] = await createUsers(demoBId, 4, "doc");
     authorId = author.id;
     approverAId = a.id;
     approverBId = b.id;
     outsiderId = outsider.id;
-    authorCtx = { tenantId: kcbId, userId: authorId, roles: ["Member"] };
-    aCtx = { tenantId: kcbId, userId: approverAId, roles: ["Member"] };
-    bCtx = { tenantId: kcbId, userId: approverBId, roles: ["Member"] };
-    outsiderCtx = { tenantId: kcbId, userId: outsiderId, roles: ["Member"] };
+    authorCtx = { tenantId: demoBId, userId: authorId, roles: ["Member"] };
+    aCtx = { tenantId: demoBId, userId: approverAId, roles: ["Member"] };
+    bCtx = { tenantId: demoBId, userId: approverBId, roles: ["Member"] };
+    outsiderCtx = { tenantId: demoBId, userId: outsiderId, roles: ["Member"] };
 
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       const project = await tx.project.create({
         data: {
-          tenantId: kcbId,
+          tenantId: demoBId,
           code: `DR${Date.now() % 100000}`,
           name: "Register Fixture",
           type: "Project",
@@ -67,16 +67,16 @@ describe("M8-B document register", () => {
   });
 
   afterAll(async () => {
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       await tx.domainEvent.deleteMany({ where: { type: { in: ["document.submitted", "document.decided"] } } });
       await tx.project.deleteMany({ where: { id: projectId } });
     });
-    await cleanupFixtureUsers(kcbId);
+    await cleanupFixtureUsers(demoBId);
     await prisma.$disconnect();
   });
 
   it("§10-style check: the DM1.18 remap left no legacy status in either tenant", async () => {
-    for (const slug of ["kcb", "riverbank"]) {
+    for (const slug of ["demo-b", "riverbank"]) {
       const tenant = await prisma.tenant.findUniqueOrThrow({ where: { slug } });
       const legacy = await withTenant({ tenantId: tenant.id, userId: "test" }, (tx) =>
         tx.projectDocument.count({ where: { status: { in: ["PendingReview", "Final"] } } }),
@@ -101,7 +101,7 @@ describe("M8-B document register", () => {
     expect(doc.approvals.every((a) => a.decision === "Pending")).toBe(true);
 
     // Both approvers were told; the submitter was not.
-    const notified = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const notified = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.notification.findMany({ where: { kind: "document_review" }, select: { userId: true } }),
     );
     const ids = new Set(notified.map((n) => n.userId));
@@ -129,10 +129,10 @@ describe("M8-B document register", () => {
 
   it("an approved BRD satisfies the M8-A gate rule that reads the register", async () => {
     // The BRD gate also wants an allocated team, so give it one.
-    await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
-      tx.projectMember.create({ data: { tenantId: kcbId, projectId, userId: authorId, role: "Project Manager" } }),
+    await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
+      tx.projectMember.create({ data: { tenantId: demoBId, projectId, userId: authorId, role: "Project Manager" } }),
     );
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       const tmpl = await tx.checkpointTemplate.findFirstOrThrow({ where: { name: "Product build" }, select: { id: true } });
       await tx.project.update({ where: { id: projectId }, data: { checkpointTemplateId: tmpl.id } });
     });

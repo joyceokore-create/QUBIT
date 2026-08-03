@@ -11,39 +11,39 @@ import { createUser, listUsers, setUserGroups } from "@/server/users";
 import { ensureUsers, cleanupFixtureUsers } from "./_users";
 
 describe("M1a personas", () => {
-  let kcbId: string;
+  let demoBId: string;
   let adminCtx: TenantContext;
   let inviteeId: string;
   let projectId: string;
   const inviteeEmail = `persona_${Date.now()}@fixture.invalid`;
 
   beforeAll(async () => {
-    const kcb = await prisma.tenant.findUnique({ where: { slug: "kcb" } });
-    if (!kcb) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
-    kcbId = kcb.id;
-    const [admin] = await ensureUsers(kcbId, 1);
-    adminCtx = { tenantId: kcbId, userId: admin.id, roles: ["PlatformSuperAdmin"] };
+    const demoB = await prisma.tenant.findUnique({ where: { slug: "demo-b" } });
+    if (!demoB) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    demoBId = demoB.id;
+    const [admin] = await ensureUsers(demoBId, 1);
+    adminCtx = { tenantId: demoBId, userId: admin.id, roles: ["PlatformSuperAdmin"] };
 
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       const project = await tx.project.create({
-        data: { tenantId: kcbId, code: `PRS${Date.now() % 100000}`, name: "Persona Fixture", type: "Project", priority: "Low", status: "Planning" },
+        data: { tenantId: demoBId, code: `PRS${Date.now() % 100000}`, name: "Persona Fixture", type: "Project", priority: "Low", status: "Planning" },
       });
       projectId = project.id;
     });
   });
 
   afterAll(async () => {
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       await tx.projectMember.deleteMany({ where: { projectId } });
       await tx.project.deleteMany({ where: { id: projectId } });
-      const invitee = await tx.user.findUnique({ where: { tenantId_email: { tenantId: kcbId, email: inviteeEmail } }, select: { id: true } });
+      const invitee = await tx.user.findUnique({ where: { tenantId_email: { tenantId: demoBId, email: inviteeEmail } }, select: { id: true } });
       if (invitee) {
         await tx.roleAssignment.deleteMany({ where: { userId: invitee.id } });
         await tx.auditLog.deleteMany({ where: { entityId: invitee.id } });
         await tx.user.delete({ where: { id: invitee.id } });
       }
     });
-    await cleanupFixtureUsers(kcbId);
+    await cleanupFixtureUsers(demoBId);
     await prisma.$disconnect();
   });
 
@@ -57,7 +57,7 @@ describe("M1a personas", () => {
       primaryGroup: "implementor", // not in the declared set — must be folded in, not lost
     });
     inviteeId = user.id;
-    const row = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const row = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.user.findUniqueOrThrow({ where: { id: user.id }, select: { userGroups: true, primaryGroup: true } }),
     );
     expect(row.userGroups.sort()).toEqual(["implementor", "qa"]);
@@ -65,7 +65,7 @@ describe("M1a personas", () => {
   });
 
   it("day-one landing: declared groups decide before any membership exists (§1.3)", async () => {
-    const row = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const row = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.user.findUniqueOrThrow({
         where: { id: inviteeId },
         include: { roles: true, projectAllocations: { select: { role: true } }, projectsLed: { select: { id: true }, take: 1 } },
@@ -83,8 +83,8 @@ describe("M1a personas", () => {
   });
 
   it("adding a project membership merges the derived group (§1.3 step 2)", async () => {
-    await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
-      tx.projectMember.create({ data: { tenantId: kcbId, projectId, userId: inviteeId, role: "Developer" } }),
+    await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
+      tx.projectMember.create({ data: { tenantId: demoBId, projectId, userId: inviteeId, role: "Developer" } }),
     );
     const summary = (await listUsers(adminCtx)).find((u) => u.id === inviteeId)!;
     expect(summary.derivedGroups).toContain("developer");
@@ -92,10 +92,10 @@ describe("M1a personas", () => {
   });
 
   it("group edits persist, audit, and NEVER alter permissions — both directions", async () => {
-    const rolesBefore = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const rolesBefore = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.roleAssignment.findMany({ where: { userId: inviteeId }, select: { role: true } }),
     );
-    const ctxBefore = { tenantId: kcbId, userId: inviteeId, roles: rolesBefore.map((r) => r.role) };
+    const ctxBefore = { tenantId: demoBId, userId: inviteeId, roles: rolesBefore.map((r) => r.role) };
     const couldManageBefore = can(ctxBefore, "iam:manage");
     const couldReadBefore = can(ctxBefore, "dashboard:read");
 
@@ -104,15 +104,15 @@ describe("M1a personas", () => {
     // Direction 2: stripping every group removes no access either.
     await setUserGroups(adminCtx, inviteeId, { userGroups: [], primaryGroup: null });
 
-    const rolesAfter = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const rolesAfter = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.roleAssignment.findMany({ where: { userId: inviteeId }, select: { role: true } }),
     );
     expect(rolesAfter).toEqual(rolesBefore); // RBAC rows untouched
-    const ctxAfter = { tenantId: kcbId, userId: inviteeId, roles: rolesAfter.map((r) => r.role) };
+    const ctxAfter = { tenantId: demoBId, userId: inviteeId, roles: rolesAfter.map((r) => r.role) };
     expect(can(ctxAfter, "iam:manage")).toBe(couldManageBefore);
     expect(can(ctxAfter, "dashboard:read")).toBe(couldReadBefore);
 
-    const auditRows = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const auditRows = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.auditLog.count({ where: { entityId: inviteeId, actorId: adminCtx.userId } }),
     );
     expect(auditRows).toBeGreaterThanOrEqual(2); // both edits audited

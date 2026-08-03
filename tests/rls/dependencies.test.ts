@@ -9,7 +9,7 @@ import { listProjectTasks, setTaskStatus } from "@/server/project-tasks";
 import { createUsers, cleanupFixtureUsers } from "./_users";
 
 describe("M7-A task dependencies", () => {
-  let kcbId: string;
+  let demoBId: string;
   let riverbankId: string;
   let leadId: string;
   let projectA: string;
@@ -21,7 +21,7 @@ describe("M7-A task dependencies", () => {
     withTenant(ctx, (tx) =>
       tx.project.create({
         data: {
-          tenantId: kcbId, code, name, type: "Project",
+          tenantId: demoBId, code, name, type: "Project",
           priority: "High", status: "OnTrack", leadUserId: leadId,
         },
         select: { id: true },
@@ -29,15 +29,15 @@ describe("M7-A task dependencies", () => {
     );
 
   beforeAll(async () => {
-    const [kcb, riverbank] = await Promise.all([
-      prisma.tenant.findUnique({ where: { slug: "kcb" } }),
+    const [demoB, riverbank] = await Promise.all([
+      prisma.tenant.findUnique({ where: { slug: "demo-b" } }),
       prisma.tenant.findUnique({ where: { slug: "riverbank" } }),
     ]);
-    if (!kcb || !riverbank) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
-    kcbId = kcb.id;
+    if (!demoB || !riverbank) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    demoBId = demoB.id;
     riverbankId = riverbank.id;
-    [{ id: leadId }] = await createUsers(kcbId, 1, "dep");
-    ctx = { tenantId: kcbId, userId: leadId, roles: ["Member"] };
+    [{ id: leadId }] = await createUsers(demoBId, 1, "dep");
+    ctx = { tenantId: demoBId, userId: leadId, roles: ["Member"] };
 
     const stamp = Date.now() % 100000;
     projectA = (await makeProject(`DA${stamp}`, "Dependency Fixture A")).id;
@@ -48,7 +48,7 @@ describe("M7-A task dependencies", () => {
         const t = await tx.projectTask.create({
           // Chore, so the completion below goes through the real engine without tripping
           // the separate "QA owns Completed for Feature/Bug" rule (docs/18 §4).
-          data: { tenantId: kcbId, projectId, title: `Task ${key}`, type: "Chore" },
+          data: { tenantId: demoBId, projectId, title: `Task ${key}`, type: "Chore" },
           select: { id: true },
         });
         task[key] = t.id;
@@ -62,7 +62,7 @@ describe("M7-A task dependencies", () => {
       await tx.projectTask.deleteMany({ where: { projectId: { in: [projectA, projectB] } } });
       await tx.project.deleteMany({ where: { id: { in: [projectA, projectB] } } });
     });
-    await cleanupFixtureUsers(kcbId);
+    await cleanupFixtureUsers(demoBId);
     await prisma.$disconnect();
   });
 

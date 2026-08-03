@@ -9,36 +9,36 @@ import { emitDomainEvent } from "@/server/events";
 import { ensureUsers, cleanupFixtureUsers } from "./_users";
 
 describe("domain-event outbox", () => {
-  let kcbId: string;
+  let demoBId: string;
   let riverbankId: string;
   let recipientId: string;
   let actorId: string;
 
   beforeAll(async () => {
-    const [kcb, riverbank] = await Promise.all([
-      prisma.tenant.findUnique({ where: { slug: "kcb" } }),
+    const [demoB, riverbank] = await Promise.all([
+      prisma.tenant.findUnique({ where: { slug: "demo-b" } }),
       prisma.tenant.findUnique({ where: { slug: "riverbank" } }),
     ]);
-    if (!kcb || !riverbank) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
-    kcbId = kcb.id;
+    if (!demoB || !riverbank) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    demoBId = demoB.id;
     riverbankId = riverbank.id;
-    const [actor, recipient] = await ensureUsers(kcbId, 2);
+    const [actor, recipient] = await ensureUsers(demoBId, 2);
     actorId = actor.id;
     recipientId = recipient.id;
   });
 
   afterAll(async () => {
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       await tx.notification.deleteMany({ where: { kind: "outbox_test" } });
       await tx.domainEvent.deleteMany({ where: { type: { startsWith: "test." } } });
     });
-    await cleanupFixtureUsers(kcbId);
+    await cleanupFixtureUsers(demoBId);
     await prisma.$disconnect();
   });
 
   it("writes the event row and fans out notifications in the same transaction", async () => {
-    await withTenant({ tenantId: kcbId, userId: actorId }, (tx) =>
-      emitDomainEvent(tx, { tenantId: kcbId, userId: actorId }, {
+    await withTenant({ tenantId: demoBId, userId: actorId }, (tx) =>
+      emitDomainEvent(tx, { tenantId: demoBId, userId: actorId }, {
         type: "test.something_happened",
         entityType: "project",
         entityId: "entity-1",
@@ -47,14 +47,14 @@ describe("domain-event outbox", () => {
       }),
     );
 
-    const event = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const event = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.domainEvent.findFirstOrThrow({ where: { type: "test.something_happened" } }),
     );
     expect(event.actorId).toBe(actorId);
     expect(event.entityType).toBe("project");
     expect((event.payload as { notified?: number }).notified).toBe(1);
 
-    const notification = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const notification = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.notification.findFirstOrThrow({ where: { kind: "outbox_test", userId: recipientId } }),
     );
     expect(notification.message).toBe("Something happened");
@@ -63,8 +63,8 @@ describe("domain-event outbox", () => {
 
   it("rolls the event back with the mutation (outbox is transactional)", async () => {
     await expect(
-      withTenant({ tenantId: kcbId, userId: actorId }, async (tx) => {
-        await emitDomainEvent(tx, { tenantId: kcbId, userId: actorId }, {
+      withTenant({ tenantId: demoBId, userId: actorId }, async (tx) => {
+        await emitDomainEvent(tx, { tenantId: demoBId, userId: actorId }, {
           type: "test.rolled_back",
           entityType: "project",
           entityId: "entity-2",
@@ -73,7 +73,7 @@ describe("domain-event outbox", () => {
       }),
     ).rejects.toThrow("boom");
 
-    const event = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const event = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.domainEvent.findFirst({ where: { type: "test.rolled_back" } }),
     );
     expect(event).toBeNull();

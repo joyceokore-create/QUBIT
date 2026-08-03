@@ -8,7 +8,7 @@ const FOCUS_RING =
 
 // Centred masthead: announcement pill → large two-tone
 // headline → subcopy → primary + ghost CTAs → honest trust row. No product mock
-// card. Trust signal uses the real group names (KCB / Riverbank), not fabricated
+// card. Trust signal uses the real group name (Riverbank), not fabricated
 // ratings or avatars.
 export function Hero() {
   return (
@@ -117,7 +117,6 @@ export function Hero() {
             <span className="text-[10px] font-bold uppercase tracking-[1.8px] text-[var(--ink3)]">
               Trusted across the group
             </span>
-            <span className="rounded-full border border-[var(--hair)] px-[13px] py-[5px] text-[12px] font-bold text-[var(--ink3)]">KCB Group</span>
             <span className="rounded-full border border-[var(--hair)] px-[13px] py-[5px] text-[12px] font-bold text-[var(--ink3)]">Riverbank Group</span>
           </div>
         </div>

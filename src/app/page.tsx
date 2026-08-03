@@ -16,16 +16,16 @@ export const metadata = {
 export default function LandingPage() {
   return (
     // Landing-only type: repoint the --font-display/-body indirection vars to
-    // Lufga (loaded globally as --font-lufga in layout.tsx). Scoped to this
-    // wrapper, so login and the tenant app shells keep their own faces.
+    // Plus Jakarta Sans (loaded globally as --font-jakarta in layout.tsx). Scoped to
+    // this wrapper, so login and the tenant app shells keep their own faces.
     // `font-sans` re-resolves body text against the overridden --font-body here;
     // headings pick up --font-display via the global h1–h6 rule.
     <div
       className="min-h-screen overflow-x-clip bg-[var(--qbg)] font-sans"
       style={
         {
-          "--font-display": "var(--font-lufga)",
-          "--font-body": "var(--font-lufga)",
+          "--font-display": "var(--font-jakarta)",
+          "--font-body": "var(--font-jakarta)",
         } as React.CSSProperties
       }
     >

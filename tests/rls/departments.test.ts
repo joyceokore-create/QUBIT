@@ -12,25 +12,25 @@ import {
 import { createUser, updateUserDepartment, softDeleteUser, UserAdminError } from "@/server/users";
 
 const TEST_PREFIX = "Test Dept Lifecycle";
-const TEST_EMAIL_MANAGER = "test-dept-manager@kcb.example.invalid";
-const TEST_EMAIL_REPORT = "test-dept-report@kcb.example.invalid";
+const TEST_EMAIL_MANAGER = "test-dept-manager@demo-b.example.invalid";
+const TEST_EMAIL_REPORT = "test-dept-report@demo-b.example.invalid";
 
 describe("Department lifecycle", () => {
-  let kcbId: string;
+  let demoBId: string;
   let riverbankId: string;
   let ctx: TenantContext;
 
   beforeAll(async () => {
-    const [kcb, riverbank] = await Promise.all([
-      prisma.tenant.findUnique({ where: { slug: "kcb" } }),
+    const [demoB, riverbank] = await Promise.all([
+      prisma.tenant.findUnique({ where: { slug: "demo-b" } }),
       prisma.tenant.findUnique({ where: { slug: "riverbank" } }),
     ]);
-    if (!kcb || !riverbank) {
+    if (!demoB || !riverbank) {
       throw new Error("Department tests require seeded data — run `pnpm prisma:seed` first.");
     }
-    kcbId = kcb.id;
+    demoBId = demoB.id;
     riverbankId = riverbank.id;
-    ctx = { tenantId: kcbId, userId: "test-dept-actor", roles: ["PlatformSuperAdmin"] };
+    ctx = { tenantId: demoBId, userId: "test-dept-actor", roles: ["PlatformSuperAdmin"] };
   });
 
   beforeEach(async () => {
@@ -46,7 +46,7 @@ describe("Department lifecycle", () => {
         await tx.department.deleteMany({ where: { id: { in: ids } } });
       }
       for (const email of [TEST_EMAIL_MANAGER, TEST_EMAIL_REPORT]) {
-        const existing = await tx.user.findUnique({ where: { tenantId_email: { tenantId: kcbId, email } } });
+        const existing = await tx.user.findUnique({ where: { tenantId_email: { tenantId: demoBId, email } } });
         if (existing) {
           await tx.auditLog.deleteMany({ where: { entityId: existing.id } });
           await tx.roleAssignment.deleteMany({ where: { userId: existing.id } });
@@ -171,7 +171,7 @@ describe("Department lifecycle", () => {
   });
 
   it("keeps departments tenant-isolated", async () => {
-    const department = await createDepartment(ctx, { name: `${TEST_PREFIX} KCB Only` });
+    const department = await createDepartment(ctx, { name: `${TEST_PREFIX} the fixture tenant Only` });
 
     const riverbankCtx: TenantContext = {
       tenantId: riverbankId,

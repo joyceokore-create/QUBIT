@@ -11,20 +11,20 @@ import {
 import { ROLE_PERMISSIONS } from "@/lib/rbac";
 
 describe("role permissions (Phase 1.5)", () => {
-  let kcbId: string;
+  let demoBId: string;
   let riverbankId: string;
   let ctx: TenantContext;
   let rbCtx: TenantContext;
 
   beforeAll(async () => {
-    const [kcb, rb] = await Promise.all([
-      prisma.tenant.findUnique({ where: { slug: "kcb" } }),
+    const [demoB, rb] = await Promise.all([
+      prisma.tenant.findUnique({ where: { slug: "demo-b" } }),
       prisma.tenant.findUnique({ where: { slug: "riverbank" } }),
     ]);
-    if (!kcb || !rb) throw new Error("role-permission tests require seeded data — run `pnpm prisma:seed` first.");
-    kcbId = kcb.id;
+    if (!demoB || !rb) throw new Error("role-permission tests require seeded data — run `pnpm prisma:seed` first.");
+    demoBId = demoB.id;
     riverbankId = rb.id;
-    ctx = { tenantId: kcbId, userId: "test-roleperm-actor", roles: ["PlatformSuperAdmin"] };
+    ctx = { tenantId: demoBId, userId: "test-roleperm-actor", roles: ["PlatformSuperAdmin"] };
     rbCtx = { tenantId: riverbankId, userId: "test-roleperm-actor-rb", roles: ["PlatformSuperAdmin"] };
   });
 
@@ -47,13 +47,13 @@ describe("role permissions (Phase 1.5)", () => {
   });
 
   it("resolves the code default when a role has no override", async () => {
-    const perms = await withTenant(ctx, (tx) => resolvePermissionsForRoles(tx, kcbId, ["Member"]));
+    const perms = await withTenant(ctx, (tx) => resolvePermissionsForRoles(tx, demoBId, ["Member"]));
     expect([...perms].sort()).toEqual([...ROLE_PERMISSIONS.Member].sort());
   });
 
   it("applies a tenant override and reflects it in resolution + listing", async () => {
     await setRolePermissions(ctx, "Member", [...ROLE_PERMISSIONS.Member, "task:write"]);
-    const perms = await withTenant(ctx, (tx) => resolvePermissionsForRoles(tx, kcbId, ["Member"]));
+    const perms = await withTenant(ctx, (tx) => resolvePermissionsForRoles(tx, demoBId, ["Member"]));
     expect(perms).toContain("task:write");
 
     const member = (await listRolePermissions(ctx)).find((r) => r.role === "Member")!;
@@ -72,7 +72,7 @@ describe("role permissions (Phase 1.5)", () => {
     await expect(setRolePermissions(ctx, "PlatformSuperAdmin", ["project:read"])).rejects.toBeInstanceOf(
       RolePermissionError,
     );
-    const perms = await withTenant(ctx, (tx) => resolvePermissionsForRoles(tx, kcbId, ["PlatformSuperAdmin"]));
+    const perms = await withTenant(ctx, (tx) => resolvePermissionsForRoles(tx, demoBId, ["PlatformSuperAdmin"]));
     expect(perms).toEqual(["*"]);
     expect((await listRolePermissions(ctx)).find((r) => r.role === "PlatformSuperAdmin")!.editable).toBe(false);
   });

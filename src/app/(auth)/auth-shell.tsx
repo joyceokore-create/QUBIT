@@ -21,8 +21,8 @@ export function AuthShell({ brand, children }: { brand: string; children: ReactN
             "radial-gradient(ellipse 50% 50% at 85% 80%, var(--l-glow-brand), transparent 65%)",
             "var(--l-bg)",
           ].join(", "),
-          "--font-display": "var(--font-lufga)",
-          "--font-body": "var(--font-lufga)",
+          "--font-display": "var(--font-jakarta)",
+          "--font-body": "var(--font-jakarta)",
         } as CSSProperties
       }
     >

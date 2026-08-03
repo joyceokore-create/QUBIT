@@ -11,7 +11,7 @@ import { createUsers, cleanupFixtureUsers } from "./_users";
 
 describe("M-D-B rollout matrix", () => {
   let rvId: string;
-  let kcbId: string;
+  let demoBId: string;
   let leadId: string;
   let ctx: TenantContext;
   let portfolioId: string;
@@ -21,13 +21,13 @@ describe("M-D-B rollout matrix", () => {
   let unusedMarket: string;
 
   beforeAll(async () => {
-    const [rv, kcb] = await Promise.all([
+    const [rv, demoB] = await Promise.all([
       prisma.tenant.findUnique({ where: { slug: "riverbank" } }),
-      prisma.tenant.findUnique({ where: { slug: "kcb" } }),
+      prisma.tenant.findUnique({ where: { slug: "demo-b" } }),
     ]);
-    if (!rv || !kcb) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    if (!rv || !demoB) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
     rvId = rv.id;
-    kcbId = kcb.id;
+    demoBId = demoB.id;
     const [lead] = await createUsers(rvId, 1, "ro");
     leadId = lead.id;
     ctx = { tenantId: rvId, userId: leadId, roles: ["Member"] };
@@ -164,13 +164,13 @@ describe("M-D-B rollout matrix", () => {
   });
 
   it("RLS: the other tenant sees none of this portfolio's rollout data", async () => {
-    const [kcbUser] = await createUsers(kcbId, 1, "rokcb");
-    const kcbCtx = { tenantId: kcbId, userId: kcbUser.id, roles: ["Member"] };
+    const [kcbUser] = await createUsers(demoBId, 1, "rokcb");
+    const kcbCtx = { tenantId: demoBId, userId: kcbUser.id, roles: ["Member"] };
     expect(await getRolloutMatrix(kcbCtx, portfolioId)).toBeNull();
     const matrices = await getRolloutMatrices(kcbCtx);
     expect(matrices.some((m) => m.portfolioId === portfolioId)).toBe(false);
-    // KCB has no Market org units at all, so its rollout portfolios render no columns.
+    // the fixture tenant has no Market org units at all, so its rollout portfolios render no columns.
     for (const m of matrices) expect(m.markets).toHaveLength(0);
-    await cleanupFixtureUsers(kcbId);
+    await cleanupFixtureUsers(demoBId);
   });
 });

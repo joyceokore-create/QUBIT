@@ -10,21 +10,21 @@ import { getGapReport } from "@/server/raid";
 const TEST_PREFIX = "Test RAID Lifecycle";
 
 describe("RAID lifecycle", () => {
-  let kcbId: string;
+  let demoBId: string;
   let riverbankId: string;
   let ctx: TenantContext;
 
   beforeAll(async () => {
-    const [kcb, riverbank] = await Promise.all([
-      prisma.tenant.findUnique({ where: { slug: "kcb" } }),
+    const [demoB, riverbank] = await Promise.all([
+      prisma.tenant.findUnique({ where: { slug: "demo-b" } }),
       prisma.tenant.findUnique({ where: { slug: "riverbank" } }),
     ]);
-    if (!kcb || !riverbank) {
+    if (!demoB || !riverbank) {
       throw new Error("RAID tests require seeded data — run `pnpm prisma:seed` first.");
     }
-    kcbId = kcb.id;
+    demoBId = demoB.id;
     riverbankId = riverbank.id;
-    ctx = { tenantId: kcbId, userId: "test-raid-actor", roles: ["PlatformSuperAdmin"] };
+    ctx = { tenantId: demoBId, userId: "test-raid-actor", roles: ["PlatformSuperAdmin"] };
   });
 
   beforeEach(async () => {

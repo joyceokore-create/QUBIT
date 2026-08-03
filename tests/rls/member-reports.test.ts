@@ -19,7 +19,7 @@ import { canAccessReport } from "@/server/q/access";
 import { createUsers, cleanupFixtureUsers } from "./_users";
 
 describe("M2-B member weekly reports", () => {
-  let kcbId: string;
+  let demoBId: string;
   let memberId: string;
   let pmAId: string;
   let pmBId: string;
@@ -31,55 +31,55 @@ describe("M2-B member weekly reports", () => {
   const isoWeek = isoWeekId(new Date());
 
   beforeAll(async () => {
-    const kcb = await prisma.tenant.findUnique({ where: { slug: "kcb" } });
-    if (!kcb) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
-    kcbId = kcb.id;
+    const demoB = await prisma.tenant.findUnique({ where: { slug: "demo-b" } });
+    if (!demoB) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    demoBId = demoB.id;
     // Clean users: this suite's assertions depend on the member having NO other project
     // involvement and NO admin permissions (ensureUsers would hand back the super-admin).
-    const [member, pmA, pmB] = await createUsers(kcbId, 3, "mr");
+    const [member, pmA, pmB] = await createUsers(demoBId, 3, "mr");
     memberId = member.id;
     pmAId = pmA.id;
     pmBId = pmB.id;
-    memberCtx = { tenantId: kcbId, userId: memberId, roles: ["Member"] };
-    pmACtx = { tenantId: kcbId, userId: pmAId, roles: ["Member"] };
-    pmBCtx = { tenantId: kcbId, userId: pmBId, roles: ["Member"] };
+    memberCtx = { tenantId: demoBId, userId: memberId, roles: ["Member"] };
+    pmACtx = { tenantId: demoBId, userId: pmAId, roles: ["Member"] };
+    pmBCtx = { tenantId: demoBId, userId: pmBId, roles: ["Member"] };
 
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       const now = Date.now();
       const [a, b] = await Promise.all([
         tx.project.create({
-          data: { tenantId: kcbId, code: `MRA${now % 100000}`, name: "Report Fixture A", type: "Project", priority: "High", status: "OnTrack", leadUserId: pmAId },
+          data: { tenantId: demoBId, code: `MRA${now % 100000}`, name: "Report Fixture A", type: "Project", priority: "High", status: "OnTrack", leadUserId: pmAId },
         }),
         tx.project.create({
-          data: { tenantId: kcbId, code: `MRB${now % 100000}`, name: "Report Fixture B", type: "Project", priority: "Med", status: "OnTrack", leadUserId: pmBId },
+          data: { tenantId: demoBId, code: `MRB${now % 100000}`, name: "Report Fixture B", type: "Project", priority: "Med", status: "OnTrack", leadUserId: pmBId },
         }),
       ]);
       projectAId = a.id;
       projectBId = b.id;
       await tx.projectMember.createMany({
         data: [
-          { tenantId: kcbId, projectId: projectAId, userId: memberId, role: "Developer" },
-          { tenantId: kcbId, projectId: projectBId, userId: memberId, role: "Developer" },
+          { tenantId: demoBId, projectId: projectAId, userId: memberId, role: "Developer" },
+          { tenantId: demoBId, projectId: projectBId, userId: memberId, role: "Developer" },
         ],
       });
       // The member's own week: one finished on A, one still running on B.
       await tx.projectTask.createMany({
         data: [
-          { tenantId: kcbId, projectId: projectAId, title: "Ship export endpoint", type: "Feature", status: "Completed", approvalStatus: "Published", assigneeId: memberId },
-          { tenantId: kcbId, projectId: projectBId, title: "Wire settlement retry", type: "Feature", status: "InProgress", approvalStatus: "Published", assigneeId: memberId },
+          { tenantId: demoBId, projectId: projectAId, title: "Ship export endpoint", type: "Feature", status: "Completed", approvalStatus: "Published", assigneeId: memberId },
+          { tenantId: demoBId, projectId: projectBId, title: "Wire settlement retry", type: "Feature", status: "InProgress", approvalStatus: "Published", assigneeId: memberId },
           // Somebody else's card on A — must never appear in the member's report.
-          { tenantId: kcbId, projectId: projectAId, title: "Not my work", type: "Feature", status: "InProgress", approvalStatus: "Published", assigneeId: pmAId },
+          { tenantId: demoBId, projectId: projectAId, title: "Not my work", type: "Feature", status: "InProgress", approvalStatus: "Published", assigneeId: pmAId },
         ],
       });
     });
   });
 
   afterAll(async () => {
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       await tx.memberReport.deleteMany({ where: { userId: memberId } }); // acks cascade
       await tx.project.deleteMany({ where: { id: { in: [projectAId, projectBId] } } });
     });
-    await cleanupFixtureUsers(kcbId);
+    await cleanupFixtureUsers(demoBId);
     await prisma.$disconnect();
   });
 
@@ -125,7 +125,7 @@ describe("M2-B member weekly reports", () => {
     expect(rowA.sections[0].note).toContain("load test");
 
     // Both leads were notified; the submitter never notifies themselves.
-    const notes = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const notes = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.notification.findMany({ where: { kind: "member_report" }, select: { userId: true } }),
     );
     const notified = new Set(notes.map((n) => n.userId));
@@ -144,7 +144,7 @@ describe("M2-B member weekly reports", () => {
 
     await acknowledgeReport(pmACtx, row.id, { projectId: projectAId, comment: "Thanks — load test noted." });
 
-    const [after, audit] = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const [after, audit] = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       Promise.all([
         tx.memberReport.findFirstOrThrow({ where: { userId: memberId, isoWeek }, select: { status: true, acks: { select: { projectId: true } } } }),
         tx.auditLog.findFirst({ where: { entityType: "member_report", actorId: pmAId }, orderBy: { createdAt: "desc" } }),
@@ -164,7 +164,7 @@ describe("M2-B member weekly reports", () => {
   });
 
   it("acknowledged sections roll into that project's check-in draft (§5.1.4)", async () => {
-    const draft = await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    const draft = await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       const { draft } = await computeCheckInDraft(tx, projectAId);
       return draft as CheckInDraft;
     });

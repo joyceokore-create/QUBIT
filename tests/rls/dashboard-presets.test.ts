@@ -16,7 +16,7 @@ const allRows = (s: PortfolioSectionsData) => s.sections.flatMap((sec) => sec.pi
 const day = 86_400_000;
 
 describe("M1b dashboard presets", () => {
-  let kcbId: string;
+  let demoBId: string;
   let pmId: string;
   let devId: string;
   let projectId: string;
@@ -25,20 +25,20 @@ describe("M1b dashboard presets", () => {
   let pmCtx: TenantContext;
 
   beforeAll(async () => {
-    const kcb = await prisma.tenant.findUnique({ where: { slug: "kcb" } });
-    if (!kcb) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
-    kcbId = kcb.id;
-    const [pm, dev] = await ensureUsers(kcbId, 2);
+    const demoB = await prisma.tenant.findUnique({ where: { slug: "demo-b" } });
+    if (!demoB) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    demoBId = demoB.id;
+    const [pm, dev] = await ensureUsers(demoBId, 2);
     pmId = pm.id;
     devId = dev.id;
-    pmCtx = { tenantId: kcbId, userId: pmId, roles: ["Member"] };
-    devCtx = { tenantId: kcbId, userId: devId, roles: ["Member"] };
+    pmCtx = { tenantId: demoBId, userId: pmId, roles: ["Member"] };
+    devCtx = { tenantId: demoBId, userId: devId, roles: ["Member"] };
 
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       const now = Date.now();
       const project = await tx.project.create({
         data: {
-          tenantId: kcbId,
+          tenantId: demoBId,
           code: `PRE${now % 100000}`,
           name: "Preset Fixture",
           type: "Project",
@@ -48,35 +48,35 @@ describe("M1b dashboard presets", () => {
         },
       });
       projectId = project.id;
-      await tx.projectMember.create({ data: { tenantId: kcbId, projectId, userId: devId, role: "Developer" } });
+      await tx.projectMember.create({ data: { tenantId: demoBId, projectId, userId: devId, role: "Developer" } });
 
       const overdue = await tx.projectTask.create({
-        data: { tenantId: kcbId, projectId, title: "Fix export race", status: "InProgress", approvalStatus: "Published", assigneeId: devId, dueDate: new Date(now - 3 * day), lastActivityAt: new Date(now) },
+        data: { tenantId: demoBId, projectId, title: "Fix export race", status: "InProgress", approvalStatus: "Published", assigneeId: devId, dueDate: new Date(now - 3 * day), lastActivityAt: new Date(now) },
       });
       overdueTaskId = overdue.id;
       const blockedTask = await tx.projectTask.create({
-        data: { tenantId: kcbId, projectId, title: "Blocked migration", status: "InProgress", approvalStatus: "Published", assigneeId: devId, dueDate: new Date(now - 6 * day), lastActivityAt: new Date(now) },
+        data: { tenantId: demoBId, projectId, title: "Blocked migration", status: "InProgress", approvalStatus: "Published", assigneeId: devId, dueDate: new Date(now - 6 * day), lastActivityAt: new Date(now) },
       });
       await tx.blocker.create({
-        data: { tenantId: kcbId, projectId, taskId: blockedTask.id, description: "Waiting on DBA window", severity: "Medium", status: "Open", createdAt: new Date(now - 4 * day) },
+        data: { tenantId: demoBId, projectId, taskId: blockedTask.id, description: "Waiting on DBA window", severity: "Medium", status: "Open", createdAt: new Date(now - 4 * day) },
       });
       await tx.projectTask.create({
-        data: { tenantId: kcbId, projectId, title: "Ship burndown widget", status: "Completed", approvalStatus: "Published", assigneeId: devId, lastActivityAt: new Date(now), updatedAt: new Date(now) },
+        data: { tenantId: demoBId, projectId, title: "Ship burndown widget", status: "Completed", approvalStatus: "Published", assigneeId: devId, lastActivityAt: new Date(now), updatedAt: new Date(now) },
       });
       await tx.projectTask.create({
-        data: { tenantId: kcbId, projectId, title: "AI draft idea", status: "NotStarted", approvalStatus: "Draft", createdAt: new Date(now - 3 * day) },
+        data: { tenantId: demoBId, projectId, title: "AI draft idea", status: "NotStarted", approvalStatus: "Draft", createdAt: new Date(now - 3 * day) },
       });
       await tx.projectMilestone.create({
-        data: { tenantId: kcbId, projectId, name: "Pilot go-live", status: "Pending", dueDate: new Date(now + 10 * day) },
+        data: { tenantId: demoBId, projectId, name: "Pilot go-live", status: "Pending", dueDate: new Date(now + 10 * day) },
       });
     });
   });
 
   afterAll(async () => {
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       await tx.project.deleteMany({ where: { id: projectId } }); // tasks/members/milestones cascade
     });
-    await cleanupFixtureUsers(kcbId);
+    await cleanupFixtureUsers(demoBId);
     await prisma.$disconnect();
   });
 
@@ -132,7 +132,7 @@ describe("M1b dashboard presets", () => {
     expect(d.teamLoad.map((m) => m.userId)).toContain(devId);
     // Every listed member must actually share one of MY projects (the fixture PM may
     // also run seeded demo projects with their own members — that's legitimate).
-    const myMembers = await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    const myMembers = await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       const mine = await tx.project.findMany({
         where: { OR: [{ leadUserId: pmId }, { members: { some: { userId: pmId, role: "Project Manager" } } }] },
         select: { id: true },
@@ -149,7 +149,7 @@ describe("M1b dashboard presets", () => {
   });
 
   it("developer data is tenant-scoped and personal", async () => {
-    const stranger = { tenantId: kcbId, userId: "00000000-0000-0000-0000-000000000000", roles: ["Member"] };
+    const stranger = { tenantId: demoBId, userId: "00000000-0000-0000-0000-000000000000", roles: ["Member"] };
     const d = await getDevDashboard(stranger);
     expect(d.focus).toBeNull();
     expect(d.buckets.overdue).toHaveLength(0);

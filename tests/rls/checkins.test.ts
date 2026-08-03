@@ -15,7 +15,7 @@ const nextKey = () => `${KEY_PREFIX}:${++keySeq}`;
 const WEEK = isoWeekId(new Date());
 
 describe("M2 weekly loop", () => {
-  let kcbId: string;
+  let demoBId: string;
   let riverbankId: string;
   let leadId: string;
   let execId: string;
@@ -23,22 +23,22 @@ describe("M2 weekly loop", () => {
   let leadCtx: TenantContext;
 
   beforeAll(async () => {
-    const [kcb, riverbank] = await Promise.all([
-      prisma.tenant.findUnique({ where: { slug: "kcb" } }),
+    const [demoB, riverbank] = await Promise.all([
+      prisma.tenant.findUnique({ where: { slug: "demo-b" } }),
       prisma.tenant.findUnique({ where: { slug: "riverbank" } }),
     ]);
-    if (!kcb || !riverbank) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
-    kcbId = kcb.id;
+    if (!demoB || !riverbank) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    demoBId = demoB.id;
     riverbankId = riverbank.id;
-    const [lead, exec] = await ensureUsers(kcbId, 2);
+    const [lead, exec] = await ensureUsers(demoBId, 2);
     leadId = lead.id;
     execId = exec.id;
-    leadCtx = { tenantId: kcbId, userId: leadId, roles: ["Member"] };
+    leadCtx = { tenantId: demoBId, userId: leadId, roles: ["Member"] };
 
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       const project = await tx.project.create({
         data: {
-          tenantId: kcbId,
+          tenantId: demoBId,
           code: `CHK${Date.now() % 100000}`,
           name: "Check-in Loop Fixture",
           type: "Project",
@@ -49,15 +49,15 @@ describe("M2 weekly loop", () => {
       });
       projectId = project.id;
       await tx.reportSubscription.upsert({
-        where: { tenantId_userId_kind: { tenantId: kcbId, userId: execId, kind: "weekly_report" } },
-        create: { tenantId: kcbId, userId: execId, kind: "weekly_report" },
+        where: { tenantId_userId_kind: { tenantId: demoBId, userId: execId, kind: "weekly_report" } },
+        create: { tenantId: demoBId, userId: execId, kind: "weekly_report" },
         update: {},
       });
     });
   });
 
   afterAll(async () => {
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       await tx.checkIn.deleteMany({ where: { isoWeek: WEEK } });
       await tx.sharedReport.deleteMany({ where: { type: "weekly", periodLabel: WEEK } });
       await tx.notification.deleteMany({ where: { kind: { in: ["checkin_ready", "weekly_report"] } } });
@@ -74,7 +74,7 @@ describe("M2 weekly loop", () => {
       await tx.domainEvent.deleteMany({ where: { type: { in: ["checkin.drafted", "checkin.confirmed", "report.published"] } } });
     });
     await prisma.jobRun.deleteMany({ where: { idempotencyKey: { startsWith: KEY_PREFIX } } });
-    await cleanupFixtureUsers(kcbId);
+    await cleanupFixtureUsers(demoBId);
     await prisma.$disconnect();
   });
 
@@ -90,16 +90,16 @@ describe("M2 weekly loop", () => {
     const result = await runJob("friday-checkin-drafts", nextKey());
     expect(result.status).toBe("Succeeded");
 
-    const row = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const row = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.checkIn.findUniqueOrThrow({
-        where: { tenantId_projectId_isoWeek: { tenantId: kcbId, projectId, isoWeek: WEEK } },
+        where: { tenantId_projectId_isoWeek: { tenantId: demoBId, projectId, isoWeek: WEEK } },
       }),
     );
     expect(row.status).toBe("Draft");
 
     // The fixture lead may be the seeded demo project's lead too — target this
     // project's notification precisely rather than whichever fan-out landed first.
-    const note = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const note = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.notification.findFirst({
         where: { userId: leadId, kind: "checkin_ready", link: `/projects/${projectId}` },
       }),
@@ -122,7 +122,7 @@ describe("M2 weekly loop", () => {
     expect(ttlDays).toBeGreaterThan(6.9);
     expect(ttlDays).toBeLessThan(7.1); // …and expires in ~7 days
 
-    const auditRow = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const auditRow = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.auditLog.findFirst({ where: { entityType: "check_in", actorId: leadId } }),
     );
     expect(auditRow).not.toBeNull();
@@ -131,9 +131,9 @@ describe("M2 weekly loop", () => {
   it("a re-run draft job never clobbers a confirmed check-in", async () => {
     const result = await runJob("friday-checkin-drafts", nextKey());
     expect(result.status).toBe("Succeeded");
-    const row = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const row = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.checkIn.findUniqueOrThrow({
-        where: { tenantId_projectId_isoWeek: { tenantId: kcbId, projectId, isoWeek: WEEK } },
+        where: { tenantId_projectId_isoWeek: { tenantId: demoBId, projectId, isoWeek: WEEK } },
       }),
     );
     expect(row.status).toBe("Confirmed");
@@ -144,7 +144,7 @@ describe("M2 weekly loop", () => {
     const result = await runJob("friday-report", nextKey());
     expect(result.status).toBe("Succeeded");
 
-    const report = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const report = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.sharedReport.findFirstOrThrow({ where: { type: "weekly", periodLabel: WEEK } }),
     );
     expect(report.markdown).toContain("Vendor slippage contained"); // confirmed narrative
@@ -152,7 +152,7 @@ describe("M2 weekly loop", () => {
     expect(report.markdown).toContain("unconfirmed — computed status shown"); // seeded leadless projects
     expect(report.createdById).toBeNull(); // machine actor
 
-    const note = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const note = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.notification.findFirst({ where: { userId: execId, kind: "weekly_report" } }),
     );
     expect(note?.link).toContain("/reports/s/");
@@ -161,9 +161,9 @@ describe("M2 weekly loop", () => {
   it("publishes at most one weekly report per tenant per ISO week", async () => {
     const again = await runJob("friday-report", nextKey());
     expect(again.status).toBe("Succeeded");
-    const kcbDetail = again.detail.kcb as { skipped?: string };
-    expect(kcbDetail.skipped).toBe("report already published");
-    const count = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const fixtureDetail = again.detail["demo-b"] as { skipped?: string };
+    expect(fixtureDetail.skipped).toBe("report already published");
+    const count = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.sharedReport.count({ where: { type: "weekly", periodLabel: WEEK } }),
     );
     expect(count).toBe(1);

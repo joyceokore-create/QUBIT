@@ -15,9 +15,9 @@ describe("join requests (Phase 5)", () => {
   let orphanProjectId: string; // no lead, no PM member — exercises the HeadOfProjects fallback
 
   beforeAll(async () => {
-    const kcb = await prisma.tenant.findUnique({ where: { slug: "kcb" } });
-    if (!kcb) throw new Error("join-request tests require seeded data — run `pnpm prisma:seed` first.");
-    tenantId = kcb.id;
+    const demoB = await prisma.tenant.findUnique({ where: { slug: "demo-b" } });
+    if (!demoB) throw new Error("join-request tests require seeded data — run `pnpm prisma:seed` first.");
+    tenantId = demoB.id;
     await withTenant({ tenantId, userId: "seed" }, async (tx) => {
       const [lead, req, exec, outsider, head] = await Promise.all([
         tx.user.create({ data: { tenantId, email: "jr-lead@fixture.invalid", name: "JR Lead", status: "ACTIVE" } }),

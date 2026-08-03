@@ -11,7 +11,7 @@ import { setIntegration, listIntegrations } from "@/server/integrations";
 import { createProject } from "@/server/projects";
 
 describe("Workspace — connectors (phase 4)", () => {
-  let kcb: TenantContext;
+  let demoB: TenantContext;
   let projectId: string;
   const projectIds: string[] = [];
 
@@ -20,11 +20,11 @@ describe("Workspace — connectors (phase 4)", () => {
     if (!process.env.INTEGRATION_ENCRYPTION_KEY && !process.env.MFA_ENCRYPTION_KEY) {
       process.env.INTEGRATION_ENCRYPTION_KEY = crypto.randomBytes(32).toString("base64");
     }
-    const k = await prisma.tenant.findUnique({ where: { slug: "kcb" } });
+    const k = await prisma.tenant.findUnique({ where: { slug: "demo-b" } });
     if (!k) throw new Error("Seed required.");
     const kUser = await withTenant({ tenantId: k.id, userId: "seed" }, (tx) => tx.user.findFirstOrThrow({ where: { status: "ACTIVE" } }));
-    kcb = { tenantId: k.id, userId: kUser.id, roles: [] };
-    const project = await createProject(kcb, {
+    demoB = { tenantId: k.id, userId: kUser.id, roles: [] };
+    const project = await createProject(demoB, {
       code: `CN-${Date.now().toString().slice(-6)}`,
       name: "Connector test",
       type: "Project",
@@ -36,7 +36,7 @@ describe("Workspace — connectors (phase 4)", () => {
   });
 
   afterAll(async () => {
-    await withTenant({ tenantId: kcb.tenantId, userId: "seed" }, async (tx) => {
+    await withTenant({ tenantId: demoB.tenantId, userId: "seed" }, async (tx) => {
       await tx.projectIntegration.deleteMany({ where: { projectId: { in: projectIds } } });
       await tx.project.deleteMany({ where: { id: { in: projectIds } } });
     });
@@ -66,15 +66,15 @@ describe("Workspace — connectors (phase 4)", () => {
   });
 
   it("stores the token encrypted and reports connect state", async () => {
-    await setIntegration(kcb, projectId, "github", { connected: true, resource: "acme/repo", token: "ghp_secret_123" });
-    const row = await withTenant(kcb, (tx) =>
+    await setIntegration(demoB, projectId, "github", { connected: true, resource: "acme/repo", token: "ghp_secret_123" });
+    const row = await withTenant(demoB, (tx) =>
       tx.projectIntegration.findUnique({ where: { projectId_provider: { projectId, provider: "github" } } }),
     );
     expect(row?.secret).toBeTruthy();
     expect(row?.secret).not.toBe("ghp_secret_123"); // encrypted at rest
     expect(decryptSecret(row!.secret!)).toBe("ghp_secret_123");
 
-    const cards = await listIntegrations(kcb, projectId);
+    const cards = await listIntegrations(demoB, projectId);
     const gh = cards.find((c) => c.provider === "github")!;
     expect(gh.connected).toBe(true);
     expect(gh.hasToken).toBe(true);
@@ -84,8 +84,8 @@ describe("Workspace — connectors (phase 4)", () => {
   });
 
   it("clears the token on disconnect", async () => {
-    await setIntegration(kcb, projectId, "github", { connected: false });
-    const row = await withTenant(kcb, (tx) =>
+    await setIntegration(demoB, projectId, "github", { connected: false });
+    const row = await withTenant(demoB, (tx) =>
       tx.projectIntegration.findUnique({ where: { projectId_provider: { projectId, provider: "github" } } }),
     );
     expect(row?.connected).toBe(false);
@@ -93,8 +93,8 @@ describe("Workspace — connectors (phase 4)", () => {
   });
 
   it("returns null summaries for unconnected or unsupported providers (no network)", async () => {
-    expect(await getIntegrationSummary(kcb, projectId, "github")).toBeNull(); // disconnected
-    await setIntegration(kcb, projectId, "sentry", { connected: true, resource: "acme/app", token: "x" });
-    expect(await getIntegrationSummary(kcb, projectId, "sentry")).toBeNull(); // no connector yet
+    expect(await getIntegrationSummary(demoB, projectId, "github")).toBeNull(); // disconnected
+    await setIntegration(demoB, projectId, "sentry", { connected: true, resource: "acme/app", token: "x" });
+    expect(await getIntegrationSummary(demoB, projectId, "sentry")).toBeNull(); // no connector yet
   });
 });

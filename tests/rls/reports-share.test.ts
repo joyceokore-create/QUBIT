@@ -10,7 +10,7 @@ import { createShare, getShareByToken } from "@/server/q/shares";
 import { canAccessReport } from "@/server/q/access";
 
 describe("MVP1 — reports centre (period, sharing, access)", () => {
-  let kcb: TenantContext;
+  let demoB: TenantContext;
   let riverbank: TenantContext;
   let kcbName: string;
   let projectId: string;
@@ -20,17 +20,17 @@ describe("MVP1 — reports centre (period, sharing, access)", () => {
   beforeAll(async () => {
     delete process.env.ANTHROPIC_API_KEY; // deterministic, offline path
     const [k, r] = await Promise.all([
-      prisma.tenant.findUnique({ where: { slug: "kcb" } }),
+      prisma.tenant.findUnique({ where: { slug: "demo-b" } }),
       prisma.tenant.findUnique({ where: { slug: "riverbank" } }),
     ]);
     if (!k || !r) throw new Error("Seed required.");
     kcbName = k.name;
     const kUser = await withTenant({ tenantId: k.id, userId: "seed" }, (tx) => tx.user.findFirstOrThrow({ where: { status: "ACTIVE" } }));
     const rUser = await withTenant({ tenantId: r.id, userId: "seed" }, (tx) => tx.user.findFirstOrThrow({ where: { status: "ACTIVE" } }));
-    kcb = { tenantId: k.id, userId: kUser.id, roles: [] };
+    demoB = { tenantId: k.id, userId: kUser.id, roles: [] };
     riverbank = { tenantId: r.id, userId: rUser.id, roles: [] };
 
-    const project = await createProject(kcb, {
+    const project = await createProject(demoB, {
       code: `RC-${Date.now().toString().slice(-6)}`,
       name: "Reports centre project",
       type: "Project",
@@ -39,33 +39,33 @@ describe("MVP1 — reports centre (period, sharing, access)", () => {
     });
     projectId = project.id;
     projectIds.push(project.id);
-    await setProjectMember(kcb, projectId, kcb.userId, { role: "Technical Lead", allocationPct: 60 });
+    await setProjectMember(demoB, projectId, demoB.userId, { role: "Technical Lead", allocationPct: 60 });
 
     // Activity inside the weekly window: a completed task + a status update (both stamped now).
-    await withTenant(kcb, async (tx) => {
+    await withTenant(demoB, async (tx) => {
       await tx.projectTask.create({
-        data: { tenantId: kcb.tenantId, projectId, title: "Ship it", status: "Completed", assigneeId: kcb.userId },
+        data: { tenantId: demoB.tenantId, projectId, title: "Ship it", status: "Completed", assigneeId: demoB.userId },
       });
       await tx.projectStatusUpdate.create({
-        data: { tenantId: kcb.tenantId, projectId, body: "Kicked off this week", rag: "Amber", postedById: kcb.userId },
+        data: { tenantId: demoB.tenantId, projectId, body: "Kicked off this week", rag: "Amber", postedById: demoB.userId },
       });
     });
   });
 
   afterAll(async () => {
-    await withTenant(kcb, async (tx) => {
+    await withTenant(demoB, async (tx) => {
       if (shareTokens.length) await tx.sharedReport.deleteMany({ where: { token: { in: shareTokens } } });
       await tx.projectStatusUpdate.deleteMany({ where: { projectId: { in: projectIds } } });
       await tx.projectTask.deleteMany({ where: { projectId: { in: projectIds } } });
       await tx.projectMember.deleteMany({ where: { projectId: { in: projectIds } } });
-      await tx.aiCallLog.deleteMany({ where: { userId: kcb.userId } });
+      await tx.aiCallLog.deleteMany({ where: { userId: demoB.userId } });
       await tx.project.deleteMany({ where: { id: { in: projectIds } } });
     });
     await prisma.$disconnect();
   });
 
   it("produces a weekly project report with a period label + activity section", async () => {
-    const rep = await generateReport(kcb, { type: "project", targetId: projectId, period: "week", tenantName: kcbName });
+    const rep = await generateReport(demoB, { type: "project", targetId: projectId, period: "week", tenantName: kcbName });
     expect(rep.title).toMatch(/weekly report/i);
     expect(rep.periodLabel).toMatch(/week of/i);
     expect(rep.markdown).toMatch(/Activity/i);
@@ -73,14 +73,14 @@ describe("MVP1 — reports centre (period, sharing, access)", () => {
   });
 
   it("produces a monthly project report titled accordingly", async () => {
-    const rep = await generateReport(kcb, { type: "project", targetId: projectId, period: "month", tenantName: kcbName });
+    const rep = await generateReport(demoB, { type: "project", targetId: projectId, period: "month", tenantName: kcbName });
     expect(rep.title).toMatch(/monthly report/i);
     expect(rep.periodLabel).toMatch(/month to/i);
   });
 
   it("shares a report snapshot and reads it back by token", async () => {
-    const rep = await generateReport(kcb, { type: "project", targetId: projectId, period: "week", tenantName: kcbName });
-    const { token } = await createShare(kcb, {
+    const rep = await generateReport(demoB, { type: "project", targetId: projectId, period: "week", tenantName: kcbName });
+    const { token } = await createShare(demoB, {
       type: "project",
       targetId: projectId,
       title: rep.title,
@@ -91,7 +91,7 @@ describe("MVP1 — reports centre (period, sharing, access)", () => {
     shareTokens.push(token);
     expect(token.length).toBeGreaterThan(20); // high-entropy, not the row id
 
-    const view = await getShareByToken(kcb, token);
+    const view = await getShareByToken(demoB, token);
     expect(view).toBeTruthy();
     expect(view?.title).toBe(rep.title);
     expect(view?.markdown).toBe(rep.markdown);
@@ -102,13 +102,13 @@ describe("MVP1 — reports centre (period, sharing, access)", () => {
     const token = shareTokens[0];
     expect(token).toBeTruthy();
     const leaked = await getShareByToken(riverbank, token);
-    expect(leaked).toBeNull(); // Riverbank cannot read KCB's shared report
+    expect(leaked).toBeNull(); // Riverbank cannot read the fixture tenant's shared report
   });
 
   it("authorises own + read-all reports for everyone, and gates another person's workload", async () => {
-    const base = { tenantId: kcb.tenantId, userId: kcb.userId };
+    const base = { tenantId: demoB.tenantId, userId: demoB.userId };
     // Own person reports — allowed with no roles.
-    expect(await canAccessReport({ ...base, roles: [] }, "member", kcb.userId)).toBe(true);
+    expect(await canAccessReport({ ...base, roles: [] }, "member", demoB.userId)).toBe(true);
     expect(await canAccessReport({ ...base, roles: [] }, "resource")).toBe(true); // no target → self
     // Portfolio + project reports are read-all world — allowed for everyone (PROMPT §2).
     expect(await canAccessReport({ ...base, roles: ["Member"] }, "portfolio")).toBe(true);

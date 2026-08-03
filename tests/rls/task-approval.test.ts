@@ -10,9 +10,9 @@ describe("plan approval — Draft tasks (§2.2)", () => {
   let ctx: TenantContext;
 
   beforeAll(async () => {
-    const kcb = await prisma.tenant.findUnique({ where: { slug: "kcb" } });
-    if (!kcb) throw new Error("task-approval tests require seeded data — run `pnpm prisma:seed` first.");
-    tenantId = kcb.id;
+    const demoB = await prisma.tenant.findUnique({ where: { slug: "demo-b" } });
+    if (!demoB) throw new Error("task-approval tests require seeded data — run `pnpm prisma:seed` first.");
+    tenantId = demoB.id;
     ctx = { tenantId, userId: "approval-actor", roles: ["ProjectManager"] };
     await withTenant(ctx, async (tx) => {
       const p = await tx.project.create({

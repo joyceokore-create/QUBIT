@@ -10,18 +10,18 @@ import { audit } from "@/lib/audit";
 const TEST_ENTITY_ID = "TEST-AUDIT-P001";
 
 describe("audit()", () => {
-  let kcbId: string;
+  let demoBId: string;
 
   beforeAll(async () => {
-    const kcb = await prisma.tenant.findUnique({ where: { slug: "kcb" } });
-    if (!kcb) {
+    const demoB = await prisma.tenant.findUnique({ where: { slug: "demo-b" } });
+    if (!demoB) {
       throw new Error("Audit tests require seeded data — run `pnpm prisma:seed` first.");
     }
-    kcbId = kcb.id;
+    demoBId = demoB.id;
   });
 
   beforeEach(async () => {
-    await withTenant({ tenantId: kcbId, userId: "test-actor" }, (tx) =>
+    await withTenant({ tenantId: demoBId, userId: "test-actor" }, (tx) =>
       tx.auditLog.deleteMany({
         where: { entityId: { in: [TEST_ENTITY_ID, "ROLLBACK-TEST"] } },
       }),
@@ -33,7 +33,7 @@ describe("audit()", () => {
   });
 
   it("writes a tenant-scoped row with actor, action, and before/after snapshots", async () => {
-    const ctx = { tenantId: kcbId, userId: "test-actor" };
+    const ctx = { tenantId: demoBId, userId: "test-actor" };
 
     await withTenant(ctx, async (tx) => {
       await audit(tx, ctx, {
@@ -51,7 +51,7 @@ describe("audit()", () => {
 
     expect(rows).toHaveLength(1);
     const row = rows[0];
-    expect(row.tenantId).toBe(kcbId);
+    expect(row.tenantId).toBe(demoBId);
     expect(row.actorId).toBe("test-actor");
     expect(row.entityType).toBe("project");
     expect(row.before).toEqual({ status: "Planning" });
@@ -59,7 +59,7 @@ describe("audit()", () => {
   });
 
   it("is atomic with the mutation it accompanies — a rolled-back transaction writes no audit row", async () => {
-    const ctx = { tenantId: kcbId, userId: "test-actor" };
+    const ctx = { tenantId: demoBId, userId: "test-actor" };
 
     await expect(
       withTenant(ctx, async (tx) => {

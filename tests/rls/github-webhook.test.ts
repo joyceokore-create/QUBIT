@@ -15,7 +15,7 @@ let seq = 0;
 const nextDelivery = () => `gw-test-${process.pid}-${++seq}`;
 
 describe("M7-B GitHub webhook", () => {
-  let kcbId: string;
+  let demoBId: string;
   let riverbankId: string;
   let projectId: string;
   let leadId: string;
@@ -39,23 +39,23 @@ describe("M7-B GitHub webhook", () => {
   });
 
   beforeAll(async () => {
-    const [kcb, riverbank] = await Promise.all([
-      prisma.tenant.findUnique({ where: { slug: "kcb" } }),
+    const [demoB, riverbank] = await Promise.all([
+      prisma.tenant.findUnique({ where: { slug: "demo-b" } }),
       prisma.tenant.findUnique({ where: { slug: "riverbank" } }),
     ]);
-    if (!kcb || !riverbank) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
-    kcbId = kcb.id;
+    if (!demoB || !riverbank) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    demoBId = demoB.id;
     riverbankId = riverbank.id;
-    const [lead, dev] = await createUsers(kcbId, 2, "gw");
+    const [lead, dev] = await createUsers(demoBId, 2, "gw");
     leadId = lead.id;
     devId = dev.id;
-    ctx = { tenantId: kcbId, userId: leadId, roles: ["Member"] };
+    ctx = { tenantId: demoBId, userId: leadId, roles: ["Member"] };
 
     await withTenant(ctx, async (tx) => {
       devEmail = (await tx.user.findUniqueOrThrow({ where: { id: devId }, select: { email: true } })).email;
       const project = await tx.project.create({
         data: {
-          tenantId: kcbId, code: "GWFIX", name: "Webhook Fixture", type: "Project",
+          tenantId: demoBId, code: "GWFIX", name: "Webhook Fixture", type: "Project",
           priority: "High", status: "OnTrack", leadUserId: leadId,
         },
         select: { id: true },
@@ -63,7 +63,7 @@ describe("M7-B GitHub webhook", () => {
       projectId = project.id;
       await tx.projectIntegration.create({
         data: {
-          tenantId: kcbId, projectId, provider: "github", connected: true,
+          tenantId: demoBId, projectId, provider: "github", connected: true,
           resource: REPO, webhookSecret: encryptSecret("gw-fixture-secret"),
         },
       });
@@ -73,7 +73,7 @@ describe("M7-B GitHub webhook", () => {
         ["c", { taskKey: "GWFIX-3", title: "Already verified", type: "Chore", status: "Completed" }],
         ["m", { title: "Mirrored issue", status: "InProgress", sourceSystem: "youtrack", externalId: "2-77", externalKey: "RBC-77" }],
       ] as const) {
-        const t = await tx.projectTask.create({ data: { tenantId: kcbId, projectId, ...data }, select: { id: true } });
+        const t = await tx.projectTask.create({ data: { tenantId: demoBId, projectId, ...data }, select: { id: true } });
         task[key] = t.id;
       }
     });
@@ -108,19 +108,19 @@ describe("M7-B GitHub webhook", () => {
       await tx.projectTask.deleteMany({ where: { id: riverbankTaskId } });
       await tx.project.deleteMany({ where: { code: "GWFIX" } });
     });
-    await cleanupFixtureUsers(kcbId);
+    await cleanupFixtureUsers(demoBId);
     await prisma.$disconnect();
   });
 
   it("resolves the integration by OUR stored resource, case-insensitively", async () => {
     const hit = await resolveGithubIntegration(REPO.toUpperCase());
-    expect(hit).toMatchObject({ tenantId: kcbId, projectId });
+    expect(hit).toMatchObject({ tenantId: demoBId, projectId });
     expect(hit?.webhookSecret).toBe("gw-fixture-secret"); // decrypted, ready for HMAC
     expect(await resolveGithubIntegration("acme/never-configured")).toBeNull();
   });
 
   it("`fixes KEY` moves the task to InReview — never Completed — as the matched committer", async () => {
-    const r = await processPush({ tenantId: kcbId, projectId }, payload([
+    const r = await processPush({ tenantId: demoBId, projectId }, payload([
       commit("c0ffee1", "fixes GWFIX-2: clamp the rate to 4dp", devEmail),
     ]), nextDelivery());
     expect(r).toMatchObject({ replay: false, linked: 1, moved: 1 });
@@ -138,7 +138,7 @@ describe("M7-B GitHub webhook", () => {
   });
 
   it("#progress starts a NotStarted task and stores the commit link", async () => {
-    const r = await processPush({ tenantId: kcbId, projectId }, payload([
+    const r = await processPush({ tenantId: demoBId, projectId }, payload([
       commit("c0ffee2", "GWFIX-1 #progress scaffolding the exporter", devEmail),
     ]), nextDelivery());
     expect(r.moved).toBe(1);
@@ -157,7 +157,7 @@ describe("M7-B GitHub webhook", () => {
   });
 
   it("#blocked raises a linked Blocker owned by the matched committer", async () => {
-    const r = await processPush({ tenantId: kcbId, projectId }, payload([
+    const r = await processPush({ tenantId: demoBId, projectId }, payload([
       commit("c0ffee3", "GWFIX-1 #blocked waiting on treasury API creds", devEmail),
     ]), nextDelivery());
     expect(r.blocked).toBe(1);
@@ -169,7 +169,7 @@ describe("M7-B GitHub webhook", () => {
   });
 
   it("an unmatched committer acts as the sentinel: ownerless blocker, link kept", async () => {
-    const r = await processPush({ tenantId: kcbId, projectId }, payload([
+    const r = await processPush({ tenantId: demoBId, projectId }, payload([
       commit("c0ffee4", "GWFIX-2 #blocked flaky CI", "stranger@example.invalid"),
     ]), nextDelivery());
     expect(r.blocked).toBe(1);
@@ -181,18 +181,18 @@ describe("M7-B GitHub webhook", () => {
 
   it("a replayed delivery is a recorded no-op", async () => {
     const deliveryId = nextDelivery();
-    const first = await processPush({ tenantId: kcbId, projectId }, payload([
+    const first = await processPush({ tenantId: demoBId, projectId }, payload([
       commit("c0ffee5", "GWFIX-1 more scaffolding"),
     ]), deliveryId);
     expect(first.replay).toBe(false);
-    const again = await processPush({ tenantId: kcbId, projectId }, payload([
+    const again = await processPush({ tenantId: demoBId, projectId }, payload([
       commit("c0ffee5", "GWFIX-1 more scaffolding"),
     ]), deliveryId);
     expect(again).toMatchObject({ replay: true, linked: 0, moved: 0, blocked: 0 });
   });
 
   it("ignores illegal transitions: Completed stays Completed", async () => {
-    const r = await processPush({ tenantId: kcbId, projectId }, payload([
+    const r = await processPush({ tenantId: demoBId, projectId }, payload([
       commit("c0ffee6", "fixes GWFIX-3 (again)"),
     ]), nextDelivery());
     expect(r.moved).toBe(0);
@@ -203,7 +203,7 @@ describe("M7-B GitHub webhook", () => {
   });
 
   it("a YouTrack-mirrored issue referenced by its tracker key LINKS but never moves", async () => {
-    const r = await processPush({ tenantId: kcbId, projectId }, payload([
+    const r = await processPush({ tenantId: demoBId, projectId }, payload([
       commit("c0ffee7", "RBC-77 #done ported the fix", devEmail),
     ]), nextDelivery());
     expect(r.linked).toBe(1);
@@ -216,14 +216,14 @@ describe("M7-B GitHub webhook", () => {
   });
 
   it("unknown keys are ignored, not errors", async () => {
-    const r = await processPush({ tenantId: kcbId, projectId }, payload([
+    const r = await processPush({ tenantId: demoBId, projectId }, payload([
       commit("c0ffee8", "fixes NOPE-99 in a repo far away"),
     ]), nextDelivery());
     expect(r).toMatchObject({ moved: 0, linked: 0, ignored: 1 });
   });
 
   it("cross-tenant forgery: the same key in another tenant is untouchable", async () => {
-    // The KCB integration processed pushes mentioning GWFIX-1 above; the Riverbank task
+    // The the fixture tenant integration processed pushes mentioning GWFIX-1 above; the Riverbank task
     // with the SAME key must be exactly as it started.
     const canary = await withTenant({ tenantId: riverbankId, userId: "test" }, (tx) =>
       tx.projectTask.findUniqueOrThrow({ where: { id: riverbankTaskId }, select: { status: true, commitLinks: { select: { id: true } } } }),

@@ -12,7 +12,7 @@ import { createUsers, cleanupFixtureUsers } from "./_users";
 const DAY = 86_400_000;
 
 describe("M6-A absence & capacity", () => {
-  let kcbId: string;
+  let demoBId: string;
   let awayId: string;
   let pmId: string;
   let ctx: TenantContext;
@@ -21,18 +21,18 @@ describe("M6-A absence & capacity", () => {
   const now = new Date();
 
   beforeAll(async () => {
-    const kcb = await prisma.tenant.findUnique({ where: { slug: "kcb" } });
-    if (!kcb) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
-    kcbId = kcb.id;
-    const [away, pm] = await createUsers(kcbId, 2, "abs");
+    const demoB = await prisma.tenant.findUnique({ where: { slug: "demo-b" } });
+    if (!demoB) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    demoBId = demoB.id;
+    const [away, pm] = await createUsers(demoBId, 2, "abs");
     awayId = away.id;
     pmId = pm.id;
-    ctx = { tenantId: kcbId, userId: pmId, roles: ["ProjectManager"] };
+    ctx = { tenantId: demoBId, userId: pmId, roles: ["ProjectManager"] };
 
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       const project = await tx.project.create({
         data: {
-          tenantId: kcbId,
+          tenantId: demoBId,
           code: `AB${Date.now() % 100000}`,
           name: "Absence Fixture",
           type: "Project",
@@ -44,20 +44,20 @@ describe("M6-A absence & capacity", () => {
       projectId = project.id;
       await tx.projectMember.createMany({
         data: [
-          { tenantId: kcbId, projectId, userId: awayId, role: "Developer", allocationPct: 100 },
-          { tenantId: kcbId, projectId, userId: pmId, role: "Project Manager", allocationPct: 50 },
+          { tenantId: demoBId, projectId, userId: awayId, role: "Developer", allocationPct: 100 },
+          { tenantId: demoBId, projectId, userId: pmId, role: "Project Manager", allocationPct: 50 },
         ],
       });
     });
   });
 
   afterAll(async () => {
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       await tx.absence.deleteMany({ where: { userId: { in: [awayId, pmId] } } });
       await tx.nudge.deleteMany({ where: { entityId: projectId } });
       await tx.project.deleteMany({ where: { id: projectId } });
     });
-    await cleanupFixtureUsers(kcbId);
+    await cleanupFixtureUsers(demoBId);
     await prisma.$disconnect();
   });
 
@@ -73,7 +73,7 @@ describe("M6-A absence & capacity", () => {
     expect(rows[0].source).toBe("manual");
     absenceId = rows[0].id;
 
-    const audit = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const audit = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.auditLog.findFirst({ where: { entityType: "absence", actorId: pmId }, orderBy: { createdAt: "desc" } }),
     );
     expect((audit?.after as { userId?: string })?.userId).toBe(awayId);
@@ -121,12 +121,12 @@ describe("M6-A absence & capacity", () => {
       level: 0,
       recipientsByLevel: [[awayId]],
     };
-    const result = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
-      applyCandidates(tx, { tenantId: kcbId, userId: "job:test" }, [candidate], now),
+    const result = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
+      applyCandidates(tx, { tenantId: demoBId, userId: "job:test" }, [candidate], now),
     );
     expect(result.created).toBe(1);
 
-    const nudge = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const nudge = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.nudge.findFirstOrThrow({ where: { entityId: projectId }, select: { recipientIds: true } }),
     );
     // The absent person is not pinged…
@@ -136,11 +136,11 @@ describe("M6-A absence & capacity", () => {
   });
 
   it("only manual absences can be deleted — imported ones belong to their source", async () => {
-    const importedId = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const importedId = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.absence
         .create({
           data: {
-            tenantId: kcbId, userId: awayId, type: "Leave", source: "erp",
+            tenantId: demoBId, userId: awayId, type: "Leave", source: "erp",
             startDate: new Date(now.getTime() + 40 * DAY), endDate: new Date(now.getTime() + 44 * DAY),
           },
         })

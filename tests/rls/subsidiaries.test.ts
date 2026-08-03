@@ -6,22 +6,22 @@ import { withTenant, type TenantContext } from "@/lib/tenant";
 import { getSubsidiaryDetail } from "@/server/subsidiaries";
 
 describe("Subsidiary view", () => {
-  let kcbId: string;
+  let demoBId: string;
   let riverbankId: string;
   let ctx: TenantContext;
   let keOrgUnitId: string;
 
   beforeAll(async () => {
-    const [kcb, riverbank] = await Promise.all([
-      prisma.tenant.findUnique({ where: { slug: "kcb" } }),
+    const [demoB, riverbank] = await Promise.all([
+      prisma.tenant.findUnique({ where: { slug: "demo-b" } }),
       prisma.tenant.findUnique({ where: { slug: "riverbank" } }),
     ]);
-    if (!kcb || !riverbank) {
+    if (!demoB || !riverbank) {
       throw new Error("Subsidiary tests require seeded data — run `pnpm prisma:seed` first.");
     }
-    kcbId = kcb.id;
+    demoBId = demoB.id;
     riverbankId = riverbank.id;
-    ctx = { tenantId: kcbId, userId: "test-subsidiary-actor", roles: ["PlatformSuperAdmin"] };
+    ctx = { tenantId: demoBId, userId: "test-subsidiary-actor", roles: ["PlatformSuperAdmin"] };
 
     const ke = await withTenant(ctx, (tx) => tx.orgUnit.findFirstOrThrow({ where: { code: "KE" } }));
     keOrgUnitId = ke.id;

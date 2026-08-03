@@ -18,7 +18,7 @@ export function TrustBand() {
           <div>
             <p className="mb-3 text-[13px] font-bold tracking-[-0.1px] text-[var(--pbrand)]">Governance &amp; security</p>
             <h2 className="text-[30px] font-[800] leading-[1.08] tracking-[-1px] text-[var(--qink)] md:text-[40px]">
-              Built for Riverbank Group &amp; KCB Group
+              Built for Riverbank Group
             </h2>
             <p className="mt-3 max-w-[300px] text-pretty text-[14px] leading-[1.6] text-[var(--ink35)]">
               Enterprise governance is the default, not an add-on — so every team works inside the same guardrails.

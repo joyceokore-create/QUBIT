@@ -12,30 +12,30 @@ import {
   UserAdminError,
 } from "@/server/users";
 
-const TEST_EMAIL = "test-admin-lifecycle@kcb.example.invalid";
+const TEST_EMAIL = "test-admin-lifecycle@demo-b.example.invalid";
 
 describe("Admin/IAM user lifecycle", () => {
-  let kcbId: string;
+  let demoBId: string;
   let riverbankId: string;
   let adminCtx: TenantContext;
 
   beforeAll(async () => {
-    const [kcb, riverbank] = await Promise.all([
-      prisma.tenant.findUnique({ where: { slug: "kcb" } }),
+    const [demoB, riverbank] = await Promise.all([
+      prisma.tenant.findUnique({ where: { slug: "demo-b" } }),
       prisma.tenant.findUnique({ where: { slug: "riverbank" } }),
     ]);
-    if (!kcb || !riverbank) {
+    if (!demoB || !riverbank) {
       throw new Error("Admin tests require seeded data — run `pnpm prisma:seed` first.");
     }
-    kcbId = kcb.id;
+    demoBId = demoB.id;
     riverbankId = riverbank.id;
-    adminCtx = { tenantId: kcbId, userId: "test-admin-actor", roles: ["PlatformSuperAdmin"] };
+    adminCtx = { tenantId: demoBId, userId: "test-admin-actor", roles: ["PlatformSuperAdmin"] };
   });
 
   beforeEach(async () => {
     await withTenant(adminCtx, async (tx) => {
       const existing = await tx.user.findUnique({
-        where: { tenantId_email: { tenantId: kcbId, email: TEST_EMAIL } },
+        where: { tenantId_email: { tenantId: demoBId, email: TEST_EMAIL } },
       });
       if (existing) {
         await tx.roleAssignment.deleteMany({ where: { userId: existing.id } });
@@ -139,7 +139,7 @@ describe("Admin/IAM user lifecycle", () => {
   });
 
   it("blocks an admin from suspending, deleting, or self-demoting their own account", async () => {
-    const selfCtx: TenantContext = { tenantId: kcbId, userId: "self-actor", roles: ["PlatformSuperAdmin"] };
+    const selfCtx: TenantContext = { tenantId: demoBId, userId: "self-actor", roles: ["PlatformSuperAdmin"] };
 
     await expect(setUserStatus(selfCtx, "self-actor", "SUSPENDED")).rejects.toThrow(UserAdminError);
     await expect(softDeleteUser(selfCtx, "self-actor")).rejects.toThrow(UserAdminError);

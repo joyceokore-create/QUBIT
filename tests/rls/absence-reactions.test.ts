@@ -11,7 +11,7 @@ import { createUsers, cleanupFixtureUsers } from "./_users";
 const DAY = 86_400_000;
 
 describe("M6-B absence reactions", () => {
-  let kcbId: string;
+  let demoBId: string;
   let awayId: string;
   let freeId: string;
   let busyId: string;
@@ -23,36 +23,36 @@ describe("M6-B absence reactions", () => {
   const dueInsideLeave = new Date(now.getTime() + 3 * DAY);
 
   beforeAll(async () => {
-    const kcb = await prisma.tenant.findUnique({ where: { slug: "kcb" } });
-    if (!kcb) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
-    kcbId = kcb.id;
-    const [away, free, busy, other] = await createUsers(kcbId, 4, "react");
+    const demoB = await prisma.tenant.findUnique({ where: { slug: "demo-b" } });
+    if (!demoB) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    demoBId = demoB.id;
+    const [away, free, busy, other] = await createUsers(demoBId, 4, "react");
     awayId = away.id;
     freeId = free.id;
     busyId = busy.id;
     otherRoleId = other.id;
-    ctx = { tenantId: kcbId, userId: freeId, roles: ["ProjectManager"] };
+    ctx = { tenantId: demoBId, userId: freeId, roles: ["ProjectManager"] };
 
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       const project = await tx.project.create({
         data: {
-          tenantId: kcbId, code: `RX${Date.now() % 100000}`, name: "Reactions Fixture",
+          tenantId: demoBId, code: `RX${Date.now() % 100000}`, name: "Reactions Fixture",
           type: "Project", priority: "High", status: "OnTrack", leadUserId: freeId,
         },
       });
       projectId = project.id;
       await tx.projectMember.createMany({
         data: [
-          { tenantId: kcbId, projectId, userId: awayId, role: "Developer", allocationPct: 100 },
-          { tenantId: kcbId, projectId, userId: freeId, role: "Developer", allocationPct: 20 },
-          { tenantId: kcbId, projectId, userId: busyId, role: "Developer", allocationPct: 90 },
-          { tenantId: kcbId, projectId, userId: otherRoleId, role: "QA Engineer", allocationPct: 10 },
+          { tenantId: demoBId, projectId, userId: awayId, role: "Developer", allocationPct: 100 },
+          { tenantId: demoBId, projectId, userId: freeId, role: "Developer", allocationPct: 20 },
+          { tenantId: demoBId, projectId, userId: busyId, role: "Developer", allocationPct: 90 },
+          { tenantId: demoBId, projectId, userId: otherRoleId, role: "QA Engineer", allocationPct: 10 },
         ],
       });
       // The assignee is away across the due date.
       await tx.absence.create({
         data: {
-          tenantId: kcbId, userId: awayId, type: "Leave", source: "manual",
+          tenantId: demoBId, userId: awayId, type: "Leave", source: "manual",
           startDate: new Date(now.getTime() + DAY), endDate: new Date(now.getTime() + 6 * DAY),
         },
       });
@@ -65,11 +65,11 @@ describe("M6-B absence reactions", () => {
   });
 
   afterAll(async () => {
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       await tx.absence.deleteMany({ where: { userId: { in: [awayId, freeId, busyId, otherRoleId] } } });
       await tx.project.deleteMany({ where: { id: projectId } });
     });
-    await cleanupFixtureUsers(kcbId);
+    await cleanupFixtureUsers(demoBId);
     await prisma.$disconnect();
   });
 
@@ -97,10 +97,10 @@ describe("M6-B absence reactions", () => {
   });
 
   it("does not suggest an alternate who is also away that day", async () => {
-    await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.absence.create({
         data: {
-          tenantId: kcbId, userId: freeId, type: "Training", source: "manual",
+          tenantId: demoBId, userId: freeId, type: "Training", source: "manual",
           startDate: new Date(now.getTime() + 2 * DAY), endDate: new Date(now.getTime() + 4 * DAY),
         },
       }),
@@ -111,7 +111,7 @@ describe("M6-B absence reactions", () => {
   });
 
   it("reports next week's exposure for the Friday report", async () => {
-    const exposure = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const exposure = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       leaveExposureNextWeek(tx, now),
     );
     expect(exposure.peopleAway).toBeGreaterThanOrEqual(2); // the away dev + the free dev
@@ -138,7 +138,7 @@ describe("M6-B absence reactions", () => {
     expect(second.created).toBe(0);
     expect(second.updated).toBe(1);
 
-    const rows = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const rows = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.absence.findMany({ where: { userId: busyId, source: "import" }, select: { endDate: true } }),
     );
     expect(rows).toHaveLength(1);

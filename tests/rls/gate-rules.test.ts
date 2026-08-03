@@ -9,24 +9,24 @@ import { addLesson, listLessons } from "@/server/lessons";
 import { createUsers, cleanupFixtureUsers } from "./_users";
 
 describe("M8-A gate checklists", () => {
-  let kcbId: string;
+  let demoBId: string;
   let leadId: string;
   let ctx: TenantContext;
   let projectId: string;
   let gateIds: Record<string, string> = {};
 
   beforeAll(async () => {
-    const kcb = await prisma.tenant.findUnique({ where: { slug: "kcb" } });
-    if (!kcb) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
-    kcbId = kcb.id;
-    const [lead] = await createUsers(kcbId, 1, "gate");
+    const demoB = await prisma.tenant.findUnique({ where: { slug: "demo-b" } });
+    if (!demoB) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    demoBId = demoB.id;
+    const [lead] = await createUsers(demoBId, 1, "gate");
     leadId = lead.id;
-    ctx = { tenantId: kcbId, userId: leadId, roles: ["Member"] };
+    ctx = { tenantId: demoBId, userId: leadId, roles: ["Member"] };
 
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       const project = await tx.project.create({
         data: {
-          tenantId: kcbId,
+          tenantId: demoBId,
           code: `GT${Date.now() % 100000}`,
           name: "Gate Fixture",
           type: "Project",
@@ -46,11 +46,11 @@ describe("M8-A gate checklists", () => {
   });
 
   afterAll(async () => {
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       await tx.domainEvent.deleteMany({ where: { type: "checkpoint.state_changed" } });
       await tx.project.deleteMany({ where: { id: projectId } });
     });
-    await cleanupFixtureUsers(kcbId);
+    await cleanupFixtureUsers(demoBId);
     await prisma.$disconnect();
   });
 
@@ -91,7 +91,7 @@ describe("M8-A gate checklists", () => {
     expect(brd.state).toBe("Done");
     expect(brd.overrideReason).toContain("Steering approved verbally");
 
-    const [row, audit, event] = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const [row, audit, event] = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       Promise.all([
         tx.checkpointStatus.findFirstOrThrow({
           where: { projectId, checkpointId: gateIds.BRD, orgUnitId: null },
@@ -109,11 +109,11 @@ describe("M8-A gate checklists", () => {
 
   it("satisfying the requirements closes the gate with no override recorded", async () => {
     // Give the project a lead + member and an approved BRD — the gate's own conditions.
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       await tx.project.update({ where: { id: projectId }, data: { leadUserId: leadId } });
-      await tx.projectMember.create({ data: { tenantId: kcbId, projectId, userId: leadId, role: "Project Manager" } });
+      await tx.projectMember.create({ data: { tenantId: demoBId, projectId, userId: leadId, role: "Project Manager" } });
       await tx.projectDocument.create({
-        data: { tenantId: kcbId, projectId, title: "Business requirements", kind: "BRD", status: "Approved" },
+        data: { tenantId: demoBId, projectId, title: "Business requirements", kind: "BRD", status: "Approved" },
       });
     });
     // Re-close it cleanly: reset then set Done with no reason at all.

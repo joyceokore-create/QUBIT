@@ -26,7 +26,7 @@ Users should be able to export a statement as PDF.
 `;
 
 describe("M8-C requirements + traceability", () => {
-  let kcbId: string;
+  let demoBId: string;
   let leadId: string;
   let ctx: TenantContext;
   let projectId: string;
@@ -35,17 +35,17 @@ describe("M8-C requirements + traceability", () => {
   let otherProjectTaskId: string;
 
   beforeAll(async () => {
-    const kcb = await prisma.tenant.findUnique({ where: { slug: "kcb" } });
-    if (!kcb) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
-    kcbId = kcb.id;
-    const [lead] = await createUsers(kcbId, 1, "req");
+    const demoB = await prisma.tenant.findUnique({ where: { slug: "demo-b" } });
+    if (!demoB) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    demoBId = demoB.id;
+    const [lead] = await createUsers(demoBId, 1, "req");
     leadId = lead.id;
-    ctx = { tenantId: kcbId, userId: leadId, roles: ["Member"] };
+    ctx = { tenantId: demoBId, userId: leadId, roles: ["Member"] };
 
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       const project = await tx.project.create({
         data: {
-          tenantId: kcbId,
+          tenantId: demoBId,
           code: `RQ${Date.now() % 100000}`,
           name: "Requirements Fixture",
           type: "Project",
@@ -55,16 +55,16 @@ describe("M8-C requirements + traceability", () => {
         },
       });
       projectId = project.id;
-      await tx.projectMember.create({ data: { tenantId: kcbId, projectId, userId: leadId, role: "QA Engineer" } });
+      await tx.projectMember.create({ data: { tenantId: demoBId, projectId, userId: leadId, role: "QA Engineer" } });
 
       const doc = await tx.projectDocument.create({
-        data: { tenantId: kcbId, projectId, title: "Payments URS", kind: "URS", status: "Approved", content: URS_TEXT },
+        data: { tenantId: demoBId, projectId, title: "Payments URS", kind: "URS", status: "Approved", content: URS_TEXT },
       });
       docId = doc.id;
 
       const task = await tx.projectTask.create({
         data: {
-          tenantId: kcbId, projectId, title: "Build nightly reconciliation job",
+          tenantId: demoBId, projectId, title: "Build nightly reconciliation job",
           type: "Feature", status: "InProgress", approvalStatus: "Published",
         },
       });
@@ -73,7 +73,7 @@ describe("M8-C requirements + traceability", () => {
       const other = await tx.project.findFirstOrThrow({ where: { id: { not: projectId } }, select: { id: true } });
       const strayTask = await tx.projectTask.create({
         data: {
-          tenantId: kcbId, projectId: other.id, title: "Unrelated work",
+          tenantId: demoBId, projectId: other.id, title: "Unrelated work",
           type: "Feature", status: "NotStarted", approvalStatus: "Published",
         },
       });
@@ -82,12 +82,12 @@ describe("M8-C requirements + traceability", () => {
   });
 
   afterAll(async () => {
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       await tx.domainEvent.deleteMany({ where: { type: "requirements.accepted" } });
       await tx.projectTask.deleteMany({ where: { id: otherProjectTaskId } });
       await tx.project.deleteMany({ where: { id: projectId } });
     });
-    await cleanupFixtureUsers(kcbId);
+    await cleanupFixtureUsers(demoBId);
     await prisma.$disconnect();
   });
 
@@ -101,9 +101,9 @@ describe("M8-C requirements + traceability", () => {
   });
 
   it("refuses to read a document with no text rather than inventing requirements", async () => {
-    const emptyId = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const emptyId = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.projectDocument
-        .create({ data: { tenantId: kcbId, projectId, title: "Empty", kind: "URS", status: "Draft" } })
+        .create({ data: { tenantId: demoBId, projectId, title: "Empty", kind: "URS", status: "Draft" } })
         .then((d) => d.id),
     );
     await expect(extractCandidates(ctx, emptyId)).rejects.toThrowError(RequirementError);
@@ -144,11 +144,11 @@ describe("M8-C requirements + traceability", () => {
 
   it("a Draft task is not coverage — only published work counts", async () => {
     const [, second] = await listRequirements(ctx, projectId);
-    const draftTaskId = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const draftTaskId = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.projectTask
         .create({
           data: {
-            tenantId: kcbId, projectId, title: "AI-drafted idea",
+            tenantId: demoBId, projectId, title: "AI-drafted idea",
             type: "Feature", status: "NotStarted", approvalStatus: "Draft",
           },
         })
@@ -161,7 +161,7 @@ describe("M8-C requirements + traceability", () => {
   });
 
   it("the pilot gate reads coverage, and the QA strip shows the same number", async () => {
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       const tmpl = await tx.checkpointTemplate.findFirstOrThrow({ where: { name: "Product build" }, select: { id: true } });
       await tx.project.update({ where: { id: projectId }, data: { checkpointTemplateId: tmpl.id } });
     });
@@ -176,11 +176,11 @@ describe("M8-C requirements + traceability", () => {
   });
 
   it("a project with NO requirements does not fail the gate on an empty set", async () => {
-    const bareId = await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    const bareId = await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       const tmpl = await tx.checkpointTemplate.findFirstOrThrow({ where: { name: "Product build" }, select: { id: true } });
       const p = await tx.project.create({
         data: {
-          tenantId: kcbId, code: `RQB${Date.now() % 100000}`, name: "No Requirements Fixture",
+          tenantId: demoBId, code: `RQB${Date.now() % 100000}`, name: "No Requirements Fixture",
           type: "Project", priority: "Med", status: "OnTrack", checkpointTemplateId: tmpl.id,
         },
       });
@@ -189,7 +189,7 @@ describe("M8-C requirements + traceability", () => {
     const view = await getProjectCheckpoints(ctx, bareId);
     const rule = view.rows.find((r) => r.name === "UAT")!.gate.find((g) => g.key === "requirement-coverage")!;
     expect(rule.met).toBe(true); // nothing to cover ≠ failing to cover
-    await withTenant({ tenantId: kcbId, userId: "test" }, (tx) => tx.project.deleteMany({ where: { id: bareId } }));
+    await withTenant({ tenantId: demoBId, userId: "test" }, (tx) => tx.project.deleteMany({ where: { id: bareId } }));
   });
 
   it("RLS: the other tenant sees none of these requirements", async () => {

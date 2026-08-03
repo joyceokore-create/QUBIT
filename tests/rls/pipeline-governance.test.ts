@@ -12,25 +12,25 @@ import { confirmCheckIn } from "@/server/checkins";
 import { ensureUsers, cleanupFixtureUsers } from "./_users";
 
 describe("M18-A pipeline governance", () => {
-  let kcbId: string;
+  let demoBId: string;
   let leadId: string;
   let memberId: string;
   let projectId: string;
   let leadCtx: TenantContext;
 
   beforeAll(async () => {
-    const kcb = await prisma.tenant.findUnique({ where: { slug: "kcb" } });
-    if (!kcb) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
-    kcbId = kcb.id;
-    const [lead, member] = await ensureUsers(kcbId, 2);
+    const demoB = await prisma.tenant.findUnique({ where: { slug: "demo-b" } });
+    if (!demoB) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    demoBId = demoB.id;
+    const [lead, member] = await ensureUsers(demoBId, 2);
     leadId = lead.id;
     memberId = member.id;
-    leadCtx = { tenantId: kcbId, userId: leadId, roles: ["Member"] };
+    leadCtx = { tenantId: demoBId, userId: leadId, roles: ["Member"] };
 
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       const project = await tx.project.create({
         data: {
-          tenantId: kcbId,
+          tenantId: demoBId,
           code: `GOV${Date.now() % 100000}`,
           name: "Governance Fixture",
           type: "Project",
@@ -44,33 +44,33 @@ describe("M18-A pipeline governance", () => {
   });
 
   afterAll(async () => {
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       await tx.domainEvent.deleteMany({ where: { type: "project.pipeline_stage_changed" } });
       await tx.checkIn.deleteMany({ where: { projectId } });
       await tx.project.deleteMany({ where: { id: projectId } });
     });
-    await cleanupFixtureUsers(kcbId);
+    await cleanupFixtureUsers(demoBId);
     await prisma.$disconnect();
   });
 
   it("gate both ways (§10): execs and heads hold project:stage; members hold neither path", async () => {
-    expect(can({ tenantId: kcbId, userId: "x", roles: ["Executive"] }, "project:stage")).toBe(true);
-    expect(can({ tenantId: kcbId, userId: "x", roles: ["HeadOfProjects"] }, "project:stage")).toBe(true);
-    expect(can({ tenantId: kcbId, userId: "x", roles: ["HeadOfQA"] }, "project:stage")).toBe(true);
-    expect(can({ tenantId: kcbId, userId: memberId, roles: ["Member"] }, "project:stage")).toBe(false);
-    expect(await canWriteProject({ tenantId: kcbId, userId: memberId, roles: ["Member"] }, projectId)).toBe(false);
+    expect(can({ tenantId: demoBId, userId: "x", roles: ["Executive"] }, "project:stage")).toBe(true);
+    expect(can({ tenantId: demoBId, userId: "x", roles: ["HeadOfProjects"] }, "project:stage")).toBe(true);
+    expect(can({ tenantId: demoBId, userId: "x", roles: ["HeadOfQA"] }, "project:stage")).toBe(true);
+    expect(can({ tenantId: demoBId, userId: memberId, roles: ["Member"] }, "project:stage")).toBe(false);
+    expect(await canWriteProject({ tenantId: demoBId, userId: memberId, roles: ["Member"] }, projectId)).toBe(false);
     expect(await canWriteProject(leadCtx, projectId)).toBe(true); // the resource-scoped path
   });
 
   it("defaults new projects to Exploring; stage change is audited and evented", async () => {
-    const before = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const before = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { pipelineStage: true } }),
     );
     expect(before.pipelineStage).toBe("Exploring");
 
     await updateProject(leadCtx, projectId, { pipelineStage: "Evaluating", statusNote: "Business case in review with the vendor." });
 
-    const [row, event, auditRow] = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const [row, event, auditRow] = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       Promise.all([
         tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { pipelineStage: true, statusNote: true } }),
         tx.domainEvent.findFirst({ where: { type: "project.pipeline_stage_changed", entityId: projectId } }),
@@ -98,7 +98,7 @@ describe("M18-A pipeline governance", () => {
   });
 
   it("no legacy priority values survive the DM1.18 backfill in either tenant", async () => {
-    for (const slug of ["kcb", "riverbank"]) {
+    for (const slug of ["demo-b", "riverbank"]) {
       const tenant = await prisma.tenant.findUniqueOrThrow({ where: { slug } });
       const legacy = await withTenant({ tenantId: tenant.id, userId: "test" }, (tx) =>
         tx.project.count({ where: { priority: { in: ["Medium", "Critical"] } } }),

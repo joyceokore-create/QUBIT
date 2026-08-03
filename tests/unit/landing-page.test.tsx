@@ -34,10 +34,11 @@ describe("HowItWorks", () => {
 });
 
 describe("TrustBand", () => {
-  it("names both groups honestly and invents no statistics", () => {
+  it("names the real group honestly and invents no statistics", () => {
     render(<TrustBand />);
     expect(screen.getByText(/riverbank group/i)).toBeInTheDocument();
-    expect(screen.getByText(/kcb group/i)).toBeInTheDocument();
+    // M10 (DM1.46): KCB is not a customer — the marketing page must not claim it.
+    expect(screen.queryByText(/kcb/i)).toBeNull();
   });
 });
 
@@ -50,6 +51,6 @@ describe("LandingPage", () => {
       expect(text).not.toContain(banned);
     }
     // Honest trust band present.
-    expect(screen.getByText(/built for riverbank group & kcb group/i)).toBeInTheDocument();
+    expect(screen.getByText(/built for riverbank group/i)).toBeInTheDocument();
   });
 });

@@ -13,32 +13,32 @@ let seq = 0;
 const nextKey = () => `digest-test-${process.pid}:${++seq}`;
 
 describe("M5 digest email", () => {
-  let kcbId: string;
+  let demoBId: string;
   let aliceId: string;
   let bobId: string;
   let ctx: TenantContext;
 
   beforeAll(async () => {
-    const kcb = await prisma.tenant.findUnique({ where: { slug: "kcb" } });
-    if (!kcb) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
-    kcbId = kcb.id;
-    const [alice, bob] = await createUsers(kcbId, 2, "dig");
+    const demoB = await prisma.tenant.findUnique({ where: { slug: "demo-b" } });
+    if (!demoB) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    demoBId = demoB.id;
+    const [alice, bob] = await createUsers(demoBId, 2, "dig");
     aliceId = alice.id;
     bobId = bob.id;
-    ctx = { tenantId: kcbId, userId: aliceId, roles: ["Member"] };
+    ctx = { tenantId: demoBId, userId: aliceId, roles: ["Member"] };
 
     // Clear anything other suites left pending so the counts below are this suite's.
-    await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.notification.updateMany({ where: { emailedAt: null }, data: { emailedAt: new Date() } }),
     );
   });
 
   afterAll(async () => {
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       await tx.notification.deleteMany({ where: { userId: { in: [aliceId, bobId] } } });
       await tx.notificationPreference.deleteMany({ where: { userId: { in: [aliceId, bobId] } } });
     });
-    await cleanupFixtureUsers(kcbId);
+    await cleanupFixtureUsers(demoBId);
     await prisma.$disconnect();
   });
 
@@ -49,20 +49,20 @@ describe("M5 digest email", () => {
 
     // A catch-all override moves everything unnamed…
     await setMyPreference(ctx, { kind: "*", channel: "InApp" });
-    let resolved = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    let resolved = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       resolveChannels(tx, [{ userId: aliceId, kind: "task_assigned" }]),
     );
     expect(resolved.get(`${aliceId}:task_assigned`)).toBe("InApp");
 
     // …and an explicit kind beats the catch-all.
     await setMyPreference(ctx, { kind: "task_assigned", channel: "Digest" });
-    resolved = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    resolved = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       resolveChannels(tx, [{ userId: aliceId, kind: "task_assigned" }]),
     );
     expect(resolved.get(`${aliceId}:task_assigned`)).toBe("Digest");
 
     // Somebody who changed nothing still gets the code default.
-    const bobResolved = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const bobResolved = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       resolveChannels(tx, [{ userId: bobId, kind: "task_assigned" }]),
     );
     expect(bobResolved.get(`${bobId}:task_assigned`)).toBe("Digest");
@@ -80,36 +80,36 @@ describe("M5 digest email", () => {
   });
 
   it("batches one email per person and never emails the same notification twice", async () => {
-    await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.notification.createMany({
         data: [
-          { tenantId: kcbId, userId: bobId, kind: "task_assigned", message: "Task one" },
-          { tenantId: kcbId, userId: bobId, kind: "task_assigned", message: "Task two" },
-          { tenantId: kcbId, userId: bobId, kind: "checkin_ready", message: "Bell only" },
+          { tenantId: demoBId, userId: bobId, kind: "task_assigned", message: "Task one" },
+          { tenantId: demoBId, userId: bobId, kind: "task_assigned", message: "Task two" },
+          { tenantId: demoBId, userId: bobId, kind: "checkin_ready", message: "Bell only" },
         ],
       }),
     );
 
     const first = await runJob("daily-digest", nextKey());
-    const kcbResult = (first.detail as Record<string, { sent?: number; notifications?: number; inAppOnly?: number }>).kcb;
+    const fixtureResult = (first.detail as Record<string, { sent?: number; notifications?: number; inAppOnly?: number }>)["demo-b"];
     // Assert BOB's outcome, not a global count: the job processes everything pending in
     // the tenant, so another suite's leftover notification would otherwise flip these.
-    expect(kcbResult.sent).toBeGreaterThanOrEqual(1);
-    expect(kcbResult.notifications).toBeGreaterThanOrEqual(2);
-    expect(kcbResult.inAppOnly).toBeGreaterThanOrEqual(1); // checkin_ready stayed in the bell
+    expect(fixtureResult.sent).toBeGreaterThanOrEqual(1);
+    expect(fixtureResult.notifications).toBeGreaterThanOrEqual(2);
+    expect(fixtureResult.inAppOnly).toBeGreaterThanOrEqual(1); // checkin_ready stayed in the bell
 
     // The decisive check: Bob's two mailable rows went out in ONE email, not two.
-    const bobStamped = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const bobStamped = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.notification.count({ where: { userId: bobId, emailedAt: { not: null } } }),
     );
     expect(bobStamped).toBe(3); // 2 mailed + 1 in-app-only, all considered once
 
     // Every considered row is stamped, so a second run sends nothing.
     const second = await runJob("daily-digest", nextKey());
-    const secondKcb = (second.detail as Record<string, { sent?: number; reason?: string }>).kcb;
-    expect(secondKcb.sent ?? 0).toBe(0);
+    const secondFixture = (second.detail as Record<string, { sent?: number; reason?: string }>)["demo-b"];
+    expect(secondFixture.sent ?? 0).toBe(0);
 
-    const stamped = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const stamped = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.notification.count({ where: { userId: bobId, emailedAt: null } }),
     );
     expect(stamped).toBe(0);

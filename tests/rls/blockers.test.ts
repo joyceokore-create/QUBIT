@@ -13,7 +13,7 @@ import {
 import { generateReport } from "@/server/q/report";
 
 describe("MVP1 — blockers (M10) + manager/member reports (M11)", () => {
-  let kcb: TenantContext;
+  let demoB: TenantContext;
   let riverbank: TenantContext;
   let projectId: string;
   const projectIds: string[] = [];
@@ -24,15 +24,15 @@ describe("MVP1 — blockers (M10) + manager/member reports (M11)", () => {
   beforeAll(async () => {
     delete process.env.ANTHROPIC_API_KEY;
     const [k, r] = await Promise.all([
-      prisma.tenant.findUnique({ where: { slug: "kcb" } }),
+      prisma.tenant.findUnique({ where: { slug: "demo-b" } }),
       prisma.tenant.findUnique({ where: { slug: "riverbank" } }),
     ]);
     if (!k || !r) throw new Error("Seed required.");
     const kUser = await withTenant({ tenantId: k.id, userId: "seed" }, (tx) => tx.user.findFirstOrThrow({ where: { status: "ACTIVE" } }));
     const rUser = await withTenant({ tenantId: r.id, userId: "seed" }, (tx) => tx.user.findFirstOrThrow({ where: { status: "ACTIVE" } }));
-    kcb = { tenantId: k.id, userId: kUser.id, roles: [] };
+    demoB = { tenantId: k.id, userId: kUser.id, roles: [] };
     riverbank = { tenantId: r.id, userId: rUser.id, roles: [] };
-    const project = await createProject(kcb, {
+    const project = await createProject(demoB, {
       code: `BL-${Date.now().toString().slice(-6)}`,
       name: "Blocker test project",
       type: "Project",
@@ -41,31 +41,31 @@ describe("MVP1 — blockers (M10) + manager/member reports (M11)", () => {
     });
     projectId = project.id;
     projectIds.push(project.id);
-    baseline = await getBlockerCounts(kcb);
+    baseline = await getBlockerCounts(demoB);
   });
 
   afterAll(async () => {
-    await withTenant({ tenantId: kcb.tenantId, userId: "seed" }, async (tx) => {
+    await withTenant({ tenantId: demoB.tenantId, userId: "seed" }, async (tx) => {
       await tx.blocker.deleteMany({ where: { projectId: { in: projectIds } } });
-      await tx.aiCallLog.deleteMany({ where: { userId: kcb.userId } });
+      await tx.aiCallLog.deleteMany({ where: { userId: demoB.userId } });
       await tx.project.deleteMany({ where: { id: { in: projectIds } } });
     });
     await prisma.$disconnect();
   });
 
   it("creates blockers and rolls up counts (open/resolved/critical)", async () => {
-    await createBlocker(kcb, projectId, { description: "Vendor contract unsigned", severity: "Critical", ownerId: kcb.userId });
-    await createBlocker(kcb, projectId, { description: "Test environment down", severity: "Medium" });
+    await createBlocker(demoB, projectId, { description: "Vendor contract unsigned", severity: "Critical", ownerId: demoB.userId });
+    await createBlocker(demoB, projectId, { description: "Test environment down", severity: "Medium" });
 
-    const list = await listBlockers(kcb, { projectId });
+    const list = await listBlockers(demoB, { projectId });
     expect(list).toHaveLength(2);
 
-    let counts = await getBlockerCounts(kcb);
+    let counts = await getBlockerCounts(demoB);
     expect(counts).toMatchObject({ open: baseline.open + 2, critical: baseline.critical + 1 });
 
     const critical = list.find((b) => b.severity === "Critical")!;
-    await updateBlocker(kcb, critical.id, { status: "Resolved", resolutionNotes: "Signed 14 Jul" });
-    counts = await getBlockerCounts(kcb);
+    await updateBlocker(demoB, critical.id, { status: "Resolved", resolutionNotes: "Signed 14 Jul" });
+    counts = await getBlockerCounts(demoB);
     expect(counts).toMatchObject({ open: baseline.open + 1, resolved: baseline.resolved + 1, critical: baseline.critical });
   });
 
@@ -75,7 +75,7 @@ describe("MVP1 — blockers (M10) + manager/member reports (M11)", () => {
   });
 
   it("manager report is grounded in blockers + risks (deterministic)", async () => {
-    const { markdown, usedAi } = await generateReport(kcb, { type: "manager", tenantName: "KCB" });
+    const { markdown, usedAi } = await generateReport(demoB, { type: "manager", tenantName: "the fixture tenant" });
     expect(usedAi).toBe(false);
     expect(markdown.toLowerCase()).toContain("manager report");
     expect(markdown).toContain("Test environment down"); // still-open blocker surfaces
@@ -83,8 +83,8 @@ describe("MVP1 — blockers (M10) + manager/member reports (M11)", () => {
 
   it("member report shows the caller's owned blockers", async () => {
     // The caller owns no open blocker now (the critical one was resolved) — add one they own.
-    await createBlocker(kcb, projectId, { description: "Awaiting security sign-off", severity: "Medium", ownerId: kcb.userId });
-    const { markdown } = await generateReport(kcb, { type: "member", targetId: kcb.userId, tenantName: "KCB" });
+    await createBlocker(demoB, projectId, { description: "Awaiting security sign-off", severity: "Medium", ownerId: demoB.userId });
+    const { markdown } = await generateReport(demoB, { type: "member", targetId: demoB.userId, tenantName: "the fixture tenant" });
     expect(markdown.toLowerCase()).toContain("my work");
     expect(markdown).toContain("Awaiting security sign-off");
   });

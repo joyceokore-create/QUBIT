@@ -6,7 +6,7 @@ import { checkRateLimit, recordFailure } from "@/lib/rate-limit";
 const QuerySchema = z.object({ email: z.string().email() });
 
 /**
- * Unauthenticated, pre-login lookup so the login form can show "Signing in to KCB Group"
+ * Unauthenticated, pre-login lookup so the login form can show "Signing in to Riverbank Group"
  * as the user types their email. Domain-to-tenant mapping isn't secret (it's usually the
  * org's own public domain), but this is still rate-limited to deter bulk domain scraping.
  */

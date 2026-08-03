@@ -1,7 +1,8 @@
-// QUBIT synthetic seed data. See docs/05-data-model.md.
-// KCB Group mirrors docs/design-reference-exec-dashboard.html; Riverbank Group is a
-// smaller synthetic set for demonstrating tenant isolation. No real PII — every email is
-// @example.invalid and every name is fictional.
+// QUBIT seed data. See docs/05-data-model.md.
+// Riverbank Group is the only real tenant (M10, DM1.46). "Demo Org B" is a synthetic
+// fixture tenant — the old demo dataset with all customer identity removed — kept so the
+// RLS isolation and persona suites always have a fully-shaped tenant B. No real PII —
+// synthetic emails are @example.invalid and synthetic names are fictional.
 
 import { prisma } from "../src/lib/db";
 import { withTenant } from "../src/lib/tenant";
@@ -139,24 +140,30 @@ interface TenantSeed {
   issues: IssueSeed[];
 }
 
-// ── KCB Group — mirrors the dashboard reference exactly ──────────────────────
+// ── Demo Org B — SYNTHETIC fixture tenant (M10, DM1.46) ─────────────────────
+//
+// Riverbank is the only real tenant. This dataset (formerly branded as the KCB demo)
+// stays because the RLS isolation suites and persona/e2e fixtures depend on its SHAPE —
+// portfolios, programmes, markets, checkpoint templates, demo QA/Implementor users. All
+// customer identity is gone: the tenant, its people and its org units are unmistakably
+// fake, on .invalid domains.
 
-const KCB_SEED: TenantSeed = {
-  slug: "kcb",
-  name: "KCB Group",
-  brandColor: "#1B7A3E",
-  brandLight: "#E8F5EE",
-  domains: ["kcb.example.invalid"],
+const DEMO_B_SEED: TenantSeed = {
+  slug: "demo-b",
+  name: "Demo Org B",
+  brandColor: "#475569",
+  brandLight: "#E2E8F0",
+  domains: ["demo-b.example.invalid"],
   orgUnits: [
-    { code: "KE", name: "KCB Kenya", flag: "🇰🇪" },
-    { code: "UG", name: "KCB Uganda", flag: "🇺🇬" },
-    { code: "TZ", name: "KCB Tanzania", flag: "🇹🇿" },
-    { code: "RW", name: "KCB Rwanda", flag: "🇷🇼" },
-    { code: "SS", name: "KCB South Sudan", flag: "🇸🇸" },
+    { code: "KE", name: "Demo Kenya", flag: "🇰🇪" },
+    { code: "UG", name: "Demo Uganda", flag: "🇺🇬" },
+    { code: "TZ", name: "Demo Tanzania", flag: "🇹🇿" },
+    { code: "RW", name: "Demo Rwanda", flag: "🇷🇼" },
+    { code: "SS", name: "Demo South Sudan", flag: "🇸🇸" },
   ],
   // Only the tenant's super-admin is seeded — every other user is onboarded in-app.
   users: [
-    { email: "daniel.kiptoo@kcb.example.invalid", name: "Daniel Kiptoo", roles: ["PlatformSuperAdmin"] },
+    { email: "demo.admin@demo-b.example.invalid", name: "Demo Admin B", roles: ["PlatformSuperAdmin"] },
   ],
   portfolios: [
     {
@@ -690,7 +697,7 @@ const KCB_SEED: TenantSeed = {
       probability: 4,
       impact: 5,
       mitigation: "Escalate vendor resourcing; stand up a dedicated UAT squad in TZ/RW.",
-      ownerEmail: "brian.otieno@kcb.example.invalid",
+      ownerEmail: "brian.otieno@demo-b.example.invalid",
       status: "Open",
       daysAgo: 3,
     },
@@ -701,7 +708,7 @@ const KCB_SEED: TenantSeed = {
       probability: 3,
       impact: 4,
       mitigation: "Backfill contractor roles; re-baseline the Phase 3 resourcing plan.",
-      ownerEmail: "brian.otieno@kcb.example.invalid",
+      ownerEmail: "brian.otieno@demo-b.example.invalid",
       status: "Monitoring",
       daysAgo: 7,
     },
@@ -712,7 +719,7 @@ const KCB_SEED: TenantSeed = {
       probability: 4,
       impact: 4,
       mitigation: "Renegotiate South Sudan vendor rates; flag to Finance for contingency draw-down.",
-      ownerEmail: "carol.mwangi@kcb.example.invalid",
+      ownerEmail: "carol.mwangi@demo-b.example.invalid",
       status: "Open",
       daysAgo: 1,
     },
@@ -722,7 +729,7 @@ const KCB_SEED: TenantSeed = {
       title: "AML platform UAT slip materialised into a missed regulatory deadline",
       projectCode: "P006",
       severity: "Critical",
-      ownerEmail: "brian.otieno@kcb.example.invalid",
+      ownerEmail: "brian.otieno@demo-b.example.invalid",
       status: "Open",
       originRiskTitle: "AML platform UAT deadline missed across Tanzania and Rwanda",
       daysAgo: 2,
@@ -731,7 +738,7 @@ const KCB_SEED: TenantSeed = {
       title: "Oracle Fusion procurement sign-off delayed in Uganda",
       projectCode: "P008",
       severity: "Medium",
-      ownerEmail: "daniel.kiptoo@kcb.example.invalid",
+      ownerEmail: "demo.admin@demo-b.example.invalid",
       status: "Open",
       daysAgo: 5,
     },
@@ -739,7 +746,7 @@ const KCB_SEED: TenantSeed = {
       title: "Mobile Banking 2.0 vendor delivery delay across all subsidiaries",
       projectCode: "P004",
       severity: "High",
-      ownerEmail: "carol.mwangi@kcb.example.invalid",
+      ownerEmail: "carol.mwangi@demo-b.example.invalid",
       status: "Open",
       daysAgo: 2,
     },
@@ -1644,11 +1651,11 @@ async function seedTenant(seed: TenantSeed) {
       }
     }
 
-    // ── Demo sparkline history — SYNTHETIC tenant (KCB) ONLY ──────────────────
-    // 14 days of PortfolioSnapshot so the dashboard's KPI sparklines have a demo trend.
-    // Riverbank (the real tenant) gets NO fabricated history: its sparklines stay in the
-    // honest empty state until the nightly-snapshot job accrues real nights.
-    if (seed.slug === "kcb") {
+    // ── Demo sparkline history — SYNTHETIC fixture tenant ONLY ────────────────
+    // 14 days of PortfolioSnapshot so the fixture dashboard's KPI sparklines have a
+    // demo trend. Riverbank (the real tenant) gets NO fabricated history: its sparklines
+    // stay in the honest empty state until the nightly-snapshot job accrues real nights.
+    if (seed.slug === "demo-b") {
       const statuses = (await tx.project.findMany({ select: { status: true } })).map((p) => p.status);
       const current = portfolioHealth(statuses);
       const now = new Date();
@@ -1690,10 +1697,13 @@ async function seedTenant(seed: TenantSeed) {
 }
 
 async function main() {
+  // "kcb" is reset (tenant row deleted) so dev databases seeded before M10 come out
+  // clean; the customer is gone — its old demo dataset lives on as Demo Org B.
   await resetTenant("kcb");
+  await resetTenant("demo-b");
   await resetTenant("riverbank");
 
-  const kcb = await seedTenant(KCB_SEED);
+  const demoB = await seedTenant(DEMO_B_SEED);
   const riverbank = await seedTenant(RIVERBANK_SEED);
 
   // Synthetic "Get started" requests so the admin review page isn't empty in demos.
@@ -1707,7 +1717,7 @@ async function main() {
     if (!exists) await prisma.accessRequest.create({ data: r });
   }
 
-  console.log(`Seeded ${kcb.name} (slug: ${kcb.slug}) and ${riverbank.name} (slug: ${riverbank.slug}).`);
+  console.log(`Seeded ${riverbank.name} (slug: ${riverbank.slug}) + fixture ${demoB.name} (slug: ${demoB.slug}).`);
 }
 
 main()

@@ -27,7 +27,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   // Point --brand at the tenant's theme-aware brand var (defined per theme in
   // globals.css) rather than a fixed hex, so the brand flips correctly on the
-  // ☼/☾ toggle. Riverbank = red, everything else = the product green (KCB).
+  // ☼/☾ toggle. Riverbank = red, everything else = the QUBIT product green.
   // --brand-light is derived from --brand via color-mix in globals.css.
   const brandStyle: BrandStyle = {
     "--brand": session.user.tenantSlug === "riverbank" ? "var(--rbrand)" : "var(--pbrand)",

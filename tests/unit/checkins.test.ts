@@ -20,7 +20,7 @@ describe("buildDraftLines", () => {
         tasksCompleted: 8,
         blockersOpened: 1,
         blockersResolved: 2,
-        milestonesDone: ["🇰🇪 KCB Kenya UAT"],
+        milestonesDone: ["🇰🇪 the fixture tenant Kenya UAT"],
         overdueTasks: 1,
         progressDelta: 5,
         progress: 45,
@@ -29,7 +29,7 @@ describe("buildDraftLines", () => {
       "8 tasks completed this week",
       "1 blocker opened",
       "2 blockers resolved",
-      "Milestone done: 🇰🇪 KCB Kenya UAT",
+      "Milestone done: 🇰🇪 the fixture tenant Kenya UAT",
       "1 task overdue right now",
       "Progress +5% (now 45%)",
     ]);

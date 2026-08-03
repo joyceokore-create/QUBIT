@@ -32,7 +32,7 @@ export function AudienceSplit() {
     <section className="mx-auto max-w-[1180px] px-6 py-20 sm:py-24">
       <div className="grid grid-cols-1 gap-12 sm:grid-cols-2 sm:gap-16">
         <Panel icon={Users} title="For executives" items={EXEC} tint="var(--pbrand)" />
-        <Panel icon={ClipboardList} title="For programme managers" items={PM} tint="var(--kcb-blue)" />
+        <Panel icon={ClipboardList} title="For programme managers" items={PM} tint="var(--navy)" />
       </div>
     </section>
   );

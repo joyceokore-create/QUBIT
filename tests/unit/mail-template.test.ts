@@ -1,11 +1,11 @@
 // Email templates (docs/16 §8). Two properties matter enough to pin: the tenant's brand
-// colour reaches the markup (KCB green, Riverbank red — docs/08's per-tenant rule holds
+// colour reaches the markup (the fixture tenant green, Riverbank red — docs/08's per-tenant rule holds
 // in email too), and user-supplied text is escaped, because a notification message can
 // contain anything somebody typed into a task title.
 import { describe, expect, it } from "vitest";
 import { digestEmail, weeklyReportEmail } from "@/server/mail/template";
 
-const base = { tenantName: "KCB Group", brandColor: "#1B7A3E", appUrl: "https://q.example.invalid" };
+const base = { tenantName: "Demo Org B", brandColor: "#1B7A3E", appUrl: "https://q.example.invalid" };
 
 describe("digestEmail", () => {
   it("batches every item into ONE email and links each one", () => {

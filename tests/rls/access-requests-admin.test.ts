@@ -13,9 +13,9 @@ let ctx: TenantContext;
 
 describe("access-request admin service", () => {
   beforeAll(async () => {
-    const kcb = await prisma.tenant.findUnique({ where: { slug: "kcb" } });
-    if (!kcb) throw new Error("Requires seeded data — run `pnpm prisma db seed` first.");
-    ctx = { tenantId: kcb.id, userId: "test-ar-actor", roles: ["PlatformSuperAdmin"] };
+    const demoB = await prisma.tenant.findUnique({ where: { slug: "demo-b" } });
+    if (!demoB) throw new Error("Requires seeded data — run `pnpm prisma db seed` first.");
+    ctx = { tenantId: demoB.id, userId: "test-ar-actor", roles: ["PlatformSuperAdmin"] };
     await prisma.accessRequest.deleteMany({ where: { email: EMAIL } });
   });
 

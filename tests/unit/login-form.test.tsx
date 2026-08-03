@@ -14,13 +14,14 @@ describe("LoginForm (restyled)", () => {
     expect(document.querySelector("#email")).toBeTruthy();
     expect(document.querySelector("#password")).toBeTruthy();
     expect(screen.getByRole("button", { name: /enter authenticator code/i })).toBeInTheDocument();
+    // M10 (DM1.46): Riverbank is the only real tenant — one quick sign-in card.
     expect(screen.getByRole("button", { name: /riverbank/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /kcb/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /kcb/i })).toBeNull();
   });
 
   it("quick sign-in fills the email field", () => {
     render(<LoginForm callbackUrl="/dashboard" />);
-    fireEvent.click(screen.getByRole("button", { name: /kcb/i }));
+    fireEvent.click(screen.getByRole("button", { name: /riverbank/i }));
     expect((document.querySelector("#email") as HTMLInputElement).value).toContain("@");
   });
 });

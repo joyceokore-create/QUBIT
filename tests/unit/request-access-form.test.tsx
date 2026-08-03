@@ -37,12 +37,12 @@ describe("RequestAccessForm", () => {
   it("nudges to sign in when the email domain is a known tenant", async () => {
     (global.fetch as unknown as Mock).mockImplementation((url: string) => {
       if (String(url).includes("/api/auth/resolve-org")) {
-        return Promise.resolve(new Response(JSON.stringify({ found: true, tenantName: "KCB Group", tenantSlug: "kcb" }), { status: 200 }));
+        return Promise.resolve(new Response(JSON.stringify({ found: true, tenantName: "Demo Org B", tenantSlug: "demo-b" }), { status: 200 }));
       }
       return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 201 }));
     });
     render(<RequestAccessForm />);
-    fireEvent.change(screen.getByLabelText(/work email/i), { target: { value: "sam@kcb.example.invalid" } });
+    fireEvent.change(screen.getByLabelText(/work email/i), { target: { value: "sam@demo-b.example.invalid" } });
     expect(await screen.findByText(/already uses qubit/i)).toBeInTheDocument();
   });
 });

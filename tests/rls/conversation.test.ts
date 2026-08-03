@@ -16,7 +16,7 @@ import { listProjectActivity } from "@/server/activity-feed";
 import { ensureUsers, cleanupFixtureUsers } from "./_users";
 
 describe("M4 conversation", () => {
-  let kcbId: string;
+  let demoBId: string;
   let riverbankId: string;
   let leadId: string;
   let memberId: string;
@@ -28,23 +28,23 @@ describe("M4 conversation", () => {
   let memberCtx: TenantContext;
 
   beforeAll(async () => {
-    const [kcb, riverbank] = await Promise.all([
-      prisma.tenant.findUnique({ where: { slug: "kcb" } }),
+    const [demoB, riverbank] = await Promise.all([
+      prisma.tenant.findUnique({ where: { slug: "demo-b" } }),
       prisma.tenant.findUnique({ where: { slug: "riverbank" } }),
     ]);
-    if (!kcb || !riverbank) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
-    kcbId = kcb.id;
+    if (!demoB || !riverbank) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    demoBId = demoB.id;
     riverbankId = riverbank.id;
-    const [lead, member] = await ensureUsers(kcbId, 2);
+    const [lead, member] = await ensureUsers(demoBId, 2);
     leadId = lead.id;
     memberId = member.id;
-    leadCtx = { tenantId: kcbId, userId: leadId, roles: ["Member"] };
-    memberCtx = { tenantId: kcbId, userId: memberId, roles: ["Member"] };
+    leadCtx = { tenantId: demoBId, userId: leadId, roles: ["Member"] };
+    memberCtx = { tenantId: demoBId, userId: memberId, roles: ["Member"] };
 
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       const project = await tx.project.create({
         data: {
-          tenantId: kcbId,
+          tenantId: demoBId,
           code: `CNV${Date.now() % 100000}`,
           name: "Conversation Fixture",
           type: "Project",
@@ -55,22 +55,22 @@ describe("M4 conversation", () => {
       });
       projectId = project.id;
       const task = await tx.projectTask.create({
-        data: { tenantId: kcbId, projectId, title: "Draft integration contract", status: "InProgress", approvalStatus: "Published" },
+        data: { tenantId: demoBId, projectId, title: "Draft integration contract", status: "InProgress", approvalStatus: "Published" },
       });
       taskId = task.id;
       const risk = await tx.risk.create({
-        data: { tenantId: kcbId, projectId, title: "Vendor API instability", probability: 3, impact: 4, status: "Open" },
+        data: { tenantId: demoBId, projectId, title: "Vendor API instability", probability: 3, impact: 4, status: "Open" },
       });
       riskId = risk.id;
       const doc = await tx.projectDocument.create({
-        data: { tenantId: kcbId, projectId, title: "Integration BRD", kind: "BRD", content: "…", createdById: leadId },
+        data: { tenantId: demoBId, projectId, title: "Integration BRD", kind: "BRD", content: "…", createdById: leadId },
       });
       documentId = doc.id;
     });
   });
 
   afterAll(async () => {
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       await tx.workComment.deleteMany({ where: { projectId } });
       await tx.decision.deleteMany({ where: { projectId } });
       await tx.notification.deleteMany({ where: { kind: { in: ["mention", "comment_reply"] } } });
@@ -78,7 +78,7 @@ describe("M4 conversation", () => {
       await tx.auditLog.deleteMany({ where: { entityType: { in: ["work_comment", "decision"] } } });
       await tx.project.deleteMany({ where: { id: projectId } });
     });
-    await cleanupFixtureUsers(kcbId);
+    await cleanupFixtureUsers(demoBId);
     await prisma.$disconnect();
   });
 
@@ -92,7 +92,7 @@ describe("M4 conversation", () => {
       const view = await postComment(memberCtx, { entityType, entityId, body: `Comment on ${entityType}`, mentionUserIds: [] });
       expect(view.id).toBeTruthy();
     }
-    const row = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const row = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.workComment.findFirst({ where: { entityType: "risk", entityId: riskId } }),
     );
     expect(row?.projectId).toBe(projectId); // derived, never client-supplied
@@ -111,7 +111,7 @@ describe("M4 conversation", () => {
       body: `@Fixture lead — can you unblock this?`,
       mentionUserIds: [leadId],
     });
-    const mentionNote = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const mentionNote = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.notification.findFirst({ where: { userId: leadId, kind: "mention" } }),
     );
     expect(mentionNote?.message).toContain("mentioned you");
@@ -126,7 +126,7 @@ describe("M4 conversation", () => {
     });
     expect(reply.parentId).toBe(root.id);
 
-    const replyNote = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const replyNote = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.notification.findFirst({ where: { userId: memberId, kind: "comment_reply" } }),
     );
     expect(replyNote?.message).toContain("replied");
@@ -175,7 +175,7 @@ describe("M4 conversation", () => {
     expect(decisions.map((d) => d.id)).toContain(decision.id);
     expect(decisions[0].sourceCommentId).toBe(comment.id);
 
-    const linked = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const linked = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.workComment.findUniqueOrThrow({ where: { id: comment.id }, select: { decisionId: true } }),
     );
     expect(linked.decisionId).toBe(decision.id);
@@ -186,7 +186,7 @@ describe("M4 conversation", () => {
 
   it("delete is author-or-PM", async () => {
     const c = await postComment(memberCtx, { entityType: "project", entityId: projectId, body: "typo, deleting", mentionUserIds: [] });
-    const stranger = { tenantId: kcbId, userId: "00000000-0000-0000-0000-000000000000", roles: ["Member"] };
+    const stranger = { tenantId: demoBId, userId: "00000000-0000-0000-0000-000000000000", roles: ["Member"] };
     await expect(deleteComment(stranger, c.id)).rejects.toThrow(ConversationError);
     await deleteComment(memberCtx, c.id); // author OK
     const c2 = await postComment(memberCtx, { entityType: "project", entityId: projectId, body: "PM may moderate", mentionUserIds: [] });

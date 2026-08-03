@@ -11,16 +11,16 @@ let keySeq = 0;
 const nextKey = () => `${KEY_PREFIX}:${++keySeq}`;
 
 describe("nightly-snapshot job", () => {
-  let kcbId: string;
+  let demoBId: string;
   let riverbankId: string;
 
   beforeAll(async () => {
-    const [kcb, riverbank] = await Promise.all([
-      prisma.tenant.findUnique({ where: { slug: "kcb" } }),
+    const [demoB, riverbank] = await Promise.all([
+      prisma.tenant.findUnique({ where: { slug: "demo-b" } }),
       prisma.tenant.findUnique({ where: { slug: "riverbank" } }),
     ]);
-    if (!kcb || !riverbank) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
-    kcbId = kcb.id;
+    if (!demoB || !riverbank) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    demoBId = demoB.id;
     riverbankId = riverbank.id;
   });
 
@@ -33,7 +33,7 @@ describe("nightly-snapshot job", () => {
     const result = await runJob("nightly-snapshot", nextKey());
     expect(result.status).toBe("Succeeded");
 
-    for (const tenantId of [kcbId, riverbankId]) {
+    for (const tenantId of [demoBId, riverbankId]) {
       await withTenant({ tenantId, userId: "test" }, async (tx) => {
         const today = new Date();
         const day = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
@@ -56,14 +56,14 @@ describe("nightly-snapshot job", () => {
 
   it("re-running the same day upserts — no duplicate rows", async () => {
     await runJob("nightly-snapshot", nextKey());
-    const before = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) => tx.projectSnapshot.count());
+    const before = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) => tx.projectSnapshot.count());
     await runJob("nightly-snapshot", nextKey());
-    const after = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) => tx.projectSnapshot.count());
+    const after = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) => tx.projectSnapshot.count());
     expect(after).toBe(before);
   });
 
   it("keeps snapshots tenant-isolated", async () => {
-    const kcbProject = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const kcbProject = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.projectSnapshot.findFirstOrThrow({ select: { id: true } }),
     );
     const crossRead = await withTenant({ tenantId: riverbankId, userId: "test" }, (tx) =>
@@ -76,7 +76,7 @@ describe("nightly-snapshot job", () => {
   });
 
   it("leaves a machine-actor audit trail", async () => {
-    const row = await withTenant({ tenantId: kcbId, userId: "test" }, (tx) =>
+    const row = await withTenant({ tenantId: demoBId, userId: "test" }, (tx) =>
       tx.auditLog.findFirst({ where: { actorId: "job:nightly-snapshot", entityType: "portfolio_snapshot" } }),
     );
     expect(row).not.toBeNull();

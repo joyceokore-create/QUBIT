@@ -8,27 +8,27 @@ import { createProject, updateProject, ProjectError } from "@/server/projects";
 const TEST_CODE = "TEST-LIFECYCLE-01";
 
 describe("Project create/update lifecycle", () => {
-  let kcbId: string;
+  let demoBId: string;
   let riverbankId: string;
   let ctx: TenantContext;
 
   beforeAll(async () => {
-    const [kcb, riverbank] = await Promise.all([
-      prisma.tenant.findUnique({ where: { slug: "kcb" } }),
+    const [demoB, riverbank] = await Promise.all([
+      prisma.tenant.findUnique({ where: { slug: "demo-b" } }),
       prisma.tenant.findUnique({ where: { slug: "riverbank" } }),
     ]);
-    if (!kcb || !riverbank) {
+    if (!demoB || !riverbank) {
       throw new Error("Project tests require seeded data — run `pnpm prisma:seed` first.");
     }
-    kcbId = kcb.id;
+    demoBId = demoB.id;
     riverbankId = riverbank.id;
-    ctx = { tenantId: kcbId, userId: "test-project-actor", roles: ["PlatformSuperAdmin"] };
+    ctx = { tenantId: demoBId, userId: "test-project-actor", roles: ["PlatformSuperAdmin"] };
   });
 
   beforeEach(async () => {
     await withTenant(ctx, async (tx) => {
       const existing = await tx.project.findUnique({
-        where: { tenantId_code: { tenantId: kcbId, code: TEST_CODE } },
+        where: { tenantId_code: { tenantId: demoBId, code: TEST_CODE } },
       });
       if (existing) {
         await tx.auditLog.deleteMany({ where: { entityId: existing.id } });
@@ -50,7 +50,7 @@ describe("Project create/update lifecycle", () => {
       status: "Planning",
     });
 
-    expect(project.tenantId).toBe(kcbId);
+    expect(project.tenantId).toBe(demoBId);
 
     const rows = await withTenant(ctx, (tx) =>
       tx.auditLog.findMany({ where: { entityId: project.id } }),

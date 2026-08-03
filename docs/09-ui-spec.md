@@ -10,7 +10,8 @@
 - **Topbar:** tenant-branded logo + QUBIT mark, nav — Dashboard · My Board · Projects ·
   Risks · Time · Teams · People · Reports (+ Admin for admins), right side: notifications
   bell (SSE live), theme toggle, tenant chip, account menu, **Ask Q**.
-- Theme is per tenant (Riverbank red / KCB green, docs/08); every surface below renders
+- Theme is per tenant (Riverbank red; product-default green elsewhere, docs/08); every
+  surface below renders
   under both.
 - Machine routes (`/api/internal/*`, `/api/webhooks/*`) sit OUTSIDE the auth middleware;
   everything else redirects to `/login` without a session.

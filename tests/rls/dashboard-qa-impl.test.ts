@@ -13,7 +13,7 @@ import { ensureUsers, cleanupFixtureUsers } from "./_users";
 const day = 86_400_000;
 
 describe("M1c QA + Implementor dashboards", () => {
-  let kcbId: string;
+  let demoBId: string;
   let qaId: string;
   let devId: string;
   let projectId: string;
@@ -22,19 +22,19 @@ describe("M1c QA + Implementor dashboards", () => {
   let qaCtx: TenantContext;
 
   beforeAll(async () => {
-    const kcb = await prisma.tenant.findUnique({ where: { slug: "kcb" } });
-    if (!kcb) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
-    kcbId = kcb.id;
-    const [qa, dev] = await ensureUsers(kcbId, 2);
+    const demoB = await prisma.tenant.findUnique({ where: { slug: "demo-b" } });
+    if (!demoB) throw new Error("Requires seeded tenants — run `pnpm prisma:seed`.");
+    demoBId = demoB.id;
+    const [qa, dev] = await ensureUsers(demoBId, 2);
     qaId = qa.id;
     devId = dev.id;
-    qaCtx = { tenantId: kcbId, userId: qaId, roles: ["Member"] };
+    qaCtx = { tenantId: demoBId, userId: qaId, roles: ["Member"] };
 
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       const now = Date.now();
       const project = await tx.project.create({
         data: {
-          tenantId: kcbId,
+          tenantId: demoBId,
           code: `QAI${now % 100000}`,
           name: "QA/Impl Fixture",
           type: "Project",
@@ -43,19 +43,19 @@ describe("M1c QA + Implementor dashboards", () => {
         },
       });
       projectId = project.id;
-      await tx.projectMember.create({ data: { tenantId: kcbId, projectId, userId: qaId, role: "QA Engineer" } });
+      await tx.projectMember.create({ data: { tenantId: demoBId, projectId, userId: qaId, role: "QA Engineer" } });
 
       // Verification work: one InQA feature that has sat 10 business days (aging=bad).
       await tx.projectTask.create({
         data: {
-          tenantId: kcbId, projectId, title: "Verify e2e export flow", type: "Feature",
+          tenantId: demoBId, projectId, title: "Verify e2e export flow", type: "Feature",
           status: "InQA", approvalStatus: "Published", lastActivityAt: new Date(now - 14 * day),
         },
       });
       // Triage: an unassigned CRITICAL bug — pinned first, never in the project groups.
       const crit = await tx.projectTask.create({
         data: {
-          tenantId: kcbId, projectId, title: "Login loop on TOTP retry", type: "Bug",
+          tenantId: demoBId, projectId, title: "Login loop on TOTP retry", type: "Bug",
           severity: "Critical", status: "NotStarted", approvalStatus: "Published",
           lastActivityAt: new Date(now),
         },
@@ -64,7 +64,7 @@ describe("M1c QA + Implementor dashboards", () => {
       // A bug the QA fixture raised, being fixed by dev — the "Bugs I raised" panel.
       const raised = await tx.projectTask.create({
         data: {
-          tenantId: kcbId, projectId, title: "Totals drift on paginated audit view", type: "Bug",
+          tenantId: demoBId, projectId, title: "Totals drift on paginated audit view", type: "Bug",
           severity: "High", status: "InProgress", approvalStatus: "Published",
           reporterId: qaId, assigneeId: devId, lastActivityAt: new Date(now),
         },
@@ -74,26 +74,26 @@ describe("M1c QA + Implementor dashboards", () => {
       // Implementor interim source: UAT/pilot-tagged milestones + a pending-review doc.
       await tx.projectMilestone.createMany({
         data: [
-          { tenantId: kcbId, projectId, name: "SIT complete", status: "Done", orderIndex: 0 },
-          { tenantId: kcbId, projectId, name: "UAT sign-off", status: "Pending", dueDate: new Date(now + 5 * day), orderIndex: 1 },
-          { tenantId: kcbId, projectId, name: "Go-live pilot", status: "Pending", dueDate: new Date(now + 12 * day), orderIndex: 2 },
+          { tenantId: demoBId, projectId, name: "SIT complete", status: "Done", orderIndex: 0 },
+          { tenantId: demoBId, projectId, name: "UAT sign-off", status: "Pending", dueDate: new Date(now + 5 * day), orderIndex: 1 },
+          { tenantId: demoBId, projectId, name: "Go-live pilot", status: "Pending", dueDate: new Date(now + 12 * day), orderIndex: 2 },
         ],
       });
       await tx.blocker.create({
-        data: { tenantId: kcbId, projectId, description: "Telco API docs outstanding", severity: "Critical", status: "Open" },
+        data: { tenantId: demoBId, projectId, description: "Telco API docs outstanding", severity: "Critical", status: "Open" },
       });
       await tx.projectDocument.create({
-        data: { tenantId: kcbId, projectId, title: "Handover pack", kind: "Handover", status: "InReview" },
+        data: { tenantId: demoBId, projectId, title: "Handover pack", kind: "Handover", status: "InReview" },
       });
     });
   });
 
   afterAll(async () => {
-    await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       await tx.domainEvent.deleteMany({ where: { payload: { path: ["projectId"], equals: projectId } } });
       await tx.project.deleteMany({ where: { id: projectId } });
     });
-    await cleanupFixtureUsers(kcbId);
+    await cleanupFixtureUsers(demoBId);
     await prisma.$disconnect();
   });
 
@@ -132,7 +132,7 @@ describe("M1c QA + Implementor dashboards", () => {
   });
 
   it("QA: scoped to MY projects — a non-member sees none of the fixture work", async () => {
-    const stranger = { tenantId: kcbId, userId: "00000000-0000-0000-0000-000000000000", roles: ["Member"] };
+    const stranger = { tenantId: demoBId, userId: "00000000-0000-0000-0000-000000000000", roles: ["Member"] };
     const d = await getQaDashboard(stranger);
     expect(d.queue.map((g) => g.projectId)).not.toContain(projectId);
     expect(d.triage.map((t) => t.id)).not.toContain(criticalBugId);
@@ -158,7 +158,7 @@ describe("M1c QA + Implementor dashboards", () => {
   });
 
   it("M8: with a checkpoint template attached, the gates come from the template", async () => {
-    const template = await withTenant({ tenantId: kcbId, userId: "test" }, async (tx) => {
+    const template = await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       const tmpl = await tx.checkpointTemplate.findFirstOrThrow({
         where: { name: "Product build" },
         select: { id: true, checkpoints: { select: { id: true }, orderBy: { orderIndex: "asc" } } },
@@ -167,9 +167,9 @@ describe("M1c QA + Implementor dashboards", () => {
       // Close the first two gates and block the third.
       await tx.checkpointStatus.createMany({
         data: [
-          { tenantId: kcbId, projectId, checkpointId: tmpl.checkpoints[0].id, state: "Done" },
-          { tenantId: kcbId, projectId, checkpointId: tmpl.checkpoints[1].id, state: "Done" },
-          { tenantId: kcbId, projectId, checkpointId: tmpl.checkpoints[2].id, state: "Blocked" },
+          { tenantId: demoBId, projectId, checkpointId: tmpl.checkpoints[0].id, state: "Done" },
+          { tenantId: demoBId, projectId, checkpointId: tmpl.checkpoints[1].id, state: "Done" },
+          { tenantId: demoBId, projectId, checkpointId: tmpl.checkpoints[2].id, state: "Blocked" },
         ],
       });
       return tmpl;

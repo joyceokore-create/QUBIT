@@ -6,7 +6,7 @@
 
 /* Riverbank-only variant. `rv:text-heading-lg` etc. apply only inside the
    Riverbank app-shell; the [data-tenant] prefix also raises specificity (0,2,0)
-   so rv: wins over the element's base utilities while KCB keeps them. */
+   so rv: wins over the element's base utilities while the default theme keeps them. */
 @custom-variant rv ([data-tenant="riverbank"] &);
 
 @theme inline {
@@ -105,7 +105,7 @@
   /* ── Riverbank Style Guide v1.0 primitive ramps ───────────────────────────
      Raw scales exposed as Tailwind utilities (bg-primary-500, text-neutral-500,
      …). Global utilities, but components reference SEMANTIC tokens — these are
-     intended for Riverbank-scoped UI. KCB is unaffected (it uses --brand). */
+     intended for Riverbank-scoped UI. Other tenants are unaffected (they use --brand). */
   --color-primary-50: #fef4f4;
   --color-primary-100: #fcddde;
   --color-primary-200: #fbc6c8;
@@ -162,7 +162,7 @@
   /* ── Riverbank Style Guide v1.0 type scale ────────────────────────────────
      1.250 Major Third. Utilities: text-display-2xl … text-data-xs. Each carries
      line-height / letter-spacing / weight per the guide. Applied Riverbank-only
-     via the rv: variant (see above), so KCB/pre-auth keep their own sizing. */
+     via the rv: variant (see above), so other tenants/pre-auth keep their own sizing. */
   --text-display-2xl: 4.5rem;
   --text-display-2xl--line-height: 1.1;
   --text-display-2xl--letter-spacing: -0.03em;
@@ -243,7 +243,7 @@
   --font-num: var(--font-plex);
 
   /* Product & tenant brand (per theme). --brand defaults to the product green
-     (KCB); the (app) layout overrides it per-tenant with a theme-aware var
+     (the product default); the (app) layout overrides it per-tenant with a theme-aware var
      reference so it flips correctly on the ☼/☾ toggle. RAG colours below are
      semantic and NEVER per-tenant. */
   --pbrand: #1b7a3e;
@@ -251,9 +251,9 @@
   --onbrand: #ffffff;
   --glowA: 18%;
   --brand: var(--pbrand);
-  /* KCB official secondary blue. Exact #002B4D in light; a legible lightened
+  /* Deep navy accent. Exact #002B4D in light; a legible lightened
      variant lives in .dark (pure navy is invisible on the dark shell). */
-  --kcb-blue: #002b4d;
+  --navy: #002b4d;
 
   /* Surfaces & inks (light) — warm paper (QUBIT App v3) */
   --qbg: #f1efe9;
@@ -415,7 +415,7 @@
   --rbrand: #f4534d;
   --onbrand: #160707;
   --glowA: 34%;
-  --kcb-blue: #4a90d9;
+  --navy: #4a90d9;
 
   --qbg: #151110;
   --qcard: #1b1613;
@@ -511,7 +511,7 @@
 
 /* Dark-theme topbar brand tokens, resolved where the per-tenant --brand lives (the
    app-shell wrapper) so the logo glyph + active pill are the tenant colour (Riverbank
-   red / KCB green), not the html-level default. Light mode keeps the literal
+   red / the product green), not the html-level default. Light mode keeps the literal
    product-green glyph + white active pill from :root. */
 .dark .app-shell {
   --tbglyph: var(--brand);
@@ -769,10 +769,6 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Per-tenant fonts (theme-independent) ── */
-[data-tenant="kcb"] {
-  --font-display: var(--font-lufga);
-  --font-body: var(--font-lufga);
-}
 [data-tenant="riverbank"] {
   --font-display: var(--font-inter);
   --font-body: var(--font-inter);
@@ -886,22 +882,3 @@
   --rv-active: #b81c22;
 }
 
-/* ══ KCB — official green/blue over existing warm-paper surfaces ══ */
-[data-tenant="kcb"] {
-  --pbrand: #84bd00;                 /* → --brand (official KCB green) */
-  --brand: var(--pbrand);            /* portalled UI inherits KCB green (see TenantScope) */
-  --onbrand: #002b4d;                /* KCB navy label on green (~6.4:1) */
-  --accent-foreground: #3d6b00;      /* darkened green text on warm paper (~5.5:1) */
-  --sidebar-accent-foreground: #3d6b00;
-  /* Topbar: navy → green (official) */
-  --topbar: linear-gradient(95deg, #002b4d 0%, color-mix(in oklab, var(--brand) 55%, #002b4d) 62%, var(--brand) 120%);
-}
-.dark[data-tenant="kcb"],
-.dark [data-tenant="kcb"] {
-  --pbrand: #84bd00;
-  --onbrand: #002b4d;
-  --accent-foreground: #84bd00;      /* green reads on warm dark (~8:1) */
-  --sidebar-accent-foreground: #84bd00;
-  /* Keep KCB's warm dark bar subtle */
-  --topbar: rgba(21, 16, 14, 0.72);
-}
