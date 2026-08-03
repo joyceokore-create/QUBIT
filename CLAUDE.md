@@ -76,6 +76,11 @@ migrations run automatically at container startup, so schema changes deploy with
 extra step.
 
 **Env / config gotchas:**
+- `--no-build` CANNOT deliver new Prisma migrations: the entrypoint runs them from the
+  files baked into the image, not from the synced tree. Any deploy that adds a migration
+  needs the full `./scripts/deploy.sh` (rebuild). Always verify data migrations by row
+  count on the box afterwards — under each tenant's RLS context (a bare `count(*)` on a
+  FORCE-RLS table reads 0 and looks like success).
 - `.env.production` on the box holds runtime secrets. `AUTH_URL` MUST be the public URL
   (`https://q.fikrawork.com`) with `AUTH_TRUST_HOST=true`, or NextAuth emits broken
   internal-IP callback URLs.
