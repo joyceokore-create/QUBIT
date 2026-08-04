@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { can, primaryRoleLabel } from "@/lib/rbac";
@@ -43,6 +44,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const canStaff = can(ctx, "project:create") || can(ctx, "staffing:manage");
   const memberOnly = isMemberOnly(session.user.personas ?? []);
   const canSwitchTenant = can(ctx, "tenant:switch");
+  // M-P1e (docs/31 §5): the finish-setup banner for Super Admins of un-set-up tenants.
+  // Existing tenants were backfilled at migration time, so this greets only new ones.
+  const needsSetup =
+    can(ctx, "iam:manage") &&
+    (await prisma.tenant.findUnique({ where: { id: ctx.tenantId }, select: { setupCompletedAt: true } }))
+      ?.setupCompletedAt === null;
   const tenants = isRiverbank && canSwitchTenant
     ? await prisma.tenant.findMany({ orderBy: { name: "asc" }, select: { slug: true, name: true } })
     : [];
@@ -67,13 +74,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 userEmail={session.user.email ?? ""}
                 userRole={primaryRoleLabel(session.user.roles)}
               >
+                {needsSetup && <SetupBanner />}
                 {children}
               </RiverbankShell>
             </div>
           ) : (
             <div className="relative z-[1]">
               <Topbar />
-              <main className="flex min-h-[calc(100vh-62px)] flex-col">{children}</main>
+              <main className="flex min-h-[calc(100vh-62px)] flex-col">
+                {needsSetup && <SetupBanner />}
+                {children}
+              </main>
             </div>
           )}
           <SlidePanel />
@@ -81,5 +92,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </SlidePanelStateProvider>
       </QProvider>
     </div>
+  );
+}
+
+// M-P1e (docs/31 §5) — dismissed by finishing, not by clicking away: setup is a state,
+// not a notification.
+function SetupBanner() {
+  return (
+    <Link
+      href="/setup"
+      className="flex items-center justify-center gap-2 bg-[color-mix(in_oklab,var(--brand)_10%,transparent)] px-4 py-2 text-[12px] font-semibold text-[var(--brand)]"
+    >
+      Finish setting up QUBIT — brand, markets, templates, people →
+    </Link>
   );
 }

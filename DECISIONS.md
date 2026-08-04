@@ -1956,3 +1956,38 @@ the remodeled screens were closed (nothing else touched):
   workspace, where check-ins are confirmed).
 
 Verified live on all three; 767/767 stays green.
+
+## DM1.58 — The org-setup wizard: a tenant usable in ten minutes (M-P1e)
+
+Executes docs/31-p1e — the spec pack's P1-E, un-parked by the pack itself (this doc's
+earlier parking in docs/27 §1.7 was overruled by Joyce shipping the spec).
+
+- **A thin orchestrator over things that already exist** (`src/server/org-setup.ts`):
+  brand colours on Tenant, Market org units, departments, the two checkpoint templates,
+  the M-O3 invite path, the P1-A portfolio wizard. Nothing new was invented — the wizard
+  sequences capabilities.
+- **Every seeding step is idempotent** (re-running creates nothing — pinned by tests),
+  so the wizard is resumable; each step SHOWS what already exists ("7 already exist",
+  "Both templates exist ✓") instead of pretending a fresh slate.
+- **`importPeople` never aborts the batch**: one `createUser` per CSV row, each minting
+  its own invite (email, or the copyable link while the mailer is off — NO temp
+  passwords anywhere); a bad row becomes an error result. The parser
+  (`src/lib/people-csv.ts`) validates name/email/role/group per line BEFORE the DB is
+  touched, with quoted-field support and in-file duplicate detection. The M-O1
+  SuperAdmin-grant guard still applies through `createUser`.
+- **Super-Admin territory twice over**: the route gates `iam:manage` AND the engine
+  re-asserts it, so no future caller can skip either layer.
+- **`Tenant.setupCompletedAt`** drives the "Finish setting up QUBIT" banner (both
+  shells). Existing tenants were BACKFILLED at migration time — they were stood up by
+  script/seed, and greeting Riverbank with a setup banner weeks in would be noise. The
+  tenant table carries no RLS (by design), so the backfill is plain DML.
+- Step 5 (first portfolio) deliberately LINKS to the full portfolio wizard rather than
+  embedding a lesser copy of it.
+
+**Verified**: lint/typecheck/build green, 777/777 (10 new: parser truth table incl.
+quoting/duplicates; idempotency ×2 runs; per-row import outcomes with a duplicate
+mid-batch; completion stamp; engine-level FORBIDDEN for a PM; cross-tenant leak check).
+Live as Joyce: wizard rendered with resume states ("7 already exist", templates ✓,
+portfolios ✓), a two-row CSV import returned one invited (with copyable link) and one
+per-row error, and the dashboard shows NO banner for the backfilled tenant. Fixture
+removed.
