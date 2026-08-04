@@ -2019,3 +2019,35 @@ pack (27-p1a…31-p1e) in full.
 **Verified**: lint/typecheck/build green, 779/779 (3 new lifecycle/audit tests). Live:
 stage chips on the wizard, and a raise → Cancel button → cancel (status "Cancelled")
 round-trip through the real routes. Fixtures removed.
+
+## DM1.60 — The one read-only board: tasks live in YouTrack, QUBIT reflects (M-P2a)
+
+First docs/33 milestone — the P2 behavioural break, shipped first on purpose.
+
+- **Human task authoring is RETIRED for every role, PMs included** (docs/25 §1,
+  superseding docs/18 §4). Create, edit, move, delete, draft-publish and AI plan
+  generation all answer `403 TASKS_ARE_MIRRORED` with a message that says where work
+  items actually live. The gate sits at the ROUTES; the engine functions stay open
+  because the SYSTEM writes through them — the YouTrack sync's upserts and the M7-B
+  commit webhook's `updateTask` calls are pinned alive by the same suite that pins the
+  routes shut. What stays human: flagging/resolving blockers (RAID), discussing
+  (comments), everything that is judgement rather than work-item state.
+- **Three lanes, not five columns** (docs/25 §4): To do / Doing / Done as pure VIEWS
+  over task states (`laneOf`, unit-tested; unknown states land in Doing — visible beats
+  dropped). The exact state stays readable as a chip on each card; Blocked stays a badge,
+  never a column. No drop targets, no drag, no status selects — on the project board,
+  the personal /board, and the slide panel's task list alike.
+- **Sync health leads the board header** (docs/33 — a stale board must never read as a
+  quiet one): fresh ("Synced from YouTrack · Nm ago") / stale (>2× the sync interval) /
+  error (the actual message) / not connected (with a PM link to Integrations and an
+  honest empty-state line instead of an empty lie). Pure derivation, unit-tested.
+- **Members default to MINE** with an All toggle (docs/25 §4); PMs keep the four lenses
+  and default to All. The QA triage strip stays but assignment happens in YouTrack —
+  the strip now says so instead of offering a dead select.
+- Legacy AI-draft cards keep their pill (labelled "legacy draft"); the publish flow died
+  with authoring. `bug-dialog.tsx` and the generate dialog were deleted, not disabled.
+
+**Verified**: lint/typecheck/build green, 788/788 (9 new: lane table, badge states,
+routes-refuse + engine-alive both ways). Live on HomeQuest as Joyce: three lanes, no
+add/drag/move affordances anywhere, "🔗 Not connected to YouTrack" badge, read-only
+pill, blocker flag intact; e2e smoke untouched (it checks lenses + export only).

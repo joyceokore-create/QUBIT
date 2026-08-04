@@ -55,3 +55,18 @@ export async function requireSession(): Promise<Guard> {
 export function forbidden(message = "You don't have permission to do this."): NextResponse {
   return NextResponse.json({ error: { code: "FORBIDDEN", message } }, { status: 403 });
 }
+
+/** M-P2a (docs/33 §0, docs/25 §1): tasks live in YouTrack; QUBIT mirrors them read-only.
+ * Every human task-authoring route answers with this. System writers (the YouTrack sync,
+ * the commit webhook) never pass through these routes — they call engine paths directly. */
+export function tasksAreMirrored(): NextResponse {
+  return NextResponse.json(
+    {
+      error: {
+        code: "TASKS_ARE_MIRRORED",
+        message: "Tasks are managed in YouTrack and mirrored here read-only. Connect or open YouTrack to change work items.",
+      },
+    },
+    { status: 403 },
+  );
+}

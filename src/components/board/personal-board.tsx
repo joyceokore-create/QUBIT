@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ExternalLink, ShieldAlert, UserRound } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // The personal board (docs/18 §4): lanes To do · Doing · Done as VIEWS over the
 // 5-status taxonomy (docs/15 6.1 untouched) — Doing wears an InProgress/InReview/InQA
@@ -38,21 +37,10 @@ const LANES = [
 ] as const;
 
 /** Allowed moves per docs/18 §4 — QA owns Completed for Feature/Bug. */
-function statusOptions(t: BoardTask): { value: string; label: string }[] {
-  const base = [
-    { value: "NotStarted", label: "To do" },
-    { value: "InProgress", label: "Doing" },
-    { value: "InReview", label: "In review" },
-    { value: "InQA", label: "In QA — hand to QA" },
-  ];
-  if (["Feature", "Bug"].includes(t.type)) return base; // Completed comes from QA
-  return [...base, { value: "Completed", label: "Done" }];
-}
 
 export function PersonalBoard({ viewerName }: { viewerName: string }) {
   const [tasks, setTasks] = useState<BoardTask[]>([]);
   const [projectTab, setProjectTab] = useState<string>("all");
-  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const d = await fetch("/api/board").then((r) => r.json()).catch(() => null);
@@ -79,20 +67,6 @@ export function PersonalBoard({ viewerName }: { viewerName: string }) {
 
   const visible = projectTab === "all" ? tasks : tasks.filter((t) => t.projectId === projectTab);
 
-  const move = async (task: BoardTask, status: string) => {
-    setError(null);
-    const prev = task.status;
-    setTasks((ts) => ts.map((t) => (t.id === task.id ? { ...t, status } : t))); // optimistic
-    const res = await fetch(`/api/tasks/${task.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    if (!res.ok) {
-      setTasks((ts) => ts.map((t) => (t.id === task.id ? { ...t, status: prev } : t)));
-      setError((await res.json().catch(() => null))?.error?.message ?? "Could not move the task.");
-    }
-  };
 
   return (
     <div className="flex flex-col gap-3">
@@ -113,7 +87,6 @@ export function PersonalBoard({ viewerName }: { viewerName: string }) {
           </button>
         ))}
       </div>
-      {error && <p className="text-[11.5px] text-[var(--bad)]">{error}</p>}
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         {LANES.map((lane) => {
@@ -165,18 +138,9 @@ export function PersonalBoard({ viewerName }: { viewerName: string }) {
                       <ShieldAlert className="size-2.5 flex-none" /> {t.blockedReason}
                     </p>
                   )}
-                  {lane.key !== "done" && t.sourceSystem && (
+                  {/* M-P2a (docs/25 §1): tasks move in YouTrack; this board reflects. */}
+                  {lane.key !== "done" && (
                     <p className="text-[10px] italic text-[var(--ink5)]">Move it in YouTrack.</p>
-                  )}
-                  {lane.key !== "done" && !t.sourceSystem && (
-                    <Select value={t.status} onValueChange={(v) => v && v !== t.status && void move(t, v)}>
-                      <SelectTrigger className="h-6 w-[160px] text-[10px]" aria-label={`Move ${t.title}`}><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {statusOptions(t).map((o) => (
-                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                   )}
                 </div>
               ))}
@@ -185,8 +149,8 @@ export function PersonalBoard({ viewerName }: { viewerName: string }) {
         })}
       </div>
       <p className="text-[10px] text-[var(--ink5)]">
-        Signed in as {viewerName}. Feature and bug work is completed by QA — hand it over with “In QA”.
-        Project boards stay at each project for triage and handoffs.
+        Signed in as {viewerName}. Work items move in YouTrack and this board reflects them;
+        flag anything stuck as blocked from the project board.
       </p>
     </div>
   );

@@ -138,3 +138,20 @@ export function wipOverloads(
   }
   return [...counts.values()].filter((e) => e.count > limit);
 }
+
+// ── M-P2a (docs/33, docs/25 §4) — the read-only board's three lanes, as VIEWS over
+// task states. Blocked stays a card badge, never a column.
+export type BoardColumn = "todo" | "doing" | "done";
+export const BOARD_COLUMNS: { key: BoardColumn; label: string; token: string }[] = [
+  { key: "todo", label: "To do", token: "--ink4" },
+  { key: "doing", label: "Doing", token: "--qinfo" },
+  { key: "done", label: "Done", token: "--ok" },
+];
+
+/** NotStarted → To do · InProgress/InReview/InQA → Doing · Completed → Done.
+ * Unknown states land in Doing — visible and questionable beats silently dropped. */
+export function laneOf(status: string): BoardColumn {
+  if (status === "NotStarted") return "todo";
+  if (status === "Completed") return "done";
+  return "doing";
+}
