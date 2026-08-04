@@ -1803,3 +1803,37 @@ under RLS. Fixtures removed. One tooling note: after a mid-session viewport resi
 browser pane's physical clicks stopped registering; verification continued with
 DOM-dispatched clicks — same app code path. The Base UI `nativeButton` warning on the
 link-styled create button was fixed in the same pass.
+
+## DM1.53 — The project wizard: seven questions, one transaction (M-P1c)
+
+Third docs/27 milestone — the centrepiece of the create & assign track.
+
+- **`/projects/new`**: Basics (auto-suggested code, portfolio REQUIRED, programme
+  filtered by portfolio) → Type & delivery (checkpoint-template cards; stage is fixed at
+  Exploring — promotion is governance, not a form field) → Markets (pre-filled from the
+  portfolio's `defaultMarkets` until touched) → Team → Docs → Integration → Review.
+- **The Team step is capacity-aware** (docs/26 §4.3): one-click team template ("Standard
+  build"), per-row role hat + allocation + window, live load from `listWorkload`,
+  over-allocation and leave-window warnings with one-click least-loaded alternates.
+  Warnings INFORM, never block — and the accepted set travels to the server and lands in
+  the audit blob, so an override is always a recorded decision.
+- **One transaction** (docs/27 §1.6): project + members + market org-statuses + template
+  link + optional BRD + optional YouTrack connection land together or not at all —
+  pinned by a test that fails a late reference and counts zero residue. The first
+  Project Manager hat becomes `Project.leadUserId` (DM1.21's "every project has a PM").
+- **Draft policy has two deliberate holes**: the YouTrack token (a secret) and any
+  attached file (megabytes) are never written to localStorage; everything else resumes.
+- **Both legacy flat create dialogs are retired** — /projects and the portfolio detail
+  page now link to the wizard (the detail page pre-selects its portfolio).
+- **Bug caught live, then pinned**: checkpoint-template ids are CUIDs (M-D-A era), and
+  the wire schema's `.uuid()` rejected them — the engine suite stayed green because it
+  bypasses Zod. The suite now parses the wire schema too; the route and the engine can
+  no longer drift apart silently. Repo connect stays in workspace → Integrations (it
+  mints a webhook secret shown once — a ceremony a wizard step shouldn't swallow).
+
+**Verified**: lint/typecheck/build green, 748/748 (5 new). Live walk as Joyce: wizard
+end-to-end — auto-code hint (WW), programme select filtered, template card, markets,
+Standard-build template applied then trimmed, a real 140% over-allocation warning
+(fixture-induced) shown on the row and counted on Review ("1 warning accepted"), create
+landed in the new workspace; DB read-back confirmed members/tracks/template/lead and
+`acceptedWarnings` in the audit row. Fixtures removed, qa.demo's allocation restored.

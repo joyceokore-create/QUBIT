@@ -1,24 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
+import Link from "next/link";
 import { ChevronRight, Plus, Search } from "lucide-react";
 import { usePanel } from "@/components/panels/panel-context";
 import { ExportButton } from "@/components/export-button";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { gateCells, projectRank, statusBarTok, statusMeta } from "@/lib/project-view";
-import { StatusDot } from "@/components/status-dot";
 
 interface ProjectRow {
   id: string;
@@ -35,8 +23,6 @@ interface ProjectRow {
   isMine: boolean;
 }
 
-const STATUSES = ["Planning", "OnTrack", "AtRisk", "Overdue", "Completed", "Cancelled"];
-const PRIORITIES = ["Low", "Medium", "High", "Critical"];
 const ROW_GRID = "grid grid-cols-[96px_62px_minmax(0,1fr)_130px_90px_60px_24px] items-center gap-3.5";
 
 export function ProjectsClient({
@@ -85,7 +71,11 @@ export function ProjectsClient({
           </div>
           <h1 className="font-heading text-[27px] rv:text-heading-lg font-bold tracking-[-.8px] text-[var(--qink)]">Projects</h1>
         </div>
-        {canCreate && <NewProjectDialog />}
+        {canCreate && (
+          <Button nativeButton={false} render={<Link href="/projects/new" />}>
+            <Plus /> New project
+          </Button>
+        )}
       </div>
 
       {/* Filter bar */}
@@ -190,103 +180,5 @@ export function ProjectsClient({
         )}
       </div>
     </main>
-  );
-}
-
-function NewProjectDialog() {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
-  // No code field — codes are auto-generated from the name, unique per tenant (DM1.21).
-  const [form, setForm] = useState({ name: "", description: "", type: "Project", priority: "Medium", status: "Planning" });
-  // Every project needs a project manager (its lead) — required before create (per Joyce).
-  const [leadUserId, setLeadUserId] = useState<string>("");
-  const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
-
-  useEffect(() => {
-    if (!open) return;
-    fetch("/api/users")
-      .then((r) => r.json())
-      .then((d) => setUsers(d.data ?? []))
-      .catch(() => {});
-  }, [open]);
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    if (!leadUserId) {
-      setError("Choose a project manager — every project needs a lead.");
-      return;
-    }
-    setLoading(true);
-    const res = await fetch("/api/projects", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, description: form.description || null, leadUserId }),
-    });
-    setLoading(false);
-    if (!res.ok) {
-      const b = await res.json().catch(() => null);
-      setError(b?.error?.message ?? "Could not create project.");
-      return;
-    }
-    setOpen(false);
-    setForm({ name: "", description: "", type: "Project", priority: "Medium", status: "Planning" });
-    setLeadUserId("");
-    router.refresh();
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button className="rounded-full shadow-[0_4px_20px_color-mix(in_oklab,var(--brand)_var(--glowA),transparent)]" />}>
-        <Plus /> New project
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>New project</DialogTitle>
-          <DialogDescription>Create a Riverbank project. Assign resources and teams after.</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-ink-2">Name</label>
-            <Input required value={form.name} onChange={(e) => set("name", e.target.value)} />
-            <p className="text-xs text-ink-3">The project code is generated from the name.</p>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-ink-2">Description</label>
-            <Input value={form.description} onChange={(e) => set("description", e.target.value)} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-ink-2">Priority</label>
-              <Select value={form.priority} onValueChange={(v) => set("priority", v ?? "Medium")} items={Object.fromEntries(PRIORITIES.map((p) => [p, p]))}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent>{PRIORITIES.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-ink-2">Status</label>
-              <Select value={form.status} onValueChange={(v) => set("status", v ?? "Planning")} items={Object.fromEntries(STATUSES.map((s) => [s, s]))}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent>{STATUSES.map((s) => <SelectItem key={s} value={s}><StatusDot status={s} className="mr-2" />{s}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-ink-2">Project manager (lead)</label>
-            <Select value={leadUserId || undefined} onValueChange={(v) => setLeadUserId(v ?? "")}>
-              <SelectTrigger className="w-full"><SelectValue placeholder="Choose who runs this project…" /></SelectTrigger>
-              <SelectContent>{users.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          {error && <p role="alert" className="text-sm text-status-red">{error}</p>}
-          <DialogFooter>
-            <Button type="submit" disabled={loading}>{loading ? "Creating…" : "Create project"}</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }

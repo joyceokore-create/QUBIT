@@ -6,7 +6,9 @@ import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { ProgrammeCard } from "@/components/portfolios/programme-card";
 import { StandaloneCardGrid } from "@/components/dashboard/standalone-card";
 import { EmptyState } from "@/components/dashboard/empty-state";
-import { NewProjectDialog } from "./new-project-dialog";
+import Link from "next/link";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { NewProgrammeDialog } from "./new-programme-dialog";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -71,10 +73,9 @@ export default async function PortfolioDetailPage({
           <div className="flex items-center gap-2">
             {canCreateProgramme && <NewProgrammeDialog portfolioId={portfolio.id} />}
             {canCreate && (
-              <NewProjectDialog
-                portfolioId={portfolio.id}
-                programmes={portfolio.programmes.map((p) => ({ id: p.id, name: p.name }))}
-              />
+              <Button nativeButton={false} render={<Link href={`/projects/new?portfolio=${portfolio.id}`} />}>
+                <Plus /> New project
+              </Button>
             )}
           </div>
         </div>

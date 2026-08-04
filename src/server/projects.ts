@@ -424,7 +424,7 @@ export function projectCodeBase(name: string): string {
 }
 
 /** First free code for the base within the tenant: AVS, then AVS2, AVS3… (RLS-scoped). */
-async function nextFreeCode(tx: Prisma.TransactionClient, base: string): Promise<string> {
+export async function nextFreeCode(tx: Prisma.TransactionClient, base: string): Promise<string> {
   const taken = new Set(
     (await tx.project.findMany({ where: { code: { startsWith: base } }, select: { code: true } })).map((p) => p.code),
   );
