@@ -57,8 +57,6 @@ export interface ExecutiveDashboard {
   delta: DeltaFeed;
   /** code+status of every project — the health-parity contract with Q. */
   projects: { id: string; code: string; name: string; status: string }[];
-  /** docs/32 M-W1b — the notes' (ii) link-through cards: counts by estate level. */
-  counts: { portfolios: number; programmes: number; activeProjects: number };
   /** Head of PMs only (null otherwise): this week's per-project check-in state —
    * review-only; the approve step arrives with PortfolioReport (P3). */
   headQueue: HeadQueueRow[] | null;
@@ -84,7 +82,7 @@ export async function getExecutiveDashboard(ctx: TenantContext): Promise<Executi
     listMyNudges(ctx, now),
     getDeltaFeed(ctx),
     withTenant(ctx, async (tx) => {
-      const [projects, snapshots, escalations, unconfirmed, draftGroups, overdueTasks, portfolioCount, programmeCount, headProjects, weekCheckIns] = await Promise.all([
+      const [projects, snapshots, escalations, unconfirmed, draftGroups, overdueTasks, headProjects, weekCheckIns] = await Promise.all([
         tx.project.findMany({
           select: { id: true, code: true, name: true, status: true },
           orderBy: { name: "asc" },
@@ -108,8 +106,6 @@ export async function getExecutiveDashboard(ctx: TenantContext): Promise<Executi
         tx.projectTask.count({
           where: { approvalStatus: { not: "Draft" }, status: { not: "Completed" }, dueDate: { lt: now } },
         }),
-        tx.portfolio.count(),
-        tx.programme.count(),
         // Head queue rows: active projects + their PM (docs/32 M-W1b).
         tx.project.findMany({
           where: { status: { notIn: ["Completed", "Cancelled"] } },
@@ -118,7 +114,7 @@ export async function getExecutiveDashboard(ctx: TenantContext): Promise<Executi
         }),
         tx.checkIn.findMany({ where: { isoWeek }, select: { projectId: true, status: true } }),
       ]);
-      return { projects, snapshots, escalations, unconfirmed, draftGroups, overdueTasks, portfolioCount, programmeCount, headProjects, weekCheckIns };
+      return { projects, snapshots, escalations, unconfirmed, draftGroups, overdueTasks, headProjects, weekCheckIns };
     }),
   ]);
 
@@ -187,11 +183,6 @@ export async function getExecutiveDashboard(ctx: TenantContext): Promise<Executi
     rolloutMatrices,
     delta,
     projects: live.projects.map(({ id, code, name, status }) => ({ id, code, name, status })),
-    counts: {
-      portfolios: live.portfolioCount,
-      programmes: live.programmeCount,
-      activeProjects: live.headProjects.length,
-    },
     headQueue: buildHeadQueue(ctx, live.headProjects, live.weekCheckIns),
   };
 }

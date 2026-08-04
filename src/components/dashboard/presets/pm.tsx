@@ -16,6 +16,9 @@ import { CARD, Empty, Panel } from "@/components/dashboard/presets/v2-sections";
 function Hero({ d, showChecklist }: { d: PmDashboard; showChecklist: boolean }) {
   const { checkins, agedBlockers, draftsPending } = d.hero;
   const unconfirmed = checkins.total - checkins.confirmed;
+  // Wireframe: the banner carries the action, not just the fact. Check-ins are
+  // confirmed in the workspace, so land on the worst project first (rows are sorted).
+  const firstProject = d.myProjects[0];
   return (
     <div className={`${CARD} flex flex-col gap-2 p-4`} style={{ background: "var(--cardbg)" }}>
       <FirstLoginChecklist group="pm" show={showChecklist} />
@@ -36,6 +39,14 @@ function Hero({ d, showChecklist }: { d: PmDashboard; showChecklist: boolean }) 
           <span className="font-mono text-[10px] font-bold uppercase tracking-[.8px] text-[var(--qinfo)]">
             {draftsPending} draft{draftsPending === 1 ? "" : "s"} awaiting approval
           </span>
+        )}
+        {unconfirmed > 0 && firstProject && (
+          <Link
+            href={`/projects/${firstProject.id}`}
+            className="ml-auto rounded-[8px] bg-[var(--brand)] px-3 py-1.5 text-[11.5px] font-bold text-[var(--onbrand)]"
+          >
+            Open check-ins →
+          </Link>
         )}
       </div>
     </div>

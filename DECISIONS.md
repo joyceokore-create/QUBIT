@@ -1941,3 +1941,18 @@ Third docs/32 milestone — the dashboard remodel (M-W1a–c) is complete. Read-
 slipped-milestone flag, blocker count, worst-first order, my-scoping, and Δ=null without
 history). Live as Joyce (PM persona): banner, HomeQuest row (48%, "UAT sign-off — pilot
 branch · 12 Aug", 1 open blocker), team-load summary + staffing link, sections below.
+
+### DM1.57 addendum — wireframe-match pass (same day)
+
+Joyce asked for the built UI to match the wireframe HTML exactly; three divergences on
+the remodeled screens were closed (nothing else touched):
+- Exec: the aggregate counts row became the wireframe's **per-portfolio square cards**
+  ("click a card → its page": name, RAG dot, lens · count, progress bar, category tag,
+  Δ WoW) built from the sections data — the engine's unused `counts` field was removed.
+- Head queue: the wireframe's **four KPI cards** now sit above the rows (check-ins in ·
+  unconfirmed · red/amber · awaiting my approval, the last honestly "arrives with P3"),
+  and each row carries the visible **Review →** chip.
+- PM banner: the **"Open check-ins →"** primary button (lands on the worst project's
+  workspace, where check-ins are confirmed).
+
+Verified live on all three; 767/767 stays green.

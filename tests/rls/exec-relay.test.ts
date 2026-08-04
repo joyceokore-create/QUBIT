@@ -53,7 +53,7 @@ describe("M-W1b groupSectionsByCategory (pure)", () => {
   });
 });
 
-describe("M-W1b exec dashboard: counts + head queue", () => {
+describe("M-W1b exec dashboard: head queue", () => {
   let rbId: string;
 
   beforeAll(async () => {
@@ -66,11 +66,9 @@ describe("M-W1b exec dashboard: counts + head queue", () => {
     await prisma.$disconnect();
   });
 
-  it("a plain Executive gets counts but NO head queue", async () => {
+  it("a plain Executive gets NO head queue", async () => {
     const ctx: TenantContext = { tenantId: rbId, userId: "test", roles: ["Executive"] };
     const d = await getExecutiveDashboard(ctx);
-    expect(d.counts.portfolios).toBeGreaterThan(0);
-    expect(d.counts.activeProjects).toBeGreaterThan(0);
     expect(d.headQueue).toBeNull();
   });
 
@@ -78,7 +76,7 @@ describe("M-W1b exec dashboard: counts + head queue", () => {
     const ctx: TenantContext = { tenantId: rbId, userId: "test", roles: ["HeadOfProjects"] };
     const d = await getExecutiveDashboard(ctx);
     expect(d.headQueue).not.toBeNull();
-    expect(d.headQueue!.length).toBe(d.counts.activeProjects);
+    expect(d.headQueue!.length).toBeGreaterThan(0);
     for (const row of d.headQueue!) {
       expect(["Confirmed", "Draft", "None"]).toContain(row.checkIn);
     }

@@ -107,24 +107,48 @@ function DecisionQueue({ d }: { d: ExecutiveDashboard }) {
   );
 }
 
-/** docs/32 M-W1b — the notes' (ii): cards on the estate levels that LINK THROUGH. */
-function CountsRow({ d }: { d: ExecutiveDashboard }) {
-  const cards = [
-    { label: "Portfolios", n: d.counts.portfolios, href: "/portfolios" },
-    { label: "Programmes", n: d.counts.programmes, href: "/programmes" },
-    { label: "Active projects", n: d.counts.activeProjects, href: "/projects" },
-  ];
+/** docs/32 M-W1b, matched to the wireframe: PER-PORTFOLIO square cards ("click a card →
+ * its page") — name, RAG dot, lens · project count, progress bar, category tag, Δ WoW.
+ * Built from the sections data the page already has; no extra queries. */
+function PortfolioCards({ d }: { d: ExecutiveDashboard }) {
+  const sections = d.sections.sections.filter((s) => !s.isUnassigned);
+  if (!sections.length) return null;
   return (
-    <section className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
-      {cards.map((c) => (
-        <Link key={c.href} href={c.href} className={`${CARD} group flex items-center justify-between p-4`} style={{ background: "var(--cardbg)" }}>
-          <div>
-            <div className="font-mono text-[9.5px] font-bold uppercase tracking-[1.2px] text-[var(--ink4)]">{c.label}</div>
-            <div className="text-[24px] font-bold tracking-[-1px] text-[var(--qink)]">{c.n}</div>
-          </div>
-          <ArrowRight className="size-4 text-[var(--ink4)] transition-transform group-hover:translate-x-0.5" />
-        </Link>
-      ))}
+    <section>
+      <h2 className="mb-2 flex items-center gap-2 text-[13px] font-bold text-[var(--qink)]">
+        Portfolios
+        <span className="rounded-full border border-[var(--w08)] px-2 py-0.5 font-mono text-[8.5px] font-bold uppercase tracking-[.8px] text-[var(--ink4)]">
+          click a card → its page
+        </span>
+      </h2>
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+        {sections.map((s) => (
+          <Link key={s.id} href={`/portfolios/${s.id}`} className={`${CARD} group flex flex-col gap-2.5 p-4`} style={{ background: "var(--cardbg)" }}>
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-[13.5px] leading-tight font-bold text-[var(--qink)]">{s.name}</span>
+              <span
+                className="mt-0.5 size-2.5 flex-none rounded-full"
+                style={{ background: s.rag === "Red" ? "var(--bad)" : s.rag === "Amber" ? "var(--warn)" : "var(--ok)" }}
+              />
+            </div>
+            <span className="font-mono text-[9.5px] uppercase tracking-[.8px] text-[var(--ink4)]">
+              {s.viewKind} · {s.projectCount} project{s.projectCount === 1 ? "" : "s"}
+            </span>
+            <div className="h-1.5 overflow-hidden rounded-full bg-[var(--wash2)]">
+              <div className="h-full rounded-full bg-[var(--ink3)]" style={{ width: `${s.progress}%` }} />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full border border-[var(--w08)] px-2 py-0.5 text-[10px] font-semibold text-[var(--ink3)]">{s.category}</span>
+              {s.ragDelta !== null && s.ragDelta !== 0 && (
+                <span className="font-mono text-[9px] font-bold" style={{ color: s.ragDelta < 0 ? "var(--ok)" : "var(--bad)" }}>
+                  {s.ragDelta < 0 ? "▲ improved" : "▼ worsened"} WoW
+                </span>
+              )}
+              <span className="ml-auto font-mono text-[9.5px] tabular-nums text-[var(--ink4)]">{s.progress}%</span>
+            </div>
+          </Link>
+        ))}
+      </div>
     </section>
   );
 }
@@ -132,8 +156,23 @@ function CountsRow({ d }: { d: ExecutiveDashboard }) {
 /** docs/32 M-W1b — Head of PMs only: this week's check-in state per active project.
  * Review-only; the approve step arrives with the Head roll-up (PortfolioReport, P3). */
 function HeadQueue({ rows }: { rows: HeadQueueRow[] }) {
+  const kpis = [
+    { n: rows.filter((r) => r.checkIn === "Confirmed").length, label: "PM check-ins in", tok: "--ok" },
+    { n: rows.filter((r) => r.checkIn !== "Confirmed").length, label: "Unconfirmed", tok: "--warn" },
+    { n: rows.filter((r) => r.status === "Overdue" || r.status === "AtRisk").length, label: "Red/amber projects", tok: "--bad" },
+    { n: 0, label: "Awaiting my approval", tok: "--qinfo", note: "arrives with P3" },
+  ];
   return (
     <Panel title="PM check-ins this week" sub={`${rows.filter((r) => r.checkIn !== "Confirmed").length} NOT CONFIRMED`}>
+      <div className="grid grid-cols-2 gap-2.5 p-[10px_16px_2px] sm:grid-cols-4">
+        {kpis.map((k) => (
+          <div key={k.label} className="rounded-[10px] border border-[var(--w08)] p-2.5">
+            <div className="text-[20px] font-bold tracking-[-0.6px]" style={{ color: `var(${k.tok})` }}>{k.n}</div>
+            <div className="font-mono text-[8.5px] font-bold uppercase tracking-[.8px] text-[var(--ink4)]">{k.label}</div>
+            {"note" in k && k.note && <div className="mt-0.5 text-[9px] text-[var(--ink5)]">{k.note}</div>}
+          </div>
+        ))}
+      </div>
       <div className="flex flex-col">
         {rows.length === 0 && <Empty>No active projects.</Empty>}
         {rows.map((r) => {
@@ -142,7 +181,7 @@ function HeadQueue({ rows }: { rows: HeadQueueRow[] }) {
             <Link
               key={r.projectId}
               href={`/projects/${r.projectId}`}
-              className="flex items-center gap-3 border-b border-[var(--w06)] py-2 text-[12.5px] last:border-0 hover:bg-[var(--wash2)]"
+              className="group flex items-center gap-3 border-b border-[var(--w06)] py-2 text-[12.5px] last:border-0 hover:bg-[var(--wash2)]"
             >
               <span className="size-2 flex-none rounded-full" style={{ background: dot }} />
               <span className="min-w-0 flex-1 truncate font-semibold text-[var(--qink)]">
@@ -160,6 +199,9 @@ function HeadQueue({ rows }: { rows: HeadQueueRow[] }) {
                 }
               >
                 {r.checkIn === "None" ? "No check-in" : r.checkIn}
+              </span>
+              <span className="hidden flex-none items-center gap-1 rounded-[7px] border border-[var(--w10)] px-2 py-1 font-mono text-[9px] font-bold text-[var(--ink3)] group-hover:text-[var(--brand)] sm:flex">
+                Review <ArrowRight className="size-2.5" />
               </span>
             </Link>
           );
@@ -186,7 +228,7 @@ export function ExecutivePreset({ d, firstName }: { d: ExecutiveDashboard; first
         <ExecHero d={d} firstName={firstName} />
         <HealthTrendCard d={d} />
       </section>
-      <CountsRow d={d} />
+      <PortfolioCards d={d} />
       {d.headQueue && <HeadQueue rows={d.headQueue} />}
       <DecisionQueue d={d} />
       {/* Amended docs/18 §6 + docs/32 M-W1b: portfolio-grouped sections ARE the projects
