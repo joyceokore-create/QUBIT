@@ -168,6 +168,52 @@ export async function getPortfolioCards(ctx: TenantContext): Promise<PortfolioCa
   });
 }
 
+// M-W1a (docs/32) — the programmes index: same RAG/avg math as the portfolio cards,
+// one level down. A programme with no projects reads 0-progress, not invented health.
+export interface ProgrammeCardData {
+  id: string;
+  name: string;
+  category: string;
+  portfolioId: string | null;
+  portfolioName: string | null;
+  itemCount: number;
+  onTrack: number;
+  atRisk: number;
+  overdue: number;
+  avgProgress: number;
+}
+
+export async function getProgrammeCards(ctx: TenantContext): Promise<ProgrammeCardData[]> {
+  const [projects, programmes] = await Promise.all([
+    getProjectsWithStatus(ctx),
+    withTenant(ctx, (tx) =>
+      tx.programme.findMany({
+        select: { id: true, name: true, category: true, portfolioId: true, portfolio: { select: { name: true } } },
+        orderBy: { name: "asc" },
+      }),
+    ),
+  ]);
+  return programmes.map((programme) => {
+    const items = projects.filter((p) => p.programmeId === programme.id);
+    const { onTrack, atRisk, overdue } = ragCounts(items);
+    const avg = items.length
+      ? Math.round(items.reduce((sum, p) => sum + avgProgress(p), 0) / items.length)
+      : 0;
+    return {
+      id: programme.id,
+      name: programme.name,
+      category: programme.category,
+      portfolioId: programme.portfolioId,
+      portfolioName: programme.portfolio?.name ?? null,
+      itemCount: items.length,
+      onTrack,
+      atRisk,
+      overdue,
+      avgProgress: avg,
+    };
+  });
+}
+
 // Type kept for the portfolios page's programme-less grid; the /standalone surface and
 // its query died with docs/18 §0.5 (every project belongs to a portfolio).
 export interface StandaloneCardData {

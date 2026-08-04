@@ -4,6 +4,7 @@ import { can } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
 import { QubitLogo } from "@/components/brand/qubit-logo";
 import { NavPills } from "@/components/layout/nav-pills";
+import { isMemberOnly } from "@/components/layout/nav-items";
 import { TenantChip } from "@/components/layout/tenant-chip";
 import { UserMenu } from "@/components/layout/user-menu";
 import { AskQButton } from "@/components/layout/ask-q-button";
@@ -26,6 +27,7 @@ export async function Topbar() {
 
   const canAccessAdmin = can(ctx, "admin:access");
   const canStaff = can(ctx, "project:create") || can(ctx, "staffing:manage");
+  const memberOnly = isMemberOnly(session.user.personas ?? []);
   const canSwitchTenant = can(ctx, "tenant:switch");
 
   // Tenant list only needed (and only queried) for the switcher. The tenant
@@ -52,7 +54,7 @@ export async function Topbar() {
         <span className="font-heading text-[16.5px] font-bold tracking-[2.5px] text-[var(--tbinkS)]">QUBIT</span>
       </Link>
 
-      <NavPills canAccessAdmin={canAccessAdmin} canStaff={canStaff} />
+      <NavPills canAccessAdmin={canAccessAdmin} canStaff={canStaff} memberOnly={memberOnly} />
 
       <NotificationBell />
       <ThemeToggle />

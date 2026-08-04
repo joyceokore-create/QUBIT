@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { Menu, X, PanelLeftClose, PanelLeftOpen, LogOut } from "lucide-react";
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { signOutAction } from "@/lib/auth-actions";
-import { NAV_ITEMS, isNavActive } from "./nav-items";
+import { isNavActive, visibleNavItems } from "./nav-items";
 import { UserMenu } from "./user-menu";
 import { AskQButton } from "./ask-q-button";
 import { NotificationBell } from "./notification-bell";
@@ -15,6 +15,7 @@ import { ThemeToggle } from "@/components/theme/theme-toggle";
 interface RiverbankShellProps {
   canAccessAdmin: boolean;
   canStaff: boolean;
+  memberOnly: boolean;
   canSwitchTenant: boolean;
   tenants: { slug: string; name: string }[];
   tenantSlug: string;
@@ -30,6 +31,7 @@ const SIDEBAR_KEY = "rv-sidebar-open";
 export function RiverbankShell({
   canAccessAdmin,
   canStaff,
+  memberOnly,
   canSwitchTenant,
   tenants,
   tenantSlug,
@@ -99,7 +101,7 @@ export function RiverbankShell({
     };
   }, [mobileOpen]);
 
-  const items = NAV_ITEMS.filter((n) => (n.perm === "admin:access" ? canAccessAdmin : n.perm === "project:create" ? canStaff : true));
+  const items = visibleNavItems({ canAccessAdmin, canStaff, memberOnly });
   // Labels show when expanded on desktop, or always inside the mobile drawer.
   const labelled = open || mobileOpen;
 

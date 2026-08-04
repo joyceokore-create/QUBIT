@@ -2,20 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NAV_ITEMS, isNavActive } from "./nav-items";
+import { isNavActive, visibleNavItems } from "./nav-items";
 
 interface NavPillsProps {
   /** Admin + Teams pills render only when the viewer holds `admin:access` (SuperAdmin + heads). */
   canAccessAdmin: boolean;
   canStaff: boolean;
+  /** docs/32 §0.3 — member-only viewers get the slim nav. */
+  memberOnly: boolean;
 }
 
-export function NavPills({ canAccessAdmin, canStaff }: NavPillsProps) {
+export function NavPills({ canAccessAdmin, canStaff, memberOnly }: NavPillsProps) {
   const pathname = usePathname();
 
   return (
     <nav className="flex flex-1 gap-1">
-      {NAV_ITEMS.filter((t) => (t.perm === "admin:access" ? canAccessAdmin : t.perm === "project:create" ? canStaff : true)).map((tab) => {
+      {visibleNavItems({ canAccessAdmin, canStaff, memberOnly }).map((tab) => {
         const active = isNavActive(pathname, tab.href);
         return (
           <Link

@@ -11,10 +11,19 @@ import { Chip } from "@/components/wizard/wizard-shell";
 
 // M-P1b (docs/26 §5.2) — programme creation is deliberately ONE card: it exists to
 // group. If you're reaching for more fields here, the thing you want is a project.
-export function NewProgrammeDialog({ portfolioId }: { portfolioId: string }) {
+// M-W1a: opened from the programmes INDEX it has no fixed parent — pass `portfolios`
+// and the dialog grows a parent select instead.
+export function NewProgrammeDialog({
+  portfolioId,
+  portfolios,
+}: {
+  portfolioId?: string;
+  portfolios?: { id: string; name: string }[];
+}) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [category, setCategory] = useState("Exploring");
+  const [parentId, setParentId] = useState(portfolioId ?? "");
   const { busy, error, setError, mutate } = useAdminMutation();
 
   async function submit() {
@@ -22,10 +31,14 @@ export function NewProgrammeDialog({ portfolioId }: { portfolioId: string }) {
       setError("Name is required.");
       return;
     }
+    if (!parentId) {
+      setError("A programme lives inside a portfolio — pick one.");
+      return;
+    }
     await mutate(
       "/api/programmes",
       "POST",
-      { name: name.trim(), portfolioId, category },
+      { name: name.trim(), portfolioId: parentId, category },
       {
         fallback: "Could not create the programme.",
         onSuccess: () => {
@@ -57,6 +70,23 @@ export function NewProgrammeDialog({ portfolioId }: { portfolioId: string }) {
       }
     >
       <div className="flex flex-col gap-3">
+        {portfolios && (
+          <div>
+            <span className="text-[11px] font-semibold tracking-[0.6px] text-[var(--ink4)] uppercase">Parent portfolio</span>
+            <select
+              value={parentId}
+              onChange={(e) => setParentId(e.target.value)}
+              className="mt-1.5 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
+            >
+              <option value="">— pick —</option>
+              {portfolios.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div>
           <label htmlFor="pg-name" className="text-[11px] font-semibold tracking-[0.6px] text-[var(--ink4)] uppercase">
             Name

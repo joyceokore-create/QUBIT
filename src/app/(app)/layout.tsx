@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { can, primaryRoleLabel } from "@/lib/rbac";
 import { Topbar } from "@/components/layout/topbar";
 import { RiverbankShell } from "@/components/layout/riverbank-shell";
+import { isMemberOnly } from "@/components/layout/nav-items";
 import { TenantScope } from "@/components/layout/tenant-scope";
 import { prisma } from "@/lib/db";
 import { SlidePanelStateProvider } from "@/components/panels/panel-context";
@@ -40,6 +41,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const isRiverbank = session.user.tenantSlug === "riverbank";
   const canAccessAdmin = can(ctx, "admin:access");
   const canStaff = can(ctx, "project:create") || can(ctx, "staffing:manage");
+  const memberOnly = isMemberOnly(session.user.personas ?? []);
   const canSwitchTenant = can(ctx, "tenant:switch");
   const tenants = isRiverbank && canSwitchTenant
     ? await prisma.tenant.findMany({ orderBy: { name: "asc" }, select: { slug: true, name: true } })
@@ -56,6 +58,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <RiverbankShell
                 canAccessAdmin={canAccessAdmin}
                 canStaff={canStaff}
+                memberOnly={memberOnly}
                 canSwitchTenant={canSwitchTenant}
                 tenants={tenants}
                 tenantSlug={session.user.tenantSlug}

@@ -1870,3 +1870,26 @@ the bench (pill "Filled — Joyce Okore") → second request declined with a rea
 its pill → workspace Add-to-team dialog assigned QA Demo with badges and window → invite
 dialog showed the scope line. DB read-back confirmed receipts, notes, 4 audit rows and
 notification fan-out. All verification residue removed.
+
+## DM1.55 — Programmes index + the slim member nav (M-W1a)
+
+First docs/32 milestone (dashboard & nav remodel). No schema changes.
+
+- **`/programmes`**: category-grouped cards (Approved · Exploring · Shelved) with parent
+  portfolio, project count, RAG dot and derived progress — the same math as the
+  portfolio cards, one level down (`getProgrammeCards`). Cards link to the parent
+  portfolio: programmes exist to group (docs/26 §5.2), they earn no detail page. The
+  create dialog grew an optional parent-portfolio select for index use.
+- **One nav filter, two shells** (`visibleNavItems`): the topbar pills and the Riverbank
+  sidebar now consume the same pure function, so they cannot drift. New `memberHidden`
+  flag + `isMemberOnly(personas)` — true only when every held group is dev/qa/
+  implementor; an EMPTY persona list fails OPEN to the full nav (hiding surfaces from an
+  unclassified account would be a silent lockout).
+- **The member nav is the slim four** (docs/32 §0.3, confirmed): Dashboard · My Board ·
+  Projects · Reports. Presentation only — `programme:read`/`portfolio:read` stay BASE
+  grants and the pages remain URL-reachable; nothing about permissions changed.
+
+**Verified**: lint/typecheck/build green, 762/762 (8 new). Live: created "Core Banking"
+under Market Rollout via the index dialog → appeared grouped under Approved; signed in
+as qa.demo → nav showed exactly the four items while /programmes stayed reachable by
+URL (200). Fixture removed.
