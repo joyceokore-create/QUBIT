@@ -16,6 +16,8 @@ import { ProjectBlockersSection } from "@/components/panels/project-blockers-sec
 import { AskQAbout } from "@/components/q/ask-q-about";
 
 export interface ProjectPanelJson {
+  /** M-P2c — candidates for the dependency picker (id/code/name of every other project). */
+  allProjects?: { id: string; code: string; name: string }[];
   /** M-P2b — the Delivery tab's market strip (project × subsidiary tracks). */
   marketTracks?: { orgUnitId: string; code: string; flag: string | null; progress: number; status: string }[];
   id: string;

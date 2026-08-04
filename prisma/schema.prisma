@@ -11,22 +11,22 @@ datasource db {
 }
 
 model Tenant {
-  id         String   @id @default(uuid())
-  slug       String   @unique
-  name       String
-  brandColor String   @map("brand_color")
-  brandLight String   @map("brand_light")
+  id               String    @id @default(uuid())
+  slug             String    @unique
+  name             String
+  brandColor       String    @map("brand_color")
+  brandLight       String    @map("brand_light")
   // Email domains that resolve to this tenant at login (src/lib/tenant-domain.ts). Prisma
   // can't express uniqueness across array values, so "a domain belongs to only one
   // tenant" is enforced in application code (resolveTenantByEmailDomain takes the first
   // match; keep domain lists disjoint when configuring tenants).
-  domains    String[] @default([])
+  domains          String[]  @default([])
   // M-P1e (docs/31) — stamped when the org-setup wizard finishes; NULL shows the
   // "finish setting up" banner to Super Admins. Existing tenants were backfilled
   // (they were bootstrapped by script/seed, not by the wizard).
   setupCompletedAt DateTime? @map("setup_completed_at")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
   orgUnits         OrgUnit[]
   users            User[]
@@ -109,6 +109,7 @@ model Tenant {
   inviteTokens            InviteToken[]
   resourceRequests        ResourceRequest[]
   teamTemplates           TeamTemplate[]
+  projectDependencies     ProjectDependency[]
 
   @@map("tenant")
 }
@@ -196,6 +197,7 @@ model User {
    * /**
    * /**
    * /**
+   * /**
    * /** Hours available in a normal week — the denominator leave is subtracted from.
    */
   capacityHoursPerWeek   Int         @default(40) @map("capacity_hours_per_week")
@@ -248,6 +250,7 @@ model User {
   decisionsMade            Decision[]               @relation("DecisionDecider")
   resourceRequestsRaised   ResourceRequest[]        @relation("ResourceRequestRaiser")
   resourceRequestsResolved ResourceRequest[]        @relation("ResourceRequestResolver")
+  projectDependenciesMade  ProjectDependency[]      @relation("ProjectDependencyAuthor")
 
   @@unique([tenantId, email])
   @@map("user")
@@ -814,27 +817,27 @@ model JoinRequest {
 }
 
 model Portfolio {
-  id           String   @id @default(uuid())
-  tenantId     String   @map("tenant_id")
-  tenant       Tenant   @relation(fields: [tenantId], references: [id])
-  name         String
-  description  String?
-  type         String?
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  name           String
+  description    String?
+  type           String?
   // docs/18 §3.0 — the portfolio's native dashboard lens: Pipeline (stage-grouped
   // table) or Rollout (project × market heatmap, lands with M-D). Default lens only;
   // both are reachable on drill-down.
-  viewKind     String   @default("Pipeline") @map("view_kind")
+  viewKind       String   @default("Pipeline") @map("view_kind")
   // docs/26 §2 (M-P1a) — the business pipeline axis: Approved | Exploring | Shelved.
   // Distinct from viewKind (how it's shown) and from delivery status (derived from
   // checkpoints). Existing portfolios were backfilled to Approved (docs/27 §1.2).
-  category     String   @default("Exploring")
+  category       String   @default("Exploring")
   // docs/26 §5.1 (M-P1b) — Rollout portfolios: org-unit ids (kind=Market) the wizard
   // picked; the project wizard pre-fills its Markets step from these. NULL = none set.
-  defaultMarkets Json?  @map("default_markets")
-  ownerId      String?  @map("owner_id")
-  targetBudget String?  @map("target_budget")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  defaultMarkets Json?    @map("default_markets")
+  ownerId        String?  @map("owner_id")
+  targetBudget   String?  @map("target_budget")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   programmes Programme[]
   projects   Project[]
@@ -924,6 +927,8 @@ model Project {
   lessonsLearned       LessonLearned[]
   requirements         Requirement[]
   resourceRequests     ResourceRequest[]
+  waitsOn              ProjectDependency[]   @relation("ProjectWaits")
+  blocks               ProjectDependency[]   @relation("ProjectBlocks")
 
   @@unique([tenantId, code])
   @@map("project")
@@ -1720,6 +1725,28 @@ model ProjectTeam {
   @@id([projectId, teamId])
   @@index([tenantId])
   @@map("project_team")
+}
+
+// docs/33 M-P2c (docs/26 §6) — "Project A's UAT waits on B's API": a cross-project
+// dependency link, cycle-checked at write time (the M7-A pattern one level up). Powers
+// the workspace "waits on / blocks" card and the portfolio blocking map.
+model ProjectDependency {
+  id                 String   @id @default(uuid())
+  tenantId           String   @map("tenant_id")
+  tenant             Tenant   @relation(fields: [tenantId], references: [id])
+  projectId          String   @map("project_id")
+  project            Project  @relation("ProjectWaits", fields: [projectId], references: [id], onDelete: Cascade)
+  dependsOnProjectId String   @map("depends_on_project_id")
+  dependsOnProject   Project  @relation("ProjectBlocks", fields: [dependsOnProjectId], references: [id], onDelete: Cascade)
+  note               String?
+  createdById        String   @map("created_by_id")
+  createdBy          User     @relation("ProjectDependencyAuthor", fields: [createdById], references: [id])
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@unique([projectId, dependsOnProjectId])
+  @@index([tenantId])
+  @@index([dependsOnProjectId])
+  @@map("project_dependency")
 }
 
 // docs/26 §4.3 (M-P1a) — a PM asks for a SHAPE ("1 QA · 60% · Aug–Sep"), not a person;

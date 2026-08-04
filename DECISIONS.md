@@ -2073,3 +2073,26 @@ checkpoint/market suite untouched — the proof it was a move.
 (HomeQuest: 🇰🇪 75% OnTrack · 🇷🇼 13% Planning · 🇹🇿 50% OnTrack · 🇺🇬 38% AtRisk, each
 linking to its market page); a track-less project shows the honest empty line; Overview
 no longer carries the matrix but keeps governance/budget.
+
+## DM1.62 — Cross-project dependencies + the blocking map (M-P2c)
+
+Third docs/33 milestone — P2 "Deliver" is complete.
+
+- **`ProjectDependency`**: "Project A waits on Project B", unique per pair, FORCE-RLS
+  inline, both project FKs cascade. Declaring/removing is delivery-owner territory
+  (`canWriteProject` — the project's lead/PM or a Head); everyone reads both directions.
+- **Cycle-checked at write time** with the M7-A walk lifted one level (`wouldCycleProjects`,
+  pure): self, direct and TRANSITIVE loops all refuse with `DEPENDENCY_CYCLE` naming both
+  codes; a forward shortcut (a→c beside a→b→c) is legal.
+- **The other side hears about it**: declaring notifies the depended-on project's PM
+  ("your delivery gates theirs") through the outbox. Add audited; remove audited.
+- **The workspace card** (Overview aside): Waits on / Blocks with RAG dots from the
+  shared health engine, PM-only add/remove, deep links both ways.
+- **The portfolio "what's blocking what" panel** (docs/26 §6): LIVE edges only — a
+  delivered upstream (Completed/Cancelled) drops off the map instead of crying wolf —
+  grouped by the waiting project's portfolio, reddest upstream first.
+
+**Verified**: lint/typecheck/build green, 793/793 (5 new: pure cycle table, gate +
+audit + notification, both-direction listing, map liveness rule, RLS). Live as Joyce:
+declared "HomeQuest waits on RBS-05 — UAT waits on their API" through the card; the
+blocking panel appeared on the Market Rollout portfolio. Fixture removed.

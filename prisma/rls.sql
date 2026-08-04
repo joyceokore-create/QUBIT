@@ -115,7 +115,9 @@ BEGIN
     'invite_token',
     -- M-P1a (docs/27) — staffing as a tracked flow.
     'resource_request',
-    'team_template'
+    'team_template',
+    -- M-P2c (docs/33) — cross-project dependencies.
+    'project_dependency'
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);

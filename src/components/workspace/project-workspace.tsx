@@ -20,6 +20,7 @@ import { DecisionsCard } from "@/components/conversation/decisions-card";
 import { CheckInCard } from "@/components/workspace/checkin-card";
 import { GovernanceEditor } from "@/components/workspace/governance-editor";
 import { CheckpointMatrix } from "@/components/workspace/checkpoint-matrix";
+import { ProjectDependenciesCard } from "@/components/workspace/project-dependencies-card";
 import { LessonsCard } from "@/components/workspace/lessons-card";
 import { RequirementsPanel } from "@/components/workspace/requirements-panel";
 import { RequestToJoinButton } from "@/components/workspace/request-to-join-button";
@@ -207,6 +208,14 @@ export function ProjectWorkspace({
                   portfolios={data.portfolios}
                   budget={data.budget}
                   canGovern={data.canGovern ?? false}
+                />
+              </div>
+              {/* M-P2c (docs/26 §6) — what this project waits on / blocks. */}
+              <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
+                <ProjectDependenciesCard
+                  projectId={data.id}
+                  canEdit={data.canGovern ?? false}
+                  projects={data.allProjects ?? []}
                 />
               </div>
               {/* docs/16 §6 — captured as the project runs; the closure gate reads these. */}

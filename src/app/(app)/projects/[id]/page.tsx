@@ -46,6 +46,14 @@ export default async function ProjectWorkspacePage({
     // and the rows the server returns can never disagree.
     viewerBoardCategory(ctx, id),
   ]);
+  // M-P2c — dependency picker candidates (active projects only).
+  const allProjects = await withTenant(ctx, (tx) =>
+    tx.project.findMany({
+      where: { status: { notIn: ["Completed", "Cancelled"] } },
+      select: { id: true, code: true, name: true },
+      orderBy: { code: "asc" },
+    }),
+  );
   // M-P2b — the Delivery tab's market tracks (docs/25 §3 tab 4).
   const marketTracks = await withTenant(ctx, (tx) =>
     tx.projectOrgStatus.findMany({
@@ -66,6 +74,7 @@ export default async function ProjectWorkspacePage({
     canGovern: can(ctx, "project:stage") || (await canWriteProject(ctx, id)), // docs/18 §7
     portfolios,
     viewerCategory,
+    allProjects,
     marketTracks: marketTracks.map((m) => ({
       orgUnitId: m.orgUnitId,
       code: m.orgUnit.code,
