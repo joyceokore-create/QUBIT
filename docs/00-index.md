@@ -57,7 +57,11 @@ This is the entry point. Read documents in this order.
     this pack (divergences + open gaps). P1-E is queued after the dashboard remodel.
 25. **32-dashboard-remodel-execution.md** — dashboards & nav remodel (exec re-lay +
     category grouping, Head's check-in queue, PM home, programmes index, member slim
-    nav). Executes docs/25 W1 with the §9 decisions locked. Milestones M-W1a–c.
+    nav). Executes docs/25 W1 with the §9 decisions locked. Milestones M-W1a–c. SHIPPED
+    (DM1.55–57).
+26. **33-p2-deliver-execution.md** — P2 "Deliver": the one READ-ONLY board (lanes over
+    YouTrack states, sync health, authoring retired per docs/25 §1), the Checkpoints &
+    Rollout workspace tab, cross-project dependencies. Milestones M-P2a–c.
 
 ## Document readiness checklist
 
