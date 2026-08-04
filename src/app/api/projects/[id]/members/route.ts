@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission } from "@/lib/api-guard";
-import { listProjectMembers, setProjectMember, SetProjectMemberInput } from "@/server/resources";
+import {
+  addProjectMembers,
+  BulkAddMembersInput,
+  listProjectMembers,
+  setProjectMember,
+  SetProjectMemberInput,
+} from "@/server/resources";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -23,4 +29,17 @@ export async function PUT(req: Request, { params }: Ctx) {
   const { userId, ...rest } = parsed.data;
   await setProjectMember(guard.ctx, id, userId, rest);
   return NextResponse.json({ ok: true });
+}
+
+// M-P1d — bulk assignment from the capacity-aware assign panel (docs/26 §4.3).
+export async function POST(req: Request, { params }: Ctx) {
+  const guard = await requirePermission("project:update");
+  if ("response" in guard) return guard.response;
+  const parsed = BulkAddMembersInput.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: { code: "VALIDATION", message: "Invalid input." } }, { status: 400 });
+  }
+  const { id } = await params;
+  const result = await addProjectMembers(guard.ctx, id, parsed.data);
+  return NextResponse.json({ ok: true, count: result.count });
 }

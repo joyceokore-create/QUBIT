@@ -39,6 +39,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // top-navigation bar. Resolve the shell's data once (mirrors what Topbar queries).
   const isRiverbank = session.user.tenantSlug === "riverbank";
   const canAccessAdmin = can(ctx, "admin:access");
+  const canStaff = can(ctx, "project:create") || can(ctx, "staffing:manage");
   const canSwitchTenant = can(ctx, "tenant:switch");
   const tenants = isRiverbank && canSwitchTenant
     ? await prisma.tenant.findMany({ orderBy: { name: "asc" }, select: { slug: true, name: true } })
@@ -54,6 +55,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <div className="relative z-[1]">
               <RiverbankShell
                 canAccessAdmin={canAccessAdmin}
+                canStaff={canStaff}
                 canSwitchTenant={canSwitchTenant}
                 tenants={tenants}
                 tenantSlug={session.user.tenantSlug}

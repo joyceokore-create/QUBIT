@@ -2,6 +2,7 @@ import { z } from "zod";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { availabilityFactor } from "@/server/absence";
 import { audit } from "@/lib/audit";
+import { emitDomainEvent } from "@/server/events";
 import { PROJECT_ROLES } from "@/lib/roles";
 
 /**
@@ -15,6 +16,9 @@ export const SetProjectMemberInput = z.object({
   // projectRoleCategory(role), so free-text here would silently demote people to Stakeholder.
   role: z.enum(PROJECT_ROLES),
   allocationPct: z.number().int().min(0).max(100).nullable().optional(),
+  // M-P1d (docs/26 §4.3): an assignment has a window. Omitted = untouched on update.
+  startDate: z.string().datetime().nullable().optional(),
+  endDate: z.string().datetime().nullable().optional(),
 });
 export type SetProjectMemberInput = z.infer<typeof SetProjectMemberInput>;
 
@@ -69,17 +73,94 @@ export async function setProjectMember(
         userId,
         role: input.role,
         allocationPct: input.allocationPct ?? null,
+        startDate: input.startDate ? new Date(input.startDate) : null,
+        endDate: input.endDate ? new Date(input.endDate) : null,
       },
-      update: { role: input.role, allocationPct: input.allocationPct ?? null },
+      update: {
+        role: input.role,
+        allocationPct: input.allocationPct ?? null,
+        ...(input.startDate !== undefined ? { startDate: input.startDate ? new Date(input.startDate) : null } : {}),
+        ...(input.endDate !== undefined ? { endDate: input.endDate ? new Date(input.endDate) : null } : {}),
+      },
     });
     await audit(tx, ctx, {
       action: "update",
       entityType: "project_member",
       entityId: `${projectId}:${userId}`,
       before: null,
-      after: { role: member.role, allocationPct: member.allocationPct },
+      after: { role: member.role, allocationPct: member.allocationPct, startDate: member.startDate, endDate: member.endDate },
     });
     return member;
+  });
+}
+
+/** M-P1d — bulk assignment (docs/26 §4.3): several people onto one project in ONE
+ * transaction, each with a role hat + allocation + window. Every add is audited and the
+ * assignee notified; capacity warnings the assigner accepted ride in the audit blob. */
+export const BulkAddMembersInput = z.object({
+  members: z
+    .array(
+      SetProjectMemberInput.extend({ userId: z.string().uuid() }),
+    )
+    .min(1)
+    .max(20),
+  acceptedWarnings: z.array(z.string().max(200)).max(20).default([]),
+});
+export type BulkAddMembersInputT = z.infer<typeof BulkAddMembersInput>;
+
+export async function addProjectMembers(ctx: TenantContext, projectId: string, input: BulkAddMembersInputT) {
+  return withTenant(ctx, async (tx) => {
+    const project = await tx.project.findUniqueOrThrow({
+      where: { id: projectId },
+      select: { id: true, code: true, name: true },
+    });
+    const ids = input.members.map((m) => m.userId);
+    const found = await tx.user.count({ where: { id: { in: ids }, status: { not: "DELETED" } } });
+    if (found !== new Set(ids).size) throw new Error("Unknown team member.");
+    for (const m of input.members) {
+      await tx.projectMember.upsert({
+        where: { projectId_userId: { projectId, userId: m.userId } },
+        create: {
+          tenantId: ctx.tenantId,
+          projectId,
+          userId: m.userId,
+          role: m.role,
+          allocationPct: m.allocationPct ?? null,
+          startDate: m.startDate ? new Date(m.startDate) : null,
+          endDate: m.endDate ? new Date(m.endDate) : null,
+        },
+        update: {
+          role: m.role,
+          allocationPct: m.allocationPct ?? null,
+          ...(m.startDate !== undefined ? { startDate: m.startDate ? new Date(m.startDate) : null } : {}),
+          ...(m.endDate !== undefined ? { endDate: m.endDate ? new Date(m.endDate) : null } : {}),
+        },
+      });
+    }
+    await audit(tx, ctx, {
+      action: "update",
+      entityType: "project",
+      entityId: projectId,
+      after: {
+        assigned: input.members.map((m) => ({ userId: m.userId, role: m.role, allocationPct: m.allocationPct ?? null })),
+        acceptedWarnings: input.acceptedWarnings,
+      },
+    });
+    await emitDomainEvent(tx, ctx, {
+      type: "project.members_assigned",
+      entityType: "project",
+      entityId: projectId,
+      payload: { count: input.members.length },
+      notify: input.members
+        .filter((m) => m.userId !== ctx.userId)
+        .map((m) => ({
+          userId: m.userId,
+          kind: "project.assigned",
+          message: `You were assigned to ${project.name} as ${m.role}${m.allocationPct ? ` (${m.allocationPct}%)` : ""}.`,
+          link: `/projects/${projectId}`,
+        })),
+    });
+    return { count: input.members.length };
   });
 }
 

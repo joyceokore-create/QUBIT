@@ -34,6 +34,22 @@ export async function requirePermission(permission: string): Promise<Guard> {
   return { ctx };
 }
 
+/** Session-only preamble (M-P1d): authenticate without a blanket permission, for routes
+ * whose authorization is purely resource-scoped in the engine (e.g. "the project's own
+ * lead/PM may raise a staffing request" — no role-level key expresses that). */
+export async function requireSession(): Promise<Guard> {
+  try {
+    return { ctx: await getTenantContext() };
+  } catch {
+    return {
+      response: NextResponse.json(
+        { error: { code: "UNAUTHENTICATED", message: "Sign in required." } },
+        { status: 401 },
+      ),
+    };
+  }
+}
+
 /** Standard 403 for a secondary, resource-scoped authorization check (run after
  * requirePermission authenticates + confirms the baseline read capability). */
 export function forbidden(message = "You don't have permission to do this."): NextResponse {

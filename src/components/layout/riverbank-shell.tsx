@@ -14,6 +14,7 @@ import { ThemeToggle } from "@/components/theme/theme-toggle";
 
 interface RiverbankShellProps {
   canAccessAdmin: boolean;
+  canStaff: boolean;
   canSwitchTenant: boolean;
   tenants: { slug: string; name: string }[];
   tenantSlug: string;
@@ -28,6 +29,7 @@ const SIDEBAR_KEY = "rv-sidebar-open";
 
 export function RiverbankShell({
   canAccessAdmin,
+  canStaff,
   canSwitchTenant,
   tenants,
   tenantSlug,
@@ -97,7 +99,7 @@ export function RiverbankShell({
     };
   }, [mobileOpen]);
 
-  const items = NAV_ITEMS.filter((n) => n.perm !== "admin:access" || canAccessAdmin);
+  const items = NAV_ITEMS.filter((n) => (n.perm === "admin:access" ? canAccessAdmin : n.perm === "project:create" ? canStaff : true));
   // Labels show when expanded on desktop, or always inside the mobile drawer.
   const labelled = open || mobileOpen;
 

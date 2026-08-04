@@ -69,6 +69,14 @@ export function NewUserDialog({
   // Hide the "Administrator" tier (= PlatformSuperAdmin) from admins who can't grant it.
   const roleTiers = ONBOARDING_ROLE_TIERS.filter((t) => canGrantSuperAdmin || t.key !== "PlatformSuperAdmin");
   const roleTier = ONBOARDING_ROLE_TIERS.find((t) => t.key === role)!;
+  // docs/26 §4.2 (M-P1d) — the role-and-scope preview: what this person will be ABLE to
+  // do, said before the invite is sent, so admins invite deliberately.
+  const SCOPE_LINE: Record<OnboardingRoleKey, string> = {
+    PlatformSuperAdmin: "full administration — users, roles and settings",
+    Executive: "reads everything; edits governance fields (stage/priority) and creates portfolios",
+    ProjectManager: "creates projects and manages the ones they lead; raises staffing requests",
+    Member: "works assigned tasks on their board and sends weekly updates",
+  };
   // Live landing preview (docs/17 §1.3): the SAME resolver login uses — declared groups
   // ∪ what this invite's role/placement will derive — so the chip can't lie.
   const landing = landingPersona(
@@ -284,6 +292,7 @@ export function NewUserDialog({
                         {GROUP_LABELS[landing]} dashboard
                       </span>
                     </p>
+                    <p className="mt-1 text-[11px] text-ink-3">Scope: {SCOPE_LINE[role]}.</p>
                   </div>
                 </>
               )}
@@ -298,6 +307,7 @@ export function NewUserDialog({
                     <Row label="Team" value={teamName} />
                     <Row label="Project" value={projectId === "none" ? "—" : `${projName} · ${projectRole}`} />
                     <Row label="Lands on" value={`${GROUP_LABELS[landing]} dashboard`} />
+                    <Row label="Can" value={SCOPE_LINE[role]} />
                   </div>
                   <p className="text-xs text-ink-3">
                     They&apos;ll get an email with a one-time link to set their own password. No

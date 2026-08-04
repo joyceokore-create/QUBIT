@@ -1837,3 +1837,36 @@ Standard-build template applied then trimmed, a real 140% over-allocation warnin
 (fixture-induced) shown on the row and counted on Review ("1 warning accepted"), create
 landed in the new workspace; DB read-back confirmed members/tracks/template/lead and
 `acceptedWarnings` in the audit row. Fixtures removed, qa.demo's allocation restored.
+
+## DM1.54 — Staffing leaves the side channel: assign panel, resource requests, invite scope (M-P1d)
+
+Fourth and final docs/27 milestone — the create & assign track (docs/26 P1) is complete.
+
+- **The assign panel is capacity-aware everywhere** (docs/26 §4.3). The workspace Team
+  tab's bare add-row became a bulk panel: candidates from the bench (least booked first,
+  leave-in-window badged), one shared role hat + allocation + window, warnings that
+  inform and travel to the audit blob. Bulk add is ONE transaction
+  (`addProjectMembers`), every assignee notified through the outbox.
+- **Resource requests**: a PM asks for a SHAPE ("1 QA · 60% · Aug–Sep"), never a person.
+  Raising is resource-scoped (the project's lead/PM via `access.ts` — a new
+  `requireSession` guard exists precisely because no blanket key expresses that);
+  resolving is `staffing:manage` only — the asker never resolves their own ask. Fill
+  upserts the assignment WITH the request's shape and stamps `filledMemberId` as the
+  receipt; decline REQUIRES a reason, and the raiser's notification carries it verbatim.
+  No double resolution. `/staffing` joins the nav for PMs and Heads.
+- **The bench is role-agnostic** — role hats are per-project, so it ranks every active
+  user by booked allocation with leave-days-in-window surfaced; the fill assigns the hat.
+- **`setProjectMember` gained the assignment window** (dates omitted = untouched), so
+  every assign surface — wizard, panel, fill — speaks the same shape.
+- **Invite role-and-scope preview** (docs/26 §4.2): the invite dialog now says, before
+  sending, where the person lands AND what they'll be able to do ("Scope: creates
+  projects and manages the ones they lead…") — derived from the same role tiers, so it
+  cannot drift from the grants.
+
+**Verified**: lint/typecheck/build green, 754/754 (6 new: raise-scope denial, bench
+ordering + leave surfacing, fill receipt + notify + no-double-resolution, decline reason
+flow, list scoping, RLS). Live walk as Joyce: raised "1 QA · 60% · Sep" → filled from
+the bench (pill "Filled — Joyce Okore") → second request declined with a reason shown in
+its pill → workspace Add-to-team dialog assigned QA Demo with badges and window → invite
+dialog showed the scope line. DB read-back confirmed receipts, notes, 4 audit rows and
+notification fan-out. All verification residue removed.

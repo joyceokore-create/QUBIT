@@ -8,6 +8,7 @@ import {
   Users,
   Contact,
   BarChart3,
+  UserPlus,
   Shield,
   type LucideIcon,
 } from "lucide-react";
@@ -21,7 +22,7 @@ import {
 export interface NavItem {
   label: string;
   href: string;
-  perm?: "admin:access";
+  perm?: "admin:access" | "project:create";
   icon: LucideIcon;
 }
 
@@ -34,6 +35,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Time", href: "/time", icon: Clock },
   { label: "Teams", href: "/admin/teams", perm: "admin:access", icon: Users },
   { label: "People", href: "/people", icon: Contact },
+  { label: "Staffing", href: "/staffing", perm: "project:create", icon: UserPlus }, // M-P1d — resource requests
   { label: "Reports", href: "/reports", icon: BarChart3 },
   { label: "Admin", href: "/admin", perm: "admin:access", icon: Shield },
 ];

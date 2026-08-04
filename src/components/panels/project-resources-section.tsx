@@ -2,9 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Plus, X } from "lucide-react";
+import { AssignMembersDialog } from "@/components/panels/assign-members-dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -12,7 +11,6 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { PROJECT_ROLES, projectRoleCategory } from "@/lib/roles";
 
 interface Member {
   userId: string;
@@ -20,10 +18,6 @@ interface Member {
   email: string;
   role: string;
   allocationPct: number | null;
-}
-interface UserOpt {
-  id: string;
-  name: string;
 }
 interface TeamOpt {
   id: string;
@@ -34,11 +28,7 @@ interface TeamOpt {
 export function ProjectResourcesSection({ projectId, canEdit }: { projectId: string; canEdit: boolean }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
-  const [users, setUsers] = useState<UserOpt[]>([]);
   const [teams, setTeams] = useState<TeamOpt[]>([]);
-  const [addUser, setAddUser] = useState("");
-  const [addRole, setAddRole] = useState("");
-  const [addPct, setAddPct] = useState("");
 
   const load = useCallback(async () => {
     const [m, t] = await Promise.all([
@@ -52,25 +42,10 @@ export function ProjectResourcesSection({ projectId, canEdit }: { projectId: str
   useEffect(() => {
     void load();
     if (canEdit) {
-      fetch("/api/users").then((r) => r.json()).then((d) => setUsers(d.data ?? [])).catch(() => {});
       fetch("/api/teams").then((r) => r.json()).then((d) => setTeams((d.data ?? []).map((t: { id: string; name: string }) => ({ id: t.id, name: t.name })))).catch(() => {});
     }
   }, [load, canEdit]);
 
-  const addMember = async () => {
-    if (!addUser || !addRole.trim()) return;
-    const res = await fetch(`/api/projects/${projectId}/members`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ userId: addUser, role: addRole.trim(), allocationPct: addPct ? Number(addPct) : null }),
-    });
-    if (res.ok) {
-      setAddUser("");
-      setAddRole("");
-      setAddPct("");
-      void load();
-    }
-  };
   const removeMember = async (userId: string) => {
     const res = await fetch(`/api/projects/${projectId}/members/${userId}`, { method: "DELETE" });
     if (res.ok) void load();
@@ -86,7 +61,6 @@ export function ProjectResourcesSection({ projectId, canEdit }: { projectId: str
   };
 
   const assignedTeamNames = teams.filter((t) => assignedTeamIds.includes(t.id)).map((t) => t.name);
-  const availableUsers = users.filter((u) => !members.some((m) => m.userId === u.id));
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -122,44 +96,14 @@ export function ProjectResourcesSection({ projectId, canEdit }: { projectId: str
       </div>
 
       {canEdit && (
-        <div className="flex flex-wrap items-end gap-2">
-          <Select
-            value={addUser}
-            onValueChange={(v) => setAddUser(v ?? "")}
-            items={Object.fromEntries(availableUsers.map((u) => [u.id, u.name]))}
-          >
-            <SelectTrigger className="w-44"><SelectValue placeholder="Add person…" /></SelectTrigger>
-            <SelectContent>
-              {availableUsers.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={addRole} onValueChange={(v) => setAddRole(v ?? "")}>
-            <SelectTrigger className="w-40"><SelectValue placeholder="Project role…" /></SelectTrigger>
-            <SelectContent>
-              {PROJECT_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Input value={addPct} onChange={(e) => setAddPct(e.target.value.replace(/\D/g, ""))} placeholder="%" className="w-16" inputMode="numeric" title="Allocation % (optional)" />
-          <button
-            type="button"
-            onClick={addMember}
-            disabled={!addUser || !addRole}
-            className="flex items-center gap-1 rounded-[8px] bg-[color-mix(in_oklab,var(--brand)_14%,transparent)] px-3 py-2 text-xs font-semibold text-brand disabled:opacity-40"
-          >
-            <Plus className="size-3.5" /> Add
-          </button>
-          {/* DM1.43: the role decides which board they land on, so say so at the moment
-              of choosing rather than letting them discover a locked lens later. */}
-          {addRole && (
-            <span className="text-[11px] text-ink-3">
-              {(() => {
-                const cat = projectRoleCategory(addRole);
-                if (cat === "PM") return "→ sees every board";
-                if (cat === "Stakeholder") return "→ read-only, whole board";
-                return `→ ${cat} board`;
-              })()}
-            </span>
-          )}
+        <div className="flex items-center gap-2">
+          {/* M-P1d: the bare add-row became the capacity-aware assign panel — bulk pick,
+              load + leave surfaced, warnings audited (docs/26 §4.3). */}
+          <AssignMembersDialog
+            projectId={projectId}
+            existingUserIds={members.map((m) => m.userId)}
+            onDone={() => void load()}
+          />
         </div>
       )}
 

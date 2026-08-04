@@ -7,14 +7,15 @@ import { NAV_ITEMS, isNavActive } from "./nav-items";
 interface NavPillsProps {
   /** Admin + Teams pills render only when the viewer holds `admin:access` (SuperAdmin + heads). */
   canAccessAdmin: boolean;
+  canStaff: boolean;
 }
 
-export function NavPills({ canAccessAdmin }: NavPillsProps) {
+export function NavPills({ canAccessAdmin, canStaff }: NavPillsProps) {
   const pathname = usePathname();
 
   return (
     <nav className="flex flex-1 gap-1">
-      {NAV_ITEMS.filter((t) => t.perm !== "admin:access" || canAccessAdmin).map((tab) => {
+      {NAV_ITEMS.filter((t) => (t.perm === "admin:access" ? canAccessAdmin : t.perm === "project:create" ? canStaff : true)).map((tab) => {
         const active = isNavActive(pathname, tab.href);
         return (
           <Link

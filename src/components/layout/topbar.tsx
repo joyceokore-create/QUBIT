@@ -25,6 +25,7 @@ export async function Topbar() {
   };
 
   const canAccessAdmin = can(ctx, "admin:access");
+  const canStaff = can(ctx, "project:create") || can(ctx, "staffing:manage");
   const canSwitchTenant = can(ctx, "tenant:switch");
 
   // Tenant list only needed (and only queried) for the switcher. The tenant
@@ -51,7 +52,7 @@ export async function Topbar() {
         <span className="font-heading text-[16.5px] font-bold tracking-[2.5px] text-[var(--tbinkS)]">QUBIT</span>
       </Link>
 
-      <NavPills canAccessAdmin={canAccessAdmin} />
+      <NavPills canAccessAdmin={canAccessAdmin} canStaff={canStaff} />
 
       <NotificationBell />
       <ThemeToggle />
