@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
   ListChecks,
+  Briefcase,
   FolderKanban,
   TriangleAlert,
   Clock,
@@ -27,6 +28,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "My Board", href: "/board", icon: ListChecks }, // docs/18 §4 — the daily surface
+  { label: "Portfolios", href: "/portfolios", icon: Briefcase }, // M-P1b — resurrected index (docs/25 W1)
   { label: "Projects", href: "/projects", icon: FolderKanban },
   { label: "Risks", href: "/risks", icon: TriangleAlert },
   { label: "Time", href: "/time", icon: Clock },

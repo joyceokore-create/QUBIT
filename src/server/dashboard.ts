@@ -122,6 +122,8 @@ export async function getDashboardSummary(ctx: TenantContext): Promise<Dashboard
 export interface PortfolioCardData {
   id: string;
   name: string;
+  category: string; // Approved | Exploring | Shelved (M-P1b)
+  viewKind: string;
   budget: string | null;
   itemCount: number;
   onTrack: number;
@@ -150,6 +152,8 @@ export async function getPortfolioCards(ctx: TenantContext): Promise<PortfolioCa
     return {
       id: portfolio.id,
       name: portfolio.name,
+      category: portfolio.category,
+      viewKind: portfolio.viewKind,
       budget: portfolio.targetBudget,
       itemCount: items.length,
       onTrack,

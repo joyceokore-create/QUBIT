@@ -7,6 +7,7 @@ import { ProgrammeCard } from "@/components/portfolios/programme-card";
 import { StandaloneCardGrid } from "@/components/dashboard/standalone-card";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { NewProjectDialog } from "./new-project-dialog";
+import { NewProgrammeDialog } from "./new-programme-dialog";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
@@ -51,6 +52,7 @@ export default async function PortfolioDetailPage({
   if (!portfolio) notFound();
 
   const canCreate = can(ctx, "project:create");
+  const canCreateProgramme = can(ctx, "programme:create");
 
   return (
     <div className="flex flex-1 flex-col gap-[22px] p-[26px]">
@@ -66,12 +68,15 @@ export default async function PortfolioDetailPage({
               <div className="mt-[3px] max-w-[560px] text-xs rv:text-body-sm text-ink-3">{portfolio.description}</div>
             )}
           </div>
-          {canCreate && (
-            <NewProjectDialog
-              portfolioId={portfolio.id}
-              programmes={portfolio.programmes.map((p) => ({ id: p.id, name: p.name }))}
-            />
-          )}
+          <div className="flex items-center gap-2">
+            {canCreateProgramme && <NewProgrammeDialog portfolioId={portfolio.id} />}
+            {canCreate && (
+              <NewProjectDialog
+                portfolioId={portfolio.id}
+                programmes={portfolio.programmes.map((p) => ({ id: p.id, name: p.name }))}
+              />
+            )}
+          </div>
         </div>
         <div className="flex flex-wrap gap-6">
           <HeaderStat label="Total Items" value={portfolio.itemCount} />

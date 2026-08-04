@@ -824,6 +824,9 @@ model Portfolio {
   // Distinct from viewKind (how it's shown) and from delivery status (derived from
   // checkpoints). Existing portfolios were backfilled to Approved (docs/27 §1.2).
   category     String   @default("Exploring")
+  // docs/26 §5.1 (M-P1b) — Rollout portfolios: org-unit ids (kind=Market) the wizard
+  // picked; the project wizard pre-fills its Markets step from these. NULL = none set.
+  defaultMarkets Json?  @map("default_markets")
   ownerId      String?  @map("owner_id")
   targetBudget String?  @map("target_budget")
   createdAt    DateTime @default(now()) @map("created_at")

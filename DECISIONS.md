@@ -1767,3 +1767,39 @@ First milestone of docs/27 (the docs/26 P1 track). Schema + keys only — no UI 
 assignment window, cross-tenant read AND write denial on both new tables, seeded shape,
 key grants/denials, raise-scope). Schema-only — browser verification deferred to M-P1b
 when the first surface lands.
+
+## DM1.52 — Wizard chrome + portfolio/programme creation; the portfolio index returns (M-P1b)
+
+Second docs/27 milestone. The first user-visible piece of the docs/26 remodel.
+
+- **Shared wizard chrome** (`src/components/wizard/`): left rail with ticked/current/
+  conditionally-skipped steps, one-question cards, the standard error slot, Back/Continue/
+  Create + "Create another". Step navigation is a PURE module (`src/lib/wizard.ts`) —
+  skip-hopping in both directions and settling off a step that becomes skipped underneath
+  the user are unit-tested, not hoped.
+- **Drafts are localStorage, per wizard AND per user** (docs/27 §1.3), saved on every
+  change, cleared on success. Verified the hard way: the create 500'd mid-walk (stale dev
+  Prisma client), the server restarted, and the wizard resumed at Review with everything
+  intact — exactly the failure the draft exists for.
+- **Portfolio wizard** (`/portfolios/new`, gate `portfolio:create`): Identity → Lens →
+  Markets (greyed under Pipeline — markets are a Rollout concept, and the engine also
+  drops them server-side, never trusting the client's step logic) → Governance (read-only
+  statement of the role-derived defaults until docs/28 wires recipients) → Review.
+  Owner must hold Head/Executive (checked in the ENGINE against role assignments).
+- **`Portfolio.defaultMarkets` (Json)** added for the wizard's market picks — the project
+  wizard pre-fills from it (M-P1c). Market ids are validated against `OrgUnit.kind=Market`.
+- **Programme creation is ONE dialog** (docs/26 §5.2) on the portfolio detail page —
+  name + category, parented to the page's portfolio. It exists to group; anything more is
+  a project.
+- **The portfolio index is resurrected** (culled to a redirect in M0): category-grouped
+  square cards (Approved · Exploring · Shelved), viewKind pill, market flags, RAG dot,
+  create button only for key-holders. "Portfolios" returns to the primary nav.
+- Every create audited + `portfolio.created` evented through the outbox.
+
+**Verified**: lint/typecheck/build green, 743/743 (11 new). Live walk as Joyce
+(SuperAdmin): wizard end-to-end incl. draft resume across a server restart, programme
+dialog, cards grouping (new portfolio under Exploring), audit + event rows read back
+under RLS. Fixtures removed. One tooling note: after a mid-session viewport resize the
+browser pane's physical clicks stopped registering; verification continued with
+DOM-dispatched clicks — same app code path. The Base UI `nativeButton` warning on the
+link-styled create button was fixed in the same pass.
