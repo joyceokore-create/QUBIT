@@ -26,7 +26,9 @@ import { RequestToJoinButton } from "@/components/workspace/request-to-join-butt
 import { statusMeta } from "@/lib/project-view";
 import type { ProjectPanelJson } from "@/components/panels/project-panel-content";
 
-const TABS = ["Overview", "Board", "Documents", "Deadlines", "Team", "Integrations"] as const;
+const TABS = ["Overview", "Board", "Documents", "Delivery", "Deadlines", "Team", "Integrations"] as const;
+// M-P2b (docs/25 §3): "Delivery" is the tab KEY; it renders as Checkpoints & Rollout.
+const TAB_LABELS: Record<string, string> = { Delivery: "Checkpoints & Rollout" };
 type Tab = (typeof TABS)[number];
 
 // Standard delivery gates — the v3 stage-gate rail is derived from live task progress + the
@@ -179,7 +181,7 @@ export function ProjectWorkspace({
                 color: active ? "var(--brand)" : "var(--ink3)",
               }}
             >
-              {t}
+              {TAB_LABELS[t] ?? t}
             </button>
           );
         })}
@@ -206,10 +208,6 @@ export function ProjectWorkspace({
                   budget={data.budget}
                   canGovern={data.canGovern ?? false}
                 />
-              </div>
-              {/* docs/18 §2 — the gate matrix; % underneath is derived from these states. */}
-              <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
-                <CheckpointMatrix projectId={data.id} />
               </div>
               {/* docs/16 §6 — captured as the project runs; the closure gate reads these. */}
               <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
@@ -254,6 +252,46 @@ export function ProjectWorkspace({
             <DocumentsSection projectId={data.id} canEdit={canEdit} viewerId={viewerId ?? ""} />
             {/* docs/16 §6 — requirements live beside the documents they were read from. */}
             <RequirementsPanel projectId={data.id} />
+          </div>
+        )}
+        {tab === "Delivery" && (
+          <div className="flex flex-col gap-3.5">
+            {/* M-P2b (docs/25 §3 tab 4): the PM-editable delivery surface — gates first,
+                then where it is live. Relocated from Overview, not rewritten. */}
+            <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
+              <CheckpointMatrix projectId={data.id} />
+            </div>
+            <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
+              <div className="mb-2.5 flex items-center justify-between">
+                <span className="text-[13px] font-semibold text-foreground">Market rollout</span>
+                <span className="text-[10.5px] text-ink-3">weekly check-ins live on each market page</span>
+              </div>
+              {(data.marketTracks ?? []).length === 0 ? (
+                <p className="text-xs text-ink-3">
+                  No market tracks — this project ships to no subsidiaries yet. Markets are picked in the
+                  project wizard or inherited from a Rollout portfolio.
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                  {(data.marketTracks ?? []).map((m) => (
+                    <a
+                      key={m.orgUnitId}
+                      href={`/projects/${data.id}/markets/${m.orgUnitId}`}
+                      className="flex flex-col gap-1 rounded-[10px] border border-[var(--w07)] p-2.5 transition-colors hover:border-[var(--brand)]"
+                    >
+                      <span className="text-[12px] font-semibold text-foreground">
+                        {m.flag ? `${m.flag} ` : ""}
+                        {m.code}
+                      </span>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-[var(--wash2)]">
+                        <div className="h-full rounded-full" style={{ width: `${m.progress}%`, background: "var(--brand)" }} />
+                      </div>
+                      <span className="text-[10.5px] text-ink-3">{m.progress}% · {m.status}</span>
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
         {tab === "Deadlines" && (

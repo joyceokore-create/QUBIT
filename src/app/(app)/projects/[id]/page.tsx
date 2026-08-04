@@ -46,6 +46,14 @@ export default async function ProjectWorkspacePage({
     // and the rows the server returns can never disagree.
     viewerBoardCategory(ctx, id),
   ]);
+  // M-P2b — the Delivery tab's market tracks (docs/25 §3 tab 4).
+  const marketTracks = await withTenant(ctx, (tx) =>
+    tx.projectOrgStatus.findMany({
+      where: { projectId: id, orgUnit: { kind: "Market" } },
+      select: { orgUnitId: true, progress: true, status: true, orgUnit: { select: { code: true, flag: true } } },
+      orderBy: { orgUnit: { code: "asc" } },
+    }),
+  );
   if (!p) notFound();
 
   const data: ProjectPanelJson = {
@@ -58,6 +66,13 @@ export default async function ProjectWorkspacePage({
     canGovern: can(ctx, "project:stage") || (await canWriteProject(ctx, id)), // docs/18 §7
     portfolios,
     viewerCategory,
+    marketTracks: marketTracks.map((m) => ({
+      orgUnitId: m.orgUnitId,
+      code: m.orgUnit.code,
+      flag: m.orgUnit.flag,
+      progress: m.progress,
+      status: m.status,
+    })),
     isMember: membership.isMember, // viewer leads or is allocated → hides "Request to join"
   };
 

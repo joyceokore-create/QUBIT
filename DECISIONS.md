@@ -2051,3 +2051,25 @@ First docs/33 milestone — the P2 behavioural break, shipped first on purpose.
 routes-refuse + engine-alive both ways). Live on HomeQuest as Joyce: three lanes, no
 add/drag/move affordances anywhere, "🔗 Not connected to YouTrack" badge, read-only
 pill, blocker flag intact; e2e smoke untouched (it checks lenses + export only).
+
+## DM1.61 — The Checkpoints & Rollout tab: relocation, not rewrite (M-P2b)
+
+Second docs/33 milestone. No engine changes; 788/788 stays green with every existing
+checkpoint/market suite untouched — the proof it was a move.
+
+- New workspace tab **"Checkpoints & Rollout"** (key `Delivery`, docs/25 §3 tab 4)
+  between Documents and Deadlines: the PM-editable checkpoint matrix (gates, derived %,
+  M8-A rule overrides — all relocated intact from the Overview aside) plus a **market
+  strip**: one card per project × Market track (flag, derived %, status) linking to the
+  M-D-B drill-down page where the weekly market check-in lives.
+- Overview slims accordingly — governance, latest check-in, lessons, decisions,
+  activity, definition facts stay; the gate matrix leaves. Old deep links keep working
+  (checkpoint links always pointed at the default tab; `?tab=Deadlines` et al. are
+  untouched).
+- `ProjectPanelJson.marketTracks` is the only data addition: a four-field select over
+  `ProjectOrgStatus` × Market org units.
+
+**Verified**: lint/typecheck/build green, 788/788. Live: the tab renders matrix + strip
+(HomeQuest: 🇰🇪 75% OnTrack · 🇷🇼 13% Planning · 🇹🇿 50% OnTrack · 🇺🇬 38% AtRisk, each
+linking to its market page); a track-less project shows the honest empty line; Overview
+no longer carries the matrix but keeps governance/budget.
