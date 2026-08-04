@@ -40,6 +40,8 @@ export interface MemberReportSection {
   lines: string[];
   /** The member's own additions for this project ("add more details", §5.1.2). */
   note: string | null;
+  /** M-P3a (docs/25 §5.1) — a question or concern routed to the PM with the report. */
+  query: string | null;
 }
 
 export interface MemberReportDraft {
@@ -48,7 +50,7 @@ export interface MemberReportDraft {
 
 /** Human summary lines for one project section — pure, so the wording is unit-testable. */
 export function buildSectionLines(
-  s: Omit<MemberReportSection, "lines" | "note" | "projectId" | "projectCode" | "projectName">,
+  s: Omit<MemberReportSection, "lines" | "note" | "query" | "projectId" | "projectCode" | "projectName">,
 ): string[] {
   const lines: string[] = [];
   const n = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
@@ -138,6 +140,7 @@ export async function computeMemberDraft(
       ...facts,
       lines: buildSectionLines(facts),
       note: null,
+      query: null,
     });
   }
   return { sections };
@@ -209,6 +212,8 @@ export const SaveMemberReportInput = z.object({
   notes: z.record(z.string(), z.string().trim().max(1000).nullable()).optional(),
   /** Edited summary lines, keyed by projectId — the member may rewrite the machine's words. */
   lines: z.record(z.string(), z.array(z.string().trim().max(300)).max(20)).optional(),
+  /** M-P3a — queries & concerns to the PM, keyed by projectId. */
+  queries: z.record(z.string(), z.string().trim().max(500).nullable()).optional(),
 });
 export type SaveMemberReportInputT = z.infer<typeof SaveMemberReportInput>;
 
@@ -235,6 +240,7 @@ export async function saveMyReport(
     const sections = base.sections.map((s) => ({
       ...s,
       note: input.notes?.[s.projectId] !== undefined ? (input.notes[s.projectId] ?? null) : s.note,
+      query: input.queries?.[s.projectId] !== undefined ? (input.queries[s.projectId] ?? null) : (s.query ?? null),
       lines: input.lines?.[s.projectId] ?? s.lines,
     }));
     const data = {

@@ -17,7 +17,7 @@ import { AskQAbout } from "@/components/q/ask-q-about";
 import { ActivityCard } from "@/components/conversation/activity-card";
 import { CommentsSection } from "@/components/conversation/comments-section";
 import { DecisionsCard } from "@/components/conversation/decisions-card";
-import { CheckInCard } from "@/components/workspace/checkin-card";
+import { WorkspaceReports } from "@/components/workspace/workspace-reports";
 import { GovernanceEditor } from "@/components/workspace/governance-editor";
 import { CheckpointMatrix } from "@/components/workspace/checkpoint-matrix";
 import { ProjectDependenciesCard } from "@/components/workspace/project-dependencies-card";
@@ -27,7 +27,7 @@ import { RequestToJoinButton } from "@/components/workspace/request-to-join-butt
 import { statusMeta } from "@/lib/project-view";
 import type { ProjectPanelJson } from "@/components/panels/project-panel-content";
 
-const TABS = ["Overview", "Board", "Documents", "Delivery", "Deadlines", "Team", "Integrations"] as const;
+const TABS = ["Overview", "Board", "Documents", "Delivery", "Reports", "Team", "Integrations"] as const;
 // M-P2b (docs/25 §3): "Delivery" is the tab KEY; it renders as Checkpoints & Rollout.
 const TAB_LABELS: Record<string, string> = { Delivery: "Checkpoints & Rollout" };
 type Tab = (typeof TABS)[number];
@@ -82,9 +82,11 @@ export function ProjectWorkspace({
   initialLens?: "all" | "dev" | "qa" | "impl" | null;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>(() =>
-    TABS.includes(initialTab as Tab) ? (initialTab as Tab) : focusTaskId ? "Board" : "Overview",
-  );
+  const [tab, setTab] = useState<Tab>(() => {
+    // M-P3a: old ?tab=Deadlines links land on Overview, where milestones now live.
+    const aliased = initialTab === "Deadlines" ? "Overview" : initialTab;
+    return TABS.includes(aliased as Tab) ? (aliased as Tab) : focusTaskId ? "Board" : "Overview";
+  });
   const canEdit = data.canEdit;
   const canContribute = data.canContribute; // tasks + blockers: any project member
   const eyebrow = [data.portfolioName, data.programmeName].filter(Boolean).join(" · ") || "Standalone";
@@ -192,7 +194,14 @@ export function ProjectWorkspace({
         {tab === "Overview" && (
           <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-[1fr_360px]">
             <div className="flex flex-col gap-3.5">
-              <CheckInCard projectId={data.id} />
+              {/* M-P3a (docs/25 §3.1) — milestones + RAID live ON Overview; the weekly
+                  check-in moved to the Reports tab where the chain is authored. */}
+              <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
+                <ProjectMilestonesSection projectId={data.id} canEdit={canEdit} />
+              </div>
+              <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
+                <ProjectBlockersSection projectId={data.id} canEdit={canContribute} />
+              </div>
               <StatusUpdatesSection projectId={data.id} canEdit={canEdit} />
               <CommentsSection entityType="project" entityId={data.id} viewerId={viewerId ?? ""} canPromote={canEdit} />
             </div>
@@ -303,15 +312,8 @@ export function ProjectWorkspace({
             </div>
           </div>
         )}
-        {tab === "Deadlines" && (
-          <div className="flex flex-col gap-3.5">
-            <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
-              <ProjectMilestonesSection projectId={data.id} canEdit={canEdit} />
-            </div>
-            <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
-              <ProjectBlockersSection projectId={data.id} canEdit={canContribute} />
-            </div>
-          </div>
+        {tab === "Reports" && (
+          <WorkspaceReports projectId={data.id} isPmView={data.canGovern ?? false} />
         )}
         {tab === "Team" && (
           <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>

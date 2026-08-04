@@ -2096,3 +2096,34 @@ Third docs/33 milestone — P2 "Deliver" is complete.
 audit + notification, both-direction listing, map liveness rule, RLS). Live as Joyce:
 declared "HomeQuest waits on RBS-05 — UAT waits on their API" through the card; the
 blocking panel appeared on the Market Rollout portfolio. Fixture removed.
+
+## DM1.63 — Reports move into the workspace; the chain gets its send button (M-P3a)
+
+First docs/34 milestone — authoring belongs where the work lives (docs/25 §6).
+
+- **The workspace Reports tab** (role-composed): a MEMBER sees this project's slice of
+  their weekly update — auto-drafted facts, their notes, and the new **"Queries &
+  concerns to the PM"** field (rides the `MemberReport.draft` JSON; partial saves never
+  wipe it — test-pinned) — and submits from here (labelled honestly: submitting sends
+  the WHOLE week, all projects). A PM sees the week's check-in (the M2 card relocated
+  from Overview) plus **"Send to the Head of PMs"**; everyone reads the report history
+  (week · RAG · narrative · sent-to-Head pill).
+- **`CheckIn.submittedToHeadAt`** — one nullable column, and one rule that matters:
+  **re-confirming RESETS it.** A changed report must be re-sent; the Head never reviews
+  a silently-substituted narrative. Sending requires Confirmed (409 otherwise), audits,
+  and notifies the Heads through the outbox. The member's query surfaces in the PM's
+  ack view with the report.
+- **Overview in the wireframe shape** (docs/25 §3.1): milestones and RAID (blockers)
+  fold INTO Overview; the **Deadlines tab retires** (old `?tab=Deadlines` links alias to
+  Overview). Tab set: Overview · Board · Documents · Checkpoints & Rollout · **Reports**
+  · Team · Integrations — one more than the wireframe's six because Integrations is
+  where connect ceremonies live (deliberate, noted).
+
+**Verified**: lint/typecheck/build green, 795/795 (2 new: query round-trip + partial-save
+preservation; confirm→send→re-confirm-resets through the engine). Live as Joyce on
+HomeQuest: Reports tab with the check-in card, confirm → "Sent to the Head of PMs ·
+4 Aug" stamp, history row "2026 W32 … sent to Head"; Deadlines gone, milestones+RAID on
+Overview. (The confirmed W32 check-in remains — it is a REAL weekly check-in on the dev
+seed, not removable fixture residue.) One ops note: a stale dev server from an earlier
+session held port 3000 with a pre-migration Prisma client and had to be killed — the
+recurring stale-client lesson, now cross-session.

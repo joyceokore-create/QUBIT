@@ -20,6 +20,7 @@ interface CheckInJson {
   overrideExpiresAt: string | null;
   confirmedByName: string | null;
   confirmedAt: string | null;
+  submittedToHeadAt: string | null;
   canConfirm: boolean;
 }
 
@@ -163,6 +164,29 @@ export function CheckInCard({ projectId }: { projectId: string }) {
         <p className="text-[11px] text-[var(--ink4)]">
           Awaiting the lead&apos;s confirmation — the Friday report shows the computed status until then.
         </p>
+      )}
+      {/* M-P3a (docs/34): the chain's next rung — a confirmed report goes UP, explicitly. */}
+      {ci.status === "Confirmed" && ci.canConfirm && (
+        <div className="mt-1 flex items-center gap-2">
+          {ci.submittedToHeadAt ? (
+            <span className="rounded-full px-2.5 py-1 text-[10.5px] font-semibold" style={{ color: "var(--ok)", background: "color-mix(in oklab, var(--ok) 10%, transparent)" }}>
+              Sent to the Head of PMs · {new Date(ci.submittedToHeadAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={async () => {
+                const res = await fetch(`/api/projects/${projectId}/checkin/submit`, { method: "POST" });
+                if (res.ok) void load();
+                else setError((await res.json().catch(() => null))?.error?.message ?? "Could not send.");
+              }}
+              className="rounded-[8px] border border-[var(--brand)] px-3 py-1.5 text-[11.5px] font-bold text-[var(--brand)]"
+            >
+              Send to the Head of PMs →
+            </button>
+          )}
+          <span className="text-[10px] text-[var(--ink4)]">re-confirming requires a re-send</span>
+        </div>
       )}
     </div>
   );

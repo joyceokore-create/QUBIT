@@ -120,6 +120,12 @@ export function TeamReports() {
                   ))}
                 </ul>
                 {s.note && <p className="mt-1 text-[11.5px] italic text-[var(--ink3)]">“{s.note}”</p>}
+                {/* M-P3a (docs/25 §5.1) — the member's question travels WITH the report. */}
+                {s.query && (
+                  <p className="mt-1.5 rounded-[8px] px-2.5 py-1.5 text-[11.5px]" style={{ color: "var(--qinfo)", background: "color-mix(in oklab, var(--qinfo) 10%, transparent)" }}>
+                    <span className="font-bold">Query for you:</span> {s.query}
+                  </p>
+                )}
               </div>
             );
           })}

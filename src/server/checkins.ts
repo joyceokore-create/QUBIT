@@ -131,6 +131,8 @@ export interface CheckInView {
   overrideExpiresAt: Date | null;
   confirmedByName: string | null;
   confirmedAt: Date | null;
+  /** M-P3a — when the PM sent this confirmed check-in to the Head; null = not sent. */
+  submittedToHeadAt: Date | null;
 }
 
 /** This week's check-in — the persisted row when one exists, else a computed draft. */
@@ -156,6 +158,7 @@ export async function getCurrentCheckIn(ctx: TenantContext, projectId: string, n
         overrideExpiresAt: row.overrideExpiresAt,
         confirmedByName: row.confirmedBy?.name ?? null,
         confirmedAt: row.confirmedAt,
+        submittedToHeadAt: row.submittedToHeadAt,
       };
     }
     const { computedRag, draft } = await computeCheckInDraft(tx, projectId, now);
@@ -172,6 +175,7 @@ export async function getCurrentCheckIn(ctx: TenantContext, projectId: string, n
       overrideExpiresAt: null,
       confirmedByName: null,
       confirmedAt: null,
+      submittedToHeadAt: null,
     };
   });
 }
@@ -212,6 +216,8 @@ export async function confirmCheckIn(
       overrideExpiresAt: override ? new Date(now.getTime() + OVERRIDE_TTL_MS) : null,
       confirmedById: ctx.userId,
       confirmedAt: now,
+      // M-P3a: a re-confirmed (changed) report must be RE-sent to the Head.
+      submittedToHeadAt: null,
     };
     const row = await tx.checkIn.upsert({
       where: { tenantId_projectId_isoWeek: { tenantId: ctx.tenantId, projectId, isoWeek } },
@@ -244,6 +250,79 @@ export async function confirmCheckIn(
       overrideExpiresAt: row.overrideExpiresAt,
       confirmedByName: row.confirmedBy?.name ?? null,
       confirmedAt: row.confirmedAt,
+      submittedToHeadAt: row.submittedToHeadAt,
     };
+  });
+}
+
+/** M-P3a (docs/34) — the PM sends this week's CONFIRMED check-in up the chain. The Head
+ * roll-up (M-P3b) builds from submitted reports; re-confirming resets the stamp. */
+export async function submitCheckInToHead(ctx: TenantContext, projectId: string, now = new Date()) {
+  return withTenant(ctx, async (tx) => {
+    const isoWeek = isoWeekId(now);
+    const row = await tx.checkIn.findUnique({
+      where: { tenantId_projectId_isoWeek: { tenantId: ctx.tenantId, projectId, isoWeek } },
+      include: { project: { select: { code: true, name: true } } },
+    });
+    if (!row || row.status !== "Confirmed") {
+      throw new Error("Confirm the check-in first — the Head reviews what you signed.");
+    }
+    const updated = await tx.checkIn.update({
+      where: { id: row.id },
+      data: { submittedToHeadAt: now },
+    });
+    await audit(tx, ctx, {
+      action: "update",
+      entityType: "check_in",
+      entityId: row.id,
+      after: { isoWeek, submittedToHead: true },
+    });
+    const heads = await tx.roleAssignment.findMany({
+      where: { role: "HeadOfProjects" },
+      select: { userId: true },
+    });
+    await emitDomainEvent(tx, ctx, {
+      type: "checkin.submitted_to_head",
+      entityType: "check_in",
+      entityId: row.id,
+      payload: { projectId, isoWeek },
+      notify: [...new Set(heads.map((h) => h.userId))]
+        .filter((id) => id !== ctx.userId)
+        .map((userId) => ({
+          userId,
+          kind: "checkin.submitted_to_head",
+          message: `${row.project.code} sent its week ${isoWeek.split("-W")[1]} report for your roll-up.`,
+          link: "/dashboard?persona=executive",
+        })),
+    });
+    return updated;
+  });
+}
+
+export interface PastReportRow {
+  id: string;
+  isoWeek: string;
+  rag: Rag;
+  narrative: string | null;
+  confirmedAt: Date | null;
+  submittedToHeadAt: Date | null;
+}
+
+/** The workspace Reports tab's history: this project's confirmed check-ins, newest first. */
+export async function listProjectReports(ctx: TenantContext, projectId: string, take = 12): Promise<PastReportRow[]> {
+  return withTenant(ctx, async (tx) => {
+    const rows = await tx.checkIn.findMany({
+      where: { projectId, status: "Confirmed" },
+      orderBy: { isoWeek: "desc" },
+      take,
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      isoWeek: r.isoWeek,
+      rag: effectiveRag(r, new Date()),
+      narrative: r.narrative,
+      confirmedAt: r.confirmedAt,
+      submittedToHeadAt: r.submittedToHeadAt,
+    }));
   });
 }

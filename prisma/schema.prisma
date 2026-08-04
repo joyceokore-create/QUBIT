@@ -1934,6 +1934,9 @@ model CheckIn {
   overrideReason    String?   @map("override_reason")
   overrideExpiresAt DateTime? @map("override_expires_at")
   confirmedById     String?   @map("confirmed_by_id")
+  // M-P3a (docs/34) — when the PM sent this confirmed check-in to the Head of PMs.
+  // Reset on re-confirm: a changed report must be re-sent, never silently swapped.
+  submittedToHeadAt DateTime? @map("submitted_to_head_at")
   confirmedBy       User?     @relation("CheckInConfirmer", fields: [confirmedById], references: [id])
   confirmedAt       DateTime? @map("confirmed_at")
   createdAt         DateTime  @default(now()) @map("created_at")
