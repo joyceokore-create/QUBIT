@@ -203,6 +203,7 @@ export function ProjectWorkspace({
                   statusNote={data.statusNote}
                   portfolioId={data.portfolioId}
                   portfolios={data.portfolios}
+                  budget={data.budget}
                   canGovern={data.canGovern ?? false}
                 />
               </div>

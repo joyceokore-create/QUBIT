@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight, CircleHelp, Minus } from "lucide-react";
 import { ArrowRight } from "lucide-react";
-import type { DecisionQueueRow, ExecutiveDashboard } from "@/server/dashboard-exec";
+import type { DecisionQueueRow, ExecutiveDashboard, HeadQueueRow } from "@/server/dashboard-exec";
+import { groupSectionsByCategory } from "@/server/pipeline";
+import { statusBarTok } from "@/lib/project-view";
 import { Sparkline } from "@/components/dashboard/sparkline";
 import { NeedsAttentionList } from "@/components/dashboard/needs-attention";
 import { PortfolioSections } from "@/components/dashboard/portfolio-sections";
@@ -105,18 +107,102 @@ function DecisionQueue({ d }: { d: ExecutiveDashboard }) {
   );
 }
 
+/** docs/32 M-W1b — the notes' (ii): cards on the estate levels that LINK THROUGH. */
+function CountsRow({ d }: { d: ExecutiveDashboard }) {
+  const cards = [
+    { label: "Portfolios", n: d.counts.portfolios, href: "/portfolios" },
+    { label: "Programmes", n: d.counts.programmes, href: "/programmes" },
+    { label: "Active projects", n: d.counts.activeProjects, href: "/projects" },
+  ];
+  return (
+    <section className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
+      {cards.map((c) => (
+        <Link key={c.href} href={c.href} className={`${CARD} group flex items-center justify-between p-4`} style={{ background: "var(--cardbg)" }}>
+          <div>
+            <div className="font-mono text-[9.5px] font-bold uppercase tracking-[1.2px] text-[var(--ink4)]">{c.label}</div>
+            <div className="text-[24px] font-bold tracking-[-1px] text-[var(--qink)]">{c.n}</div>
+          </div>
+          <ArrowRight className="size-4 text-[var(--ink4)] transition-transform group-hover:translate-x-0.5" />
+        </Link>
+      ))}
+    </section>
+  );
+}
+
+/** docs/32 M-W1b — Head of PMs only: this week's check-in state per active project.
+ * Review-only; the approve step arrives with the Head roll-up (PortfolioReport, P3). */
+function HeadQueue({ rows }: { rows: HeadQueueRow[] }) {
+  return (
+    <Panel title="PM check-ins this week" sub={`${rows.filter((r) => r.checkIn !== "Confirmed").length} NOT CONFIRMED`}>
+      <div className="flex flex-col">
+        {rows.length === 0 && <Empty>No active projects.</Empty>}
+        {rows.map((r) => {
+          const dot = `var(${statusBarTok(r.status)})`;
+          return (
+            <Link
+              key={r.projectId}
+              href={`/projects/${r.projectId}`}
+              className="flex items-center gap-3 border-b border-[var(--w06)] py-2 text-[12.5px] last:border-0 hover:bg-[var(--wash2)]"
+            >
+              <span className="size-2 flex-none rounded-full" style={{ background: dot }} />
+              <span className="min-w-0 flex-1 truncate font-semibold text-[var(--qink)]">
+                {r.code} · {r.name}
+              </span>
+              <span className="hidden text-[11px] text-[var(--ink4)] sm:block">{r.pmName ?? "no PM"}</span>
+              <span
+                className="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                style={
+                  r.checkIn === "Confirmed"
+                    ? { background: "color-mix(in oklab, var(--ok) 12%, transparent)", color: "var(--ok)" }
+                    : r.checkIn === "Draft"
+                      ? { background: "color-mix(in oklab, var(--warn) 12%, transparent)", color: "var(--warn)" }
+                      : { background: "var(--wash2)", color: "var(--ink4)" }
+                }
+              >
+                {r.checkIn === "None" ? "No check-in" : r.checkIn}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <a href="/api/export?kind=projects" className="rounded-[8px] border border-[var(--w10)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--ink2)]">
+          ⤓ Export projects (CSV)
+        </a>
+        <a href="/api/export?kind=allocations" className="rounded-[8px] border border-[var(--w10)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--ink2)]">
+          ⤓ Export allocations (CSV)
+        </a>
+        <span className="text-[10.5px] text-[var(--ink4)]">Review &amp; approve arrives with the Head roll-up (P3).</span>
+      </div>
+    </Panel>
+  );
+}
+
 export function ExecutivePreset({ d, firstName }: { d: ExecutiveDashboard; firstName: string }) {
+  const grouped = groupSectionsByCategory(d.sections);
   return (
     <>
       <section className="grid grid-cols-1 gap-3.5 lg:grid-cols-[minmax(0,1fr)_290px]">
         <ExecHero d={d} firstName={firstName} />
         <HealthTrendCard d={d} />
       </section>
+      <CountsRow d={d} />
+      {d.headQueue && <HeadQueue rows={d.headQueue} />}
       <DecisionQueue d={d} />
-      {/* Amended docs/18 §6: portfolio-grouped sections ARE the projects view — worst
-          health first, Unassigned last; milestones/risks/velocity are per-row chips;
-          there is no global KPI strip and no separate heatmap. */}
-      <PortfolioSections data={d.sections} matrices={d.rolloutMatrices} />
+      {/* Amended docs/18 §6 + docs/32 M-W1b: portfolio-grouped sections ARE the projects
+          view, now under the business-pipeline headers (Approved → Exploring → Shelved),
+          worst health first within a group; Unassigned last in Approved. */}
+      {grouped.map((g) => (
+        <section key={g.category}>
+          <h2 className="mb-2 flex items-center gap-2 text-[13px] font-bold text-[var(--qink)]">
+            {g.category}
+            <span className="rounded-full border border-[var(--w08)] px-2 py-0.5 text-[10px] font-semibold text-[var(--ink4)]">
+              {g.data.sections.length}
+            </span>
+          </h2>
+          <PortfolioSections data={g.data} matrices={d.rolloutMatrices} />
+        </section>
+      ))}
       <ChangedSection delta={d.delta} />
     </>
   );

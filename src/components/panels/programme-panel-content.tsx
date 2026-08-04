@@ -41,7 +41,7 @@ export function ProgrammePanelContent({ data, onProjectClick }: ProgrammePanelCo
         </SheetTitle>
         <p className="mt-0.5 text-[11px] text-ink-3">
           {data.description ? `${data.description} · ` : ""}
-          Budget: {data.budget ?? "—"} · {data.projects.length} project
+          Budget: {data.budget ?? "typed in Phase C"} · {data.projects.length} project
           {data.projects.length === 1 ? "" : "s"}
         </p>
       </SheetHeader>
@@ -55,7 +55,7 @@ export function ProgrammePanelContent({ data, onProjectClick }: ProgrammePanelCo
           />
           <StatTile label="Status" value={<StatusPill status={data.status} />} />
           <StatTile label="Projects" value={data.projects.length} />
-          <StatTile label="Budget" value={data.budget ?? "—"} valueClassName="text-[15px]" />
+          <StatTile label="Budget" value={data.budget ?? "typed in Phase C"} valueClassName={data.budget ? "text-[15px]" : "text-[12px] text-[var(--ink4)]"} />
         </div>
 
         <div>

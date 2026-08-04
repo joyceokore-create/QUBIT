@@ -57,6 +57,20 @@ export interface ExecutiveDashboard {
   delta: DeltaFeed;
   /** code+status of every project — the health-parity contract with Q. */
   projects: { id: string; code: string; name: string; status: string }[];
+  /** docs/32 M-W1b — the notes' (ii) link-through cards: counts by estate level. */
+  counts: { portfolios: number; programmes: number; activeProjects: number };
+  /** Head of PMs only (null otherwise): this week's per-project check-in state —
+   * review-only; the approve step arrives with PortfolioReport (P3). */
+  headQueue: HeadQueueRow[] | null;
+}
+
+export interface HeadQueueRow {
+  projectId: string;
+  code: string;
+  name: string;
+  pmName: string | null;
+  status: string; // project status — RAG derives via the shared health engine
+  checkIn: "Confirmed" | "Draft" | "None";
 }
 
 const day = 86_400_000;
@@ -70,7 +84,7 @@ export async function getExecutiveDashboard(ctx: TenantContext): Promise<Executi
     listMyNudges(ctx, now),
     getDeltaFeed(ctx),
     withTenant(ctx, async (tx) => {
-      const [projects, snapshots, escalations, unconfirmed, draftGroups, overdueTasks] = await Promise.all([
+      const [projects, snapshots, escalations, unconfirmed, draftGroups, overdueTasks, portfolioCount, programmeCount, headProjects, weekCheckIns] = await Promise.all([
         tx.project.findMany({
           select: { id: true, code: true, name: true, status: true },
           orderBy: { name: "asc" },
@@ -94,8 +108,17 @@ export async function getExecutiveDashboard(ctx: TenantContext): Promise<Executi
         tx.projectTask.count({
           where: { approvalStatus: { not: "Draft" }, status: { not: "Completed" }, dueDate: { lt: now } },
         }),
+        tx.portfolio.count(),
+        tx.programme.count(),
+        // Head queue rows: active projects + their PM (docs/32 M-W1b).
+        tx.project.findMany({
+          where: { status: { notIn: ["Completed", "Cancelled"] } },
+          select: { id: true, code: true, name: true, status: true, lead: { select: { name: true } } },
+          orderBy: { name: "asc" },
+        }),
+        tx.checkIn.findMany({ where: { isoWeek }, select: { projectId: true, status: true } }),
       ]);
-      return { projects, snapshots, escalations, unconfirmed, draftGroups, overdueTasks };
+      return { projects, snapshots, escalations, unconfirmed, draftGroups, overdueTasks, portfolioCount, programmeCount, headProjects, weekCheckIns };
     }),
   ]);
 
@@ -164,7 +187,36 @@ export async function getExecutiveDashboard(ctx: TenantContext): Promise<Executi
     rolloutMatrices,
     delta,
     projects: live.projects.map(({ id, code, name, status }) => ({ id, code, name, status })),
+    counts: {
+      portfolios: live.portfolioCount,
+      programmes: live.programmeCount,
+      activeProjects: live.headProjects.length,
+    },
+    headQueue: buildHeadQueue(ctx, live.headProjects, live.weekCheckIns),
   };
+}
+
+/** docs/32 M-W1b — visible to the Head of PMs (and SuperAdmin, who sees everything);
+ * a plain Executive gets null and never renders the panel. */
+function buildHeadQueue(
+  ctx: TenantContext,
+  projects: { id: string; code: string; name: string; status: string; lead: { name: string } | null }[],
+  checkIns: { projectId: string; status: string }[],
+): HeadQueueRow[] | null {
+  const isHead = ctx.roles.some((r) => r === "HeadOfProjects" || r === "PlatformSuperAdmin");
+  if (!isHead) return null;
+  const checkInByProject = new Map(checkIns.map((c) => [c.projectId, c.status]));
+  return projects.map((p) => {
+    const ci = checkInByProject.get(p.id);
+    return {
+      projectId: p.id,
+      code: p.code,
+      name: p.name,
+      pmName: p.lead?.name ?? null,
+      status: p.status,
+      checkIn: ci === "Confirmed" ? "Confirmed" : ci ? "Draft" : "None",
+    };
+  });
 }
 
 /** Re-export for the parity test: the exec preset must classify like everything else. */

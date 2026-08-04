@@ -22,6 +22,7 @@ export function GovernanceEditor({
   statusNote,
   portfolioId,
   portfolios = [],
+  budget = null,
   canGovern,
 }: {
   projectId: string;
@@ -30,6 +31,8 @@ export function GovernanceEditor({
   statusNote: string | null;
   portfolioId?: string | null;
   portfolios?: { id: string; name: string }[];
+  /** docs/32 §0.2 — shown as the honest "typed in Phase C" placeholder when null. */
+  budget?: string | null;
   canGovern: boolean;
 }) {
   const router = useRouter();
@@ -64,6 +67,7 @@ export function GovernanceEditor({
         <Chip label="Stage" value={pipelineStage} tok={STAGE_TOKEN[pipelineStage] ?? "--ink4"} />
         <Chip label="Priority" value={priority} tok="--ink3" />
         {portfolioName && <Chip label="Portfolio" value={portfolioName} tok="--ink3" />}
+        <Chip label="Budget" value={budget ?? "typed in Phase C"} tok={budget ? "--qink" : "--ink4"} />
         {statusNote && <p className="w-full text-[11.5px] italic text-[var(--ink3)]">“{statusNote}”</p>}
       </div>
     );
@@ -126,6 +130,10 @@ export function GovernanceEditor({
             </SelectContent>
           </Select>
         )}
+        {/* docs/32 §0.2 — Budget is honest emptiness until money is typed (Phase C). */}
+        <span className="ml-1 text-[11px] text-ink-3">
+          Budget: <span className={budget ? "font-semibold text-foreground" : "text-ink-4"}>{budget ?? "typed in Phase C"}</span>
+        </span>
       </div>
       {editingNote ? (
         <div className="flex items-center gap-1.5">

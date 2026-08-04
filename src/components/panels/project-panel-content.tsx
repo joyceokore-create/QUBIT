@@ -77,7 +77,7 @@ export function ProjectPanelContent({ data, onUpdated }: ProjectPanelContentProp
         <p className="mt-0.5 text-[11px] text-ink-3">
           {data.portfolioName ? `${data.portfolioName} Portfolio · ` : "Standalone · "}
           {data.programmeName ? `${data.programmeName} · ` : ""}
-          Due: {formatDate(data.dueDate)} · Budget: {data.budget ?? "—"}
+          Due: {formatDate(data.dueDate)} · Budget: {data.budget ?? "typed in Phase C"}
         </p>
       </SheetHeader>
 
@@ -99,7 +99,7 @@ export function ProjectPanelContent({ data, onUpdated }: ProjectPanelContentProp
           />
           <StatTile label="Status" value={<StatusPill status={data.status} />} />
           <StatTile label="Subsidiaries" value={data.subsidiaries.length} />
-          <StatTile label="Budget" value={data.budget ?? "—"} valueClassName="text-[15px]" />
+          <StatTile label="Budget" value={data.budget ?? "typed in Phase C"} valueClassName={data.budget ? "text-[15px]" : "text-[12px] text-[var(--ink4)]"} />
         </div>
 
         {data.team && (

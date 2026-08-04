@@ -59,6 +59,8 @@ export interface PipelineTableData {
 export interface PortfolioSection {
   id: string;
   name: string;
+  /** Business pipeline axis (M-P1a) — the exec dashboard groups by this (docs/32 M-W1b). */
+  category: string;
   viewKind: "Pipeline" | "Rollout";
   /** Worst-of children through the health engine (docs/18 §3.0 roll-up). */
   rag: Rag;
@@ -81,6 +83,31 @@ export interface PortfolioSectionsData {
   mineCount: number;
 }
 
+/** docs/32 M-W1b — the exec view groups sections by the business pipeline axis:
+ * Approved → Exploring → Shelved, keeping the existing worst-health-first order WITHIN
+ * each group (the input is already sorted; this only partitions). Unknown categories
+ * land in Approved rather than vanishing. Pure — unit-tested. */
+export const SECTION_CATEGORY_ORDER = ["Approved", "Exploring", "Shelved"] as const;
+export function groupSectionsByCategory(
+  data: PortfolioSectionsData,
+): { category: string; data: PortfolioSectionsData }[] {
+  return SECTION_CATEGORY_ORDER.map((category) => {
+    const sections = data.sections.filter((s) =>
+      category === "Approved"
+        ? s.category === "Approved" || !SECTION_CATEGORY_ORDER.includes(s.category as never)
+        : s.category === category,
+    );
+    return {
+      category,
+      data: {
+        sections,
+        total: sections.reduce((a, s) => a + s.projectCount, 0),
+        mineCount: data.mineCount,
+      },
+    };
+  }).filter((g) => g.data.sections.length > 0);
+}
+
 
 function groupByStage(rows: (PipelineRow & { stage: PipelineStage })[]): PipelineTableData {
   return {
@@ -100,7 +127,7 @@ export async function getPortfolioSections(ctx: TenantContext, now = new Date())
     const [portfolios, projects, checkIns, riskAgg, milestones, velocityAgg, memberAgg, blockerAgg, weekAgoSnaps] =
       await Promise.all([
         tx.portfolio.findMany({
-          select: { id: true, name: true, viewKind: true, ownerId: true },
+          select: { id: true, name: true, viewKind: true, ownerId: true, category: true },
           orderBy: { name: "asc" },
         }),
         tx.project.findMany({
@@ -210,6 +237,7 @@ export async function getPortfolioSections(ctx: TenantContext, now = new Date())
       return {
         id: portfolio.id,
         name: portfolio.name,
+        category: portfolio.category,
         viewKind: portfolio.viewKind === "Rollout" ? ("Rollout" as const) : ("Pipeline" as const),
         rag: projectRag(current),
         ragDelta: prev === null ? null : (Math.sign(ragRank(current) - ragRank(prev)) as -1 | 0 | 1),

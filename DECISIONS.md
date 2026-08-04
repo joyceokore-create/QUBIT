@@ -1893,3 +1893,28 @@ First docs/32 milestone (dashboard & nav remodel). No schema changes.
 under Market Rollout via the index dialog → appeared grouped under Approved; signed in
 as qa.demo → nav showed exactly the four items while /programmes stayed reachable by
 URL (200). Fixture removed.
+
+## DM1.56 — Exec re-lay: estate cards, category grouping, the Head's queue, honest budget (M-W1b)
+
+Second docs/32 milestone. Read-only — no schema, no new mutations.
+
+- **The notes' (ii) cards row**: Portfolios · Programmes · Active projects, each a
+  link-through to its index. Counts, not KPIs — the DM1.29 KPI-strip stays dead.
+- **Sections group by the business pipeline**: Approved → Exploring → Shelved headers on
+  the exec dashboard, worst health first WITHIN a group (the pure
+  `groupSectionsByCategory` partitions the already-sorted input; the PortfolioSections
+  component is untouched). Unknown categories land in Approved rather than vanishing.
+- **The Head's queue** (docs/25 matrix row 1, composed not forked — DM1.10): holders of
+  HeadOfProjects (and SuperAdmin) get a "PM check-ins this week" panel — per active
+  project: PM, RAG dot via the shared health tokens, Confirmed/Draft/None pill, CSV
+  export shortcuts. The panel SAYS the approve step arrives with the Head roll-up (P3)
+  instead of faking a button. A plain Executive gets `headQueue: null` and never renders
+  it — engine-tested both ways.
+- **Budget is honest everywhere** (docs/32 §0.2): the workspace governance card (edit
+  AND read-only renders) and both slide panels now show "typed in Phase C" when null —
+  an em-dash read as "no budget exists", which is not what's true.
+
+**Verified**: lint/typecheck/build green, 766/766 (4 new). Live as Joyce: exec view
+showed the counts row (2 · 0 · 25) linking through, the Head queue with 25 rows and
+check-in pills, the Approved section header over both portfolios, and the workspace
+governance card reading "Budget: typed in Phase C".
