@@ -1,16 +1,17 @@
 import Link from "next/link";
 import { ArrowRight, ShieldAlert } from "lucide-react";
-import type { PmDashboard } from "@/server/dashboard-pm";
+import type { PmDashboard, PmProjectRow } from "@/server/dashboard-pm";
+import { statusBarTok } from "@/lib/project-view";
 import type { PortfolioSectionsData } from "@/server/pipeline";
 import { FirstLoginChecklist } from "@/components/dashboard/presets/first-login-checklist";
 import { PortfolioSections } from "@/components/dashboard/portfolio-sections";
 import { ScopeToggle } from "@/components/dashboard/scope-toggle";
 import { CARD, Empty, Panel } from "@/components/dashboard/presets/v2-sections";
 
-// PM preset (docs/17 §3, project listing per amended docs/18 §6): the check-in ritual
-// first, then the SAME portfolio-grouped sections every persona sees — scoped to my
-// projects by default, with an ALL toggle that is a filter, never a wall (DM1.20) —
-// then what's stuck on me.
+// PM preset v2 (docs/32 M-W1c — the drawn shape, confirmed 2026-08-04): check-in
+// banner → MY PROJECTS table (RAG · progress · Δ WoW · next milestone · blockers) →
+// action queue + team load → the shared portfolio sections below the fold. The PM's
+// landing question is "what needs me", not "browse the estate".
 
 function Hero({ d, showChecklist }: { d: PmDashboard; showChecklist: boolean }) {
   const { checkins, agedBlockers, draftsPending } = d.hero;
@@ -41,6 +42,77 @@ function Hero({ d, showChecklist }: { d: PmDashboard; showChecklist: boolean }) 
   );
 }
 
+
+function MyProjects({ rows }: { rows: PmProjectRow[] }) {
+  const fmt = (d: Date) => new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  return (
+    <Panel title="My projects" sub={`${rows.length} ACTIVE`}>
+      {rows.length === 0 ? (
+        <Empty>No active projects under you yet — take one on from the portfolio.</Empty>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-[12.5px]">
+            <thead>
+              <tr className="text-left">
+                {["Project", "RAG", "Progress", "Next milestone", "Blockers", ""].map((h) => (
+                  <th key={h} className="px-3 py-1.5 font-mono text-[8.5px] font-bold uppercase tracking-[1px] text-[var(--ink4)]">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-t border-[var(--hair2)]">
+                  <td className="px-3 py-2 font-semibold text-[var(--qink)]">{r.name}</td>
+                  <td className="px-3 py-2"><span className="inline-block size-2 rounded-full" style={{ background: `var(${statusBarTok(r.status)})` }} /></td>
+                  <td className="w-[150px] px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 min-w-[64px] flex-1 overflow-hidden rounded-full bg-[var(--wash2)]">
+                        <div className="h-full rounded-full bg-[var(--ink3)]" style={{ width: `${r.progress}%` }} />
+                      </div>
+                      <span className="font-mono text-[9.5px] tabular-nums text-[var(--ink4)]">
+                        {r.progress}%
+                        {r.deltaPct !== null && r.deltaPct !== 0 && (
+                          <span style={{ color: r.deltaPct > 0 ? "var(--ok)" : "var(--bad)" }}>
+                            {" "}{r.deltaPct > 0 ? "+" : ""}{r.deltaPct} WoW
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-[11.5px] text-[var(--ink3)]">
+                    {r.nextMilestone ? (
+                      <>
+                        {r.nextMilestone.name} · {fmt(r.nextMilestone.dueDate)}
+                        {r.nextMilestone.overdue && <span className="ml-1.5 font-mono text-[8.5px] font-bold uppercase text-[var(--bad)]">slipped</span>}
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    {r.openBlockers > 0 ? (
+                      <span className="rounded-full px-2 py-0.5 font-mono text-[9px] font-bold text-[var(--bad)]" style={{ background: "color-mix(in oklab, var(--bad) 10%, transparent)" }}>
+                        {r.openBlockers} open
+                      </span>
+                    ) : (
+                      <span className="font-mono text-[9px] text-[var(--ink5)]">none</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <Link href={`/projects/${r.id}`} className="inline-flex items-center gap-1 font-mono text-[9.5px] font-bold text-[var(--ink3)] hover:text-[var(--brand)]">
+                      Open <ArrowRight className="size-3" />
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 const QUEUE_KIND: Record<string, { label: string; tok: string }> = {
   join: { label: "JOIN", tok: "--qinfo" },
   drafts: { label: "APPROVAL", tok: "--qinfo" },
@@ -64,9 +136,7 @@ export function PmPreset({
     <>
       <Hero d={d} showChecklist={showChecklist} />
 
-      {/* Scope toggle (DM1.20): default mine, never a wall. */}
-      <ScopeToggle persona="pm" scope={scope} />
-      <PortfolioSections data={sections} scope={scope} />
+      <MyProjects rows={d.myProjects} />
 
       <section className="grid grid-cols-1 gap-3.5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <Panel title="Action queue" sub={`${d.actionQueue.length} STUCK ON YOU`}>
@@ -124,8 +194,21 @@ export function PmPreset({
           ) : (
             <Empty>No members allocated on your projects yet.</Empty>
           )}
+          <div className="flex items-center justify-between gap-2 border-t border-[var(--hair2)] p-[8px_16px]">
+            <span className="font-mono text-[9px] uppercase tracking-[.8px] text-[var(--ink4)]">
+              {d.teamLoad.filter((m) => m.totalPct > 90).length} over 90% · {d.teamLoad.filter((m) => m.onLeaveUntil).length} on leave
+            </span>
+            <Link href="/staffing" className="font-mono text-[9.5px] font-bold text-[var(--ink3)] hover:text-[var(--brand)]">
+              Raise a resource request →
+            </Link>
+          </div>
         </Panel>
       </section>
+
+      {/* The estate view stays reachable BELOW the four blocks (DM1.20: a filter with an
+          ALL toggle, never a wall) — the landing question above is "what needs me". */}
+      <ScopeToggle persona="pm" scope={scope} />
+      <PortfolioSections data={sections} scope={scope} />
     </>
   );
 }

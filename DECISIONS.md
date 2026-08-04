@@ -1918,3 +1918,26 @@ Second docs/32 milestone. Read-only — no schema, no new mutations.
 showed the counts row (2 · 0 · 25) linking through, the Head queue with 25 rows and
 check-in pills, the Approved section header over both portfolios, and the workspace
 governance card reading "Budget: typed in Phase C".
+
+## DM1.57 — PM home in the drawn shape: the Δ table, then everything stuck on me (M-W1c)
+
+Third docs/32 milestone — the dashboard remodel (M-W1a–c) is complete. Read-only.
+
+- **Order is the answer to the PM's landing question** ("what needs me", not "browse the
+  estate"): check-in banner → MY PROJECTS table → action queue + team load → the shared
+  portfolio sections BELOW, still with the DM1.20 mine/ALL toggle. Nothing was removed —
+  re-ordered.
+- **The my-projects table**: RAG dot (shared tokens) · derived progress bar · **Δ WoW**
+  from `ProjectSnapshot` (newest snapshot ≥6 days old, bounded to 21 days; NULL before
+  history exists — never invented) · next milestone (earliest not-Done, with a "slipped"
+  flag) · open-blocker pill · Open →. Worst status first. "My" = lead or PM-hat member —
+  scoping, not visibility.
+- **Team load grew its summary line** ("N over 90% · M on leave") and the "Raise a
+  resource request →" link into /staffing — the docs/26 §4.3 loop closes from the daily
+  surface.
+- The action queue was already right (M18-era) and is untouched.
+
+**Verified**: lint/typecheck/build green, 767/767 (1 new engine test pinning Δ math,
+slipped-milestone flag, blocker count, worst-first order, my-scoping, and Δ=null without
+history). Live as Joyce (PM persona): banner, HomeQuest row (48%, "UAT sign-off — pilot
+branch · 12 Aug", 1 open blocker), team-load summary + staffing link, sections below.

@@ -22,6 +22,18 @@ export interface PmActionRow {
 
 // The project listing itself is the shared pipeline table (docs/18 §6) — fetched via
 // getPipelineTable and rendered with scope="mine" by default.
+export interface PmProjectRow {
+  id: string;
+  code: string;
+  name: string;
+  status: string; // RAG derives via the shared health tokens
+  progress: number;
+  /** Progress WoW vs the newest snapshot ≥6 days old; null before snapshots accrue. */
+  deltaPct: number | null;
+  nextMilestone: { name: string; dueDate: Date; overdue: boolean } | null;
+  openBlockers: number;
+}
+
 export interface PmDashboard {
   hero: {
     /** My active projects' check-ins this week. */
@@ -29,6 +41,9 @@ export interface PmDashboard {
     agedBlockers: number;
     draftsPending: number;
   };
+  /** docs/32 M-W1c — the drawn centrepiece: my projects with RAG · progress · Δ ·
+   * next milestone · blockers, worst first. */
+  myProjects: PmProjectRow[];
   actionQueue: PmActionRow[];
   /** docs/16 §5 — effectivePct is leave-aware; onLeaveUntil drives the badge. */
   teamLoad: { userId: string; name: string; totalPct: number; effectivePct: number; onLeaveUntil: Date | null }[];
@@ -40,14 +55,17 @@ export async function getPmDashboard(ctx: TenantContext, now = new Date()): Prom
   const [workload, live] = await Promise.all([
     listWorkload(ctx),
     withTenant(ctx, async (tx) => {
-      const [projects, checkIns, openBlockers, draftGroups, joinRequests, slipping, myMemberUserIds] =
+      const [projects, checkIns, openBlockers, draftGroups, joinRequests, slipping, myMemberUserIds, milestones, weekAgoSnaps] =
         await Promise.all([
           tx.project.findMany({
             where: { status: { notIn: ["Completed", "Cancelled"] } },
             select: {
               id: true,
+              code: true,
               name: true,
+              status: true,
               leadUserId: true,
+              orgStatuses: { select: { progress: true } },
               members: { where: { role: { in: PM_PROJECT_ROLES } }, select: { userId: true } },
             },
             orderBy: { name: "asc" },
@@ -72,6 +90,19 @@ export async function getPmDashboard(ctx: TenantContext, now = new Date()): Prom
             orderBy: { dueDate: "asc" },
           }),
           tx.projectMember.findMany({ select: { projectId: true, userId: true } }),
+          // Next milestone per project (docs/32 M-W1c) — earliest not-Done, dated.
+          tx.projectMilestone.findMany({
+            where: { status: { not: "Done" }, dueDate: { not: null } },
+            select: { projectId: true, name: true, dueDate: true },
+            orderBy: { dueDate: "asc" },
+          }),
+          // Δ WoW source: newest snapshot at least ~6 days old (same rule as the exec
+          // trend), bounded to 21 days so this never scans history.
+          tx.projectSnapshot.findMany({
+            where: { day: { lte: new Date(now.getTime() - 6 * day), gte: new Date(now.getTime() - 21 * day) } },
+            select: { projectId: true, progress: true, day: true },
+            orderBy: { day: "desc" },
+          }),
         ]);
       // docs/18 §5.1.4 — member reports submitted to me and not yet acknowledged.
       const submittedReports = await tx.memberReport.findMany({
@@ -84,7 +115,7 @@ export async function getPmDashboard(ctx: TenantContext, now = new Date()): Prom
           acks: { select: { projectId: true } },
         },
       });
-      return { projects, checkIns, openBlockers, draftGroups, joinRequests, slipping, myMemberUserIds, submittedReports };
+      return { projects, checkIns, openBlockers, draftGroups, joinRequests, slipping, myMemberUserIds, milestones, weekAgoSnaps, submittedReports };
     }),
   ]);
 
@@ -165,6 +196,43 @@ export async function getPmDashboard(ctx: TenantContext, now = new Date()): Prom
     }));
 
   const myActive = live.projects.filter((p) => mine.has(p.id));
+
+  // ── My projects table (docs/32 M-W1c): worst first, same tokens as everywhere ──
+  const rank: Record<string, number> = { Overdue: 0, AtRisk: 1, Planning: 2, OnTrack: 3 };
+  const nextMilestoneByProject = new Map<string, { name: string; dueDate: Date }>();
+  for (const m of live.milestones) {
+    if (!nextMilestoneByProject.has(m.projectId)) {
+      nextMilestoneByProject.set(m.projectId, { name: m.name, dueDate: m.dueDate! });
+    }
+  }
+  const weekAgoProgress = new Map<string, number>();
+  for (const sSnap of live.weekAgoSnaps) {
+    if (!weekAgoProgress.has(sSnap.projectId)) weekAgoProgress.set(sSnap.projectId, sSnap.progress);
+  }
+  const blockersByProject = new Map<string, number>();
+  for (const b of live.openBlockers) {
+    blockersByProject.set(b.projectId, (blockersByProject.get(b.projectId) ?? 0) + 1);
+  }
+  const myProjects: PmProjectRow[] = myActive
+    .map((p) => {
+      const progress = p.orgStatuses.length
+        ? Math.round(p.orgStatuses.reduce((a, o) => a + o.progress, 0) / p.orgStatuses.length)
+        : 0;
+      const then = weekAgoProgress.get(p.id);
+      const nm = nextMilestoneByProject.get(p.id) ?? null;
+      return {
+        id: p.id,
+        code: p.code,
+        name: p.name,
+        status: p.status,
+        progress,
+        deltaPct: then === undefined ? null : progress - then,
+        nextMilestone: nm ? { ...nm, overdue: nm.dueDate < now } : null,
+        openBlockers: blockersByProject.get(p.id) ?? 0,
+      };
+    })
+    .sort((a, b) => (rank[a.status] ?? 2) - (rank[b.status] ?? 2) || a.name.localeCompare(b.name));
+
   return {
     hero: {
       checkins: {
@@ -174,6 +242,7 @@ export async function getPmDashboard(ctx: TenantContext, now = new Date()): Prom
       agedBlockers: agedBlockers.length,
       draftsPending: myDrafts.reduce((n, g) => n + g._count._all, 0),
     },
+    myProjects,
     actionQueue,
     teamLoad,
     myProjectCount: myActive.length,
