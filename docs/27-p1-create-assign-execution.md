@@ -155,3 +155,29 @@ working; nothing depends on a later milestone.
    half-planned project survives a device switch?
 3. The docs/25 §9 trio (PM dashboard composition, Budget placeholder, slim member nav)
    — needed before docs/28 (dashboards), not before P1.
+
+---
+
+## 5. Reconciliation vs the P1 spec pack (docs/27-p1a … 31-p1e) — 2026-08-04
+
+Joyce's detailed P1 specs (27-p1a portfolio/programme, 28-p1b project wizard, 29-p1c
+assignment, 30-p1d resource requests, 31-p1e org setup) landed alongside this build.
+M-P1a–d (DM1.51–54) deliver P1-A…P1-D with these deliberate divergences:
+
+| Spec said | Shipped | Why |
+|---|---|---|
+| `defaultMarkets String[]` of OrgUnit **codes** | `Json` of org-unit **ids** | ids survive code renames; validated against `kind=Market` either way |
+| reuse `Programme.status` for the category | new `Programme.category` | status carries lifecycle ("Active"); overloading it would break existing status displays |
+| gate portfolio create on `project:create` | new `portfolio:create` → Executive + Head | docs/24 puts the Add button on the **exec's** Portfolio page; Executive holds no `project:create` |
+| extend `createProject` + `POST /api/projects` | separate `createProjectFromWizard` + `/api/projects/wizard` | single-transaction guarantee incl. document + integration, without destabilising the legacy path |
+| server throws `NEEDS_OVERRIDE` until caller re-sends `overrideWarnings` | warnings computed live in the UI; the accepted list rides to the server and lands in the audit blob | same audited-ack outcome, one round-trip; revisit if API-only callers appear |
+| request status `Cancelled` (raiser withdraws) | `Declined` (Head refuses, reason required) | both are real; **cancel-by-raiser is a known gap** (below) |
+
+**Open gaps carried forward** (small, none block the dashboard track):
+1. `PATCH /api/portfolios/[id]` governance edits (27-p1a §3) — creation shipped, update didn't.
+2. Pipeline-stage chips at project create (28-p1b §3) — shipped fixed at Exploring.
+3. Wizard Docs step inline BRD-ingest review (28-p1b §5.5) — extraction exists post-create
+   in the workspace (M8-C); the wizard only attaches.
+4. Cancel-by-raiser on resource requests (30-p1d).
+5. **P1-E org-setup wizard (31-p1e) is UNBUILT** — this doc's §1.7 parked it; the spec
+   pack un-parks it. Queued after the dashboard remodel (docs/32).

@@ -38,6 +38,26 @@ This is the entry point. Read documents in this order.
 
     Execution specs 21–23 are written for Claude Code: read the spec, implement, verify with
     the listed commands, stop for review. Order: 21 → 22 → 23.
+21. **24-workflow-notes-transcription.md** — transcription of the handwritten workflow notes
+    (Exec + PM pages), reconciled with the 2026-08-03 decisions.
+22. **25-delivery-reporting-workflow-spec.md** — the delivery + reporting workflow: read-only
+    YouTrack tasks, one board per project, role×surface matrix, member→PM→Head→Exec chain.
+    Pairs with `wireframes/qubit-workflow-wireframes.html`.
+23. **26-first-principles-redesign.md** — whole-product rethink (four loops, lifecycle spine,
+    IA, onboarding+assignment, wizards, gaps, sequencing P0–P5). The vision doc.
+24. **27–31 — Phase 1 "Create & Assign" execution specs** (for Claude Code; order A→E):
+    - **27-p1a-portfolio-programme-wizards.md** — portfolio/programme create + wizards (category, lens).
+    - **28-p1b-project-wizard.md** — guided project creation wizard.
+    - **29-p1c-assignment-capacity.md** — dated allocations + capacity/leave-aware assignment.
+    - **30-p1d-resource-requests.md** — PM raise → Head fill staffing flow (new model).
+    - **31-p1e-org-setup-wizard.md** — one-time organisation setup wizard.
+    Pairs with `wireframes/qubit-wizards-wireframes.html`.
+    **Build status:** P1-A…P1-D shipped 2026-08-04 (DM1.51–54) via
+    **27-p1-create-assign-execution.md** — its §5 reconciles the shipped build against
+    this pack (divergences + open gaps). P1-E is queued after the dashboard remodel.
+25. **32-dashboard-remodel-execution.md** — dashboards & nav remodel (exec re-lay +
+    category grouping, Head's check-in queue, PM home, programmes index, member slim
+    nav). Executes docs/25 W1 with the §9 decisions locked. Milestones M-W1a–c.
 
 ## Document readiness checklist
 

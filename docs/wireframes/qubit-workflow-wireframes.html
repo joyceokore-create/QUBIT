@@ -126,7 +126,7 @@
     <div class="logo"><span class="dot"></span> QUBIT</div>
     <nav class="nav" id="nav"></nav>
     <div style="margin-top:18px;font-size:10px;color:var(--ink4);padding:0 10px;line-height:1.5">
-      Low-fi wireframe · Riverbank tenant<br>docs/24–25 + docs/26 §4.3 · §5 wizards
+      Low-fi wireframe · Riverbank tenant<br>docs/24–26 + docs/32 dashboard remodel
     </div>
   </aside>
   <div>
@@ -186,7 +186,7 @@ const S = {};
 S.dashboard = ()=>{
   if(state.role==="exec") return `
     <h1>Dashboard</h1><p class="sub">Executive view · everything, read-only</p>
-    ${annot("From your notes: <b>(i) an AI brief of actions needed + urgent look-outs</b>, then <b>(ii) cards on overall portfolios / programmes / projects</b> that link through to their pages, then the <b>(iv) market rollout heat map</b>.")}
+    ${annot("From your notes: <b>(i) an AI brief of actions needed + urgent look-outs</b>, then <b>(ii) cards on overall portfolios / programmes / projects</b> that link through to their pages, then the <b>(iv) market rollout heat map</b>. Sections group <b>Approved → Exploring → Shelved</b>, worst health first within a group (docs/32 M-W1b).")}
     <div class="card" style="border-left:3px solid var(--brand)">
       <div class="lbl">AI brief · generated ${'8:00'} today</div>
       <p style="margin:6px 0 8px">2 decisions need you: <b>ZED ERP</b> stage-gate approval is waiting, and the <b>Swipe Agent Banking</b> UAT sign-off is overdue.</p>
@@ -207,7 +207,7 @@ S.dashboard = ()=>{
 
   if(state.role==="head") return `
     <h1>Dashboard</h1><p class="sub">Head of PMs · delivery governance across all portfolios</p>
-    ${annot("The Head's home is the <b>cross-PM roll-up review queue</b> (docs/19 §6): confirmed PM check-ins roll up here to review + approve before they reach the executive. Plus one-click export.")}
+    ${annot("The Head's home is the <b>cross-PM roll-up review queue</b> (docs/19 §6): confirmed PM check-ins roll up here for review. The <b>approve</b> step lands with PortfolioReport in P3 (docs/32 M-W1b builds the queue read-only first). Plus one-click export.")}
     <div class="grid g4">
       ${[["6","PM check-ins in","ok"],["2","Unconfirmed","warn"],["3","Red projects","bad"],["1","Awaiting my approval","info"]].map(([n,l,t])=>`
       <div class="card"><div class="kpi">${n}</div><div class="lbl">${l}</div><div style="margin-top:6px"><span class="tag ${t}">week 32</span></div></div>`).join("")}
@@ -223,7 +223,7 @@ S.dashboard = ()=>{
 
   if(state.role==="member") return `
     <h1>Dashboard</h1><p class="sub">Dev · QA · Implementor · your work across projects</p>
-    ${annot("Members don't manage projects. Their home nudges them toward <b>this week's updates</b> and shows their tasks (read-only, from YouTrack) and the queries they've raised.")}
+    ${annot("Members don't manage projects. Their home nudges them toward <b>this week's updates</b> and shows their tasks (read-only, from YouTrack) and the queries they've raised. Slim nav <b>confirmed 2026-08-04</b> (docs/32 §0.3): Dashboard · My Board · Projects · Reports only.")}
     <div class="banner">⏰ <b>2 weekly updates due</b> for Mobile Banking and Fikra AI — send or edit your draft before Fri 5pm.<a class="btn sm" onclick="go('memberReport')">Review drafts →</a></div>
     <div class="grid g3">
       <div class="card"><div class="lbl">My open tasks (YouTrack)</div><div class="kpi">7</div><div class="muted" style="font-size:11px">3 in review · 1 blocked</div></div>
@@ -239,7 +239,7 @@ S.dashboard = ()=>{
   // PM
   return `
     <h1>Dashboard</h1><p class="sub">Project Manager · your projects this week</p>
-    ${annot("PM home (the one spot your notes left open) — proposed: <b>check-in status</b>, <b>my projects (RAG + Δ)</b>, an <b>action queue</b>, and <b>team load</b>. Confirm or tweak.")}
+    ${annot("PM home — <b>confirmed 2026-08-04</b> (docs/32 §0.1): <b>check-in status</b>, <b>my projects (RAG + Δ)</b>, an <b>action queue</b>, and <b>team load</b>. Portfolio browsing sits below these four.")}
     <div class="banner">📝 <b>Friday check-in due</b> for 3 projects. Drafts are ready from this week's board activity — confirm each in ~2 min.<a class="btn sm pri" onclick="go('pmReport')">Open check-ins →</a></div>
     <h2>My projects</h2>
     <div class="card" style="padding:0"><table>
@@ -339,7 +339,7 @@ function wsOverview(r){
   <div class="grid g2" style="margin-top:12px">
     <div class="card"><b>Project details</b>
       <div style="margin-top:8px;font-size:12px;color:var(--ink2);line-height:1.9">
-      Portfolio: Swipe Agent Banking<br>Programme: Payments<br>Checkpoint template: Product build (BRD→Go-Live)<br>Markets: KE, TZ, UG<br>Budget: <span class="tag">typed in Phase C</span></div>
+      Portfolio: Swipe Agent Banking<br>Programme: Payments<br>Checkpoint template: Product build (BRD→Go-Live)<br>Markets: KE, TZ, UG<br>Budget: <span class="tag">typed in Phase C — confirmed placeholder (docs/32 §0.2)</span></div>
     </div>
     <div class="card"><b>Latest summary report (from PM)</b> <span class="tag info">week 32</span>
       <p style="font-size:12px;color:var(--ink2);margin:8px 0 0">Computed RAG <b>Red</b>: UAT slipped 6 days; 2 blockers open on payments reconciliation. QA cleared 8 tasks. Next: vendor fix ETA Thu.</p>
