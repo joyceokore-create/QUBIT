@@ -114,6 +114,57 @@ export async function createProgramme(ctx: TenantContext, input: CreateProgramme
   });
 }
 
+export const UpdatePortfolioSchema = z.object({
+  name: z.string().trim().min(2).max(120).optional(),
+  description: z.string().trim().max(500).nullable().optional(),
+  category: z.enum(CATEGORIES).optional(),
+  viewKind: z.enum(VIEW_KINDS).optional(),
+  ownerId: z.string().uuid().nullable().optional(),
+  marketIds: z.array(z.string().uuid()).max(20).optional(),
+});
+export type UpdatePortfolioInput = z.infer<typeof UpdatePortfolioSchema>;
+
+/** docs/27 §5 gap 1 (27-p1a §3) — governance edits on a portfolio, audited with a
+ * before/after diff. Owner eligibility and market validation match createPortfolio. */
+export async function updatePortfolio(ctx: TenantContext, id: string, input: UpdatePortfolioInput) {
+  return withTenant(ctx, async (tx) => {
+    const before = await tx.portfolio.findUnique({ where: { id } });
+    if (!before) throw new PortfolioError("Portfolio not found.", "PORTFOLIO_NOT_FOUND");
+    if (input.ownerId) {
+      const owner = await tx.roleAssignment.findFirst({
+        where: { userId: input.ownerId, role: { in: ["Executive", "HeadOfProjects", "PlatformSuperAdmin"] } },
+        select: { id: true },
+      });
+      if (!owner) throw new PortfolioError("Owner must be a Head or Executive.", "OWNER_INELIGIBLE");
+    }
+    if (input.marketIds?.length) {
+      const found = await tx.orgUnit.count({ where: { id: { in: input.marketIds }, kind: "Market" } });
+      if (found !== input.marketIds.length) {
+        throw new PortfolioError("One or more markets are not valid market org units.", "BAD_MARKET");
+      }
+    }
+    const portfolio = await tx.portfolio.update({
+      where: { id },
+      data: {
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.description !== undefined ? { description: input.description } : {}),
+        ...(input.category !== undefined ? { category: input.category } : {}),
+        ...(input.viewKind !== undefined ? { viewKind: input.viewKind } : {}),
+        ...(input.ownerId !== undefined ? { ownerId: input.ownerId } : {}),
+        ...(input.marketIds !== undefined ? { defaultMarkets: input.marketIds.length ? input.marketIds : undefined } : {}),
+      },
+    });
+    await audit(tx, ctx, {
+      action: "update",
+      entityType: "portfolio",
+      entityId: id,
+      before: { name: before.name, category: before.category, viewKind: before.viewKind, ownerId: before.ownerId },
+      after: { name: portfolio.name, category: portfolio.category, viewKind: portfolio.viewKind, ownerId: portfolio.ownerId },
+    });
+    return portfolio;
+  });
+}
+
 /** Market org units for the wizard's Markets step (chips). */
 export async function listMarkets(ctx: TenantContext) {
   return withTenant(ctx, (tx) =>

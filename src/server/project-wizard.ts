@@ -30,6 +30,10 @@ export const CreateProjectWizardInput = z.object({
     .optional(),
   description: z.string().trim().max(500).optional(),
   portfolioId: z.string().uuid({ message: "Every project belongs to a portfolio." }),
+  // docs/27 §5 gap 2 (28-p1b §3): the stage may be chosen at create — Approved projects
+  // exist on day one when the business case predates QUBIT. Paused is NOT offered:
+  // creating a paused project is a contradiction.
+  pipelineStage: z.enum(["Exploring", "Evaluating", "Approved"]).default("Exploring"),
   programmeId: z.string().uuid().nullable().optional(),
   // CheckpointTemplate ids are CUIDs (M-D-A models default cuid(), not uuid()) — the
   // real integrity check is the RLS-scoped findUniqueOrThrow in the engine.
@@ -132,6 +136,7 @@ async function createOnce(ctx: TenantContext, input: CreateProjectWizardInputT) 
         portfolioId: input.portfolioId,
         programmeId: input.programmeId ?? null,
         checkpointTemplateId: input.checkpointTemplateId ?? null,
+        pipelineStage: input.pipelineStage,
         leadUserId,
       },
     });

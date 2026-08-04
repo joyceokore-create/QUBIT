@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import {
   benchFor,
+  cancelResourceRequest,
   declineResourceRequest,
   fillResourceRequest,
   listResourceRequests,
@@ -146,6 +147,22 @@ describe("M-P1d staffing flow", () => {
       tx.notification.findFirst({ where: { userId: pmId, kind: "resource_request.declined" } }),
     );
     expect(note?.message).toContain("no Implementor bench until October");
+  });
+
+  it("gap 4: the raiser cancels their own OPEN ask; an outsider cannot; no double resolution", async () => {
+    const request = await raiseResourceRequest(pmCtx, { projectId, role: "Developer", allocationPct: 30, ...WINDOW });
+    const outsider: TenantContext = { tenantId: rbId, userId: benchId, roles: ["Member"] };
+    await expect(cancelResourceRequest(outsider, request.id)).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    const cancelled = await cancelResourceRequest(pmCtx, request.id, "found capacity internally");
+    expect(cancelled.status).toBe("Cancelled");
+    expect(cancelled.resolvedNote).toBe("found capacity internally");
+    await expect(fillResourceRequest(headCtx, request.id, benchId)).rejects.toMatchObject({ code: "ALREADY_RESOLVED" });
+
+    // The Head may also cancel someone else's stale ask.
+    const second = await raiseResourceRequest(pmCtx, { projectId, role: "Trainer", allocationPct: 20, ...WINDOW });
+    const headCancelled = await cancelResourceRequest(headCtx, second.id);
+    expect(headCancelled.status).toBe("Cancelled");
   });
 
   it("listing scopes: the PM sees only their own; the Head sees all", async () => {

@@ -82,6 +82,7 @@ interface Draft {
   portfolioId: string;
   programmeId: string;
   checkpointTemplateId: string;
+  pipelineStage: string;
   marketIds: string[];
   marketsTouched: boolean;
   team: TeamRow[];
@@ -100,6 +101,7 @@ const EMPTY: Draft = {
   portfolioId: "",
   programmeId: "",
   checkpointTemplateId: "",
+  pipelineStage: "Exploring",
   marketIds: [],
   marketsTouched: false,
   team: [],
@@ -240,6 +242,7 @@ export function ProjectWizard({
         portfolioId: d.portfolioId,
         programmeId: d.programmeId || undefined,
         checkpointTemplateId: d.checkpointTemplateId || undefined,
+        pipelineStage: d.pipelineStage,
         marketIds: effectiveMarkets,
         team: d.team.map((t) => ({
           userId: t.userId,
@@ -273,7 +276,11 @@ export function ProjectWizard({
             /* ignore */
           }
           const id = (data as { project?: { id?: string } } | undefined)?.project?.id;
-          router.push(id ? `/projects/${id}` : "/projects");
+          // docs/27 §5 gap 3: an attached BRD/URS lands you on the register, where the
+          // M8-C extraction ("Review Q's suggestions") is one click away — extraction
+          // itself stays human-gated in the workspace, never run inside the mutation.
+          const hadDoc = Boolean(d.docTitle.trim() && (d.docContent.trim() || file));
+          router.push(id ? `/projects/${id}${hadDoc ? "?tab=Documents" : ""}` : "/projects");
         },
       },
     );
@@ -389,10 +396,19 @@ export function ProjectWizard({
               />
             ))}
           </div>
+          <div className="mt-3">
+            <span className={LABEL}>Pipeline stage</span>
+            <div className="mt-2">
+              {["Exploring", "Evaluating", "Approved"].map((st) => (
+                <Chip key={st} on={d.pipelineStage === st} onClick={() => set({ pipelineStage: st })}>
+                  {st}
+                </Chip>
+              ))}
+            </div>
+          </div>
           <p className="mt-3 text-[11.5px] text-[var(--ink4)]">
             The template decides the Delivery tab&apos;s gates; % is always derived from gate states, never typed.
-            Pipeline stage starts at <span className="font-semibold">Exploring</span> — promotion to Approved is a
-            governance action, not a form field.
+            Later stage moves stay a governance action on the workspace.
           </p>
         </WizardCard>
       )}
@@ -636,9 +652,7 @@ export function ProjectWizard({
                 ],
                 [
                   "Delivery",
-                  d.checkpointTemplateId
-                    ? `${templates.find((t) => t.id === d.checkpointTemplateId)?.name} · stage Exploring`
-                    : "no template · stage Exploring",
+                  `${d.checkpointTemplateId ? templates.find((t) => t.id === d.checkpointTemplateId)?.name : "no template"} · stage ${d.pipelineStage}`,
                 ],
                 ["Markets", marketCodes(effectiveMarkets)],
                 [

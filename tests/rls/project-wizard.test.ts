@@ -76,6 +76,7 @@ describe("M-P1c project wizard engine", () => {
     const project = await createProjectFromWizard(ctx, {
       name: "Wizard Flagship",
       portfolioId,
+      pipelineStage: "Approved" as const, // gap 2: chosen at create, not always Exploring
       programmeId: null,
       checkpointTemplateId: templateId,
       marketIds: [marketId],
@@ -90,7 +91,7 @@ describe("M-P1c project wizard engine", () => {
     madeProjects.push(project.id);
 
     expect(project.code).toMatch(/^WF\d*$/); // initials of the first two words (+suffix if taken)
-    expect(project.pipelineStage).toBe("Exploring");
+    expect(project.pipelineStage).toBe("Approved"); // the chosen stage landed (gap 2)
     expect(project.leadUserId).toBe(pmId); // first PM hat becomes the lead
 
     const [members, org, doc, integ, auditRow] = await withTenant(ctx, async (tx) => [
@@ -121,6 +122,7 @@ describe("M-P1c project wizard engine", () => {
       createProjectFromWizard(ctx, {
         name: "Wizard Doomed",
         portfolioId,
+        pipelineStage: "Exploring" as const,
         programmeId: null,
         checkpointTemplateId: null,
         // A market id that is real but NOT kind=Market fails AFTER team validation…
@@ -149,6 +151,7 @@ describe("M-P1c project wizard engine", () => {
       createProjectFromWizard(ctx, {
         name: "Wizard Mismatch",
         portfolioId,
+        pipelineStage: "Exploring" as const,
         programmeId: programme.id,
         checkpointTemplateId: null,
         marketIds: [],
@@ -169,6 +172,7 @@ describe("M-P1c project wizard engine", () => {
       createProjectFromWizard(ctx, {
         name: "Wizard Flagless",
         portfolioId,
+        pipelineStage: "Exploring" as const,
         programmeId: null,
         checkpointTemplateId: null,
         marketIds: [],
@@ -183,6 +187,7 @@ describe("M-P1c project wizard engine", () => {
       createProjectFromWizard(ctx, {
         name: "Wizard Backwards",
         portfolioId,
+        pipelineStage: "Exploring" as const,
         programmeId: null,
         checkpointTemplateId: null,
         marketIds: [],

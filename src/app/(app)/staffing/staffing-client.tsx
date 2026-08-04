@@ -11,6 +11,7 @@ interface RequestRow {
   projectId: string;
   projectCode: string;
   projectName: string;
+  raisedById: string;
   raisedByName: string;
   role: string;
   allocationPct: number;
@@ -41,10 +42,12 @@ const fmt = (iso: string) =>
 
 export function StaffingClient({
   isHead,
+  viewerId,
   projects,
   requests,
 }: {
   isHead: boolean;
+  viewerId: string;
   projects: ProjectOpt[];
   requests: RequestRow[];
 }) {
@@ -201,22 +204,33 @@ export function StaffingClient({
                         ? "bg-[color-mix(in_oklab,var(--warn)_12%,transparent)] text-[var(--warn)]"
                         : r.status === "Filled"
                           ? "bg-[color-mix(in_oklab,var(--ok)_10%,transparent)] text-[var(--ok)]"
+                          : r.status === "Cancelled"
+                          ? "bg-[var(--wash2)] text-[var(--ink4)]"
                           : "bg-[color-mix(in_oklab,var(--bad)_10%,transparent)] text-[var(--bad)]"
                     }`}
                   >
                     {r.status === "Filled" && r.filledName ? `Filled — ${r.filledName}` : r.status}
-                    {r.status === "Declined" && r.resolvedNote ? ` — ${r.resolvedNote}` : ""}
+                    {(r.status === "Declined" || r.status === "Cancelled") && r.resolvedNote ? ` — ${r.resolvedNote}` : ""}
                   </span>
                 </td>
                 <td className="px-3.5 py-2.5 text-right">
-                  {isHead && r.status === "Open" && (
+                  {r.status === "Open" && (
                     <span className="inline-flex gap-1.5">
-                      <Button size="sm" onClick={() => setBenchFor(benchFor?.id === r.id ? null : r)}>
-                        Fill from bench
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => setDecliningId(decliningId === r.id ? null : r.id)}>
-                        Decline
-                      </Button>
+                      {isHead && (
+                        <>
+                          <Button size="sm" onClick={() => setBenchFor(benchFor?.id === r.id ? null : r)}>
+                            Fill from bench
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => setDecliningId(decliningId === r.id ? null : r.id)}>
+                            Decline
+                          </Button>
+                        </>
+                      )}
+                      {(isHead || r.raisedById === viewerId) && (
+                        <Button size="sm" variant="ghost" disabled={busy} onClick={() => void resolve(r.id, { action: "cancel" })}>
+                          Cancel
+                        </Button>
+                      )}
                     </span>
                   )}
                 </td>

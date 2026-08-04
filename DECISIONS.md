@@ -1991,3 +1991,31 @@ Live as Joyce: wizard rendered with resume states ("7 already exist", templates 
 portfolios ✓), a two-row CSV import returned one invited (with copyable link) and one
 per-row error, and the dashboard shows NO banner for the backfilled tenant. Fixture
 removed.
+
+## DM1.59 — P1 gap sweep: the spec-pack reconciliation items closed
+
+The four small gaps carried in docs/27 §5 are done; the P1 track now matches the spec
+pack (27-p1a…31-p1e) in full.
+
+1. **Portfolio governance PATCH** (27-p1a §3): `updatePortfolio` — name/description/
+   category/lens/owner/markets, owner-eligibility and market validation matching create,
+   audited with a BEFORE/AFTER diff. `PATCH /api/portfolios/[id]` behind the same
+   `portfolio:create` key that governs creation.
+2. **Pipeline stage at create** (28-p1b §3): the wizard's Type & delivery step gains
+   Exploring/Evaluating/Approved chips — an Approved project can exist on day one when
+   the business case predates QUBIT. **Paused is deliberately not offered**: creating a
+   paused project is a contradiction. Later moves stay a workspace governance action.
+3. **BRD-ingest hand-off** (28-p1b §5.5): creating with an attached document lands on
+   the workspace **Documents tab**, where the M8-C extraction ("Review Q's suggestions")
+   is one click away. Extraction itself stays human-gated and OUT of the create mutation
+   — the spec's own rule.
+4. **Cancel-by-raiser** (30-p1d): `Cancelled` joins the request lifecycle — the raiser
+   withdraws their own OPEN ask (or the Head tidies a stale one); distinct from
+   `Declined` (refused, with a reason). The resolve route dropped its blanket
+   `staffing:manage` gate for `requireSession` + per-action authorization in the engine,
+   because "raiser of this row" is not a role-level key. No double resolution, audited,
+   raiser notified when the Head cancels.
+
+**Verified**: lint/typecheck/build green, 779/779 (3 new lifecycle/audit tests). Live:
+stage chips on the wizard, and a raise → Cancel button → cancel (status "Cancelled")
+round-trip through the real routes. Fixtures removed.

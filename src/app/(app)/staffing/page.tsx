@@ -48,6 +48,7 @@ export default async function StaffingPage() {
       </p>
       <StaffingClient
         isHead={isHead}
+        viewerId={ctx.userId}
         projects={myProjects}
         requests={requests.map((r) => ({
           ...r,

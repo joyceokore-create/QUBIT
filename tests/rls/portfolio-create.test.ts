@@ -4,7 +4,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { withTenant, type TenantContext } from "@/lib/tenant";
-import { createPortfolio, createProgramme } from "@/server/portfolios";
+import { createPortfolio, createProgramme, updatePortfolio } from "@/server/portfolios";
 import { createUsers, cleanupFixtureUsers } from "./_users";
 
 describe("M-P1b portfolio & programme creation", () => {
@@ -133,6 +133,32 @@ describe("M-P1b portfolio & programme creation", () => {
         category: "Exploring",
       }),
     ).rejects.toMatchObject({ code: "PORTFOLIO_NOT_FOUND" });
+  });
+
+  it("gap 1: governance edits land with a before/after audit; a bad owner is refused", async () => {
+    const p = await createPortfolio(ctx, {
+      name: "mp1b-Editable",
+      category: "Exploring",
+      viewKind: "Pipeline",
+      marketIds: [],
+    });
+    made.push(p.id);
+    const updated = await updatePortfolio(ctx, p.id, { category: "Approved", name: "mp1b-Edited" });
+    expect(updated.category).toBe("Approved");
+    expect(updated.name).toBe("mp1b-Edited");
+    const auditRow = await withTenant(ctx, (tx) =>
+      tx.auditLog.findFirst({
+        where: { entityType: "portfolio", entityId: p.id, action: "update" },
+        orderBy: { createdAt: "desc" },
+      }),
+    );
+    expect((auditRow?.before as { category?: string })?.category).toBe("Exploring");
+    expect((auditRow?.after as { category?: string })?.category).toBe("Approved");
+
+    await expect(updatePortfolio(ctx, p.id, { ownerId: plainId })).rejects.toMatchObject({ code: "OWNER_INELIGIBLE" });
+    await expect(updatePortfolio(ctx, "00000000-0000-4000-8000-000000000000", { name: "ghost-edit" })).rejects.toMatchObject({
+      code: "PORTFOLIO_NOT_FOUND",
+    });
   });
 
   it("tenant B cannot see tenant A's new portfolio", async () => {

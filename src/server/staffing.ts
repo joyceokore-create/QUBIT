@@ -86,6 +86,7 @@ export interface ResourceRequestRow {
   projectId: string;
   projectCode: string;
   projectName: string;
+  raisedById: string;
   raisedByName: string;
   role: string;
   allocationPct: number;
@@ -124,6 +125,7 @@ export async function listResourceRequests(ctx: TenantContext): Promise<Resource
       projectId: r.projectId,
       projectCode: r.project.code,
       projectName: r.project.name,
+      raisedById: r.raisedById,
       raisedByName: r.raisedBy.name,
       role: r.role,
       allocationPct: r.allocationPct,
@@ -246,6 +248,57 @@ export async function fillResourceRequest(ctx: TenantContext, requestId: string,
             }]
           : []),
       ],
+    });
+    return updated;
+  });
+}
+
+/** docs/27 §5 gap 4 (30-p1d) — the RAISER may withdraw their own open ask; the Head may
+ * too (tidying a stale queue). Distinct from Declined: cancelled means "no longer
+ * needed", declined means "refused, here's why". */
+export async function cancelResourceRequest(ctx: TenantContext, requestId: string, reason?: string) {
+  return withTenant(ctx, async (tx) => {
+    const request = await tx.resourceRequest.findUnique({
+      where: { id: requestId },
+      include: { project: { select: { code: true } } },
+    });
+    if (!request) throw new StaffingError("Request not found.", "NOT_FOUND");
+    if (request.raisedById !== ctx.userId && !can(ctx, "staffing:manage")) {
+      throw new StaffingError("Only the raiser or the Head can cancel a request.", "FORBIDDEN");
+    }
+    if (request.status !== "Open") {
+      throw new StaffingError("This request was already resolved.", "ALREADY_RESOLVED");
+    }
+    const updated = await tx.resourceRequest.update({
+      where: { id: requestId },
+      data: {
+        status: "Cancelled",
+        resolvedById: ctx.userId,
+        resolvedAt: new Date(),
+        resolvedNote: reason?.trim() || null,
+      },
+    });
+    await audit(tx, ctx, {
+      action: "update",
+      entityType: "resource_request",
+      entityId: requestId,
+      before: { status: "Open" },
+      after: { status: "Cancelled", reason: reason?.trim() || null },
+    });
+    await emitDomainEvent(tx, ctx, {
+      type: "resource_request.cancelled",
+      entityType: "resource_request",
+      entityId: requestId,
+      payload: { projectId: request.projectId },
+      notify:
+        request.raisedById !== ctx.userId
+          ? [{
+              userId: request.raisedById,
+              kind: "resource_request.cancelled",
+              message: `Your ${request.role} request on ${request.project.code} was cancelled.`,
+              link: "/staffing",
+            }]
+          : [],
     });
     return updated;
   });
