@@ -4,6 +4,7 @@ import {
   Briefcase,
   Boxes,
   FolderKanban,
+  Lightbulb,
   TriangleAlert,
   Clock,
   Users,
@@ -33,6 +34,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "My Board", href: "/board", icon: ListChecks }, // docs/18 §4 — the daily surface
+  { label: "Ideas", href: "/ideas", icon: Lightbulb }, // M-P4a — intake is for everyone
   { label: "Portfolios", href: "/portfolios", memberHidden: true, icon: Briefcase }, // M-P1b (docs/25 W1)
   { label: "Programmes", href: "/programmes", memberHidden: true, icon: Boxes }, // M-W1a (docs/32)
   { label: "Projects", href: "/projects", icon: FolderKanban },

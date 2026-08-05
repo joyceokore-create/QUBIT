@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { flagEnabled } from "@/lib/flags";
 import { withTenant } from "@/lib/tenant";
+import { getIdeaForPrefill } from "@/server/ideas";
 import { listMarkets } from "@/server/portfolios";
 import { listWorkload } from "@/server/resources";
 import { Forbidden } from "@/components/forbidden";
@@ -12,7 +13,7 @@ import { ProjectWizard } from "./project-wizard";
 export default async function NewProjectPage({
   searchParams,
 }: {
-  searchParams: Promise<{ portfolio?: string }>;
+  searchParams: Promise<{ portfolio?: string; fromIdea?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) return null;
@@ -23,7 +24,11 @@ export default async function NewProjectPage({
     permissions: session.user.permissions,
   };
   if (!can(ctx, "project:create")) return <Forbidden />;
-  const { portfolio: preselectedPortfolioId } = await searchParams;
+  const { portfolio: preselectedPortfolioId, fromIdea } = await searchParams;
+  // M-P4a — accepting an idea opens this wizard pre-filled. getIdeaForPrefill returns
+  // null unless the viewer may triage AND the idea is still open, so a stale or forged
+  // ?fromIdea= simply yields the ordinary blank wizard.
+  const idea = fromIdea ? await getIdeaForPrefill(ctx, fromIdea) : null;
 
   const [data, markets, workload] = await Promise.all([
     withTenant(ctx, async (tx) => ({
@@ -58,7 +63,14 @@ export default async function NewProjectPage({
       <Breadcrumb items={[{ label: "Projects", href: "/projects" }, { label: "New project" }]} />
       <h1 className="mt-2 text-[20px] font-bold tracking-[-0.4px] text-[var(--qink)]">New project</h1>
       <p className="mb-5 text-[12.5px] text-[var(--ink3)]">
-        The centrepiece wizard — seven questions, one per screen.
+        {idea ? (
+          <>
+            Pre-filled from the idea <b>“{idea.title}”</b> — sponsored by {idea.sponsor}. Creating the project accepts
+            the idea.
+          </>
+        ) : (
+          "The centrepiece wizard — seven questions, one per screen."
+        )}
       </p>
       <ProjectWizard
         userId={ctx.userId}
@@ -88,7 +100,8 @@ export default async function NewProjectPage({
           effectivePct: w.effectivePct,
           onLeaveUntil: w.onLeaveUntil ? w.onLeaveUntil.toISOString() : null,
         }))}
-        preselectedPortfolioId={preselectedPortfolioId ?? null}
+        preselectedPortfolioId={preselectedPortfolioId ?? idea?.suggestedPortfolioId ?? null}
+        fromIdea={idea ? { id: idea.id, title: idea.title, problem: idea.problem } : null}
         youtrackEnabled={flagEnabled("youtrack")}
       />
     </div>

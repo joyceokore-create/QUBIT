@@ -131,6 +131,7 @@ export function ProjectWizard({
   markets,
   people,
   preselectedPortfolioId,
+  fromIdea,
   youtrackEnabled,
 }: {
   userId: string;
@@ -141,26 +142,45 @@ export function ProjectWizard({
   markets: Market[];
   people: Person[];
   preselectedPortfolioId: string | null;
+  /** M-P4a — the accepted idea this project comes from (docs/35 §1). */
+  fromIdea: { id: string; title: string; problem: string } | null;
   youtrackEnabled: boolean;
 }) {
   const router = useRouter();
   const { busy, error, setError, mutate } = useAdminMutation();
-  const key = draftKey("project", userId);
-  const [d, setD] = useState<Draft>({ ...EMPTY, portfolioId: preselectedPortfolioId ?? "" });
+  // M-P4a: an idea-driven run gets its OWN draft key, so accepting an idea never
+  // resumes (or clobbers) a half-finished blank wizard, and vice versa.
+  const key = draftKey(fromIdea ? `project.idea.${fromIdea.id}` : "project", userId);
+  const [d, setD] = useState<Draft>({
+    ...EMPTY,
+    portfolioId: preselectedPortfolioId ?? "",
+    name: fromIdea?.title ?? "",
+    description: fromIdea?.problem.slice(0, 500) ?? "",
+  });
   const [loaded, setLoaded] = useState(false);
   // Never drafted: the token (secret) and the file (size).
   const [ytToken, setYtToken] = useState("");
   const [file, setFile] = useState<{ name: string; data: string } | null>(null);
 
+  // M-P4a seeds, hoisted so the resume effect can depend on plain strings (the fromIdea
+  // object identity would change every render).
+  const seedName = fromIdea?.title ?? "";
+  const seedDescription = fromIdea?.problem.slice(0, 500) ?? "";
+
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(key);
-      if (raw) setD({ ...EMPTY, ...(JSON.parse(raw) as Partial<Draft>) });
+      // The idea's title/problem seed the fields, but a resumed draft's own edits win —
+      // the PM's typing is never overwritten on a second visit.
+      if (raw) {
+        const saved = JSON.parse(raw) as Partial<Draft>;
+        setD({ ...EMPTY, name: seedName, description: seedDescription, ...saved });
+      }
     } catch {
       /* corrupt draft — start clean */
     }
     setLoaded(true);
-  }, [key]);
+  }, [key, seedName, seedDescription]);
   useEffect(() => {
     if (!loaded) return;
     try {
@@ -237,6 +257,7 @@ export function ProjectWizard({
       "POST",
       {
         name: d.name.trim(),
+        fromIdeaId: fromIdea?.id ?? undefined,
         code: d.code.trim() || undefined,
         description: d.description.trim() || undefined,
         portfolioId: d.portfolioId,

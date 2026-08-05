@@ -5,10 +5,14 @@ import { isMemberOnly, visibleNavItems } from "@/components/layout/nav-items";
 const labels = (v: Parameters<typeof visibleNavItems>[0]) => visibleNavItems(v).map((n) => n.label);
 
 describe("visibleNavItems", () => {
-  it("members get the slim four: Dashboard · My Board · Projects · Reports", () => {
+  // M-P4a widened docs/32 §0.3's "slim four" to five: intake is deliberately universal
+  // (`idea:create` sits in BASE — a good idea can come from anywhere), so hiding Ideas
+  // from members would make the permission unreachable. Everything else stays estate-free.
+  it("members get the slim five: Dashboard · My Board · Ideas · Projects · Reports", () => {
     expect(labels({ canAccessAdmin: false, canStaff: false, memberOnly: true })).toEqual([
       "Dashboard",
       "My Board",
+      "Ideas",
       "Projects",
       "Reports",
     ]);

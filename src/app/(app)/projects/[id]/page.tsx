@@ -5,6 +5,7 @@ import { canViewProject } from "@/lib/project-access";
 import { canContributeToProject, canWriteProject } from "@/lib/access";
 import { viewerBoardCategory } from "@/server/board-scope";
 import { withTenant } from "@/lib/tenant";
+import { listProjectIdeaProvenance } from "@/server/ideas";
 import { getProjectPanelData } from "@/server/projects";
 import { listProjectMembers } from "@/server/resources";
 import { Forbidden } from "@/components/forbidden";
@@ -54,6 +55,8 @@ export default async function ProjectWorkspacePage({
       orderBy: { code: "asc" },
     }),
   );
+  // M-P4a — where this project came from: the idea(s) accepted into or merged into it.
+  const ideaProvenance = await listProjectIdeaProvenance(ctx, id);
   // M-P2b — the Delivery tab's market tracks (docs/25 §3 tab 4).
   const marketTracks = await withTenant(ctx, (tx) =>
     tx.projectOrgStatus.findMany({
@@ -75,6 +78,7 @@ export default async function ProjectWorkspacePage({
     portfolios,
     viewerCategory,
     allProjects,
+    ideaProvenance,
     marketTracks: marketTracks.map((m) => ({
       orgUnitId: m.orgUnitId,
       code: m.orgUnit.code,

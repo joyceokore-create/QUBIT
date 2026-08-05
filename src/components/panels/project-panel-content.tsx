@@ -20,6 +20,8 @@ export interface ProjectPanelJson {
   allProjects?: { id: string; code: string; name: string }[];
   /** M-P2b — the Delivery tab's market strip (project × subsidiary tracks). */
   marketTracks?: { orgUnitId: string; code: string; flag: string | null; progress: number; status: string }[];
+  /** M-P4a — the idea(s) this project came from: accepted into it, or folded in. */
+  ideaProvenance?: { id: string; title: string; kind: "accepted" | "merged"; submittedByName: string | null }[];
   id: string;
   code: string;
   name: string;

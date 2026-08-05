@@ -111,6 +111,7 @@ model Tenant {
   teamTemplates           TeamTemplate[]
   projectDependencies     ProjectDependency[]
   portfolioReports        PortfolioReport[]
+  ideas                   Idea[]
 
   @@map("tenant")
 }
@@ -253,6 +254,8 @@ model User {
   resourceRequestsResolved ResourceRequest[]        @relation("ResourceRequestResolver")
   projectDependenciesMade  ProjectDependency[]      @relation("ProjectDependencyAuthor")
   rollupsApproved          PortfolioReport[]        @relation("RollupApprover")
+  ideasSubmitted           Idea[]                   @relation("IdeaSubmitter")
+  ideasTriaged             Idea[]                   @relation("IdeaTriager")
 
   @@unique([tenantId, email])
   @@map("user")
@@ -843,6 +846,7 @@ model Portfolio {
 
   programmes Programme[]
   projects   Project[]
+  ideas      Idea[]
 
   @@map("portfolio")
 }
@@ -931,6 +935,8 @@ model Project {
   resourceRequests     ResourceRequest[]
   waitsOn              ProjectDependency[]   @relation("ProjectWaits")
   blocks               ProjectDependency[]   @relation("ProjectBlocks")
+  ideasAccepted        Idea[]                @relation("IdeaAcceptedProject")
+  ideasMergedIn        Idea[]                @relation("IdeaMergedProject")
 
   @@unique([tenantId, code])
   @@map("project")
@@ -1749,6 +1755,47 @@ model PortfolioReport {
 
   @@unique([tenantId, isoWeek])
   @@map("portfolio_report")
+}
+
+// M-P4a (docs/35 §1, docs/26 §5.4) — the front of the funnel: the one lifecycle stage
+// with no surface until now. An idea enters, the Head/PMO triages it, and an accepted
+// idea becomes a project in Exploring with nothing retyped. A parked idea is never
+// deleted — the reason it stopped is the record.
+model Idea {
+  id            String    @id @default(uuid())
+  tenantId      String    @map("tenant_id")
+  tenant        Tenant    @relation(fields: [tenantId], references: [id])
+  title         String
+  sponsor       String
+  problem       String
+  expectedValue String?   @map("expected_value")
+  submittedById String    @map("submitted_by_id")
+  submittedBy   User      @relation("IdeaSubmitter", fields: [submittedById], references: [id])
+  status        String    @default("New") // New | Reviewing | Accepted | Parked | Merged
+  /** Required when parking — why it stopped (docs/35 §1). */
+  parkReason    String?   @map("park_reason")
+  /**
+   * The submitter's own suggestion, not an AI guess. Q may fill `summary` later; an
+   * empty summary means "not summarised", never a fabricated line (docs/35 §3).
+   */
+  suggestedPortfolioId String?    @map("suggested_portfolio_id")
+  suggestedPortfolio   Portfolio? @relation(fields: [suggestedPortfolioId], references: [id])
+  summary              String?
+  /** The project this idea became (Accepted) — linked in the wizard's own transaction. */
+  acceptedProjectId String?  @map("accepted_project_id")
+  acceptedProject   Project? @relation("IdeaAcceptedProject", fields: [acceptedProjectId], references: [id])
+  /** The project this idea folded into (Merged) — provenance, shown on that project. */
+  mergedIntoProjectId String?  @map("merged_into_project_id")
+  mergedIntoProject   Project? @relation("IdeaMergedProject", fields: [mergedIntoProjectId], references: [id])
+  triagedById       String?   @map("triaged_by_id")
+  triagedBy         User?     @relation("IdeaTriager", fields: [triagedById], references: [id])
+  triagedAt         DateTime? @map("triaged_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@index([tenantId, status])
+  @@index([submittedById])
+  @@map("idea")
 }
 
 // docs/33 M-P2c (docs/26 §6) — "Project A's UAT waits on B's API": a cross-project

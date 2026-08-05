@@ -227,6 +227,26 @@ export function ProjectWorkspace({
                   projects={data.allProjects ?? []}
                 />
               </div>
+              {/* M-P4a (docs/35 §1) — provenance: the idea this project was born from. */}
+              {(data.ideaProvenance?.length ?? 0) > 0 && (
+                <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
+                  <div className="mb-2 text-[13px] font-semibold text-foreground">Where this came from</div>
+                  <div className="flex flex-col gap-1.5">
+                    {data.ideaProvenance!.map((i) => (
+                      <div key={i.id} className="flex flex-wrap items-baseline gap-2 text-xs">
+                        <span
+                          className="flex-none rounded-[5px] px-1.5 py-0.5 font-mono text-[8.5px] font-bold uppercase tracking-[.6px]"
+                          style={{ color: "var(--ok)", background: "color-mix(in oklab, var(--ok) 10%, transparent)" }}
+                        >
+                          {i.kind === "accepted" ? "idea accepted" : "idea merged in"}
+                        </span>
+                        <span className="min-w-0 flex-1 text-ink-2">{i.title}</span>
+                        {i.submittedByName && <span className="flex-none text-[10.5px] text-ink-3">{i.submittedByName}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {/* docs/16 §6 — captured as the project runs; the closure gate reads these. */}
               <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
                 <LessonsCard projectId={data.id} />

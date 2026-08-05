@@ -69,6 +69,9 @@ const BASE: string[] = [
   "project:join:request", // anyone can request to join a project (lead/PM approves)
   "report:resource:self", // anyone can report on their own workload
   "report:portfolio", // portfolio + project reports are read-all world
+  // M-P4a (docs/35 §1): a good idea can come from anywhere, so intake is universal.
+  // Triage (idea:triage) is the Head's — submitting is not deciding.
+  "idea:create",
 ];
 
 // Risk / issue / blocker authoring for management roles. Resource owners and a project's
@@ -98,6 +101,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     "portfolio:create", // docs/27 §1.4 — New portfolio is Exec/Head territory
     "programme:create",
     "staffing:manage", // docs/26 §4.3 — fill/decline resource requests, see the bench
+    "idea:triage", // M-P4a (docs/35 §1) — accept / park / merge the intake board
     "project:create",
     "project:write", // may edit any project (governance)
     "project:update", // transitional coarse write key for existing routes (see file header)
@@ -199,6 +203,9 @@ export const PERMISSION_CATALOGUE = [
   "report:resource:self",
   "report:resource:others",
   "report:portfolio",
+  // Front of funnel (M-P4a)
+  "idea:create",
+  "idea:triage",
 ] as const;
 
 export interface Scope {

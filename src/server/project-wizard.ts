@@ -10,6 +10,7 @@ import { PROJECT_ROLES } from "@/lib/roles";
 import { encryptSecret } from "@/lib/secret-box";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { emitDomainEvent } from "@/server/events";
+import { acceptIdeaInTx } from "@/server/ideas";
 import { nextFreeCode, projectCodeBase, ProjectError } from "@/server/projects";
 
 const TeamRow = z.object({
@@ -59,6 +60,13 @@ export const CreateProjectWizardInput = z.object({
     .optional(),
   /** Capacity/leave warnings shown AND accepted on the Team step — audited verbatim. */
   acceptedWarnings: z.array(z.string().max(200)).max(20).default([]),
+  /**
+   * M-P4a (docs/35 §1) — the idea this project came from. Stamped Accepted and linked
+   * INSIDE this transaction, so a failed create never leaves a half-accepted idea.
+   * Requires idea:triage (asserted in acceptIdeaInTx) — project:create alone is not a
+   * licence to decide intake.
+   */
+  fromIdeaId: z.string().uuid().nullable().optional(),
 });
 export type CreateProjectWizardInputT = z.infer<typeof CreateProjectWizardInput>;
 
@@ -189,6 +197,12 @@ async function createOnce(ctx: TenantContext, input: CreateProjectWizardInputT) 
           config: { baseUrl: input.youtrack.baseUrl },
         },
       });
+    }
+
+    // M-P4a: the intake link lands in THIS transaction — accepted idea and project
+    // commit together or neither does.
+    if (input.fromIdeaId) {
+      await acceptIdeaInTx(tx, ctx, input.fromIdeaId, project.id);
     }
 
     await audit(tx, ctx, {

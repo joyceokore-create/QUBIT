@@ -119,7 +119,9 @@ BEGIN
     -- M-P2c (docs/33) — cross-project dependencies.
     'project_dependency',
     -- M-P3b (docs/34) — the Head of PMs' weekly roll-up.
-    'portfolio_report'
+    'portfolio_report',
+    -- M-P4a (docs/35) — idea intake & triage, the front of the funnel.
+    'idea'
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);

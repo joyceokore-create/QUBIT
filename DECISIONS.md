@@ -2185,3 +2185,44 @@ archive empty state → built Draft appears with working CSV download (200, atta
 correct rows), `?tab=generate` lands on Status. Verification Draft row deleted under
 tenant RLS context; the two real W32 check-ins (both confirmed by the real account)
 kept.
+
+## DM1.66 — Idea intake & triage: the funnel finally has a front (M-P4a)
+
+First P4 milestone (docs/35 §1, docs/26 §5.4). Intake was the ONE lifecycle stage in
+docs/26 §2 with no surface at all — QUBIT started mid-stream. It doesn't now.
+
+- **`Idea`** — title, sponsor, problem, expectedValue, submitter, `New | Reviewing |
+  Accepted | Parked | Merged`, parkReason, suggestedPortfolio, acceptedProject /
+  mergedIntoProject, triagedBy/At. Inline RLS in the migration + `prisma/rls.sql`
+  resynced (78 tables).
+- **Submitting is universal, deciding is not.** `idea:create` sits in **BASE** — a good
+  idea can come from anywhere — while `idea:triage` is the Head's (+ SuperAdmin), gated
+  at the route AND asserted in the engine. A submitter sees only their OWN ideas
+  (userId scoping on top of RLS); the Head sees the queue.
+- **Accept → the project wizard, pre-filled** (`?fromIdea=`): title and problem seed
+  name/description, the suggested portfolio preselects, and the link is written **inside
+  the wizard's own transaction** (`acceptIdeaInTx`) — test-pinned in BOTH directions: a
+  failed create (bad market) leaves the idea still `New` with no dangling project, a
+  successful one stamps Accepted + acceptedProjectId together. An idea-driven run gets
+  its own localStorage draft key so it can't resume or clobber a blank wizard.
+- **Park needs a reason** (≥5 chars, the roll-up rule) and **never deletes** — the reason
+  it stopped IS the record, and the submitter is told. **Merge** writes provenance that
+  shows on the receiving project's Overview ("Where this came from"). A decided idea
+  refuses re-decision with `ALREADY_DECIDED`.
+- **Q summaries are NOT faked** (docs/35 §3): the `summary` column exists and stays
+  null; the card renders nothing rather than a fabricated line. An AI summary ships with
+  a Q milestone under the scope+timestamp honesty contract, or not at all.
+- **The member nav widened from four to five.** docs/32 §0.3's "slim four" now includes
+  Ideas: granting everyone `idea:create` while hiding the only page that uses it would be
+  an incoherent half-measure. The nav test was re-pinned with that reason; nothing else
+  about the member's estate-free nav changed.
+- **Deliberately narrowed vs the wireframe**: the "public-ish" intake form stays inside
+  the tenant (authenticated only). Widening it needs a reason we don't have yet.
+
+**Verified**: lint/typecheck/build green, 821/821 (11 new: 8 engine/RLS incl. the
+rollback path, 3 wire-schema). Live as Joyce: submitted → New lane with "yours" →
+Reviewing → Accept opened the wizard banner-and-fields pre-filled → created IMS whose
+Overview carries "IDEA ACCEPTED · Joyce Okore" → a second idea parked with its reason on
+the Decided list; no console errors. Verification ideas, the IMS project and idea
+audit/event residue removed under tenant RLS context (25 projects and the 2 real W32
+check-ins intact).
