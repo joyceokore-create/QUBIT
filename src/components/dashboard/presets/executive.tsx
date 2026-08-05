@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight, CircleHelp, Minus } from "lucide-react";
 import { ArrowRight } from "lucide-react";
 import type { DecisionQueueRow, ExecutiveDashboard, HeadQueueRow } from "@/server/dashboard-exec";
+import { RollupStrip } from "@/components/dashboard/rollup-strip";
 import { groupSectionsByCategory } from "@/server/pipeline";
 import { statusBarTok } from "@/lib/project-view";
 import { Sparkline } from "@/components/dashboard/sparkline";
@@ -155,12 +156,12 @@ function PortfolioCards({ d }: { d: ExecutiveDashboard }) {
 
 /** docs/32 M-W1b — Head of PMs only: this week's check-in state per active project.
  * Review-only; the approve step arrives with the Head roll-up (PortfolioReport, P3). */
-function HeadQueue({ rows }: { rows: HeadQueueRow[] }) {
+function HeadQueue({ rows, awaiting }: { rows: HeadQueueRow[]; awaiting: boolean }) {
   const kpis = [
     { n: rows.filter((r) => r.checkIn === "Confirmed").length, label: "PM check-ins in", tok: "--ok" },
     { n: rows.filter((r) => r.checkIn !== "Confirmed").length, label: "Unconfirmed", tok: "--warn" },
     { n: rows.filter((r) => r.status === "Overdue" || r.status === "AtRisk").length, label: "Red/amber projects", tok: "--bad" },
-    { n: 0, label: "Awaiting my approval", tok: "--qinfo", note: "arrives with P3" },
+    { n: awaiting ? 1 : 0, label: "Awaiting my approval", tok: "--qinfo", note: awaiting ? "this week's roll-up" : "all signed" },
   ];
   return (
     <Panel title="PM check-ins this week" sub={`${rows.filter((r) => r.checkIn !== "Confirmed").length} NOT CONFIRMED`}>
@@ -214,7 +215,6 @@ function HeadQueue({ rows }: { rows: HeadQueueRow[] }) {
         <a href="/api/export?kind=allocations" className="rounded-[8px] border border-[var(--w10)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--ink2)]">
           ⤓ Export allocations (CSV)
         </a>
-        <span className="text-[10.5px] text-[var(--ink4)]">Review &amp; approve arrives with the Head roll-up (P3).</span>
       </div>
     </Panel>
   );
@@ -228,8 +228,20 @@ export function ExecutivePreset({ d, firstName }: { d: ExecutiveDashboard; first
         <ExecHero d={d} firstName={firstName} />
         <HealthTrendCard d={d} />
       </section>
+      {d.approvedRollup?.narrative && (
+        <section className={`${CARD} flex flex-wrap items-center gap-2.5 p-4`} style={{ background: "var(--cardbg)" }}>
+          <span className="rounded-full px-2.5 py-1 font-mono text-[9px] font-bold uppercase tracking-[1px]" style={{ color: "var(--ok)", background: "color-mix(in oklab, var(--ok) 10%, transparent)" }}>
+            Week {d.approvedRollup.isoWeek.split("-W")[1]} roll-up · approved
+          </span>
+          <span className="min-w-0 flex-1 text-[13px] text-[var(--ink2)]">“{d.approvedRollup.narrative}”</span>
+          {d.approvedRollup.approvedByName && (
+            <span className="font-mono text-[9.5px] text-[var(--ink4)]">— {d.approvedRollup.approvedByName}, Head of PMs</span>
+          )}
+        </section>
+      )}
       <PortfolioCards d={d} />
-      {d.headQueue && <HeadQueue rows={d.headQueue} />}
+      {d.headQueue && <HeadQueue rows={d.headQueue} awaiting={d.rollup?.status === "Draft"} />}
+      {d.headQueue && d.rollup && <RollupStrip rollup={d.rollup} />}
       <DecisionQueue d={d} />
       {/* Amended docs/18 §6 + docs/32 M-W1b: portfolio-grouped sections ARE the projects
           view, now under the business-pipeline headers (Approved → Exploring → Shelved),

@@ -7,6 +7,7 @@ import { mergeNudgesIntoPriorities } from "@/server/dashboard-v2";
 import { getPortfolioSections, type PortfolioSectionsData } from "@/server/pipeline";
 import { getRolloutMatrices, type RolloutMatrix } from "@/server/rollout";
 import { getBriefing, type BriefingItem } from "@/server/relevance";
+import { getApprovedRollup, getRollup, type RollupView } from "@/server/portfolio-reports";
 
 /**
  * Executive preset data (docs/17 §2). Everything is grounded: health from the one
@@ -57,9 +58,12 @@ export interface ExecutiveDashboard {
   delta: DeltaFeed;
   /** code+status of every project — the health-parity contract with Q. */
   projects: { id: string; code: string; name: string; status: string }[];
-  /** Head of PMs only (null otherwise): this week's per-project check-in state —
-   * review-only; the approve step arrives with PortfolioReport (P3). */
+  /** Head of PMs only (null otherwise): this week's per-project check-in state. */
   headQueue: HeadQueueRow[] | null;
+  /** M-P3b — this week's roll-up state for the Head's approve strip (null for non-heads). */
+  rollup: RollupView | null;
+  /** M-P3b — the approved roll-up everyone's hero may show (null until the Head signs). */
+  approvedRollup: { isoWeek: string; narrative: string | null; approvedByName: string | null } | null;
 }
 
 export interface HeadQueueRow {
@@ -184,6 +188,10 @@ export async function getExecutiveDashboard(ctx: TenantContext): Promise<Executi
     delta,
     projects: live.projects.map(({ id, code, name, status }) => ({ id, code, name, status })),
     headQueue: buildHeadQueue(ctx, live.headProjects, live.weekCheckIns),
+    rollup: ctx.roles.some((r) => r === "HeadOfProjects" || r === "PlatformSuperAdmin")
+      ? await getRollup(ctx)
+      : null,
+    approvedRollup: await getApprovedRollup(ctx),
   };
 }
 

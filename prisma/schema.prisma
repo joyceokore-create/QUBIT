@@ -110,6 +110,7 @@ model Tenant {
   resourceRequests        ResourceRequest[]
   teamTemplates           TeamTemplate[]
   projectDependencies     ProjectDependency[]
+  portfolioReports        PortfolioReport[]
 
   @@map("tenant")
 }
@@ -251,6 +252,7 @@ model User {
   resourceRequestsRaised   ResourceRequest[]        @relation("ResourceRequestRaiser")
   resourceRequestsResolved ResourceRequest[]        @relation("ResourceRequestResolver")
   projectDependenciesMade  ProjectDependency[]      @relation("ProjectDependencyAuthor")
+  rollupsApproved          PortfolioReport[]        @relation("RollupApprover")
 
   @@unique([tenantId, email])
   @@map("user")
@@ -1725,6 +1727,28 @@ model ProjectTeam {
   @@id([projectId, teamId])
   @@index([tenantId])
   @@map("project_team")
+}
+
+// M-P3b (docs/34, docs/19 §6) — the Head of PMs' weekly roll-up: the missing rung
+// between PM check-ins and the executive. Draft is rebuildable; Approved FREEZES the
+// payload — what the Head signed is what the exec reads, whatever moves later.
+model PortfolioReport {
+  id           String    @id @default(uuid())
+  tenantId     String    @map("tenant_id")
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  isoWeek      String    @map("iso_week") // "2026-W32"
+  status       String    @default("Draft") // Draft | Approved
+  narrative    String?
+  /** Frozen per-project rows at approve time (RollupRow[] — src/server/portfolio-reports.ts). */
+  payload      Json      @default("[]")
+  approvedById String?   @map("approved_by_id")
+  approvedBy   User?     @relation("RollupApprover", fields: [approvedById], references: [id])
+  approvedAt   DateTime? @map("approved_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@unique([tenantId, isoWeek])
+  @@map("portfolio_report")
 }
 
 // docs/33 M-P2c (docs/26 §6) — "Project A's UAT waits on B's API": a cross-project

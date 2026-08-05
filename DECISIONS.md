@@ -2127,3 +2127,33 @@ Overview. (The confirmed W32 check-in remains — it is a REAL weekly check-in o
 seed, not removable fixture residue.) One ops note: a stale dev server from an earlier
 session held port 3000 with a pre-migration Prisma client and had to be killed — the
 recurring stale-client lesson, now cross-session.
+
+## DM1.64 — The Head's roll-up: approve freezes the payload (M-P3b)
+
+The reporting chain's top rung (docs/34 §2, docs/19 §6): PM check-ins land in the
+Head's queue; the Head builds, annotates and APPROVES; the approved roll-up is what
+the executive reads.
+
+- **`PortfolioReport`** — one row per `tenant × isoWeek` (unique), `Draft | Approved`,
+  `payload` JSON of assembled rows, `narrative`, `approvedById/At`. New-table migration
+  carries inline RLS (ENABLE+FORCE+policy) and `prisma/rls.sql` is resynced (77 tables).
+- **The one rule that matters: approve FREEZES.** A Draft is rebuildable from live
+  check-ins any number of times (upsert, never a second row); `approveRollup` assembles
+  the rows AS OF NOW, stamps the signature, and from then on `getRollup` serves the
+  frozen payload — later check-in edits never mutate what the Head signed. A second
+  approve (or a rebuild after signing) refuses with `ALREADY_APPROVED` rather than
+  silently replacing a signature. Narrative is required (≥5 chars) — an unsigned
+  roll-up with no story is not a roll-up.
+- **Head-gated in the engine** (`assertHead`: HeadOfProjects | PlatformSuperAdmin),
+  not just the route — routes carry `reports:read` plus the engine assert. Approval
+  audits and notifies every Executive through the outbox (`rollup.approved`).
+- **Surfaces**: the Head's dashboard gets the roll-up strip (build/rebuild → narrative
+  → "Approve roll-up →"; APPROVED state shows narrative + approver), the HeadQueue KPI
+  goes "all signed" once approved, and the exec hero shows the approved narrative —
+  the exec reads what was signed, nothing fresher.
+
+**Verified**: lint/typecheck/build green, 799/799 (4 new: PM forbidden; idempotent
+draft; freeze-after-approve incl. refused re-approve; tenant B sees none + exec
+notification). Live as Joyce: confirm+send HomeQuest → build draft "1/25 submitted ·
+1/25 confirmed" → approve → strip APPROVED, KPI "all signed", exec hero carrying the
+narrative. Verification roll-up row deleted; the real W32 check-in kept.

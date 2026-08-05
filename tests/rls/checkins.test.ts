@@ -68,7 +68,9 @@ describe("M2 weekly loop", () => {
     });
     // The Friday jobs loop every tenant — clear riverbank's side too so re-runs are clean.
     await withTenant({ tenantId: riverbankId, userId: "test" }, async (tx) => {
-      await tx.checkIn.deleteMany({ where: { isoWeek: WEEK } });
+      // Only what the jobs drafted — a HUMAN-confirmed riverbank check-in must survive
+      // a test run (this wipe once ate a real weekly report during M-P3b verification).
+      await tx.checkIn.deleteMany({ where: { isoWeek: WEEK, status: "Draft", confirmedById: null } });
       await tx.sharedReport.deleteMany({ where: { type: "weekly", periodLabel: WEEK } });
       await tx.notification.deleteMany({ where: { kind: { in: ["checkin_ready", "weekly_report"] } } });
       await tx.domainEvent.deleteMany({ where: { type: { in: ["checkin.drafted", "checkin.confirmed", "report.published"] } } });

@@ -117,7 +117,9 @@ BEGIN
     'resource_request',
     'team_template',
     -- M-P2c (docs/33) — cross-project dependencies.
-    'project_dependency'
+    'project_dependency',
+    -- M-P3b (docs/34) — the Head of PMs' weekly roll-up.
+    'portfolio_report'
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);
