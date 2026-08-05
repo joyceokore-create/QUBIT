@@ -61,7 +61,16 @@ This is the entry point. Read documents in this order.
     (DM1.55–57).
 26. **33-p2-deliver-execution.md** — P2 "Deliver": the one READ-ONLY board (lanes over
     YouTrack states, sync health, authoring retired per docs/25 §1), the Checkpoints &
-    Rollout workspace tab, cross-project dependencies. Milestones M-P2a–c.
+    Rollout workspace tab, cross-project dependencies. Milestones M-P2a–c. SHIPPED
+    (DM1.60–62).
+27. **34-p3-report-execution.md** — P3 "Report": in-workspace report authoring (member
+    queries → PM check-in → send to Head), the `PortfolioReport` roll-up rung where
+    approve FREEZES the payload, and the thin role-composed reports index (the standalone
+    generate centre retired). Milestones M-P3a–c. SHIPPED (DM1.63–65).
+28. **35-p4-front-of-funnel-execution.md** — P4 "Front of funnel & polish": idea intake +
+    triage board (the one lifecycle stage with no surface — docs/26 §5.4), ⌘K command
+    search, the notifications centre, and the first-run/a11y sweep. Milestones M-P4a–c.
+    NEXT.
 
 ## Document readiness checklist
 
