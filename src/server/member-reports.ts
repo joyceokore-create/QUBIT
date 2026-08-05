@@ -487,3 +487,40 @@ export async function acknowledgedMemberLines(
   }
   return lines;
 }
+
+export interface MyReportListRow {
+  isoWeek: string;
+  status: MemberReportStatus;
+  submittedAt: Date | null;
+  narrative: string | null;
+  projects: { projectId: string; projectCode: string; projectName: string }[];
+  acks: number;
+}
+
+/** M-P3c (docs/34 §1) — the thin index's "my updates" list: my own weeks, newest
+ * first. userId scoping on top of RLS — the index never shows anyone else's report. */
+export async function listMyReports(ctx: TenantContext, take = 12): Promise<MyReportListRow[]> {
+  return withTenant(ctx, async (tx) => {
+    const rows = await tx.memberReport.findMany({
+      where: { userId: ctx.userId },
+      orderBy: { isoWeek: "desc" },
+      take,
+      include: { acks: { select: { id: true } } },
+    });
+    return rows.map((r) => {
+      const draft = r.draft as unknown as MemberReportDraft;
+      return {
+        isoWeek: r.isoWeek,
+        status: r.status as MemberReportStatus,
+        submittedAt: r.submittedAt,
+        narrative: r.narrative,
+        projects: (draft.sections ?? []).map((s) => ({
+          projectId: s.projectId,
+          projectCode: s.projectCode,
+          projectName: s.projectName,
+        })),
+        acks: r.acks.length,
+      };
+    });
+  });
+}

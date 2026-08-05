@@ -2157,3 +2157,31 @@ draft; freeze-after-approve incl. refused re-approve; tenant B sees none + exec
 notification). Live as Joyce: confirm+send HomeQuest → build draft "1/25 submitted ·
 1/25 confirmed" → approve → strip APPROVED, KPI "all signed", exec hero carrying the
 narrative. Verification roll-up row deleted; the real W32 check-in kept.
+
+## DM1.65 — The thin reports index; the generate centre retires (M-P3c)
+
+P3's last rung (docs/34 §1, docs/25 §6): authoring lives in the workspaces, and
+/reports becomes the index that FINDS, READS and EXPORTS.
+
+- **Role-composed tabs**: members get "My updates" ONLY (the composer — still the one
+  home of the whole-week narrative — plus their past weeks; own rows only, pinned).
+  PMs add "Team reports" (the ack queue notifications already link to) and "My
+  projects' reports"; the Head's version is "All project reports" — every active
+  project's latest check-in state, deep-linking into workspace Reports tabs. Anyone
+  with `reports:read` keeps the R1–R3 summaries and gains **"Roll-ups"**: the archive,
+  Approved weeks for everyone, the standing Draft visible to the Head alone.
+- **Exports are honest**: CSV ships now (`/api/rollup/export?week=`, pure formatter in
+  `src/lib/report-csv.ts` with quoting pinned by unit tests; Draft weeks export only
+  for the Head — same visibility rule as the archive, 404 otherwise, never a leak).
+  PDF stays deferred with M9-B and the surface SAYS so.
+- **The generate centre retires** (`reports-client.tsx` deleted; `?tab=generate` falls
+  back). Q's drawer keeps `/api/q/report` for scoped pulls, and `/reports/s/[token]`
+  share links keep working — the standalone builder UI is what died, not the engine.
+
+**Verified**: lint/typecheck/build green, 807/807 (8 new: CSV quoting; own-rows-only;
+PM-vs-Head index scoping; Draft-hidden-from-non-heads archive + export rule; tenant B
+blind). Live as Joyce: all seven tabs, HomeQuest+HELB rows "sent to Head", roll-up
+archive empty state → built Draft appears with working CSV download (200, attachment,
+correct rows), `?tab=generate` lands on Status. Verification Draft row deleted under
+tenant RLS context; the two real W32 check-ins (both confirmed by the real account)
+kept.

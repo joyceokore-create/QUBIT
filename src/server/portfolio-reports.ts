@@ -215,3 +215,50 @@ export async function getApprovedRollup(
     return { isoWeek: row.isoWeek, narrative: row.narrative, approvedByName: row.approvedBy?.name ?? null };
   });
 }
+
+export interface RollupArchiveRow {
+  isoWeek: string;
+  status: "Draft" | "Approved";
+  narrative: string | null;
+  approvedByName: string | null;
+  approvedAt: Date | null;
+  projects: number;
+}
+
+/** M-P3c (docs/34 §1) — the roll-up archive for the thin index: Approved weeks for
+ * anyone with reports:read; the Head (and SuperAdmin) also see the standing Draft. */
+export async function listRollups(ctx: TenantContext, take = 26): Promise<RollupArchiveRow[]> {
+  const isHead = ctx.roles.some((r) => r === "HeadOfProjects" || r === "PlatformSuperAdmin");
+  return withTenant(ctx, async (tx) => {
+    const rows = await tx.portfolioReport.findMany({
+      where: isHead ? {} : { status: "Approved" },
+      orderBy: { isoWeek: "desc" },
+      take,
+      include: { approvedBy: { select: { name: true } } },
+    });
+    return rows.map((r) => ({
+      isoWeek: r.isoWeek,
+      status: r.status as "Draft" | "Approved",
+      narrative: r.narrative,
+      approvedByName: r.approvedBy?.name ?? null,
+      approvedAt: r.approvedAt,
+      projects: Array.isArray(r.payload) ? (r.payload as unknown[]).length : 0,
+    }));
+  });
+}
+
+/** M-P3c — one archived week for export: the frozen payload once Approved; the Head
+ * may also export their standing Draft (its last-built rows). Null when the caller
+ * may not see it — the route answers 404, never a leak. */
+export async function getRollupWeek(ctx: TenantContext, isoWeek: string): Promise<RollupView | null> {
+  const isHead = ctx.roles.some((r) => r === "HeadOfProjects" || r === "PlatformSuperAdmin");
+  return withTenant(ctx, async (tx) => {
+    const row = await tx.portfolioReport.findUnique({
+      where: { tenantId_isoWeek: { tenantId: ctx.tenantId, isoWeek } },
+      include: { approvedBy: { select: { name: true } } },
+    });
+    if (!row) return null;
+    if (row.status !== "Approved" && !isHead) return null;
+    return toView(isoWeek, row, (row.payload as unknown as RollupRow[]) ?? []);
+  });
+}

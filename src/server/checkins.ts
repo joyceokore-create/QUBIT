@@ -326,3 +326,52 @@ export async function listProjectReports(ctx: TenantContext, projectId: string, 
     }));
   });
 }
+
+export interface ReportIndexRow {
+  projectId: string;
+  code: string;
+  name: string;
+  pmName: string | null;
+  latest: { isoWeek: string; status: "Confirmed" | "Draft"; rag: Rag; sentToHead: boolean } | null;
+}
+
+/** M-P3c (docs/34 §1) — the thin index's project-reports rows: the Head (and
+ * SuperAdmin) see every active project, a PM sees the projects they lead. Each row
+ * carries the LATEST check-in of any week so the index can deep-link into the
+ * workspace Reports tab — authoring never happens on the index. */
+export async function listReportIndex(ctx: TenantContext, now = new Date()): Promise<ReportIndexRow[]> {
+  const seesAll = ctx.roles.some((r) => r === "HeadOfProjects" || r === "PlatformSuperAdmin");
+  return withTenant(ctx, async (tx) => {
+    const projects = await tx.project.findMany({
+      where: {
+        status: { notIn: ["Completed", "Cancelled"] },
+        ...(seesAll ? {} : { leadUserId: ctx.userId }),
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        lead: { select: { name: true } },
+        checkIns: { orderBy: { isoWeek: "desc" }, take: 1 },
+      },
+      orderBy: { name: "asc" },
+    });
+    return projects.map((p) => {
+      const ci = p.checkIns[0];
+      return {
+        projectId: p.id,
+        code: p.code,
+        name: p.name,
+        pmName: p.lead?.name ?? null,
+        latest: ci
+          ? {
+              isoWeek: ci.isoWeek,
+              status: ci.status === "Confirmed" ? ("Confirmed" as const) : ("Draft" as const),
+              rag: effectiveRag(ci, now),
+              sentToHead: Boolean(ci.submittedToHeadAt),
+            }
+          : null,
+      };
+    });
+  });
+}
