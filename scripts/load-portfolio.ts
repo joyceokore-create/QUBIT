@@ -55,7 +55,7 @@ async function main() {
     // ── Portfolios ────────────────────────────────────────────────────────────
     const portfolioIds = new Map<string, string>();
     for (const p of PORTFOLIOS) {
-      const existing = await tx.portfolio.findFirst({ where: { name: p.name }, select: { id: true } });
+      const existing = await tx.portfolio.findFirst({ where: { name: { equals: p.name, mode: "insensitive" } }, select: { id: true } });
       if (existing) {
         portfolioIds.set(p.name, existing.id);
         log(`portfolio “${p.name}” — exists`);
@@ -81,7 +81,7 @@ async function main() {
       { name: "Agent banking channels", gates: AGENT_CHANNEL_GATES },
     ];
     for (const t of TEMPLATES) {
-      const found = await tx.checkpointTemplate.findFirst({ where: { name: t.name }, select: { id: true } });
+      const found = await tx.checkpointTemplate.findFirst({ where: { name: { equals: t.name, mode: "insensitive" } }, select: { id: true } });
       if (found) {
         templateIds.set(t.name, found.id);
       } else if (DRY) {
@@ -187,7 +187,7 @@ async function main() {
     for (const rp of ROLLOUT_PORTFOLIOS) {
       let pfId = portfolioIds.get(rp.name);
       if (!pfId) {
-        const existing = await tx.portfolio.findFirst({ where: { name: rp.name }, select: { id: true } });
+        const existing = await tx.portfolio.findFirst({ where: { name: { equals: rp.name, mode: "insensitive" } }, select: { id: true } });
         if (existing) {
           pfId = existing.id;
           log(`\nportfolio “${rp.name}” — exists`);
