@@ -2301,3 +2301,40 @@ the schema kept implying a second, parallel task system.
 was what caught all 25 dangling back-relations); reseed runs; `pg_tables`/`pg_type` confirm
 all 21 tables and 4 enums gone from dev; `/time` → 404 and `/api/time/report` → 404 in the
 browser; dashboard and nav render with no Time entry and no console errors.
+
+## DM1.69 — Backups that are tested, and a health probe that can fail (M-P0a)
+
+The two P0 foundations from docs/36 §4 whose absence could lose data. Chosen over the next
+feature milestone deliberately: a bad disk on the box had no recovery path.
+
+- **`/api/health`** runs a real `SELECT 1` and is **excluded from the auth middleware** —
+  the same trap this session hit twice already: a probe redirected to `/login` answers
+  **302**, and anything checking for a 2xx/3xx reads a dead database as healthy.
+  `deploy.sh` now gates on health instead of `/login`, so an app that serves HTML against
+  an unreachable database **fails** the deploy rather than passing it. The body is three
+  keys and no detail (it is unauthenticated): status, db, latencyMs — the driver error goes
+  to the server log, not to the caller. Test-pinned including the no-leak assertion.
+- **`scripts/backup-db.sh`** — `pg_dump -Fc` as the **superuser**, not the app role. This
+  is the DM1.18 trap one layer down: `qubit` is deliberately non-superuser so FORCE RLS
+  applies to it, which means a dump taken as `qubit` would read zero rows from every
+  tenant-scoped table and still exit 0 — a *silently empty* backup. Superusers bypass RLS,
+  which is also what makes the verification's row counts true totals.
+- **The restore is tested, not hoped for.** `--verify` restores the fresh dump into a
+  scratch database, then compares **schema (table count), data (an aggregate over tenant /
+  user / project / check_in / audit_log) and RLS policy count**, and drops the scratch DB.
+  Data and policies both matter: a structurally perfect *empty* restore would pass a
+  table-count check, and a restore missing its policies would be a cross-tenant leak
+  waiting to happen. First run on the box: **tables 61→61, key rows 142→142, policies
+  57→57 — PASS.**
+- Also refuses to keep a dump under 10 KB (a truncated file that looks like a backup is
+  worse than none), prunes past 14 days, and stores dumps **0600 inside a 0700 directory
+  outside the app tree** — they contain real user emails, and `rsync --delete` must never
+  be able to reach them. Cron install is idempotent (verified: re-running left exactly two
+  QUBIT lines and did not disturb the pre-existing `auto-pull` entry).
+- **Stated limit**: the dumps sit on the same machine as the database. They survive a bad
+  migration or a mistaken delete, **not a dead disk**. Off-box copies are logged in
+  docs/36 §4 as the remaining half.
+
+**Verified**: lint/typecheck/build green, 824/824 (3 new); the health gate proved itself on
+its own first deploy (`{"status":"ok","db":"ok","latencyMs":1}`); backup + restore-verify
+run twice on the box; dump permissions, cron idempotency and scratch-DB cleanup all checked.

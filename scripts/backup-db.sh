@@ -70,17 +70,32 @@ if [ "$VERIFY" = "1" ]; then
   if ! docker compose exec -T db pg_restore -U "$DB_SUPERUSER" -d "$SCRATCH" --no-owner --no-privileges < "$OUT" 2>>"$LOG_FILE"; then
     log "verify: pg_restore reported warnings — checking the result anyway"
   fi
-  LIVE_TABLES="$(docker compose exec -T db psql -U "$DB_SUPERUSER" -d "$DB_NAME" -t -A -c "SELECT count(*) FROM pg_tables WHERE schemaname='public';" | tr -d '\r')"
-  REST_TABLES="$(docker compose exec -T db psql -U "$DB_SUPERUSER" -d "$SCRATCH" -t -A -c "SELECT count(*) FROM pg_tables WHERE schemaname='public';" | tr -d '\r')"
-  # Row-level spot check on the tenant table, which has NO RLS, so counts are directly
-  # comparable without a tenant context.
-  LIVE_TENANTS="$(docker compose exec -T db psql -U "$DB_SUPERUSER" -d "$DB_NAME" -t -A -c "SELECT count(*) FROM tenant;" | tr -d '\r')"
-  REST_TENANTS="$(docker compose exec -T db psql -U "$DB_SUPERUSER" -d "$SCRATCH" -t -A -c "SELECT count(*) FROM tenant;" | tr -d '\r')"
+  # Compare the SCHEMA and the DATA. Schema alone is not enough: pg_dump could produce a
+  # structurally perfect, entirely empty database and a table-count check would call it a
+  # pass. Row counts are read as the SUPERUSER, which bypasses row-level security — so
+  # these are true totals across every tenant, not one tenant's slice.
+  count_in() { # count_in <db> <sql>
+    docker compose exec -T db psql -U "$DB_SUPERUSER" -d "$1" -t -A -c "$2" | tr -d '\r'
+  }
+  LIVE_TABLES="$(count_in "$DB_NAME" "SELECT count(*) FROM pg_tables WHERE schemaname='public';")"
+  REST_TABLES="$(count_in "$SCRATCH" "SELECT count(*) FROM pg_tables WHERE schemaname='public';")"
+  # One aggregate over the tables that would hurt most to lose, so a single number covers
+  # tenants, people, delivery, the weekly loop and the audit trail.
+  ROWS_SQL="SELECT (SELECT count(*) FROM tenant) + (SELECT count(*) FROM \"user\") + (SELECT count(*) FROM project) + (SELECT count(*) FROM check_in) + (SELECT count(*) FROM audit_log);"
+  LIVE_ROWS="$(count_in "$DB_NAME" "$ROWS_SQL")"
+  REST_ROWS="$(count_in "$SCRATCH" "$ROWS_SQL")"
+  # RLS must survive the restore too — a recovered database with policies missing would be
+  # a cross-tenant leak waiting to happen (docs/04).
+  POL_SQL="SELECT count(*) FROM pg_policies WHERE schemaname='public';"
+  LIVE_POL="$(count_in "$DB_NAME" "$POL_SQL")"
+  REST_POL="$(count_in "$SCRATCH" "$POL_SQL")"
   docker compose exec -T db psql -U "$DB_SUPERUSER" -d postgres -c "DROP DATABASE \"$SCRATCH\";" >/dev/null
-  log "verify: tables live=$LIVE_TABLES restored=$REST_TABLES · tenants live=$LIVE_TENANTS restored=$REST_TENANTS"
+  log "verify: tables $LIVE_TABLES→$REST_TABLES · key rows $LIVE_ROWS→$REST_ROWS · RLS policies $LIVE_POL→$REST_POL"
   [ "$LIVE_TABLES" = "$REST_TABLES" ] || fail "table count mismatch — the dump is not a faithful copy"
-  [ "$LIVE_TENANTS" = "$REST_TENANTS" ] || fail "tenant count mismatch — the dump is not a faithful copy"
-  log "verify: PASS — this dump restores cleanly"
+  [ "$LIVE_ROWS" = "$REST_ROWS" ] || fail "row count mismatch ($LIVE_ROWS vs $REST_ROWS) — data did not survive the restore"
+  [ "$REST_ROWS" -gt 0 ] || fail "restored database is empty"
+  [ "$LIVE_POL" = "$REST_POL" ] || fail "RLS policy count mismatch — a restored copy would not be tenant-isolated"
+  log "verify: PASS — schema, data and RLS policies all restore faithfully"
 fi
 
 # ── Retention ───────────────────────────────────────────────────────────────────

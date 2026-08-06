@@ -43,13 +43,20 @@ P0 promised "nothing user-facing feels different; everything gets trustworthy." 
 the parts still missing — worth doing before more features, since they are what makes an
 incident survivable:
 
-- [ ] **No database backup.** Verified: no `pg_dump` anywhere in `scripts/`, and the box
-      crontab holds only a commented-out `auto-pull.sh` line. A single `docker compose exec
-      db pg_dump` on a cron plus a **tested restore** is the whole job. Highest-value item
-      on this page.
-- [ ] **No health endpoint.** `src/app/api/health` does not exist; `deploy.sh` verifies
-      `/login` instead, which only proves Next is serving — not that the DB is reachable.
-- [ ] **No observability** beyond `docker compose logs`. No error tracking, no uptime check.
+- [x] ~~No database backup~~ — **DONE 2026-08-06 (M-P0a, DM1.69).** `scripts/backup-db.sh`
+      on cron: nightly 02:30 UTC, Sundays with `--verify` (restores into a scratch database
+      and compares tables + key row counts + RLS policy counts, then drops it). 14-day
+      retention, dumps 0600 in a 0700 dir outside the app tree. First verified run:
+      tables 61→61, key rows 142→142, policies 57→57.
+- [x] ~~No health endpoint~~ — **DONE 2026-08-06 (M-P0a).** `/api/health` runs a real
+      query; `deploy.sh` now gates on it, so a live app over a dead database fails the
+      deploy.
+- [ ] **No observability** beyond `docker compose logs`. No error tracking. `/api/health`
+      now exists, so pointing any uptime monitor at `https://q.fikrawork.com/api/health` is
+      the cheap next step — it returns 503 when the database is unreachable.
+- [ ] **Backups are on-box only.** The dumps live on the same machine as the database, so
+      they survive a bad migration or an accidental delete but NOT a dead disk. Copying them
+      off-box (or snapshotting the volume) is the remaining half of a real backup story.
 
 ## 5. Deferred features with an explicit promise attached
 
