@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { FileBarChart } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { withTenant } from "@/lib/tenant";
@@ -45,12 +46,16 @@ export default async function DashboardPage({
 
   // First-login checklist (docs/23 §7): only for users who completed the guided flow and
   // haven't dismissed it. DB-read, not session — the dismissal must hold across devices.
+  // findUnique, NOT findUniqueOrThrow: a session can outlive its user (account deleted or
+  // the database reseeded), and that must land on sign-in rather than a 500 loop the user
+  // cannot escape — the cookie is still valid, so they'd keep hitting it.
   const me = await withTenant(ctx, (tx) =>
-    tx.user.findUniqueOrThrow({
+    tx.user.findUnique({
       where: { id: ctx.userId },
       select: { onboardedAt: true, checklistDismissedAt: true },
     }),
   );
+  if (!me) redirect("/login");
   const showChecklist = me.onboardedAt !== null && me.checklistDismissedAt === null;
 
   return (

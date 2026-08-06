@@ -5,8 +5,6 @@
  */
 
 const FLAG_ENV = {
-  /** ClickUp spaces surface — code removed in the M0 cull; reserved so any return is deliberate. */
-  spaces: "FEATURE_SPACES",
   /** Outbound email via the Mailer interface (lands M5). */
   email: "FEATURE_EMAIL",
   /** GitHub commit → task automation (lands M7). */

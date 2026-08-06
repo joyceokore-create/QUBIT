@@ -1157,27 +1157,6 @@ async function resetTenant(slug: string) {
     await tx.projectMember.deleteMany({});
     await tx.teamMember.deleteMany({});
     await tx.team.deleteMany({});
-    await tx.activity.deleteMany({});
-    await tx.automationRun.deleteMany({});
-    await tx.automation.deleteMany({});
-    await tx.timeEntry.deleteMany({});
-    await tx.view.deleteMany({});
-    await tx.fieldValue.deleteMany({});
-    await tx.fieldDefinition.deleteMany({});
-    await tx.comment.deleteMany({});
-    await tx.checklistItem.deleteMany({});
-    await tx.checklist.deleteMany({});
-    await tx.taskDependency.deleteMany({});
-    await tx.taskWatcher.deleteMany({});
-    await tx.taskAssignee.deleteMany({});
-    await tx.taskTag.deleteMany({});
-    await tx.task.deleteMany({});
-    await tx.tag.deleteMany({});
-    await tx.status.deleteMany({});
-    await tx.statusGroup.deleteMany({});
-    await tx.list.deleteMany({});
-    await tx.folder.deleteMany({});
-    await tx.space.deleteMany({});
 
     await tx.projectOrgStatus.deleteMany({});
     await tx.issue.deleteMany({});

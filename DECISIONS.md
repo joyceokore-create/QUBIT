@@ -2263,3 +2263,41 @@ green suite plus computed-style checks in the browser.
 
 **Verified**: lint/typecheck/build green, 821/821 unchanged; browser spot-checks on
 /ideas, /projects, /dashboard, /reports?tab=rollups and /admin/users.
+
+## DM1.68 — Nothing from ClickUp stays (M-C)
+
+Joyce's call, 2026-08-06. docs/19 M-C's "ClickUp-schema removal" executed in full: the
+transformation-era models never carried a single row in this product, and leaving them in
+the schema kept implying a second, parallel task system.
+
+- **21 tables dropped**: space, folder, list, status_group, status, **task**,
+  task_dependency, tag, task_tag, task_assignee, task_watcher, activity, checklist,
+  checklist_item, **comment**, field_definition, field_value, view, time_entry, automation,
+  automation_run — plus the 4 enums only they used (DependencyType, FieldType, ViewType,
+  RunStatus). Schema is **480 lines lighter**; `prisma/rls.sql` pruned to match.
+- **Emptiness was verified, not assumed** — counted per tenant under
+  `set_config('app.tenant_id', …)` in dev **and production**, because these are FORCE-RLS
+  tables where a bare `count(*)` reads 0 whether or not rows exist (the DM1.18/DM1.50
+  trap). All 21: zero rows in both.
+- **KEPT**, because they are live PPM features that merely sat in the same schema block:
+  `team`, `team_member`, `project_member`, `project_team`, `ai_call_log`. The near-miss
+  worth recording: an early grep suggested `team` was unused too — the pattern was wrong.
+  The authoritative check is which `tx.<model>.` names appear in src/ and tests/.
+- **`/time` went with it — a user-visible removal.** `TimeEntry` hung off `task` by a
+  REQUIRED FK, so with `task` empty no time entry could exist; there was no capture path
+  left (the timer died in the M0 cull) and 0 rows in both environments. The page could only
+  ever render an empty table, so the nav item, page, `/api/time/report` and `src/server/
+  time.ts` are gone rather than left as furniture. **docs/19 M6 owns bringing time capture
+  back against `ProjectTask` if it is still wanted** — flagged in docs/36 §7 so nobody has
+  to guess where Time went.
+- **`FEATURE_SPACES` deleted** — the last ClickUp flag, and one fewer thing to configure.
+- **One robustness bug found and fixed in passing**: the dashboard read the session's user
+  with `findUniqueOrThrow`, so a session that outlived its user (account deleted, or a
+  reseed) produced a **500 the user could not escape** — the cookie stays valid, so every
+  reload hit it again. Now `findUnique` + `redirect("/login")`. Found because reseeding dev
+  mid-verification did exactly that.
+
+**Verified**: lint/typecheck/build green, 821/821 unchanged; `prisma validate` clean (it
+was what caught all 25 dangling back-relations); reseed runs; `pg_tables`/`pg_type` confirm
+all 21 tables and 4 enums gone from dev; `/time` → 404 and `/api/time/report` → 404 in the
+browser; dashboard and nav render with no Time entry and no console errors.

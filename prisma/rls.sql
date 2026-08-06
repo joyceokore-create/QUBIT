@@ -30,30 +30,9 @@ BEGIN
     'risk',
     'issue',
     'audit_log',
-    -- ClickUp transformation (docs/clickup-transformation) — every new tenant-owned
-    -- table carries tenant_id and the same isolation policy (incl. join tables, for
-    -- defense-in-depth — see DECISIONS.md).
-    'space',
-    'folder',
-    'list',
-    'status_group',
-    'status',
-    'task',
-    'task_dependency',
-    'tag',
-    'task_tag',
-    'task_assignee',
-    'task_watcher',
-    'activity',
-    'checklist',
-    'checklist_item',
-    'comment',
-    'field_definition',
-    'field_value',
-    'view',
-    'time_entry',
-    'automation',
-    'automation_run',
+    -- Cross-functional teams + project resourcing. (The ClickUp-era tables that used to
+    -- sit here — space/folder/list/task/comment/view/automation/time_entry and friends —
+    -- were dropped in M-C; these four are live PPM features that merely shared the block.)
     'team',
     'team_member',
     'project_member',

@@ -13,7 +13,6 @@ import { listWorkload, type WorkloadRow } from "@/server/resources";
 // the CSV rules live in one place; each kind reuses the EXACT engine its screen renders
 // from — the file you download is the table you were looking at, including its
 // permission scope (tasks go through the DM1.43 board wall, not around it).
-// Time already exports at /api/time/report?format=csv (same toCsv since M9).
 
 export const dynamic = "force-dynamic";
 

@@ -6,7 +6,6 @@ import {
   FolderKanban,
   Lightbulb,
   TriangleAlert,
-  Clock,
   Users,
   Contact,
   BarChart3,
@@ -39,7 +38,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Programmes", href: "/programmes", memberHidden: true, icon: Boxes }, // M-W1a (docs/32)
   { label: "Projects", href: "/projects", icon: FolderKanban },
   { label: "Risks", href: "/risks", memberHidden: true, icon: TriangleAlert },
-  { label: "Time", href: "/time", memberHidden: true, icon: Clock },
   { label: "Teams", href: "/admin/teams", perm: "admin:access", icon: Users },
   { label: "People", href: "/people", memberHidden: true, icon: Contact },
   { label: "Staffing", href: "/staffing", perm: "project:create", icon: UserPlus }, // M-P1d — resource requests

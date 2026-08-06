@@ -16,15 +16,15 @@ claim came from an inspection, the evidence is named so it can be re-checked.
       (note it in docs/03).
 - [ ] **M-P4c — Notifications centre + first-run/a11y sweep.** A real `/notifications`
       page with paging and filters (the bell only samples today); honest-empty sweep over
-      the pre-P1 surfaces (`/risks`, `/time`, `/people`, `/subsidiaries`, `/my-tasks`);
+      the pre-P1 surfaces (`/risks`, `/people`, `/subsidiaries`, `/my-tasks`);
       keyboard/focus/touch-target pass over the P1–P4 surfaces.
 
 ## 2. Not yet deployed
 
-- [ ] **Ship the DM1.67 cleanup to the box.** `main` is at `398a9d5`; the box tree still
-      has `src/server/nav.ts` and no `src/lib/surface.ts` — verified by SSH file check. No
-      user-visible change, so it can ride with the next feature deploy; just don't forget
-      it, or the box keeps building dead files.
+- [ ] **Ship DM1.67 + M-C to the box.** Both are on `main` and neither is deployed yet.
+      M-C carries a DESTRUCTIVE migration (21 DROP TABLEs), so it needs the full
+      `./scripts/deploy.sh` — `--no-build` cannot deliver migrations. All 21 tables were
+      verified empty in production first.
 
 ## 3. P5 — Governance depth & benefits (docs/26 §11) — no execution spec yet
 
@@ -83,6 +83,12 @@ Each of these is *stated on a live surface* or in a spec, so the promise is publ
 
 ## 7. Code health (docs/19 M5 + observations)
 
+- [ ] **Time capture no longer exists** — `TimeEntry` and `/time` were removed with the
+      ClickUp schema (M-C): the model hung off the dead `task` table by a required FK, had
+      no capture path and 0 rows, so the page could only render an empty table. docs/19 M6
+      owns rebuilding time capture against `ProjectTask` **if** it is still wanted; decide
+      that before anyone asks where Time went.
+
 - [ ] **Split `src/server/project-tasks.ts`** — 846 lines, the largest file in the tree.
 - [ ] **Adopt the shared error envelope across all routes** (docs/19 M5); it exists but
       route handlers still hand-roll some responses.
@@ -102,8 +108,9 @@ Verified on the box: **no `FEATURE_*` variables are set at all** in `.env.produc
 - [ ] **`FEATURE_YOUTRACK`** → the read-only board renders, but no sync runs in production;
       "last synced" will read empty. Needs the YouTrack base URL + token per project.
 - [ ] **`FEATURE_COMMIT_AUTOMATION`** (docs/19 M5) → GitHub commit→task automation stays off.
-- [ ] **Decide whether `FEATURE_SPACES`** (legacy ClickUp-era surface) should exist at all,
-      or be removed with its code.
+- [x] ~~Decide whether `FEATURE_SPACES` should exist~~ — **answered 2026-08-06: nothing
+      from ClickUp stays.** The flag, the 21 ClickUp-era tables and the `/time` surface that
+      hung off them are gone (M-C, DM1.68). Nothing to set on the box.
 
 ---
 
