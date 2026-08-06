@@ -26,6 +26,7 @@ import { RequirementsPanel } from "@/components/workspace/requirements-panel";
 import { RequestToJoinButton } from "@/components/workspace/request-to-join-button";
 import { statusMeta } from "@/lib/project-view";
 import type { ProjectPanelJson } from "@/components/panels/project-panel-content";
+import { CARD_GLASS as CARD } from "@/lib/surface";
 
 const TABS = ["Overview", "Board", "Documents", "Delivery", "Reports", "Team", "Integrations"] as const;
 // M-P2b (docs/25 §3): "Delivery" is the tab KEY; it renders as Checkpoints & Rollout.
@@ -63,8 +64,6 @@ function timeline(dueDate: string | null): string | null {
   if (days === 0) return `Due today · ${d}`;
   return `${-days} ${days === -1 ? "day" : "days"} overdue · ${d}`;
 }
-
-const CARD = "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]";
 
 export function ProjectWorkspace({
   data,

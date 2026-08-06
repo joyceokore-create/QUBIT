@@ -3,12 +3,11 @@
 import { useEffect, useState } from "react";
 import { CheckCheck, Loader2 } from "lucide-react";
 import type { MemberReportSection } from "@/server/member-reports";
+import { CARD } from "@/lib/surface";
 
 // The lead's side of the member report loop (docs/18 §5.1.3/4): reports submitted by
 // members of the projects I lead, each showing ONLY my project's section. Acknowledging
 // is per project — a PM of A never signs off B — and rolls into my check-in draft.
-
-const CARD = "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)]";
 
 interface TeamRow {
   id: string;

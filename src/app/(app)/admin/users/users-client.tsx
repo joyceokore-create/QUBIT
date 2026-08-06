@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { AdminUserSummary } from "@/server/users";
 import type { DepartmentSummary } from "@/server/departments";
 import { UserRowActions } from "./user-row-actions";
+import { CARD_GLASS as CARD } from "@/lib/surface";
 
 export interface AdminInsight {
   text: string;
@@ -27,7 +28,6 @@ function steps(u: AdminUserSummary) {
 
 type Segment = "all" | "invited" | "nomfa" | "unassigned" | "suspended";
 const ROW_GRID = "grid grid-cols-[minmax(0,1.6fr)_170px_120px_86px_30px] items-center gap-3.5";
-const CARD = "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]";
 
 export function UsersClient({
   users,

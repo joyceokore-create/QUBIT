@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CARD } from "@/lib/surface";
 
 /**
  * M-P4a (docs/35 §1) — idea intake & triage, laid out as the wizards wireframe draws it:
@@ -37,7 +38,6 @@ interface Board {
   decided: IdeaRow[];
 }
 
-const CARD = "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)]";
 const LABEL = "text-[11px] font-semibold tracking-[0.6px] text-[var(--ink4)] uppercase";
 const TEXTAREA = "mt-1.5 w-full rounded-lg border border-input bg-background p-2.5 text-sm";
 const SELECT = "mt-1.5 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm";

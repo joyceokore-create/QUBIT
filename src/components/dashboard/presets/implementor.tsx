@@ -6,13 +6,13 @@ import { FirstLoginChecklist } from "@/components/dashboard/presets/first-login-
 import { PortfolioSections } from "@/components/dashboard/portfolio-sections";
 import { ScopeToggle } from "@/components/dashboard/scope-toggle";
 import { CARD, Empty, Panel } from "@/components/dashboard/presets/v2-sections";
+import { RAG_TOKEN } from "@/lib/surface";
 
 // Implementor preset (docs/17 §7, design handoff persona-dashboards): "what goes live
 // next, and is it ready?" Since M8 the gates are REAL — a project's checkpoint template
 // drives them, with milestones as a marked fallback for projects that have no template.
 // The rollout WINDOW still comes from UAT/pilot-tagged milestones, which is about dates.
 
-const RAG_TOKEN: Record<string, string> = { Green: "--ok", Amber: "--warn", Red: "--bad" };
 const SEVERITY_TOK: Record<string, string> = { Critical: "--bad", High: "--warn", Medium: "--qinfo", Low: "--ink4" };
 const SEVERITY_SHORT: Record<string, string> = { Critical: "CRIT", High: "HIGH", Medium: "MED", Low: "LOW" };
 

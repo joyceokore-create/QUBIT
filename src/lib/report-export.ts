@@ -29,7 +29,7 @@ function inline(text: string): string {
 }
 
 /** Render the Markdown subset Q emits (h1–h3, bullet lists, bold/italic/code, paragraphs) to an HTML body fragment. */
-export function markdownToHtmlBody(markdown: string): string {
+function markdownToHtmlBody(markdown: string): string {
   const lines = markdown.split("\n");
   const out: string[] = [];
   let list: string[] = [];

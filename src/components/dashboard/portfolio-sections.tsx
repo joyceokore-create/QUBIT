@@ -4,6 +4,7 @@ import type { RolloutMatrix } from "@/server/rollout";
 import { PipelineTable } from "@/components/dashboard/pipeline-table";
 import { RolloutHeatmap } from "@/components/dashboard/rollout-heatmap";
 import { CARD } from "@/components/dashboard/presets/v2-sections";
+import { RAG_TOKEN } from "@/lib/surface";
 
 // Portfolio sections (docs/18 §6 amended, shape per the supervisor's wireframe): one
 // collapsible <details> per portfolio, worst health first, Unassigned last and only
@@ -12,8 +13,6 @@ import { CARD } from "@/components/dashboard/presets/v2-sections";
 // Body = the viewKind lens: Pipeline renders the stage-grouped table, Rollout renders
 // the project × market heatmap (M-D-B). A Rollout portfolio with no market tracks yet
 // falls back to the pipeline lens rather than showing an empty grid.
-
-const RAG_TOKEN: Record<string, string> = { Green: "--ok", Amber: "--warn", Red: "--bad" };
 
 function SectionDelta({ delta }: { delta: -1 | 0 | 1 | null }) {
   if (delta === null) return null;

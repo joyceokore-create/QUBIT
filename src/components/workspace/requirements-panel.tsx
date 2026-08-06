@@ -3,13 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { Check, Loader2, Sparkles, X } from "lucide-react";
 import type { CoverageReport, RequirementCandidate, RequirementRow } from "@/server/requirements";
+import { CARD } from "@/lib/surface";
 
 // Requirements + traceability (docs/16 §6). Extraction PROPOSES; this screen is the
 // human gate — "Q found this in your BRD" — and only ticked items become real. Coverage
 // names the uncovered anchors ("URS §3.2 has no covering task") rather than reporting a
 // bare percentage nobody can act on.
-
-const CARD = "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)]";
 
 interface Doc {
   id: string;

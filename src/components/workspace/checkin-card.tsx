@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CheckCheck, ShieldAlert } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RAG_TOKEN } from "@/lib/surface";
 
 // Friday check-in (M2, docs/16 §7): the system drafts the week from live data; the lead
 // reads the bullets, writes ONE line, confirms — under two minutes. A RAG override needs
@@ -23,8 +24,6 @@ interface CheckInJson {
   submittedToHeadAt: string | null;
   canConfirm: boolean;
 }
-
-const RAG_TOKEN: Record<string, string> = { Green: "--ok", Amber: "--warn", Red: "--bad" };
 
 function RagChip({ rag, label }: { rag: string; label?: string }) {
   const tok = RAG_TOKEN[rag] ?? "--ink4";

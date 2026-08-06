@@ -11,6 +11,7 @@ import { MemberReportComposer } from "@/components/reports/member-report-compose
 import { TeamReports } from "@/components/reports/team-reports";
 import { PortfolioSections } from "@/components/dashboard/portfolio-sections";
 import { RolloutHeatmap } from "@/components/dashboard/rollout-heatmap";
+import { CARD, RAG_TOKEN } from "@/lib/surface";
 
 // M-P3c (docs/34 §1, docs/25 §6) — the THIN reports index. Authoring lives in the
 // workspaces; this page finds, reads and exports. Role-composed:
@@ -21,9 +22,6 @@ import { RolloutHeatmap } from "@/components/dashboard/rollout-heatmap";
 //    roll-up archive with CSV export (PDF stays deferred with M9-B — stated, not faked).
 // The standalone generate centre RETIRED here — Q's drawer still builds scoped pulls,
 // and share links under /reports/s/[token] keep working.
-
-const CARD = "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)]";
-const RAG_TOKEN: Record<string, string> = { Green: "--ok", Amber: "--warn", Red: "--bad" };
 
 type TabKey = "status" | "markets" | "focus" | "mine" | "team" | "projects" | "rollups";
 

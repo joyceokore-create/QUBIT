@@ -34,7 +34,7 @@ export interface Mailer {
   send(message: MailMessage): Promise<MailResult>;
 }
 
-export function graphConfigured(): boolean {
+function graphConfigured(): boolean {
   return Boolean(
     process.env.GRAPH_TENANT_ID &&
       process.env.GRAPH_CLIENT_ID &&

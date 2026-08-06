@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { useAdminMutation } from "@/components/admin/use-admin-mutation";
+import { CARD_GLASS as CARD } from "@/lib/surface";
 
 interface Row {
   id: string;
@@ -14,7 +15,6 @@ interface Row {
   createdAt: string;
 }
 
-const CARD = "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]";
 const ROW = "grid grid-cols-[120px_minmax(0,1.2fr)_minmax(0,1fr)_110px_150px] items-center gap-3.5 p-[10px_18px]";
 
 const STATUS_STYLE: Record<Row["status"], string> = {

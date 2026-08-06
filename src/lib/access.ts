@@ -58,24 +58,12 @@ export async function canRaiseResourceRequest(ctx: TenantContext, projectId: str
   return withTenant(ctx, (tx) => isDeliveryOwnerTx(tx, ctx.userId, projectId));
 }
 
-/** Can the viewer see budget figures? Hidden from Members; PM sees only their own project. */
-export async function canReadBudget(ctx: TenantContext, projectId?: string): Promise<boolean> {
-  if (can(ctx, "budget:read")) return true; // PlatformSuperAdmin, Executive, both heads
-  if (!projectId) return false; // no project context → Members/PMs see nothing tenant-wide
-  return withTenant(ctx, (tx) => isDeliveryOwnerTx(tx, ctx.userId, projectId));
-}
-
-/** Can the viewer write this risk/blocker? A management role, the owner, or any member of the
- * project (the only block is a project you're not part of — per Joyce). */
-export async function canWriteRiskOrBlocker(
-  ctx: TenantContext,
-  opts: { projectId?: string | null; ownerId?: string | null },
-): Promise<boolean> {
-  if (can(ctx, "risk:write")) return true; // ProjectManager, both heads, SuperAdmin
-  if (opts.ownerId && opts.ownerId === ctx.userId) return true; // the owner writes their own
-  if (!opts.projectId) return false;
-  return withTenant(ctx, (tx) => isProjectMemberTx(tx, ctx.userId, opts.projectId!));
-}
+// GAP (noted during the DM1.67 cleanup): `budget:read` is granted by ROLE in rbac.ts but
+// enforced NOWHERE — the project panel returns `budget` to any viewer who may read the
+// project. The old resource-scoped `canReadBudget` helper here was dead code, so it was
+// providing no protection and has been removed rather than left to look like a control.
+// Harmless today (budget is an unfilled Phase-C placeholder); wire a real check on the
+// same PR that starts storing money. See docs/07-auth-rbac.md.
 
 /** Can the viewer write this task? DM1.43 (supersedes the "any member" fallback): boards
  * are read-only for non-PMs. Write authority = lead/PM roles; the ASSIGNEE for their own

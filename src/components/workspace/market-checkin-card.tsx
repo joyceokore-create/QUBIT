@@ -3,14 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { CARD, RAG_TOKEN } from "@/lib/surface";
 
 // The market check-in (docs/18 §3.1): one narrative paragraph of focus & blockers plus
 // a RAG, per project × market per week. The track's % stays derived from gate state —
 // this card is only for what a human must say. Read-only without the governance gate.
 
-const CARD = "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)]";
 const RAGS = ["Green", "Amber", "Red"] as const;
-const RAG_TOKEN: Record<string, string> = { Green: "--ok", Amber: "--warn", Red: "--bad" };
 
 export function MarketCheckInCard({
   projectId,

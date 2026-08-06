@@ -8,12 +8,12 @@ import { canWriteProject } from "@/lib/access";
 import { getMarketTrack } from "@/server/rollout";
 import { Forbidden } from "@/components/forbidden";
 import { MarketCheckInCard } from "@/components/workspace/market-checkin-card";
+import { CARD } from "@/lib/surface";
 
 // One project × market track (docs/18 §3.1 drill-down): the gate matrix for this market
 // plus the week's focus & blockers — the "Where We Are" + "Critical Focus" slides as one
 // live page. Reached by clicking a cell on the rollout heatmap.
 
-const CARD = "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)]";
 const STATE_TOK: Record<string, string> = {
   Done: "--ok",
   InProgress: "--qinfo",

@@ -304,7 +304,7 @@ export function isPrivateAddress(ip: string): boolean {
 }
 
 /** Validate the configured base URL. Pure apart from DNS; throws YoutrackError on refusal. */
-export async function assertSafeBaseUrl(baseUrl: string): Promise<URL> {
+async function assertSafeBaseUrl(baseUrl: string): Promise<URL> {
   let url: URL;
   try {
     url = new URL(baseUrl);

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { CheckInCard } from "@/components/workspace/checkin-card";
+import { CARD, RAG_TOKEN as RAG_TOK } from "@/lib/surface";
 
 /**
  * M-P3a (docs/25 §3.5, docs/34) — the workspace Reports tab, role-composed:
@@ -32,9 +33,6 @@ interface PastReport {
   narrative: string | null;
   submittedToHeadAt: string | null;
 }
-
-const RAG_TOK: Record<string, string> = { Green: "--ok", Amber: "--warn", Red: "--bad" };
-const CARD = "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)]";
 
 export function WorkspaceReports({
   projectId,

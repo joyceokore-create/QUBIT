@@ -118,24 +118,6 @@ export async function listAbsences(
   });
 }
 
-/** userId → the date they are back, for everyone away ON `now`. Drives the badges. */
-export async function onLeaveUntilByUser(
-  tx: Prisma.TransactionClient,
-  now = new Date(),
-): Promise<Map<string, Date>> {
-  const rows = await tx.absence.findMany({
-    where: { startDate: { lte: now }, endDate: { gte: now } },
-    select: { userId: true, endDate: true },
-  });
-  const out = new Map<string, Date>();
-  for (const r of rows) {
-    const current = out.get(r.userId);
-    // If someone has stacked absences, the badge shows the furthest return date.
-    if (!current || r.endDate > current) out.set(r.userId, r.endDate);
-  }
-  return out;
-}
-
 /** Everyone away on `now` — the set the nudger consults before pinging anybody. */
 export async function absentUserIds(tx: Prisma.TransactionClient, now = new Date()): Promise<Set<string>> {
   const rows = await tx.absence.findMany({

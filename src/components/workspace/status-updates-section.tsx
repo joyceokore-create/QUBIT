@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Send } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RAG_TOKEN } from "@/lib/surface";
 
 interface Update {
   id: string;
@@ -11,7 +12,6 @@ interface Update {
   postedByName: string | null;
   createdAt: string;
 }
-const RAG_TOKEN: Record<string, string> = { Green: "--ok", Amber: "--warn", Red: "--bad" };
 
 export function StatusUpdatesSection({ projectId, canEdit }: { projectId: string; canEdit: boolean }) {
   const [updates, setUpdates] = useState<Update[]>([]);

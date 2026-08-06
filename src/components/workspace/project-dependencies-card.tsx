@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Plus, X } from "lucide-react";
+import { RAG_TOKEN as RAG_TOK } from "@/lib/surface";
 
 // M-P2c (docs/33) — the workspace "waits on / blocks" card. Declaring a dependency is
 // PM/Head territory (the route's engine enforces it); everyone reads both directions.
@@ -20,8 +21,6 @@ interface ProjectOpt {
   code: string;
   name: string;
 }
-
-const RAG_TOK: Record<string, string> = { Green: "--ok", Amber: "--warn", Red: "--bad" };
 
 export function ProjectDependenciesCard({
   projectId,

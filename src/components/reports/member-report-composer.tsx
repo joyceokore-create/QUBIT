@@ -3,12 +3,11 @@
 import { useEffect, useState } from "react";
 import { CheckCheck, Loader2, Send } from "lucide-react";
 import type { MemberReportSection, MemberReportView } from "@/server/member-reports";
+import { CARD } from "@/lib/surface";
 
 // The member weekly report composer (docs/18 §5.1.2). The edit step is mandatory UX:
 // QUBIT drafts what it knows from the member's board, the member edits and adds what
 // only they know, then SENDS. Nothing here auto-submits.
-
-const CARD = "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)]";
 
 interface Serialized extends Omit<MemberReportView, "submittedAt" | "acks"> {
   submittedAt: string | null;

@@ -4,8 +4,8 @@ import { can } from "@/lib/rbac";
 import { listAuditLog } from "@/server/audit";
 import { Forbidden } from "@/components/forbidden";
 import { AdminHeader } from "../admin-header";
+import { CARD_GLASS as CARD } from "@/lib/surface";
 
-const CARD = "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]";
 const ROW = "grid grid-cols-[130px_160px_140px_minmax(0,1fr)] items-center gap-3.5 p-[9px_18px]";
 
 export default async function AdminAuditPage() {

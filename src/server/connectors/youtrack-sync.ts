@@ -343,18 +343,6 @@ export async function syncProject(
   return result;
 }
 
-/** Projects in the current tenant with YouTrack connected and a token stored. */
-export async function connectedProjectIds(ctx: SyncContext): Promise<string[]> {
-  return withTenant(ctx, async (tx) => {
-    const rows = await tx.projectIntegration.findMany({
-      where: { provider: SOURCE_SYSTEM, connected: true, secret: { not: null }, resource: { not: null } },
-      select: { projectId: true },
-      orderBy: { projectId: "asc" },
-    });
-    return rows.map((r) => r.projectId);
-  });
-}
-
 /** Is this project mirrored from YouTrack? Gates native task creation and local edits. */
 export async function isYoutrackConnected(ctx: SyncContext, projectId: string): Promise<boolean> {
   const row = await withTenant(ctx, (tx) =>

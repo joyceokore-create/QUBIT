@@ -1,6 +1,5 @@
 import type { Prisma } from "@prisma/client";
 import { withTenant, getTenantContext, type TenantContext } from "@/lib/tenant";
-import { NotFoundError } from "@/server/errors";
 
 /**
  * Tenant-scoped data access for the transformation modules
@@ -21,11 +20,3 @@ export function forTenant<T>(
 /** Resolve the current request's tenant context (throws if unauthenticated). */
 export { getTenantContext };
 
-/**
- * Guard for "fetch by id" reads: a null result under RLS means the row is either
- * missing or belongs to another tenant — both surface as 404 (no existence leak).
- */
-export function assertFound<T>(value: T | null | undefined, message?: string): T {
-  if (value === null || value === undefined) throw new NotFoundError(message);
-  return value;
-}

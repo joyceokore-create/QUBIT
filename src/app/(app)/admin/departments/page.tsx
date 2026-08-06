@@ -4,8 +4,8 @@ import { listUsers } from "@/server/users";
 import { AdminHeader } from "../admin-header";
 import { DepartmentDialog } from "./department-dialog";
 import { DepartmentRowActions } from "./department-row-actions";
+import { CARD_GLASS as CARD } from "@/lib/surface";
 
-const CARD = "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]";
 const ROW = "grid grid-cols-[minmax(0,1.4fr)_140px_140px_140px_70px_40px] items-center gap-3.5 p-[10px_18px]";
 
 export default async function AdminDepartmentsPage() {

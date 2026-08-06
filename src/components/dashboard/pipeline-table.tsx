@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, Flag, Gauge, ShieldAlert, TriangleAlert, UsersRound } from "lucide-react";
 import type { PipelineGroup, PipelineRow, PipelineTableData } from "@/server/pipeline";
 import { CARD } from "@/components/dashboard/presets/v2-sections";
+import { RAG_TOKEN } from "@/lib/surface";
 
 // The portfolio pipeline table (docs/18 §1/§6): projects grouped by pipeline stage,
 // stage headers with counts, priority, derived %, latest status note, and the
@@ -9,7 +10,6 @@ import { CARD } from "@/components/dashboard/presets/v2-sections";
 // ONE component for every persona — the exec sees all; others get scope="mine".
 // Checkpoint ticks join in M-D; the column shows derived % until that data exists.
 
-const RAG_TOKEN: Record<string, string> = { Green: "--ok", Amber: "--warn", Red: "--bad" };
 const PRIORITY_TOKEN: Record<string, string> = {
   High: "--bad",
   Strat: "--qinfo",

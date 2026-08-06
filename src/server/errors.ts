@@ -97,11 +97,3 @@ export function ok<T>(data: T, meta?: Record<string, unknown>): NextResponse {
   return NextResponse.json({ data, ...(meta && { meta }) });
 }
 
-/** Read a JSON request body, tolerating an empty/invalid body (→ {}). */
-export async function readJson(req: Request): Promise<unknown> {
-  try {
-    return await req.json();
-  } catch {
-    return {};
-  }
-}

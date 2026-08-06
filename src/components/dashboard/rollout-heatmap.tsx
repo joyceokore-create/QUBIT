@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import type { RolloutMatrix } from "@/server/rollout";
+import { RAG_TOKEN } from "@/lib/surface";
 
 // The rollout heatmap (docs/18 §3.1/§6): child projects × market columns, a portfolio
 // summary row, and the top-blockers strip. Per 17 §2's ONE-encoding rule a cell shows
@@ -8,7 +9,6 @@ import type { RolloutMatrix } from "@/server/rollout";
 // is never the sole channel (16 §11). A project that doesn't ship in a market renders
 // "—", never a misleading 0%.
 
-const RAG_TOKEN: Record<string, string> = { Green: "--ok", Amber: "--warn", Red: "--bad" };
 const SEVERITY_TOK: Record<string, string> = { Critical: "--bad", High: "--warn", Medium: "--qinfo", Low: "--ink4" };
 
 function Delta({ delta }: { delta: -1 | 0 | 1 | null }) {

@@ -2226,3 +2226,40 @@ Overview carries "IDEA ACCEPTED · Joyce Okore" → a second idea parked with it
 the Decided list; no console errors. Verification ideas, the IMS project and idea
 audit/event residue removed under tenant RLS context (25 projects and the 2 real W32
 check-ins intact).
+
+## DM1.67 — Cleanup: one home for the design tokens, out with the dead code
+
+A quality-only pass across the tree after P1–P4a. No behaviour change; verified by a
+green suite plus computed-style checks in the browser.
+
+- **`src/lib/surface.ts` is now the single home** for the card surface and RAG
+  presentation tokens. The `CARD` class string had been copy-pasted into **19** files and
+  the RAG map (`{ Green: "--ok", Amber: "--warn", Red: "--bad" }`) was **byte-identical in
+  10** — a token change meant a 20-file sweep and drift was a matter of time. Both
+  variants are preserved exactly (`CARD`, `CARD_GLASS`), plus `ragToken`/`ragChipStyle`/
+  `ragFill` helpers for the chip markup that was also being retyped. Local names were kept
+  via aliased imports (`RAG_TOKEN as RAG_TOK`) so the 20 call-site bodies are untouched.
+- **Verified byte-identical rendering**, not assumed: Tailwind still detects the classes
+  from a `.ts` module (cards compute `border-radius: 16px`, 1px hairline, real shadow),
+  the glass variant still carries its blur classes on admin surfaces, and RAG chips still
+  resolve `--ok/--warn/--bad`. Worth noting for future readers: `--glassblur` is **0px
+  under `[data-tenant="riverbank"]` by design** ("solid slate cards, no glass") and
+  10/18px in the product-default themes — so `CARD_GLASS` is deliberately flat for
+  Riverbank and meaningful for everyone else. That is pre-existing intent, not drift.
+- **Dead code removed** — 7 whole files (`refresh-button`, `nav-group`, `health-ring`,
+  `project-cards`, `feeds`, `q-toast`, and `src/server/nav.ts` whose only export had no
+  callers) and 5 dead functions (`onLeaveUntilByUser`, `readJson`, `assertFound`,
+  `connectedProjectIds`, `canWriteRiskOrBlocker`). Four helpers that were only used inside
+  their own module lost the needless `export` (`extractEmailDomain`,
+  `markdownToHtmlBody`, `assertSafeBaseUrl`, `graphConfigured`) so the module surface
+  tells the truth. Net **−371 lines**.
+- **One finding surfaced, deliberately NOT hot-fixed**: `canReadBudget` was dead too, and
+  it was the ONLY reference to `budget:read` — meaning that permission is granted by role
+  but **enforced nowhere**, while `src/server/projects.ts` returns `budget` to any viewer
+  who may read the project. Deleting the dead helper doesn't change that (dead code
+  protected nothing), so the gap is recorded as a comment at the deletion site and spun
+  out as its own task. It is harmless today (budget is an unfilled Phase-C placeholder)
+  and wiring a real check is a behaviour change that does not belong in a cleanup commit.
+
+**Verified**: lint/typecheck/build green, 821/821 unchanged; browser spot-checks on
+/ideas, /projects, /dashboard, /reports?tab=rollups and /admin/users.
