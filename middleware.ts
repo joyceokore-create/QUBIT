@@ -33,7 +33,10 @@ export const config = {
   // api/onboarding/accept is public for the same reason the page is (M-O3): the invitee
   // has no session, and a middleware redirect would answer their POST with a 30x instead
   // of JSON. Its own guard is the token + per-IP rate limit.
+  // api/health (M-P0a) is excluded for a subtler reason: a probe that gets redirected to
+  // /login answers 302, and anything checking "did I get a 2xx/3xx?" would read a dead
+  // database as healthy. It must reach the route to be worth anything.
   matcher: [
-    "/((?!api/auth|api/internal|api/webhooks|api/onboarding/accept|_next/static|_next/image|favicon.ico).*)",
+    "/((?!api/auth|api/internal|api/webhooks|api/onboarding/accept|api/health|_next/static|_next/image|favicon.ico).*)",
   ],
 };

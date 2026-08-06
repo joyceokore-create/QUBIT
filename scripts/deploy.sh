@@ -91,23 +91,29 @@ fi
 $SSH "$BOX" "cd $DEST && docker compose $UP_ARGS && docker compose ps"
 
 # ── 3. Verify (poll — startup runs Prisma migrations before serving) ───────────
+# M-P0a: probe /api/health, not /login. /login only proves Next is serving HTML; health
+# runs a real query, so a reachable app with an unreachable database now FAILS the deploy
+# instead of passing it. (It is excluded from the auth middleware for exactly this reason —
+# a redirect to /login would answer 302 and read as "fine".)
 echo "→ verifying (waiting for app to serve; migrations run at startup) …"
 code=000
+body=""
 for i in $(seq 1 30); do
-  code="$($SSH "$BOX" "curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/login" 2>/dev/null || true)"
+  code="$($SSH "$BOX" "curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/api/health" 2>/dev/null || true)"
   [ "$code" = "200" ] && break
   sleep 3
 done
-echo "   local /login on box → HTTP $code"
+body="$($SSH "$BOX" "curl -s --max-time 5 http://localhost:3001/api/health" 2>/dev/null || true)"
+echo "   local /api/health on box → HTTP $code $body"
 
 if [ "$code" != "200" ]; then
-  echo "✗ app did not return 200 within 90s — recent app logs:" >&2
+  echo "✗ app+database did not report healthy within 90s — recent app logs:" >&2
   $SSH "$BOX" "cd $DEST && docker compose logs app --tail 40"
   exit 1
 fi
 
-pub="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$PUBLIC_URL/login" || true)"
-echo "   $PUBLIC_URL/login → HTTP $pub"
+pub="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$PUBLIC_URL/api/health" || true)"
+echo "   $PUBLIC_URL/api/health → HTTP $pub"
 echo "✓ deployed. $PUBLIC_URL"
 
 if [ "$TAIL_LOGS" -eq 1 ]; then
