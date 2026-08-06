@@ -72,6 +72,11 @@ This is the entry point. Read documents in this order.
     search, the notifications centre, and the first-run/a11y sweep. Milestones M-P4a–c.
     NEXT.
 
+29. **36-pending-checklist.md** — the running list of everything NOT yet done: the P4
+    milestones in flight, unfinished P0 foundations (backups, health endpoint), P5 scope,
+    deferred promises (PDF/M9-B, Phase-C budget, Q summaries), security follow-ups, code
+    health, and the production feature flags awaiting credentials. Compiled 2026-08-06.
+
 ## Document readiness checklist
 
 Everything below is included in this pack and ready for Claude Code.
