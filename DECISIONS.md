@@ -2367,3 +2367,34 @@ test that had nothing to do with the code under test. It now scopes to its own f
 **Verified**: lint/typecheck/build green, 824/824. Live: super-admin badge with all five
 persona tabs, dashboard link reading "Work through the 25 project check-ins", the new tab
 filtering to 3 rows for Market Rollout with no leakage, no console errors.
+
+## DM1.71 — The chain gets its rail, its provenance and its deadline (M-P3d)
+
+The three pieces the workflow wireframe drew that M-P3a shipped the behaviour for but not
+the surface. Joyce spotted their absence ("there was a wizard in place for this").
+
+- **Chain rail** on the PM check-in: `Draft (computed) → PM confirm → Sent to Head → Head
+  approved`, with the live step marked `aria-current="step"`. The wireframe drew three
+  states; the built chain has four, because sending to the Head and the Head signing are
+  genuinely separate rungs (M-P3a/M-P3b) and collapsing them would hide where a report is.
+- **"Rolls up from"** panel — the computed status made auditable: N of M member updates
+  (and how many acknowledged), gates done, open blockers and risks. Members who have not
+  sent are **named**: "Still to send: … — their week is not in this report." An unconfirmed
+  week is never quietly averaged into a green one (docs/25 §5).
+- **Due banner** on the member's update, stating the Friday 17:00 deadline, that the draft
+  comes from their board, and that tasks are not editable there.
+
+**Two bugs found by building them**, both fixed and pinned:
+- **Retired people were counted as owing an update.** Soft delete keeps membership rows
+  (deliberately — references survive), so the first render of the honesty line read
+  "Still to send: Deleted user, Deleted user, Deleted user". Provenance now excludes
+  DELETED users; the browser caught what the engine test would not have.
+- **The due banner was a hydration mismatch waiting to happen** — it computed `new Date()`
+  during render, so a server in one timezone and a client in another disagree on the day.
+  It now renders after mount only. (The Base UI dialog-id mismatch also visible in that
+  console is PRE-EXISTING and untouched.)
+
+**Verified**: lint/typecheck/build green, 830/830. `tests/rls/reporting-chain-e2e.test.ts`
+now walks all five rungs plus provenance — including the retired-member case — and the
+rail/panel were read back from the live page (`Draft (computed)` current, "0 of 5 member
+updates · 2/3 gates done · 1 open blocker", no "Deleted user").

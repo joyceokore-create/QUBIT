@@ -379,3 +379,78 @@ export async function listReportIndex(ctx: TenantContext, now = new Date()): Pro
     });
   });
 }
+
+export interface CheckInProvenance {
+  /** Members on the project this week (excluding the PM themselves). */
+  teamSize: number;
+  /** Member reports submitted for THIS project this week. */
+  submitted: number;
+  /** …of which the PM has acknowledged. */
+  acknowledged: number;
+  /** Names of members who owe an update — stated plainly, never silently ignored. */
+  pendingNames: string[];
+  /** Gate ticks feeding the computed status. */
+  checkpointsDone: number;
+  checkpointsTotal: number;
+  /** Open RAID items that colour the RAG. */
+  openBlockers: number;
+  openRisks: number;
+  /** Roll-up state for this week — the third rung of the rail. */
+  rollupApproved: boolean;
+}
+
+/**
+ * docs/25 §5 / the workflow wireframe's "Rolls up from" panel — what the computed
+ * check-in is actually made of, so the PM narrates over visible provenance instead of
+ * trusting a number. Unconfirmed contributors are NAMED: the chain never pretends a
+ * silent week is a green one.
+ */
+export async function getCheckInProvenance(
+  ctx: TenantContext,
+  projectId: string,
+  now = new Date(),
+): Promise<CheckInProvenance> {
+  const isoWeek = isoWeekId(now);
+  return withTenant(ctx, async (tx) => {
+    const [members, reports, gates, blockers, risks, rollup] = await Promise.all([
+      tx.projectMember.findMany({
+        // Retired people keep their membership rows (soft delete preserves references),
+        // but they cannot owe a weekly update — counting them would inflate "still to
+        // send" with "Deleted user" and make the honesty line dishonest.
+        where: { projectId, role: { not: "Project Manager" }, user: { status: { not: "DELETED" } } },
+        select: { userId: true, user: { select: { name: true } } },
+      }),
+      tx.memberReport.findMany({
+        where: { isoWeek, status: { in: ["Submitted", "Acknowledged"] } },
+        select: { userId: true, draft: true, acks: { select: { projectId: true } } },
+      }),
+      tx.checkpointStatus.findMany({ where: { projectId, orgUnitId: null }, select: { state: true } }),
+      tx.blocker.count({ where: { projectId, status: "Open" } }),
+      tx.risk.count({ where: { projectId, status: { not: "Closed" } } }),
+      tx.portfolioReport.findUnique({
+        where: { tenantId_isoWeek: { tenantId: ctx.tenantId, isoWeek } },
+        select: { status: true },
+      }),
+    ]);
+
+    // A report counts for THIS project only when it carries a section for it.
+    const forProject = reports.filter((r) => {
+      const sections = (r.draft as unknown as { sections?: { projectId: string }[] }).sections ?? [];
+      return sections.some((s) => s.projectId === projectId);
+    });
+    const submittedIds = new Set(forProject.map((r) => r.userId));
+    const acknowledged = forProject.filter((r) => r.acks.some((a) => a.projectId === projectId)).length;
+
+    return {
+      teamSize: members.length,
+      submitted: forProject.length,
+      acknowledged,
+      pendingNames: members.filter((m) => !submittedIds.has(m.userId)).map((m) => m.user?.name ?? "Unnamed"),
+      checkpointsDone: gates.filter((g) => g.state === "Done").length,
+      checkpointsTotal: gates.length,
+      openBlockers: blockers,
+      openRisks: risks,
+      rollupApproved: rollup?.status === "Approved",
+    };
+  });
+}

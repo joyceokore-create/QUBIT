@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Clock } from "lucide-react";
 import { CheckInCard } from "@/components/workspace/checkin-card";
 import { CARD, RAG_TOKEN as RAG_TOK } from "@/lib/surface";
 
@@ -32,6 +33,41 @@ interface PastReport {
   rag: "Green" | "Amber" | "Red";
   narrative: string | null;
   submittedToHeadAt: string | null;
+}
+
+/** Friday 17:00 is the weekly deadline (docs/19 M3 — the nudger escalates past it).
+ * The wireframe's due banner: a weekly update is a DEADLINE, not a form that sits there. */
+function DueBanner() {
+  // Rendered AFTER mount only. The copy depends on the current clock, and QUBIT is used
+  // across markets in different timezones — computing it during SSR gives the server's
+  // "Wednesday" against the client's "Thursday" and React logs a hydration mismatch.
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => setNow(new Date()), []);
+  if (!now) return null;
+  const daysToFriday = (5 - now.getDay() + 7) % 7;
+  const due = new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysToFriday, 17, 0, 0);
+  const overdue = now > due;
+  const when = overdue
+    ? "was due Friday 5pm"
+    : daysToFriday === 0
+      ? "is due today, 5pm"
+      : `is due ${due.toLocaleDateString("en-GB", { weekday: "long" })} 5pm`;
+  const tok = overdue ? "--bad" : daysToFriday <= 1 ? "--warn" : "--qinfo";
+  return (
+    <div
+      className="flex flex-wrap items-center gap-2 rounded-[8px] px-2.5 py-2 text-[11.5px]"
+      style={{ color: `var(${tok})`, background: `color-mix(in oklab, var(${tok}) 10%, transparent)` }}
+    >
+      <Clock className="size-3.5 flex-none" />
+      <span>
+        <b>Your weekly update {when}.</b> This is a draft from your board activity — edit it, add what only you know,
+        then submit.
+      </span>
+      <span className="rounded-[5px] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[.6px] opacity-70">
+        tasks are not editable here
+      </span>
+    </div>
+  );
 }
 
 export function WorkspaceReports({
@@ -97,6 +133,9 @@ export function WorkspaceReports({
         <CheckInCard projectId={projectId} />
       ) : (
         <div className={`${CARD} flex flex-col gap-2.5 p-4`} style={{ background: "var(--cardbg)" }}>
+          {/* The wireframe's due banner: a weekly update is a DEADLINE, not a form that
+              sits there. Says what is owed, by when, and that tasks are not editable here. */}
+          {mine?.status === "Draft" && <DueBanner />}
           <div className="flex items-center justify-between">
             <span className="text-[13px] font-semibold text-foreground">My weekly update — this project</span>
             {mine && (

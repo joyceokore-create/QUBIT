@@ -16,7 +16,7 @@ import {
   saveMyReport,
   submitMyReport,
 } from "@/server/member-reports";
-import { confirmCheckIn, getCurrentCheckIn, submitCheckInToHead } from "@/server/checkins";
+import { confirmCheckIn, getCheckInProvenance, getCurrentCheckIn, submitCheckInToHead } from "@/server/checkins";
 import { approveRollup, buildRollup, getApprovedRollup, getRollup } from "@/server/portfolio-reports";
 import { createUsers, cleanupFixtureUsers } from "./_users";
 
@@ -132,6 +132,36 @@ describe("reporting chain end to end", () => {
     }
     const stillPending = (await listTeamReports(pmCtx, NOW)).filter((r) => r.pendingProjectIds.includes(projectId));
     expect(stillPending).toHaveLength(0);
+  });
+
+  it("the PM can see WHAT the computed status is made of, and who still owes an update", async () => {
+    const p = await getCheckInProvenance(pmCtx, projectId, NOW);
+    expect(p.teamSize).toBe(3); // dev + qa + impl; the PM is not counted against themselves
+    expect(p.submitted).toBe(3);
+    expect(p.acknowledged).toBe(3);
+    expect(p.pendingNames).toHaveLength(0);
+    expect(p.rollupApproved).toBe(false); // not signed yet at this point in the chain
+
+    // A member who has not sent is NAMED, never averaged away — the honesty rule that
+    // makes the computed status trustworthy (docs/25 §5).
+    await withTenant(pmCtx, (tx) => tx.memberReport.deleteMany({ where: { userId: qaCtx.userId } }));
+    const after = await getCheckInProvenance(pmCtx, projectId, NOW);
+    expect(after.submitted).toBe(2);
+    expect(after.pendingNames).toHaveLength(1);
+    // A RETIRED member keeps their membership row but cannot owe an update — counting
+    // them would fill the honesty line with "Deleted user" (found in the browser).
+    await withTenant(pmCtx, (tx) =>
+      tx.user.update({ where: { id: implCtx.userId }, data: { status: "DELETED" } }),
+    );
+    const sansRetired = await getCheckInProvenance(pmCtx, projectId, NOW);
+    expect(sansRetired.teamSize).toBe(2);
+    expect(sansRetired.pendingNames).toHaveLength(1);
+    await withTenant(pmCtx, (tx) =>
+      tx.user.update({ where: { id: implCtx.userId }, data: { status: "ACTIVE" } }),
+    );
+    // …and put it back so the later rungs still see the full team.
+    await saveMyReport(qaCtx, { narrative: "Regression pack green.", notes: {}, queries: {} }, NOW);
+    await submitMyReport(qaCtx, NOW);
   });
 
   it("rung 4 — acknowledged updates feed the check-in, which the PM confirms and sends", async () => {

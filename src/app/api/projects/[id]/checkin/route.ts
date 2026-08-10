@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getTenantContext } from "@/lib/tenant";
 import { canViewProject } from "@/lib/project-access";
 import { canWriteProject } from "@/lib/access";
-import { getCurrentCheckIn, confirmCheckIn, ConfirmCheckInInput } from "@/server/checkins";
+import { getCurrentCheckIn, getCheckInProvenance, confirmCheckIn, ConfirmCheckInInput } from "@/server/checkins";
 
 // The Friday check-in (M2). GET: this week's draft/confirmed view (any project viewer —
 // global read). POST: confirm — PM-level, same resource gate as publishing (canWriteProject:
@@ -19,8 +19,12 @@ export async function GET(_req: Request, { params }: Ctx) {
   }
   const { id } = await params;
   if (!(await canViewProject(ctx, id))) return NextResponse.json({ error: { code: "FORBIDDEN" } }, { status: 403 });
-  const view = await getCurrentCheckIn(ctx, id);
-  return NextResponse.json({ data: { ...view, canConfirm: await canWriteProject(ctx, id) } });
+  const [view, provenance, canConfirm] = await Promise.all([
+    getCurrentCheckIn(ctx, id),
+    getCheckInProvenance(ctx, id),
+    canWriteProject(ctx, id),
+  ]);
+  return NextResponse.json({ data: { ...view, canConfirm, provenance } });
 }
 
 export async function POST(req: Request, { params }: Ctx) {

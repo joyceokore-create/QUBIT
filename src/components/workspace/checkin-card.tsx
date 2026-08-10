@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CheckCheck, ShieldAlert } from "lucide-react";
+import { Check, CheckCheck, ShieldAlert } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RAG_TOKEN } from "@/lib/surface";
 
@@ -23,6 +23,81 @@ interface CheckInJson {
   confirmedAt: string | null;
   submittedToHeadAt: string | null;
   canConfirm: boolean;
+  provenance?: Provenance;
+}
+
+interface Provenance {
+  teamSize: number;
+  submitted: number;
+  acknowledged: number;
+  pendingNames: string[];
+  checkpointsDone: number;
+  checkpointsTotal: number;
+  openBlockers: number;
+  openRisks: number;
+  rollupApproved: boolean;
+}
+
+/**
+ * The chain rail from the workflow wireframe: Draft (computed) → PM confirm → Head
+ * approve. It states WHERE this week's report has got to, so the PM is never guessing
+ * whether their part is done.
+ */
+function ChainRail({ ci }: { ci: CheckInJson }) {
+  const sent = Boolean(ci.submittedToHeadAt);
+  const approved = Boolean(ci.provenance?.rollupApproved);
+  const steps = [
+    { label: "Draft (computed)", done: true, current: ci.status === "Draft" },
+    { label: "PM confirm", done: ci.status === "Confirmed", current: ci.status === "Confirmed" && !sent },
+    { label: "Sent to Head", done: sent, current: sent && !approved },
+    { label: "Head approved", done: approved, current: approved },
+  ];
+  return (
+    <ol className="flex flex-wrap items-center gap-1.5" aria-label="Report progress">
+      {steps.map((s, i) => (
+        <li key={s.label} className="flex items-center gap-1.5">
+          {i > 0 && <span aria-hidden className="h-px w-3 bg-[var(--w10)]" />}
+          <span
+            aria-current={s.current ? "step" : undefined}
+            className="flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[9px] font-bold uppercase tracking-[.8px]"
+            style={
+              s.current
+                ? { color: "var(--onbrand)", background: "var(--brand)" }
+                : s.done
+                  ? { color: "var(--ok)", background: "color-mix(in oklab, var(--ok) 10%, transparent)" }
+                  : { color: "var(--ink5)", background: "var(--wash2)" }
+            }
+          >
+            {s.done && !s.current && <Check className="size-2.5" />}
+            {s.label}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** The wireframe's "Rolls up from" panel — the computed status made auditable. Members
+ * who owe an update are NAMED rather than quietly averaged away. */
+function RollsUpFrom({ p }: { p: Provenance }) {
+  return (
+    <div className="rounded-[8px] border border-[var(--w06)] bg-[var(--wash)] p-2.5">
+      <div className="font-mono text-[9px] font-bold uppercase tracking-[1px] text-[var(--ink4)]">Rolls up from</div>
+      <p className="mt-1 text-[11.5px] leading-[1.5] text-[var(--ink2)]">
+        {p.submitted} of {p.teamSize} member update{p.teamSize === 1 ? "" : "s"}
+        {p.acknowledged > 0 && ` (${p.acknowledged} acknowledged)`}
+        {" · "}
+        {p.checkpointsTotal > 0 ? `${p.checkpointsDone}/${p.checkpointsTotal} gates done` : "no gates set"}
+        {" · "}
+        {p.openBlockers} open blocker{p.openBlockers === 1 ? "" : "s"} · {p.openRisks} open risk{p.openRisks === 1 ? "" : "s"}
+      </p>
+      {p.pendingNames.length > 0 && (
+        <p className="mt-1 text-[11px] text-[var(--warn)]">
+          Still to send: {p.pendingNames.join(", ")} — their week is not in this report.
+        </p>
+      )}
+    </div>
+  );
 }
 
 function RagChip({ rag, label }: { rag: string; label?: string }) {
@@ -91,6 +166,9 @@ export function CheckInCard({ projectId }: { projectId: string }) {
           <RagChip rag={ci.computedRag} label={`COMPUTED · ${ci.computedRag.toUpperCase()}`} />
         </span>
       </div>
+
+      <ChainRail ci={ci} />
+      {ci.provenance && <RollsUpFrom p={ci.provenance} />}
 
       <ul className="flex flex-col gap-1">
         {ci.lines.map((line, i) => (
