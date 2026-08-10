@@ -1,11 +1,8 @@
 import Link from "next/link";
 import { ArrowRight, RotateCcw, TriangleAlert } from "lucide-react";
 import type { QaBugRaised, QaDashboard } from "@/server/dashboard-qa";
-import type { PortfolioSectionsData } from "@/server/pipeline";
 import { FirstLoginChecklist } from "@/components/dashboard/presets/first-login-checklist";
-import { PortfolioSections } from "@/components/dashboard/portfolio-sections";
-import { ScopeToggle } from "@/components/dashboard/scope-toggle";
-import { CARD, Empty, Panel } from "@/components/dashboard/presets/v2-sections";
+import { CARD, ChangedSection, Empty, Panel } from "@/components/dashboard/presets/v2-sections";
 
 // QA preset (docs/17 §5, design handoff persona-dashboards): "what's ready for me to
 // test, and which of my bugs are stuck?" Sentence hero + chips — deliberately NOT KPI
@@ -45,7 +42,12 @@ const AGING_TOK: Record<string, string> = { bad: "--bad", warn: "--warn", ok: "-
 function TestQueue({ d }: { d: QaDashboard }) {
   const total = d.hero.inQa;
   return (
-    <Panel title="Test queue" sub={`${total} IN QA · GROUPED BY PROJECT`}>
+    // DM1.73 (T8): the explainer moved from a visible footer strip into the header hint.
+    <Panel
+      title="Test queue"
+      sub={`${total} IN QA · GROUPED BY PROJECT`}
+      hint="Tinted rows sat >5 business days · features & bugs complete here — QA owns Completed"
+    >
       {d.triage.length > 0 && (
         <div style={{ background: "color-mix(in oklab, var(--bad) 6%, transparent)" }}>
           <div className="p-[8px_16px] font-mono text-[9px] font-bold uppercase tracking-[1.2px] text-[var(--bad)]">
@@ -90,9 +92,6 @@ function TestQueue({ d }: { d: QaDashboard }) {
           ))}
         </div>
       ))}
-      <div className="p-[8px_16px] font-mono text-[8.5px] uppercase tracking-[.8px] text-[var(--ink5)]">
-        Tinted rows sat &gt;5 business days · features &amp; bugs complete here — QA owns Completed
-      </div>
     </Panel>
   );
 }
@@ -135,7 +134,13 @@ function BugRow({ b }: { b: QaBugRaised }) {
 
 function Quality({ d }: { d: QaDashboard }) {
   return (
-    <Panel title="Project quality" sub="OPEN BUGS · MY PROJECTS">
+    // DM1.73 (T8): the explainer moved from a visible footer strip into the header hint
+    // (the open-risks link that lived beside it is one click away at /risks).
+    <Panel
+      title="Project quality"
+      sub="OPEN BUGS · MY PROJECTS"
+      hint="Coverage = requirements with at least one covering task"
+    >
       {d.quality.length === 0 && <Empty>No bugs on your projects. Suspicious… or excellent.</Empty>}
       {d.quality.map((q) => {
         const { critical, high, medium, low } = q.bySeverity;
@@ -176,23 +181,16 @@ function Quality({ d }: { d: QaDashboard }) {
           </div>
         );
       })}
-      <div className="p-[8px_16px] font-mono text-[8.5px] uppercase tracking-[.8px] text-[var(--ink5)]">
-        Coverage = requirements with a covering task · <Link href="/risks" className="underline underline-offset-2 hover:text-[var(--qink)]">open risks →</Link>
-      </div>
     </Panel>
   );
 }
 
 export function QaPreset({
   d,
-  sections,
   showChecklist,
-  scope,
 }: {
   d: QaDashboard;
-  sections: PortfolioSectionsData;
   showChecklist: boolean;
-  scope: "mine" | "all";
 }) {
   return (
     <>
@@ -206,9 +204,10 @@ export function QaPreset({
           <Quality d={d} />
         </div>
       </section>
-      {/* DM1.20 extension (design proposal №10, adopted): scoped by default, never a wall. */}
-      <ScopeToggle persona="qa" scope={scope} />
-      <PortfolioSections data={sections} scope={scope} />
+      {/* DM1.73 (T4): portfolio sections dropped — nothing portfolio-level on a member
+          dashboard (docs/17 §4); the scope toggle went with them (nothing left to scope).
+          (T3): the delta feed renders for every persona, not just the exec. */}
+      <ChangedSection delta={d.delta} />
     </>
   );
 }

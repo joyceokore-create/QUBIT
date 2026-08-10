@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, PanelLeftClose, PanelLeftOpen, LogOut } from "lucide-react";
+import { Menu, X, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { BrandLogo } from "@/components/brand/brand-logo";
-import { signOutAction } from "@/lib/auth-actions";
-import { isNavActive, visibleNavItems } from "./nav-items";
+import { getInitials } from "@/lib/format";
+import { activeNavHref, visibleNavItems } from "./nav-items";
 import { UserMenu } from "./user-menu";
 import { AskQButton } from "./ask-q-button";
 import { NotificationBell } from "./notification-bell";
@@ -102,6 +102,7 @@ export function RiverbankShell({
   }, [mobileOpen]);
 
   const items = visibleNavItems({ canAccessAdmin, canStaff, memberOnly });
+  const activeHref = activeNavHref(pathname, items);
   // Labels show when expanded on desktop, or always inside the mobile drawer.
   const labelled = open || mobileOpen;
 
@@ -156,7 +157,7 @@ export function RiverbankShell({
         {/* Navigation */}
         <nav aria-label="Main" className="flex-1 space-y-1.5 overflow-y-auto p-3">
           {items.map((item) => {
-            const active = isNavActive(pathname, item.href);
+            const active = item.href === activeHref;
             const Icon = item.icon;
             return (
               <Link
@@ -179,25 +180,18 @@ export function RiverbankShell({
           })}
         </nav>
 
-        {/* Sign out — pinned to the bottom of the nav, just above the user footer */}
-        <form action={signOutAction} className="flex-shrink-0 px-3 pb-1">
-          <button
-            type="submit"
-            title={labelled ? undefined : "Sign out"}
-            className={[
-              "flex w-full items-center rounded-lg text-white/80 transition-colors outline-none hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/70",
-              labelled ? "gap-3 px-3 py-2.5" : "mx-auto h-11 w-11 justify-center",
-            ].join(" ")}
-          >
-            <LogOut className="size-[18px] flex-shrink-0" strokeWidth={1.75} aria-hidden />
-            {labelled && <span className="flex-1 text-left text-[13.5px] rv:text-body-sm font-medium">Sign out</span>}
-          </button>
-        </form>
-
-        {/* User footer */}
+        {/* User footer — identity only. DM1.73: the ONE account menu (with sign-out and
+            tenant switching) is the header chip; the sidebar's duplicate menu and the
+            standalone sign-out row were dropped. */}
         <div className="flex-shrink-0 border-t border-white/10 p-3">
           <div className={`flex items-center gap-2.5 ${labelled ? "" : "justify-center"}`}>
-            <UserMenu name={userName} email={userEmail} />
+            <span
+              aria-hidden
+              className="flex size-[34px] flex-none items-center justify-center rounded-full border border-[var(--w10)] text-[11.5px] font-bold text-[var(--ink3)]"
+              style={{ background: "linear-gradient(135deg, var(--av1), var(--av2))" }}
+            >
+              {getInitials(userName)}
+            </span>
             {labelled && (
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[13px] rv:text-body-sm font-semibold">{userName || "—"}</p>

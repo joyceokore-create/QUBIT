@@ -1,8 +1,9 @@
 // M-P1c (docs/27 §2, docs/26 §5.3) — the project wizard's create. ONE transaction:
 // project + team (with role hats, allocations, windows) + market org-statuses +
-// checkpoint template link + optional BRD + optional YouTrack connection all land
-// together or not at all (docs/27 §1.6). Capacity warnings the PM accepted are recorded
-// in the audit blob — informed overrides, never silent ones.
+// checkpoint template link + resource requests for unfilled seats + optional BRD +
+// optional YouTrack connection all land together or not at all (docs/27 §1.6).
+// Capacity warnings the PM accepted are recorded in the audit blob — informed
+// overrides, never silent ones.
 import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { flagEnabled } from "@/lib/flags";
@@ -12,6 +13,7 @@ import { withTenant, type TenantContext } from "@/lib/tenant";
 import { emitDomainEvent } from "@/server/events";
 import { acceptIdeaInTx } from "@/server/ideas";
 import { nextFreeCode, projectCodeBase, ProjectError } from "@/server/projects";
+import { createResourceRequestInTx } from "@/server/staffing";
 
 const TeamRow = z.object({
   userId: z.string().uuid(),
@@ -20,6 +22,8 @@ const TeamRow = z.object({
   startDate: z.string().datetime().nullable().optional(),
   endDate: z.string().datetime().nullable().optional(),
 });
+// DM1.73 (docs/30 §5) — a seat the PM shaped but couldn't fill: same row, no person.
+const UnfilledSeat = TeamRow.omit({ userId: true });
 
 export const CreateProjectWizardInput = z.object({
   name: z.string().trim().min(2, "Name is required.").max(120),
@@ -30,6 +34,9 @@ export const CreateProjectWizardInput = z.object({
     .regex(/^[A-Z0-9]{2,10}$/, "Code must be 2–10 letters/digits.")
     .optional(),
   description: z.string().trim().max(500).optional(),
+  // DM1.73 — set from the accepted idea's sponsor (M-P4a handoff); editable later from
+  // the workspace like any other project field.
+  businessOwner: z.string().trim().max(120).nullable().optional(),
   portfolioId: z.string().uuid({ message: "Every project belongs to a portfolio." }),
   // docs/27 §5 gap 2 (28-p1b §3): the stage may be chosen at create — Approved projects
   // exist on day one when the business case predates QUBIT. Paused is NOT offered:
@@ -41,6 +48,12 @@ export const CreateProjectWizardInput = z.object({
   checkpointTemplateId: z.string().min(1).max(40).nullable().optional(),
   marketIds: z.array(z.string().uuid()).max(20).default([]),
   team: z.array(TeamRow).max(20).default([]),
+  /** DM1.73 (docs/30 §5) — each becomes a ResourceRequest in the create transaction.
+   * `.optional()` (not `.default`) so pre-existing callers' input type is unchanged. */
+  unfilledSeats: z.array(UnfilledSeat).max(20).optional(),
+  // DM1.73 — the wizard's Docs and Integration steps are gone (register/workspace own
+  // those flows now), but the fields stay accepted for API back-compat: an older client
+  // or scripted caller sending them still gets the old single-transaction behaviour.
   document: z
     .object({
       title: z.string().trim().min(1).max(160),
@@ -121,7 +134,8 @@ async function createOnce(ctx: TenantContext, input: CreateProjectWizardInputT) 
       const found = await tx.user.count({ where: { id: { in: userIds }, status: { not: "DELETED" } } });
       if (found !== userIds.length) throw new ProjectError("Unknown team member.", "MEMBER_NOT_FOUND");
     }
-    for (const t of input.team) {
+    const unfilledSeats = input.unfilledSeats ?? [];
+    for (const t of [...input.team, ...unfilledSeats]) {
       if (t.startDate && t.endDate && new Date(t.startDate) > new Date(t.endDate)) {
         throw new ProjectError("An assignment window cannot end before it starts.", "BAD_WINDOW");
       }
@@ -138,6 +152,7 @@ async function createOnce(ctx: TenantContext, input: CreateProjectWizardInputT) 
         code,
         name: input.name,
         description: input.description ?? null,
+        businessOwner: input.businessOwner ?? null, // DM1.73 — from the idea's sponsor
         type: "Project",
         priority: "Med",
         status: "Planning",
@@ -160,6 +175,22 @@ async function createOnce(ctx: TenantContext, input: CreateProjectWizardInputT) 
           startDate: t.startDate ? new Date(t.startDate) : null,
           endDate: t.endDate ? new Date(t.endDate) : null,
         },
+      });
+    }
+    // DM1.73 (docs/30 §5) — every seat the PM shaped but couldn't fill becomes a
+    // ResourceRequest in THIS transaction, so the ask survives an empty bench instead
+    // of the wizard blocking on it. Window defaults to the seat's dates, else creation
+    // day → +8 weeks (the staffing form's default horizon).
+    for (const seat of unfilledSeats) {
+      const windowStart = seat.startDate ? new Date(seat.startDate) : new Date();
+      const windowEnd = seat.endDate ? new Date(seat.endDate) : new Date(windowStart.getTime() + 56 * 86_400_000);
+      await createResourceRequestInTx(tx, ctx, {
+        projectId: project.id,
+        role: seat.role,
+        allocationPct: seat.allocationPct,
+        windowStart,
+        windowEnd,
+        note: `Unfilled seat from the project wizard for ${project.code}.`,
       });
     }
     for (const orgUnitId of input.marketIds) {
@@ -217,6 +248,7 @@ async function createOnce(ctx: TenantContext, input: CreateProjectWizardInputT) 
         checkpointTemplateId: input.checkpointTemplateId ?? null,
         markets: input.marketIds.length,
         team: input.team.map((t) => ({ userId: t.userId, role: t.role, allocationPct: t.allocationPct })),
+        unfilledSeats: unfilledSeats.map((s) => ({ role: s.role, allocationPct: s.allocationPct })), // DM1.73
         document: input.document ? { title: input.document.title, kind: input.document.kind } : null,
         youtrack: input.youtrack ? { projectKey: input.youtrack.projectKey } : null, // never the token
         acceptedWarnings: input.acceptedWarnings,

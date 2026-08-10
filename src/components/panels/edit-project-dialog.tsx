@@ -23,8 +23,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-const PRIORITIES = ["Low", "Medium", "High", "Critical"];
-const STATUSES = ["Planning", "OnTrack", "AtRisk", "Overdue", "Completed", "Cancelled"];
+// DM1.73 — shared enums; the old hardcoded ["Low","Medium","High","Critical"] list
+// silently discarded whole saves when the server enum rejected the priority.
+import { PROJECT_PRIORITIES, PROJECT_STATUSES } from "@/lib/project-enums";
+
+const PRIORITIES = PROJECT_PRIORITIES;
+const STATUSES = PROJECT_STATUSES;
 
 interface EditableProject {
   id: string;

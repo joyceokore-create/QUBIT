@@ -97,7 +97,8 @@ describe("summarizeDeltas", () => {
       NAMES,
       "viewer",
     );
-    expect(items).toEqual([{ tone: "warn", text: "1 task assigned to you", href: "/my-tasks" }]);
+    // DM1.73 (T10): assignments deep-link to /board — /my-tasks was a bare redirect.
+    expect(items).toEqual([{ tone: "warn", text: "1 task assigned to you", href: "/board" }]);
   });
 
   it("skips notification-centric events and caps the list", () => {

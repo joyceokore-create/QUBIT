@@ -13,6 +13,8 @@ export function RollupStrip({ rollup }: { rollup: RollupView }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [needsAck, setNeedsAck] = useState(false);
+
   const call = async (url: string, body?: unknown) => {
     setBusy(true);
     setError(null);
@@ -22,8 +24,15 @@ export function RollupStrip({ rollup }: { rollup: RollupView }) {
       body: body ? JSON.stringify(body) : undefined,
     });
     setBusy(false);
-    if (!res.ok) setError((await res.json().catch(() => null))?.error?.message ?? "Failed.");
-    else router.refresh();
+    if (!res.ok) {
+      const err = (await res.json().catch(() => null))?.error;
+      // DM1.73 (T7): confirmed check-ins were never sent to the Head — ask before including.
+      if (err?.code === "UNSENT_CHECKINS") setNeedsAck(true);
+      setError(err?.message ?? "Failed.");
+    } else {
+      setNeedsAck(false);
+      router.refresh();
+    }
   };
 
   return (
@@ -32,7 +41,7 @@ export function RollupStrip({ rollup }: { rollup: RollupView }) {
       sub={
         rollup.status === "Approved"
           ? `APPROVED${rollup.approvedByName ? ` · ${rollup.approvedByName.toUpperCase()}` : ""}`
-          : `${rollup.submitted}/${rollup.total} SUBMITTED · ${rollup.confirmed}/${rollup.total} CONFIRMED`
+          : `${rollup.submitted}/${rollup.total} SUBMITTED · ${rollup.confirmed}/${rollup.total} CONFIRMED${rollup.unsent > 0 ? ` · ${rollup.unsent} UNSENT` : ""}`
       }
     >
       <div className="flex flex-col gap-2.5 p-[4px_16px_12px]">
@@ -63,10 +72,10 @@ export function RollupStrip({ rollup }: { rollup: RollupView }) {
               <button
                 type="button"
                 disabled={busy || narrative.trim().length < 5}
-                onClick={() => void call("/api/rollup/approve", { narrative: narrative.trim() })}
+                onClick={() => void call("/api/rollup/approve", { narrative: narrative.trim(), acknowledgeUnsent: needsAck })}
                 className="rounded-[8px] bg-[var(--brand)] px-3.5 py-1.5 text-[11.5px] font-bold text-[var(--onbrand)] disabled:opacity-50"
               >
-                Approve roll-up →
+                {needsAck ? "Approve anyway (include unsent) →" : "Approve roll-up →"}
               </button>
             </div>
           </>

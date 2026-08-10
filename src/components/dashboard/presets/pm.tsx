@@ -6,7 +6,7 @@ import type { PortfolioSectionsData } from "@/server/pipeline";
 import { FirstLoginChecklist } from "@/components/dashboard/presets/first-login-checklist";
 import { PortfolioSections } from "@/components/dashboard/portfolio-sections";
 import { ScopeToggle } from "@/components/dashboard/scope-toggle";
-import { CARD, Empty, Panel } from "@/components/dashboard/presets/v2-sections";
+import { CARD, ChangedSection, Empty, Panel } from "@/components/dashboard/presets/v2-sections";
 
 // PM preset v2 (docs/32 M-W1c — the drawn shape, confirmed 2026-08-04): check-in
 // banner → MY PROJECTS table (RAG · progress · Δ WoW · next milestone · blockers) →
@@ -220,6 +220,9 @@ export function PmPreset({
           ALL toggle, never a wall) — the landing question above is "what needs me". */}
       <ScopeToggle persona="pm" scope={scope} />
       <PortfolioSections data={sections} scope={scope} />
+      {/* DM1.73 (T3): the delta feed renders for every persona, not just the exec —
+          without it lastDashboardSeenAt never advanced for anyone else. */}
+      <ChangedSection delta={d.delta} />
     </>
   );
 }

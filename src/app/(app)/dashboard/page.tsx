@@ -12,7 +12,6 @@ import { getPmDashboard } from "@/server/dashboard-pm";
 import { getQaDashboard } from "@/server/dashboard-qa";
 import { getPortfolioSections } from "@/server/pipeline";
 import { Forbidden } from "@/components/forbidden";
-import { LiveClock } from "@/components/command/live-clock";
 import { PersonaSwitcher } from "@/components/dashboard/persona-switcher";
 import { DeveloperPreset } from "@/components/dashboard/presets/developer";
 import { ExecutivePreset } from "@/components/dashboard/presets/executive";
@@ -58,6 +57,23 @@ export default async function DashboardPage({
   if (!me) redirect("/login");
   const showChecklist = me.onboardedAt !== null && me.checklistDismissedAt === null;
 
+  // DM1.73 (T4/T5): only exec (inside its own getter) and PM fetch portfolio sections —
+  // docs/17 §4: nothing portfolio-level on a member dashboard. The PM's two fetches run
+  // in parallel instead of the old sequential awaits inside JSX props.
+  let preset: React.ReactNode;
+  if (persona === "executive") {
+    preset = <ExecutivePreset d={await getExecutiveDashboard(ctx)} firstName={firstName} />;
+  } else if (persona === "developer") {
+    preset = <DeveloperPreset d={await getDevDashboard(ctx)} showChecklist={showChecklist} />;
+  } else if (persona === "pm") {
+    const [d, sections] = await Promise.all([getPmDashboard(ctx), getPortfolioSections(ctx)]);
+    preset = <PmPreset d={d} sections={sections} showChecklist={showChecklist} scope={scope} />;
+  } else if (persona === "qa") {
+    preset = <QaPreset d={await getQaDashboard(ctx)} showChecklist={showChecklist} />;
+  } else {
+    preset = <ImplementorPreset d={await getImplDashboard(ctx)} showChecklist={showChecklist} />;
+  }
+
   return (
     <div>
       {/* Header strip: identity + persona switcher + Reports tab (§6 — link, not a copy) */}
@@ -86,26 +102,12 @@ export default async function DashboardPage({
           <FileBarChart className="size-3" /> Reports
         </Link>
         <span className="-translate-y-[1px] flex-1 border-b border-[var(--hair2)]" />
+        {/* DM1.73: the ticking clock + pulsing LIVE dot were decoration — a client
+            component and a 1 Hz interval that answered no question. Date stays. */}
         <span className="font-mono text-[10.5px] tracking-[1px] text-[var(--ink4)]">{today}</span>
-        <LiveClock />
-        <span className="flex items-center gap-1.5 font-mono text-[10px] tracking-[1.5px] text-[var(--ok)]">
-          <span className="size-1.5 rounded-full bg-[var(--ok)] [animation:pulseGlow_2.6s_infinite]" /> LIVE
-        </span>
       </div>
 
-      <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-3.5 p-[14px_24px_90px]">
-        {persona === "executive" ? (
-          <ExecutivePreset d={await getExecutiveDashboard(ctx)} firstName={firstName} />
-        ) : persona === "developer" ? (
-          <DeveloperPreset d={await getDevDashboard(ctx)} sections={await getPortfolioSections(ctx)} showChecklist={showChecklist} />
-        ) : persona === "pm" ? (
-          <PmPreset d={await getPmDashboard(ctx)} sections={await getPortfolioSections(ctx)} showChecklist={showChecklist} scope={scope} />
-        ) : persona === "qa" ? (
-          <QaPreset d={await getQaDashboard(ctx)} sections={await getPortfolioSections(ctx)} showChecklist={showChecklist} scope={scope} />
-        ) : (
-          <ImplementorPreset d={await getImplDashboard(ctx)} sections={await getPortfolioSections(ctx)} showChecklist={showChecklist} scope={scope} />
-        )}
-      </main>
+      <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-3.5 p-[14px_24px_90px]">{preset}</main>
     </div>
   );
 }

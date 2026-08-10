@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { avgProgress, formatBudget, parseBudget } from "@/server/dashboard";
+import { avgProgress } from "@/server/dashboard";
 import { ragCounts, worstStatus } from "@/server/health";
 
 describe("avgProgress", () => {
@@ -38,30 +38,20 @@ describe("ragCounts", () => {
       { status: "Overdue" },
       { status: "Planning" },
     ];
-    expect(ragCounts(items)).toEqual({ onTrack: 2, atRisk: 1, overdue: 1 });
+    // DM1.73 (T8): planning + done buckets exist so totals reconcile on every surface.
+    expect(ragCounts(items)).toEqual({ onTrack: 2, atRisk: 1, overdue: 1, planning: 1, done: 0 });
+  });
+
+  it("buckets Completed and Cancelled as done", () => {
+    expect(ragCounts([{ status: "Completed" }, { status: "Cancelled" }, { status: "OnTrack" }])).toEqual({
+      onTrack: 1,
+      atRisk: 0,
+      overdue: 0,
+      planning: 0,
+      done: 2,
+    });
   });
 });
 
-describe("parseBudget / formatBudget", () => {
-  it("parses billions and millions into a number of KES", () => {
-    expect(parseBudget("KES 2.8B")).toBe(2_800_000_000);
-    expect(parseBudget("KES 830M")).toBe(830_000_000);
-  });
-
-  it("returns 0 for null/unparseable budgets", () => {
-    expect(parseBudget(null)).toBe(0);
-    expect(parseBudget("TBD")).toBe(0);
-  });
-
-  it("formats large sums back into a compact display string", () => {
-    expect(formatBudget(6_730_000_000)).toBe("KES 6.7B");
-    expect(formatBudget(830_000_000)).toBe("KES 830M");
-  });
-
-  it("round-trips a portfolio budget sum consistently", () => {
-    const total = ["KES 2.8B", "KES 1.5B", "KES 1.6B", "KES 830M"]
-      .map(parseBudget)
-      .reduce((a, b) => a + b, 0);
-    expect(formatBudget(total)).toBe("KES 6.7B");
-  });
-});
+// parseBudget/formatBudget died with the dashboard summary KPI (DM1.73 — docs/17 §2
+// ordered the budget KPI removed until money is typed in Phase C).

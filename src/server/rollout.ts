@@ -222,6 +222,53 @@ export async function getRolloutMatrices(ctx: TenantContext, now = new Date()): 
   return matrices.filter((m): m is RolloutMatrix => m !== null);
 }
 
+// DM1.73 (T1): the reports index's "Focus & blockers" tab used to reshape the matrices
+// inline in the page component. The shaping lives HERE now — the page just renders rows,
+// and the shape is testable/reusable without a React tree around it.
+export interface MarketFocusEntry {
+  /** Stable identity for list rendering: `projectId:orgUnitId`. */
+  key: string;
+  portfolio: string;
+  project: string;
+  marketName: string;
+  marketFlag: string | null;
+  rag: Rag | null;
+  narrative: string;
+}
+
+export interface MarketFocusView {
+  /** This week's market check-ins, in the authors' own words. */
+  entries: MarketFocusEntry[];
+  /** Open blockers across rollout projects, tagged with their portfolio. */
+  blockers: (RolloutBlocker & { portfolio: string })[];
+}
+
+/** This week's market focus & blockers across every Rollout portfolio — already shaped
+ * for the reports index (docs/25 §6). */
+export async function getMarketFocus(ctx: TenantContext, now = new Date()): Promise<MarketFocusView> {
+  const matrices = await getRolloutMatrices(ctx, now);
+  const entries = matrices.flatMap((m) =>
+    m.rows.flatMap((row) =>
+      row.cells
+        .filter((c) => c.narrative)
+        .map((c) => {
+          const market = m.markets.find((mk) => mk.id === c.orgUnitId);
+          return {
+            key: `${row.projectId}:${c.orgUnitId}`,
+            portfolio: m.portfolioName,
+            project: row.name,
+            marketName: market?.name ?? "",
+            marketFlag: market?.flag ?? null,
+            rag: c.rag,
+            narrative: c.narrative!,
+          };
+        }),
+    ),
+  );
+  const blockers = matrices.flatMap((m) => m.topBlockers.map((b) => ({ ...b, portfolio: m.portfolioName })));
+  return { entries, blockers };
+}
+
 /** Worst-of across RAGs, routed through the health engine's own ranking. */
 function worstRag(rags: Rag[]): Rag {
   const RAG_TO_STATUS: Record<Rag, string> = { Green: "OnTrack", Amber: "AtRisk", Red: "Overdue" };

@@ -1,5 +1,6 @@
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { weekWindow } from "@/lib/iso-week";
+import { getDeltaFeed, type DeltaFeed } from "@/server/delta";
 import { listMyTasks, type MyTaskRow } from "@/server/project-tasks";
 
 /**
@@ -29,6 +30,8 @@ export interface DevDashboard {
   focusReason: string;
   buckets: DevBuckets;
   doneThisWeek: DoneRow[];
+  /** DM1.73 (T3): "since you last looked" for every persona, not just the exec. */
+  delta: DeltaFeed;
 }
 
 /** §4 ranking: overdue (most first) > due soonest > awaiting review > freshest open.
@@ -59,8 +62,10 @@ export function rankFocus(tasks: MyTaskRow[], now: Date): { task: MyTaskRow; rea
 
 export async function getDevDashboard(ctx: TenantContext, now = new Date()): Promise<DevDashboard> {
   const { start, end } = weekWindow(now);
-  const [tasks, done] = await Promise.all([
+  // DM1.73 (T3): the delta feed joins the payload (and advances lastDashboardSeenAt).
+  const [tasks, delta, done] = await Promise.all([
     listMyTasks(ctx, ctx.userId),
+    getDeltaFeed(ctx),
     withTenant(ctx, (tx) =>
       tx.projectTask.findMany({
         where: { assigneeId: ctx.userId, approvalStatus: { not: "Draft" }, status: "Completed", updatedAt: { gte: start } },
@@ -85,5 +90,6 @@ export async function getDevDashboard(ctx: TenantContext, now = new Date()): Pro
     focusReason: focus?.reason ?? "",
     buckets,
     doneThisWeek: done.map((d) => ({ id: d.id, title: d.title, projectCode: d.project.code, projectId: d.projectId })),
+    delta,
   };
 }

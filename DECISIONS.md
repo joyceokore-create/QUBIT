@@ -2424,3 +2424,109 @@ one tenant and all of that is settled.
 bad rows by line BEFORE any write, good rows land as INVITED with a null password and a
 copyable invite link, a duplicate fails alone instead of aborting the batch, and a plain
 member cannot invite at all.
+
+## DM1.73 — Declutter & status-clarity pass (Waves A + B of docs/37)
+
+Joyce, 2026-08-10: "declutter, track project/portfolio status effectively, easy UI/UX,
+clean workspaces." A four-part code audit (docs/37) found the data layer sound but the
+same facts rendered too many times with too many encodings, while the status answers
+were buried or computed inconsistently. This entry lands Waves A (trust) and B (declutter).
+
+**Wave A — trust fixes**
+- The edit-project dialog's hardcoded priority list (`Low/Medium/High/Critical`) did not
+  match the server enum — picking Medium/Critical silently discarded the WHOLE save.
+  Enums now live once in `src/lib/project-enums.ts`; server + both editors import them.
+- The two FABRICATED gate strips died: the workspace hero's 8-cell "Discovery→Hypercare"
+  rail and `/projects`' `gateCells()` strip were derived from a percentage, not from the
+  real checkpoint gates. The hero caption now says PROGRESS, and the % is real (below).
+- ONE progress definition: `checkpointProgressByProject` is now threaded through every
+  read path (workspace panel, project lists, portfolio detail/cards, PM dashboard table,
+  check-in facts, nightly snapshots) — a gated project shows the same % on every surface,
+  and WoW deltas compare like with like.
+- Nav dead ends fixed: Teams moved off the top nav into the Admin sub-nav; the teams page
+  gate is `teams:manage:all` OR `iam:manage` (both Heads hold the former); iam-only tabs
+  (Audit, Access requests) hide from viewers without `iam:manage`; exactly one nav item
+  highlights (longest-prefix match).
+- "Send to the Head" now means something: `approveRollup` refuses when confirmed check-ins
+  were never sent, unless the Head explicitly approves-anyway (audited as
+  `unsentIncluded`); the strip shows the UNSENT count; the exec's approved band shows
+  "N of M confirmed · approved <date>" instead of a bare signed sentence.
+- Portfolio arithmetic reconciles: `ragCounts` gained planning/done buckets; the detail
+  page shows every bucket; card queries use the same active-only filter as the pipeline.
+- Dead code out (~1,100 lines): presets/registry.ts, layout/nav-item.tsx, dashboard-v2.ts
+  (mergeNudgesIntoPriorities moved to dashboard-exec), three unused /api/dashboard/*
+  routes, getDashboardSummary + parseBudget/formatBudget, the never-rendered
+  project-panel-content/project-tasks-section pair (ProjectPanelJson moved to its own
+  file), the dead canPublish prop chain (one canWriteProject query per page load saved),
+  the client-writable member-report `lines` field (open write path over machine facts),
+  the duplicated businessDaysBetween, duplicated checkpoint state maps, LiveClock + LIVE dot.
+
+**Wave B — declutter**
+- Nav 12 → 9: Programmes merged into Portfolios (route redirects; every programme card
+  linked to its parent portfolio anyway), Staffing merged into People (Directory +
+  Staffing requests tabs; the directory finally shows leave-aware `effectivePct` and
+  on-leave badges), Ideas hidden for member-only viewers (docs/32 §0.3 slim four).
+  The shell renders one account menu and one sign-out.
+- Dashboards: the exec's duplicate PortfolioCards grid is gone (sections already show the
+  portfolios); EVERY persona now gets the "What changed" delta feed (it was exec-only, so
+  `lastDashboardSeenAt` never advanced for anyone else); dev/QA/implementor lost the
+  portfolio estate sections (docs/17 §4); pipeline rows dropped from ~9 encodings to a
+  status pill + one worst-open-thing chip (detail on hover); implementor's OpenGates
+  folded into its hero and Pilots+GoLiveCalendar merged; section Δ survives partial
+  snapshot history; dashboard queries parallelised.
+- Project workspace: tabs 7 → 6 (Team + Integrations → Setup); Overview 11 cards → 5 —
+  Milestones, the new REGISTER (Blockers · Risks · Issues · Dependencies · Decisions ·
+  Lessons in one tabbed card — a PM can finally see and raise a risk on their own
+  project), Comments, Governance+Details merged, and the latest CONFIRMED check-in
+  (docs/25 §3.1's missing card). Status + stage moved into the hero; the corner FAB
+  retired; StatusUpdatesSection moved beside the check-in on Reports (folding it into
+  the check-in model is queued — docs/37 Wave C).
+- Reports index 7 → 5 tabs: Status (R1) and Markets (R2) deleted (pure dashboard
+  duplicates), internal codenames stripped, FocusTab's shaping moved to
+  `rollout.getMarketFocus`, the Head builds/approves the roll-up ON the Roll-ups tab,
+  existing CSV exports (projects/risks/allocations) surfaced, Friday SharedReports
+  listed (`listShares`), the member composer covers queries (and the PM's check-in
+  draft now inherits "<Name> asks: …"), two new nudge signals
+  (member_report_unacknowledged, checkin_unsent_to_head) chase the CURRENT week.
+- Wizards: portfolio 5 → 3 steps (Governance step deleted — its body said "Nothing to
+  configure yet"; owner defaults to self), project 7 → 3 (Docs + Integration steps
+  deleted — both post-create surfaces; type/markets merged into Basics; the full 15-role
+  list); unfilled team seats no longer block the wizard — they become ResourceRequests
+  in the create transaction (docs/30 §5's promise); one pure `lib/capacity.ts` warning
+  implementation shared by wizard + assign dialog (leave-aware); the bench soft-sorts by
+  role fit; idea handoff carries sponsor → businessOwner and expected value.
+
+**Wave C — the status engine**
+- `derivedRag(signals)` in health.ts: "COMPUTED" finally computes. Red = status Overdue,
+  a Blocked gate, or work both stuck AND late (open blockers + overdue tasks); Amber =
+  status AtRisk or any single trouble signal (open blocker, overdue task, milestone
+  slipped this week); Completed/Cancelled always Green. The check-in draft feeds it the
+  live counts (two added queries), so the check-in's COMPUTED chip is no longer a
+  recolouring of a hand-typed field.
+- Display RAG closes the override hole: pipeline rows (the estate everywhere) show the
+  week's `effectiveRag` when a check-in exists, falling back to the status RAG; a
+  section's badge is the worst of its children's DISPLAY RAGs. A PM's Red override can
+  no longer read Green on the exec dashboard. WoW Δ stays snapshot-based (like with like).
+- `/portfolios/[id]` is now the portfolio status page: RAG pill + WoW Δ + open blockers +
+  owner + "N of M check-ins confirmed this week" in the header, a portfolio-scoped
+  "What changed" feed (`getDeltaFeedForProjects` — same window, never advances the
+  dashboard's seen-pointer), and the edit dialog `PATCH /api/portfolios/[id]` had been
+  waiting for (closing the wizard's "change it later" promise).
+- `/projects` gained a CHECK-IN column: this week's RAG dot + confirmed/unconfirmed per
+  row (`checkinSummaryByProject`).
+
+**Wave D — workflow completeness**
+- Leave entry exists: `record-leave-dialog` on People → Directory (person, type, dates,
+  note; gated exactly as POST /api/absences guards). Until now every capacity warning
+  computed over a table no UI could write.
+- Bulk assign takes per-person rows: role/allocation/dates editable per selected person
+  (shared fields become defaults), per-row capacity warnings, same
+  `BulkAddMembersInput` contract — a PM at 20% and two devs at 60% is one dialog trip.
+- (Idea sponsor/value carry-through, resource-request seats, role-fit bench, shared
+  capacity lib landed with Wave B above.)
+
+**Verified**: typecheck 0 errors, lint clean, 427/427 unit tests, plus an adversarial
+review pass over the full diff (its four findings — a broken RLS roll-up test, a
+local-time nudger gate, a self-nudging PM, an idea-title overflow — are fixed). The RLS
+suite needs the Prisma engine binary, unavailable in the cloud sandbox this was authored
+in — run `pnpm test` + `pnpm build` locally before deploying. docs/37 holds the full audit.

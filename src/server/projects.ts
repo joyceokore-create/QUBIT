@@ -3,15 +3,15 @@ import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { avgProgress } from "@/server/dashboard";
+import { checkpointProgressByProject } from "@/server/checkpoints";
 import { emitDomainEvent } from "@/server/events";
 import { ragCounts } from "@/server/health";
 
-const PROJECT_STATUSES = ["Planning", "OnTrack", "AtRisk", "Overdue", "Completed", "Cancelled"] as const;
-// docs/18 §1 — business usage; legacy Medium/Critical were remapped by the M18-A migration.
-export const PROJECT_PRIORITIES = ["High", "Med", "Low", "New", "Strat", "Paused"] as const;
-// docs/18 §1 — the real pipeline. Stage changes are audited + evented.
-export const PIPELINE_STAGES = ["Exploring", "Evaluating", "Approved", "Paused"] as const;
-export type PipelineStage = (typeof PIPELINE_STAGES)[number];
+// Single source of truth lives in the client-safe lib (DM1.73) so dialogs and the
+// server zod schemas can never drift again; re-exported here for existing importers.
+import { PROJECT_STATUSES, PROJECT_PRIORITIES, PIPELINE_STAGES } from "@/lib/project-enums";
+export { PROJECT_PRIORITIES, PIPELINE_STAGES };
+export type { PipelineStage } from "@/lib/project-enums";
 
 // PRD Module 2 definition fields, reused by create + update.
 const ProjectDefinitionFields = {
@@ -114,6 +114,8 @@ async function projectRowsFor(
       tx.orgUnit.findMany({ select: { id: true, code: true, flag: true } }),
     ]);
     const orgUnitById = new Map(orgUnits.map((o) => [o.id, o]));
+    // DM1.73 (T3): checkpoint-derived % wins wherever a gate template exists.
+    const checkpointProgress = await checkpointProgressByProject(tx, projects.map((p) => p.id));
 
     return projects.map((p) => ({
       id: p.id,
@@ -124,7 +126,7 @@ async function projectRowsFor(
       status: p.status,
       dueDate: p.dueDate,
       budget: p.budget,
-      avgProgress: avgProgress(p),
+      avgProgress: avgProgress(p, checkpointProgress),
       orgUnits: p.orgStatuses
         .map((os) => orgUnitById.get(os.orgUnitId))
         .filter((o): o is { id: string; code: string; flag: string | null } => !!o)
@@ -153,6 +155,9 @@ export interface PortfolioDetail {
   onTrack: number;
   atRisk: number;
   overdue: number;
+  /** DM1.73 (T8): Planning + Completed/Cancelled buckets so the counts reconcile to itemCount. */
+  planning: number;
+  done: number;
   avgProgress: number;
   programmes: ProgrammeSummary[];
   standaloneInPortfolio: ProjectRowSummary[];
@@ -165,19 +170,22 @@ export async function getPortfolioDetail(
   const portfolio = await withTenant(ctx, (tx) => tx.portfolio.findUnique({ where: { id: portfolioId } }));
   if (!portfolio) return null;
 
-  const [allProjects, programmes] = await Promise.all([
-    withTenant(ctx, (tx) =>
-      tx.project.findMany({
+  const [{ allProjects, checkpointProgress }, programmes] = await Promise.all([
+    withTenant(ctx, async (tx) => {
+      const rows = await tx.project.findMany({
         where: { portfolioId },
-        select: { status: true, orgStatuses: { select: { progress: true } } },
-      }),
-    ),
+        select: { id: true, status: true, orgStatuses: { select: { progress: true } } },
+      });
+      // DM1.73 (T3): same checkpoint-derived % as the pipeline/dashboard.
+      const cp = await checkpointProgressByProject(tx, rows.map((r) => r.id));
+      return { allProjects: rows, checkpointProgress: cp };
+    }),
     withTenant(ctx, (tx) => tx.programme.findMany({ where: { portfolioId }, orderBy: { name: "asc" } })),
   ]);
 
-  const { onTrack, atRisk, overdue } = ragCounts(allProjects);
+  const { onTrack, atRisk, overdue, planning, done } = ragCounts(allProjects);
   const avg = allProjects.length
-    ? Math.round(allProjects.reduce((sum, p) => sum + avgProgress(p), 0) / allProjects.length)
+    ? Math.round(allProjects.reduce((sum, p) => sum + avgProgress(p, checkpointProgress), 0) / allProjects.length)
     : 0;
 
   const programmeSummaries: ProgrammeSummary[] = await Promise.all(
@@ -210,6 +218,8 @@ export async function getPortfolioDetail(
     onTrack,
     atRisk,
     overdue,
+    planning,
+    done,
     avgProgress: avg,
     programmes: programmeSummaries,
     standaloneInPortfolio,
@@ -310,6 +320,9 @@ export async function getProjectPanelData(
       },
     });
     if (!project) return null;
+    // DM1.73 (T3): the workspace hero shows the same checkpoint-derived % as the
+    // pipeline table and the Delivery tab — one progress number per project.
+    const checkpointProgress = await checkpointProgressByProject(tx, [project.id]);
 
     return {
       id: project.id,
@@ -333,7 +346,7 @@ export async function getProjectPanelData(
       portfolioId: project.portfolioId,
       portfolioName: project.portfolio?.name ?? null,
       programmeName: project.programme?.name ?? null,
-      avgProgress: avgProgress(project),
+      avgProgress: avgProgress(project, checkpointProgress),
       subsidiaries: project.orgStatuses.map((os) => ({
         orgUnitId: os.orgUnit.id,
         code: os.orgUnit.code,
@@ -390,6 +403,8 @@ export async function listProjects(
       tx.orgUnit.findMany({ select: { id: true, code: true, flag: true } }),
     ]);
     const orgUnitById = new Map(orgUnits.map((o) => [o.id, o]));
+    // DM1.73 (T3): checkpoint-derived % wins wherever a gate template exists.
+    const checkpointProgress = await checkpointProgressByProject(tx, projects.map((p) => p.id));
 
     return projects.map((p) => ({
       id: p.id,
@@ -402,7 +417,7 @@ export async function listProjects(
       budget: p.budget,
       portfolioId: p.portfolioId,
       programmeId: p.programmeId,
-      avgProgress: avgProgress(p),
+      avgProgress: avgProgress(p, checkpointProgress),
       orgUnits: p.orgStatuses
         .map((os) => orgUnitById.get(os.orgUnitId))
         .filter((o): o is { id: string; code: string; flag: string | null } => !!o)

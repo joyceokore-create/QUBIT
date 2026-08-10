@@ -104,7 +104,6 @@ export function ProjectBoard({
   projectId: string;
   /** Retained for the blocker affordance gate (RAID writes) — NOT task authoring. */
   canEdit: boolean;
-  canPublish?: boolean;
   viewerCategory?: ProjectRoleCategory;
   viewerId?: string;
   focusTaskId?: string | null;

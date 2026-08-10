@@ -1,6 +1,5 @@
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
-import { flagEnabled } from "@/lib/flags";
 import { withTenant } from "@/lib/tenant";
 import { getIdeaForPrefill } from "@/server/ideas";
 import { listMarkets } from "@/server/portfolios";
@@ -9,7 +8,8 @@ import { Forbidden } from "@/components/forbidden";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { ProjectWizard } from "./project-wizard";
 
-// M-P1c (docs/26 §5.3) — the centrepiece wizard: seven questions, one per screen.
+// M-P1c (docs/26 §5.3) — the centrepiece wizard. DM1.73: three steps (Basics · Team ·
+// Review) — docs and integrations moved to the workspace, where they always ended up.
 export default async function NewProjectPage({
   searchParams,
 }: {
@@ -69,7 +69,7 @@ export default async function NewProjectPage({
             the idea.
           </>
         ) : (
-          "The centrepiece wizard — seven questions, one per screen."
+          "The centrepiece wizard — three steps, one question at a time."
         )}
       </p>
       <ProjectWizard
@@ -99,10 +99,16 @@ export default async function NewProjectPage({
           totalPct: w.totalPct,
           effectivePct: w.effectivePct,
           onLeaveUntil: w.onLeaveUntil ? w.onLeaveUntil.toISOString() : null,
+          // DM1.73 — the role hats each person already wears, for the alternates soft sort.
+          roles: [...new Set(w.allocations.map((a) => a.role))],
         }))}
         preselectedPortfolioId={preselectedPortfolioId ?? idea?.suggestedPortfolioId ?? null}
-        fromIdea={idea ? { id: idea.id, title: idea.title, problem: idea.problem } : null}
-        youtrackEnabled={flagEnabled("youtrack")}
+        // DM1.73 — sponsor and expected value survive the idea → project handoff.
+        fromIdea={
+          idea
+            ? { id: idea.id, title: idea.title, problem: idea.problem, sponsor: idea.sponsor, expectedValue: idea.expectedValue }
+            : null
+        }
       />
     </div>
   );

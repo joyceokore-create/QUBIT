@@ -67,6 +67,27 @@ export async function createShare(
   return { token };
 }
 
+// DM1.73 (T7): SharedReport rows were write-only — reachable only via the emailed link.
+// The reports index now lists recent ones, so a Friday report survives a lost email.
+export interface ShareListRow {
+  token: string;
+  title: string;
+  type: string;
+  createdAt: Date;
+}
+
+/** Recent shared-report snapshots for the tenant, newest first (metadata only —
+ * the body stays behind the token route). */
+export async function listShares(ctx: TenantContext, take = 12): Promise<ShareListRow[]> {
+  return withTenant(ctx, (tx) =>
+    tx.sharedReport.findMany({
+      orderBy: { createdAt: "desc" },
+      take,
+      select: { token: true, title: true, type: true, createdAt: true },
+    }),
+  );
+}
+
 export async function getShareByToken(
   ctx: TenantContext,
   token: string,

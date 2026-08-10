@@ -39,6 +39,10 @@ const LABEL = "text-[11px] font-semibold tracking-[0.6px] text-[var(--ink4)] upp
 const SELECT = "mt-1.5 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm";
 const fmt = (iso: string) =>
   new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+// DM1.73 — sensible default ask window: today → +8 weeks (a typical staffing horizon).
+const isoDay = (t: number) => new Date(t).toISOString().slice(0, 10);
+const defaultStart = () => isoDay(Date.now());
+const defaultEnd = () => isoDay(Date.now() + 56 * 86_400_000);
 
 export function StaffingClient({
   isHead,
@@ -57,9 +61,11 @@ export function StaffingClient({
   const [projectId, setProjectId] = useState("");
   const [role, setRole] = useState("QA Engineer");
   const [alloc, setAlloc] = useState(60);
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
+  const [start, setStart] = useState(defaultStart);
+  const [end, setEnd] = useState(defaultEnd);
   const [note, setNote] = useState("");
+  // DM1.73 — brief inline confirmation after a successful raise.
+  const [sent, setSent] = useState(false);
 
   // Head: which request's bench is open, and the decline-reason editor.
   const [benchFor, setBenchFor] = useState<RequestRow | null>(null);
@@ -69,7 +75,8 @@ export function StaffingClient({
 
   useEffect(() => {
     if (!benchFor) return;
-    const qs = new URLSearchParams({ start: benchFor.windowStart, end: benchFor.windowEnd });
+    // DM1.73 — role activates benchFor's role-fit soft sort (docs/29 §3).
+    const qs = new URLSearchParams({ start: benchFor.windowStart, end: benchFor.windowEnd, role: benchFor.role });
     fetch(`/api/staffing/bench?${qs}`)
       .then((r) => r.json())
       .then((d) => setBench((d.data ?? []) as BenchRow[]))
@@ -92,7 +99,19 @@ export function StaffingClient({
         windowEnd: new Date(end).toISOString(),
         note: note.trim() || undefined,
       },
-      { fallback: "Could not raise the request." },
+      {
+        fallback: "Could not raise the request.",
+        // DM1.73 — clear the form and confirm inline; the refreshed queue below is the
+        // real receipt, the banner just points at it.
+        onSuccess: () => {
+          setProjectId("");
+          setNote("");
+          setStart(defaultStart());
+          setEnd(defaultEnd());
+          setSent(true);
+          window.setTimeout(() => setSent(false), 5000);
+        },
+      },
     );
   }
 
@@ -160,6 +179,11 @@ export function StaffingClient({
           {error && (
             <p role="alert" className="mt-2 text-[12.5px] text-status-red">
               {error}
+            </p>
+          )}
+          {sent && (
+            <p role="status" className="mt-2 text-[12.5px] font-semibold text-[var(--ok)]">
+              Request sent — it&apos;s in the queue below.
             </p>
           )}
           <Button type="button" onClick={() => void raise()} disabled={busy} className="mt-3">
@@ -245,7 +269,9 @@ export function StaffingClient({
           <p className="text-[13px] font-bold text-[var(--qink)]">
             Bench — for 1 {benchFor.role} · {benchFor.allocationPct}% · {fmt(benchFor.windowStart)}–{fmt(benchFor.windowEnd)} on {benchFor.projectCode}
           </p>
-          <p className="text-[11px] text-[var(--ink4)]">Least booked first · leave inside the window surfaced.</p>
+          <p className="text-[11px] text-[var(--ink4)]">
+            People who have worn the {benchFor.role} hat first, then least booked · leave inside the window surfaced.
+          </p>
           <div className="mt-2.5 flex flex-col">
             {bench.map((b) => (
               <div key={b.userId} className="flex items-center gap-3 border-b border-[var(--w06)] py-2 last:border-0">

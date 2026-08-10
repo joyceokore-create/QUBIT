@@ -341,12 +341,20 @@ export async function acceptIdeaInTx(
 export async function getIdeaForPrefill(
   ctx: TenantContext,
   ideaId: string,
-): Promise<{ id: string; title: string; sponsor: string; problem: string; suggestedPortfolioId: string | null } | null> {
+): Promise<{
+  id: string;
+  title: string;
+  sponsor: string;
+  problem: string;
+  expectedValue: string | null;
+  suggestedPortfolioId: string | null;
+} | null> {
   if (!canTriage(ctx)) return null;
   return withTenant(ctx, async (tx) => {
     const row = await tx.idea.findUnique({
       where: { id: ideaId },
-      select: { id: true, title: true, sponsor: true, problem: true, suggestedPortfolioId: true, status: true },
+      // DM1.73 — expectedValue included so the idea → project handoff keeps it.
+      select: { id: true, title: true, sponsor: true, problem: true, expectedValue: true, suggestedPortfolioId: true, status: true },
     });
     if (!row || (row.status !== "New" && row.status !== "Reviewing")) return null;
     const { status: _status, ...rest } = row;

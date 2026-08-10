@@ -107,51 +107,8 @@ function DecisionQueue({ d }: { d: ExecutiveDashboard }) {
   );
 }
 
-/** docs/32 M-W1b, matched to the wireframe: PER-PORTFOLIO square cards ("click a card →
- * its page") — name, RAG dot, lens · project count, progress bar, category tag, Δ WoW.
- * Built from the sections data the page already has; no extra queries. */
-function PortfolioCards({ d }: { d: ExecutiveDashboard }) {
-  const sections = d.sections.sections.filter((s) => !s.isUnassigned);
-  if (!sections.length) return null;
-  return (
-    <section>
-      <h2 className="mb-2 flex items-center gap-2 text-[13px] font-bold text-[var(--qink)]">
-        Portfolios
-        <span className="rounded-full border border-[var(--w08)] px-2 py-0.5 font-mono text-[8.5px] font-bold uppercase tracking-[.8px] text-[var(--ink4)]">
-          click a card → its page
-        </span>
-      </h2>
-      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-        {sections.map((s) => (
-          <Link key={s.id} href={`/portfolios/${s.id}`} className={`${CARD} group flex flex-col gap-2.5 p-4`} style={{ background: "var(--cardbg)" }}>
-            <div className="flex items-start justify-between gap-2">
-              <span className="text-[13.5px] leading-tight font-bold text-[var(--qink)]">{s.name}</span>
-              <span
-                className="mt-0.5 size-2.5 flex-none rounded-full"
-                style={{ background: s.rag === "Red" ? "var(--bad)" : s.rag === "Amber" ? "var(--warn)" : "var(--ok)" }}
-              />
-            </div>
-            <span className="font-mono text-[9.5px] uppercase tracking-[.8px] text-[var(--ink4)]">
-              {s.viewKind} · {s.projectCount} project{s.projectCount === 1 ? "" : "s"}
-            </span>
-            <div className="h-1.5 overflow-hidden rounded-full bg-[var(--wash2)]">
-              <div className="h-full rounded-full bg-[var(--ink3)]" style={{ width: `${s.progress}%` }} />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="rounded-full border border-[var(--w08)] px-2 py-0.5 text-[10px] font-semibold text-[var(--ink3)]">{s.category}</span>
-              {s.ragDelta !== null && s.ragDelta !== 0 && (
-                <span className="font-mono text-[9px] font-bold" style={{ color: s.ragDelta < 0 ? "var(--ok)" : "var(--bad)" }}>
-                  {s.ragDelta < 0 ? "▲ improved" : "▼ worsened"} WoW
-                </span>
-              )}
-              <span className="ml-auto font-mono text-[9.5px] tabular-nums text-[var(--ink4)]">{s.progress}%</span>
-            </div>
-          </Link>
-        ))}
-      </div>
-    </section>
-  );
-}
+// DM1.73 (T1): the PortfolioCards grid is gone — it rendered the SAME portfolios as
+// PortfolioSections below, twice on one page. The sections (with RAG+Δ headers) stay.
 
 /** docs/32 M-W1b — Head of PMs only: this week's check-in state per active project.
  * Review-only; the approve step arrives with the Head roll-up (PortfolioReport, P3). */
@@ -208,9 +165,14 @@ export function ExecutivePreset({ d, firstName }: { d: ExecutiveDashboard; first
           {d.approvedRollup.approvedByName && (
             <span className="font-mono text-[9.5px] text-[var(--ink4)]">— {d.approvedRollup.approvedByName}, Head of PMs</span>
           )}
+          {/* DM1.73 (T2): the signed line carries its denominator — coverage + when. */}
+          <span className="w-full font-mono text-[9px] uppercase tracking-[.8px] text-[var(--ink4)]">
+            {d.approvedRollup.confirmed} of {d.approvedRollup.total} check-ins confirmed
+            {d.approvedRollup.approvedAt &&
+              ` · approved ${d.approvedRollup.approvedAt.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`}
+          </span>
         </section>
       )}
-      <PortfolioCards d={d} />
       {d.headQueue && <HeadQueue rows={d.headQueue} awaiting={d.rollup?.status === "Draft"} />}
       {d.headQueue && d.rollup && <RollupStrip rollup={d.rollup} />}
       <DecisionQueue d={d} />

@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { can } from "@/lib/rbac";
 import { listDepartments, listOrgUnitOptions } from "@/server/departments";
 import { listUsers } from "@/server/users";
 import { AdminHeader } from "../admin-header";
@@ -22,7 +23,7 @@ export default async function AdminDepartmentsPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
-      <AdminHeader
+      <AdminHeader canManageIam={can(ctx, "iam:manage")}
         subtitle={`${departments.length} ${departments.length === 1 ? "department" : "departments"} · org structure ships empty by design (no seeded PII)`}
         action={<DepartmentDialog mode="create" departments={departments} orgUnits={orgUnits} users={users} />}
       />

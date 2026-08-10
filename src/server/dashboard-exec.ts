@@ -3,11 +3,26 @@ import { isoWeekId } from "@/lib/iso-week";
 import { getDeltaFeed, type DeltaFeed } from "@/server/delta";
 import { needsAttention, portfolioHealth, type PortfolioHealth } from "@/server/health";
 import { listMyNudges, type MyNudge } from "@/server/nudger";
-import { mergeNudgesIntoPriorities } from "@/server/dashboard-v2";
+
 import { getPortfolioSections, type PortfolioSectionsData } from "@/server/pipeline";
 import { getRolloutMatrices, type RolloutMatrix } from "@/server/rollout";
 import { getBriefing, type BriefingItem } from "@/server/relevance";
 import { getApprovedRollup, getRollup, type RollupView } from "@/server/portfolio-reports";
+
+// DM1.73: moved here from the deleted dashboard-v2.ts (its only live export).
+/** Active nudges outrank relevance guesses — the nudger KNOWS these need the viewer. */
+export function mergeNudgesIntoPriorities(nudges: MyNudge[], briefing: BriefingItem[], limit = 5): BriefingItem[] {
+  const nudgeItems: BriefingItem[] = nudges.map((n) => ({
+    id: n.entityId,
+    kind: "nudge",
+    title: n.message,
+    meta: n.escalationLevel > 0 ? "NUDGE · ESCALATED" : "NUDGE",
+    severity: n.escalationLevel > 0 ? "red" : "amber",
+    href: n.link ?? "/my-tasks",
+  }));
+  const nudgedEntities = new Set(nudgeItems.map((n) => n.id));
+  return [...nudgeItems, ...briefing.filter((b) => !nudgedEntities.has(b.id))].slice(0, limit);
+}
 
 /**
  * Executive preset data (docs/17 §2). Everything is grounded: health from the one
@@ -62,8 +77,16 @@ export interface ExecutiveDashboard {
   headQueue: HeadQueueRow[] | null;
   /** M-P3b — this week's roll-up state for the Head's approve strip (null for non-heads). */
   rollup: RollupView | null;
-  /** M-P3b — the approved roll-up everyone's hero may show (null until the Head signs). */
-  approvedRollup: { isoWeek: string; narrative: string | null; approvedByName: string | null } | null;
+  /** M-P3b — the approved roll-up everyone's hero may show (null until the Head signs).
+   * DM1.73 (T2): now carries confirmed/total/approvedAt so the band shows its denominator. */
+  approvedRollup: {
+    isoWeek: string;
+    narrative: string | null;
+    approvedByName: string | null;
+    approvedAt: Date | null;
+    confirmed: number;
+    total: number;
+  } | null;
 }
 
 export interface HeadQueueRow {

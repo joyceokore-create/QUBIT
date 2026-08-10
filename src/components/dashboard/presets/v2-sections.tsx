@@ -10,10 +10,12 @@ export const CARD =
   "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]";
 export const SEV: Record<string, string> = { red: "--bad", amber: "--warn", info: "--qinfo", bad: "--bad", warn: "--warn", ok: "--ok" };
 
-export function Panel({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
+// DM1.73 (T8): `hint` hangs explainer copy off the header as a title attribute — the
+// footer strips that spelled these out inside panels are gone; hover still reveals them.
+export function Panel({ title, sub, hint, children }: { title: string; sub?: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className={CARD} style={{ background: "var(--cardbg)", animation: "rise .5s cubic-bezier(.22,1,.36,1) both" }}>
-      <div className="flex items-baseline gap-2.5 border-b border-[var(--hair)] p-[12px_16px]">
+      <div className="flex items-baseline gap-2.5 border-b border-[var(--hair)] p-[12px_16px]" title={hint}>
         <span className="font-heading text-[13.5px] rv:text-heading-xs font-bold text-[var(--qink)]">{title}</span>
         {sub && <span className="font-mono rv:font-sans text-[9px] rv:text-overline tracking-[1.2px] text-[var(--ink4)]">{sub}</span>}
       </div>

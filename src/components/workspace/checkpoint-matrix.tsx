@@ -9,19 +9,9 @@ import type { CheckpointState, ProjectCheckpoints, TemplateOption } from "@/serv
 // percentage underneath is derived and never typed — that's the whole point of moving
 // the slide's hand-maintained numbers into the system.
 
+import { CHECKPOINT_STATE_TOK as STATE_TOK, CHECKPOINT_STATE_LABEL as STATE_LABEL } from "@/lib/checkpoint-view";
+
 const STATES: CheckpointState[] = ["NotStarted", "InProgress", "Done", "Blocked"];
-const STATE_TOK: Record<CheckpointState, string> = {
-  Done: "--ok",
-  InProgress: "--qinfo",
-  Blocked: "--bad",
-  NotStarted: "--ink4",
-};
-const STATE_LABEL: Record<CheckpointState, string> = {
-  Done: "Done",
-  InProgress: "In progress",
-  Blocked: "Blocked",
-  NotStarted: "Not started",
-};
 
 interface Payload extends ProjectCheckpoints {
   templates: TemplateOption[];

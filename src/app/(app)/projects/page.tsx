@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { listProjects } from "@/server/projects";
+import { checkinSummaryByProject } from "@/server/checkins";
 import { forTenant } from "@/server/tenant-db";
 import { Forbidden } from "@/components/forbidden";
 import { ProjectsClient } from "./projects-client";
@@ -13,11 +14,13 @@ export default async function ProjectsPage() {
   const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
   if (!can(ctx, "project:read")) return <Forbidden />;
 
-  const [projects, memberCounts, myMemberships, myLeads] = await Promise.all([
+  const [projects, memberCounts, myMemberships, myLeads, checkins] = await Promise.all([
     listProjects(ctx),
     forTenant(ctx, (tx) => tx.projectMember.groupBy({ by: ["projectId"], _count: { _all: true } })),
     forTenant(ctx, (tx) => tx.projectMember.findMany({ where: { userId: ctx.userId }, select: { projectId: true } })),
     forTenant(ctx, (tx) => tx.project.findMany({ where: { leadUserId: ctx.userId }, select: { id: true } })),
+    // DM1.73 (Wave C, C4): this week's check-in per project — freshness on the list.
+    checkinSummaryByProject(ctx),
   ]);
   const countByProject = new Map(memberCounts.map((r) => [r.projectId, r._count._all]));
   // "Mine" = the viewer leads it or is allocated to it (per Joyce: filter mine everywhere).
@@ -38,6 +41,11 @@ export default async function ProjectsPage() {
         avgProgress: p.avgProgress,
         memberCount: countByProject.get(p.id) ?? 0,
         isMine: mineIds.has(p.id),
+        // DM1.73 (Wave C, C4): this week's check-in RAG + confirmation, or null.
+        checkin: (() => {
+          const c = checkins.get(p.id);
+          return c ? { rag: c.rag, confirmed: c.confirmed } : null;
+        })(),
       }))}
       canCreate={can(ctx, "project:create")}
     />

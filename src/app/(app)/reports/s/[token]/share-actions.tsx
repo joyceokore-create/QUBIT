@@ -24,7 +24,9 @@ export function ShareActions({ title, markdown, footer }: { title: string; markd
   return (
     <div className="flex flex-wrap gap-2">
       <Btn onClick={onMd} icon={<FileDown className="size-3.5" />} label="Markdown" />
-      <Btn onClick={onHtml} icon={<Printer className="size-3.5" />} label="HTML / PDF" />
+      {/* DM1.73 (T4): this downloads a print-ready HTML file — there is no server PDF
+          (deferred with M9-B). Labelled for what it does, not what M9-B will do. */}
+      <Btn onClick={onHtml} icon={<Printer className="size-3.5" />} label="HTML (print to PDF)" />
       <Btn onClick={onCopyLink} icon={copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />} label={copied ? "Link copied" : "Copy link"} />
     </div>
   );

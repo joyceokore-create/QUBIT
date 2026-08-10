@@ -7,15 +7,19 @@ import { usePathname } from "next/navigation";
 // Shared QUBIT App v3 admin header — eyebrow + Archivo title + chip tabs across the five
 // admin routes (Users / Roles / Audit / Departments / Access requests). `action` is an
 // optional trailing slot (e.g. the New user / New department dialog trigger).
+// DM1.73 (T6): Teams moved here from the top-level nav (it is admin territory and its
+// top-level pill dead-ended for Heads). Tabs gated on iam:manage are hidden from viewers
+// without it, so no admin tab ever renders a Forbidden page.
 const TABS = [
   { label: "Users", href: "/admin/users" },
+  { label: "Teams", href: "/admin/teams" },
   { label: "Roles", href: "/admin/roles" },
-  { label: "Audit", href: "/admin/audit" },
   { label: "Departments", href: "/admin/departments" },
-  { label: "Access requests", href: "/admin/access-requests" },
+  { label: "Audit", href: "/admin/audit", iamOnly: true },
+  { label: "Access requests", href: "/admin/access-requests", iamOnly: true },
 ];
 
-export function AdminHeader({ subtitle, action }: { subtitle?: string; action?: React.ReactNode }) {
+export function AdminHeader({ subtitle, action, canManageIam = true }: { subtitle?: string; action?: React.ReactNode; canManageIam?: boolean }) {
   const path = usePathname();
 
   const [newCount, setNewCount] = useState(0);
@@ -45,7 +49,7 @@ export function AdminHeader({ subtitle, action }: { subtitle?: string; action?: 
         {action}
       </div>
       <div className="flex flex-wrap gap-1.5">
-        {TABS.map((t) => {
+        {TABS.filter((t) => canManageIam || !t.iamOnly).map((t) => {
           const active = path === t.href || path.startsWith(`${t.href}/`);
           return (
             <Link

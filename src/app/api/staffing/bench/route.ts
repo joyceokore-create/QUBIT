@@ -16,5 +16,7 @@ export async function GET(req: Request) {
   if (Number.isNaN(+start) || Number.isNaN(+end) || start > end) {
     return NextResponse.json({ error: { code: "VALIDATION", message: "Bad window." } }, { status: 400 });
   }
-  return NextResponse.json({ data: await benchFor(guard.ctx, start, end) });
+  // DM1.73 — optional ?role= activates the role-fit soft sort (docs/29 §3).
+  const role = url.searchParams.get("role")?.slice(0, 60) || undefined;
+  return NextResponse.json({ data: await benchFor(guard.ctx, start, end, role) });
 }

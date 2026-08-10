@@ -10,7 +10,7 @@ import { getProjectPanelData } from "@/server/projects";
 import { listProjectMembers } from "@/server/resources";
 import { Forbidden } from "@/components/forbidden";
 import { ProjectWorkspace } from "@/components/workspace/project-workspace";
-import type { ProjectPanelJson } from "@/components/panels/project-panel-content";
+import type { ProjectPanelJson } from "@/components/panels/project-panel-json";
 
 export default async function ProjectWorkspacePage({
   params,
@@ -29,11 +29,11 @@ export default async function ProjectWorkspacePage({
 
   if (!(await canViewProject(ctx, id))) return <Forbidden />;
 
-  const [p, members, canContribute, canPublish, membership, portfolios, viewerCategory] = await Promise.all([
+  const [p, members, canContribute, canWrite, membership, portfolios, viewerCategory] = await Promise.all([
     getProjectPanelData(ctx, id),
     listProjectMembers(ctx, id),
     canContributeToProject(ctx, id),
-    canWriteProject(ctx, id), // plan publishing + join-request decisions (PM-level)
+    canWriteProject(ctx, id), // governance + join-request decisions (PM-level)
     withTenant(ctx, async (tx) => {
       const [lead, m] = await Promise.all([
         tx.project.findFirst({ where: { id, leadUserId: ctx.userId }, select: { id: true } }),
@@ -47,12 +47,15 @@ export default async function ProjectWorkspacePage({
     // and the rows the server returns can never disagree.
     viewerBoardCategory(ctx, id),
   ]);
-  // M-P2c — dependency picker candidates (active projects only).
+  // M-P2c — dependency picker candidates (active projects only). DM1.73: capped — this
+  // feeds a <select> in the Register's Dependencies tab, and an unbounded findMany on a
+  // large tenant is page-load work nobody sees. 300 covers any realistic active set.
   const allProjects = await withTenant(ctx, (tx) =>
     tx.project.findMany({
       where: { status: { notIn: ["Completed", "Cancelled"] } },
       select: { id: true, code: true, name: true },
       orderBy: { code: "asc" },
+      take: 300,
     }),
   );
   // M-P4a — where this project came from: the idea(s) accepted into or merged into it.
@@ -73,8 +76,9 @@ export default async function ProjectWorkspacePage({
     startDate: p.startDate ? p.startDate.toISOString() : null,
     canEdit: can(ctx, "project:update"), // project settings / team
     canContribute, // tasks + blockers: any project member
-    canPublish, // plan approval (Draft → Published) — PM-level (DM1.15 №3)
-    canGovern: can(ctx, "project:stage") || (await canWriteProject(ctx, id)), // docs/18 §7
+    // DM1.73: the dead canPublish prop chain is gone (task authoring was retired with
+    // M-C); canWrite is computed once instead of twice.
+    canGovern: can(ctx, "project:stage") || canWrite, // docs/18 §7
     portfolios,
     viewerCategory,
     allProjects,

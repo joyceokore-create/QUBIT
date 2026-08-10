@@ -16,6 +16,35 @@ export function projectRag(status: string): Rag {
   return "Green";
 }
 
+/**
+ * DM1.73 (Wave C, T4) — the derived-signals RAG the file header promised since M2.
+ * "Computed" finally computes: the typed delivery status is ONE signal among the live
+ * ones (gates, blockers, tasks, milestones), not the whole verdict.
+ *
+ * Red   — status Overdue, or any checkpoint gate Blocked, or work both stuck AND late
+ *         (open blockers alongside overdue tasks).
+ * Amber — status AtRisk, or any single trouble signal: an open blocker, an overdue
+ *         task, or a milestone that slipped this week.
+ * Green — otherwise. Completed/Cancelled are always Green (not in delivery).
+ */
+export interface RagSignals {
+  status: string;
+  overdueTasks?: number;
+  openBlockers?: number;
+  milestonesSlipped?: number;
+  gatesBlocked?: number;
+}
+
+export function derivedRag(s: RagSignals): Rag {
+  if (s.status === "Completed" || s.status === "Cancelled") return "Green";
+  const blockers = s.openBlockers ?? 0;
+  const overdue = s.overdueTasks ?? 0;
+  const slipped = s.milestonesSlipped ?? 0;
+  if (s.status === "Overdue" || (s.gatesBlocked ?? 0) > 0 || (blockers > 0 && overdue > 0)) return "Red";
+  if (s.status === "AtRisk" || blockers > 0 || overdue > 0 || slipped > 0) return "Amber";
+  return "Green";
+}
+
 /** True when the project belongs in every "needs attention" list. */
 export function needsAttention(status: string): boolean {
   return projectRag(status) !== "Green";
@@ -62,5 +91,9 @@ export function ragCounts(items: { status: string }[]) {
     onTrack: items.filter((i) => i.status === "OnTrack").length,
     atRisk: items.filter((i) => i.status === "AtRisk").length,
     overdue: items.filter((i) => i.status === "Overdue").length,
+    // DM1.73 (T8): the remaining buckets, so "Total N" always reconciles on any surface
+    // that shows the counts (a portfolio of 12 no longer reads "4 + 1 + 0 = 12").
+    planning: items.filter((i) => i.status === "Planning").length,
+    done: items.filter((i) => i.status === "Completed" || i.status === "Cancelled").length,
   };
 }

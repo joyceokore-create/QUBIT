@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Flag, Gauge, ShieldAlert, TriangleAlert, UsersRound } from "lucide-react";
+import { ArrowRight, Flag, ShieldAlert, TriangleAlert } from "lucide-react";
 import type { PipelineGroup, PipelineRow, PipelineTableData } from "@/server/pipeline";
 import { CARD } from "@/components/dashboard/presets/v2-sections";
 import { RAG_TOKEN } from "@/lib/surface";
@@ -48,9 +48,21 @@ function Chip({ icon: Icon, value, label, tok }: { icon: typeof Flag; value: num
 function Row({ row, boardLinks }: { row: PipelineRow; boardLinks?: boolean }) {
   const href = boardLinks ? `/projects/${row.id}?tab=Board&lens=dev` : `/projects/${row.id}`;
   const c = row.chips;
+  // DM1.73 (T6): five chips per row was noise — the row keeps its health pill plus AT
+  // MOST ONE "worst open thing" chip (open blockers/risks first, else slipped
+  // milestones). The full detail moves to the row's title attribute for hover.
+  const worstOpen = row.openBlockers + c.risksOpen;
+  const detail = [
+    `${row.openBlockers} open blocker(s)`,
+    `${c.risksOpen} open risk(s)`,
+    `${c.milestonesUpcoming} milestone(s) upcoming · ${c.milestonesOverdue} overdue`,
+    `${c.velocity7d} task(s) completed in 7d`,
+    `${c.resources} allocated member(s)`,
+  ].join(" · ");
   return (
     <Link
       href={href}
+      title={detail}
       className="grid grid-cols-[minmax(0,1.2fr)_64px_72px_minmax(0,1.4fr)_auto] items-center gap-3 border-b border-[var(--hair2)] p-[9px_16px] transition-colors last:border-0 hover:bg-[var(--wash)] max-md:grid-cols-[minmax(0,1fr)_64px_auto]"
     >
       <span className="min-w-0">
@@ -94,16 +106,12 @@ function Row({ row, boardLinks }: { row: PipelineRow; boardLinks?: boolean }) {
         {row.note ?? (row.unconfirmed ? "check-in unconfirmed this week" : "—")}
       </span>
       <span className="flex flex-none items-center gap-1">
-        <Chip icon={ShieldAlert} value={c.risksOpen} label={`${c.risksOpen} open risk(s)`} tok={c.risksOpen ? "--warn" : "--ink4"} />
-        <Chip
-          icon={Flag}
-          value={c.milestonesOverdue ? `${c.milestonesUpcoming}/${c.milestonesOverdue}!` : c.milestonesUpcoming}
-          label={`${c.milestonesUpcoming} milestone(s) upcoming · ${c.milestonesOverdue} overdue`}
-          tok={c.milestonesOverdue ? "--bad" : "--ink4"}
-        />
-        <Chip icon={Gauge} value={c.velocity7d} label={`${c.velocity7d} task(s) completed in 7d`} tok="--qinfo" />
         <Chip icon={TriangleAlert} value={c.health} label={`Health: ${c.health} (computed)`} tok={RAG_TOKEN[c.health]} />
-        <Chip icon={UsersRound} value={c.resources} label={`${c.resources} allocated member(s)`} tok="--ink4" />
+        {worstOpen > 0 ? (
+          <Chip icon={ShieldAlert} value={worstOpen} label={`${row.openBlockers} open blocker(s) · ${c.risksOpen} open risk(s)`} tok="--warn" />
+        ) : c.milestonesOverdue > 0 ? (
+          <Chip icon={Flag} value={c.milestonesOverdue} label={`${c.milestonesOverdue} milestone(s) overdue`} tok="--bad" />
+        ) : null}
         <ArrowRight className="ml-1 size-3 text-[var(--ink5)]" />
       </span>
     </Link>

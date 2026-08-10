@@ -46,6 +46,8 @@ export interface RollupView {
   confirmed: number;
   submitted: number;
   total: number;
+  /** DM1.73 (T7): confirmed check-ins the PM never pressed "Send to the Head" on. */
+  unsent: number;
 }
 
 /** Assemble this week's rows from live data (active projects × check-ins). */
@@ -93,6 +95,7 @@ function toView(
     confirmed: rows.filter((r) => r.checkIn === "Confirmed").length,
     submitted: rows.filter((r) => r.submittedToHead).length,
     total: rows.length,
+    unsent: rows.filter((r) => r.checkIn === "Confirmed" && !r.submittedToHead).length,
   };
 }
 
@@ -139,7 +142,15 @@ export async function buildRollup(ctx: TenantContext, now = new Date()): Promise
 }
 
 /** Head-only: approve — freeze the rows AS ASSEMBLED NOW, stamp, tell the executives. */
-export async function approveRollup(ctx: TenantContext, narrative: string, now = new Date()): Promise<RollupView> {
+export async function approveRollup(
+  ctx: TenantContext,
+  narrative: string,
+  now = new Date(),
+  // DM1.73 (T7): "Send to the Head" used to change nothing — the roll-up assembled every
+  // confirmed check-in regardless. Approving now stops when confirmed check-ins were never
+  // sent, unless the Head explicitly acknowledges including them (audited below).
+  opts: { acknowledgeUnsent?: boolean } = {},
+): Promise<RollupView> {
   assertHead(ctx);
   const text = narrative.trim();
   if (text.length < 5) throw new RollupError("The roll-up needs the Head's narrative line.", "NARRATIVE_REQUIRED");
@@ -153,6 +164,13 @@ export async function approveRollup(ctx: TenantContext, narrative: string, now =
       throw new RollupError("This week's roll-up is already approved.", "ALREADY_APPROVED");
     }
     const rows = await assembleRows(tx, isoWeek);
+    const unsent = rows.filter((r) => r.checkIn === "Confirmed" && !r.submittedToHead).length;
+    if (unsent > 0 && !opts.acknowledgeUnsent) {
+      throw new RollupError(
+        `${unsent} confirmed check-in${unsent === 1 ? " was" : "s were"} never sent to you. Approve anyway to include them as-is.`,
+        "UNSENT_CHECKINS",
+      );
+    }
     const row = await tx.portfolioReport.upsert({
       where: { tenantId_isoWeek: { tenantId: ctx.tenantId, isoWeek } },
       create: {
@@ -177,7 +195,7 @@ export async function approveRollup(ctx: TenantContext, narrative: string, now =
       action: "update",
       entityType: "portfolio_report",
       entityId: row.id,
-      after: { isoWeek, status: "Approved", projects: rows.length },
+      after: { isoWeek, status: "Approved", projects: rows.length, unsentIncluded: unsent },
     });
     const execs = await tx.roleAssignment.findMany({
       where: { role: "Executive" },
@@ -205,14 +223,30 @@ export async function approveRollup(ctx: TenantContext, narrative: string, now =
 export async function getApprovedRollup(
   ctx: TenantContext,
   now = new Date(),
-): Promise<{ isoWeek: string; narrative: string | null; approvedByName: string | null } | null> {
+): Promise<{
+  isoWeek: string;
+  narrative: string | null;
+  approvedByName: string | null;
+  approvedAt: Date | null;
+  /** DM1.73 (T7): the exec reads a signed line WITH its denominator, not a bare sentence. */
+  confirmed: number;
+  total: number;
+} | null> {
   return withTenant(ctx, async (tx) => {
     const row = await tx.portfolioReport.findUnique({
       where: { tenantId_isoWeek: { tenantId: ctx.tenantId, isoWeek: isoWeekId(now) } },
       include: { approvedBy: { select: { name: true } } },
     });
     if (!row || row.status !== "Approved") return null;
-    return { isoWeek: row.isoWeek, narrative: row.narrative, approvedByName: row.approvedBy?.name ?? null };
+    const rows = Array.isArray(row.payload) ? (row.payload as unknown as RollupRow[]) : [];
+    return {
+      isoWeek: row.isoWeek,
+      narrative: row.narrative,
+      approvedByName: row.approvedBy?.name ?? null,
+      approvedAt: row.approvedAt,
+      confirmed: rows.filter((r) => r.checkIn === "Confirmed").length,
+      total: rows.length,
+    };
   });
 }
 

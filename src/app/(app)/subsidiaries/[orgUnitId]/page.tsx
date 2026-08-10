@@ -47,7 +47,7 @@ export default async function SubsidiaryPage({
   return (
     <div className="flex flex-1 flex-col gap-[22px] p-[26px]">
       <Breadcrumb
-        items={[{ label: "Group Overview", href: "/dashboard" }, { label: subsidiary.name }]}
+        items={[{ label: "Dashboard", href: "/dashboard" }, { label: subsidiary.name }]}
       />
 
       <div className="rounded-[10px] border border-ink-4 bg-card p-[20px_22px]">

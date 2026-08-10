@@ -70,7 +70,14 @@ describe("M-P3b portfolio roll-up", () => {
 
   it("approve freezes the payload: later check-in changes do not mutate what was signed", async () => {
     await confirmCheckIn(headCtx, projectId, { narrative: "signed state" }, NOW);
-    const approved = await approveRollup(headCtx, "Week held steady; RLP1 needs watching.", NOW);
+    // DM1.73 (T7): the check-in was confirmed but never SENT to the Head — approving
+    // without acknowledging that is now refused, so "Send to the Head" means something.
+    await expect(
+      approveRollup(headCtx, "Week held steady; RLP1 needs watching.", NOW),
+    ).rejects.toMatchObject({ code: "UNSENT_CHECKINS" });
+    const approved = await approveRollup(headCtx, "Week held steady; RLP1 needs watching.", NOW, {
+      acknowledgeUnsent: true,
+    });
     expect(approved.status).toBe("Approved");
     const signedRow = approved.rows.find((r) => r.code === "RLP1")!;
     expect(signedRow.narrative).toBe("signed state");

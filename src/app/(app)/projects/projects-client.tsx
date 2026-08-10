@@ -6,7 +6,8 @@ import { ChevronRight, Plus, Search } from "lucide-react";
 import { usePanel } from "@/components/panels/panel-context";
 import { ExportButton } from "@/components/export-button";
 import { Button } from "@/components/ui/button";
-import { gateCells, projectRank, statusBarTok, statusMeta } from "@/lib/project-view";
+import { projectRank, statusBarTok, statusMeta } from "@/lib/project-view";
+import { RAG_TOKEN } from "@/lib/surface";
 
 interface ProjectRow {
   id: string;
@@ -21,9 +22,11 @@ interface ProjectRow {
   memberCount: number;
   /** The viewer leads this project or is allocated to it — powers the MINE chip. */
   isMine: boolean;
+  /** DM1.73 (Wave C, C4): this week's check-in, or null when none exists yet. */
+  checkin: { rag: "Green" | "Amber" | "Red"; confirmed: boolean } | null;
 }
 
-const ROW_GRID = "grid grid-cols-[96px_62px_minmax(0,1fr)_130px_90px_60px_24px] items-center gap-3.5";
+const ROW_GRID = "grid grid-cols-[62px_minmax(0,1fr)_150px_90px_100px_60px_24px] items-center gap-3.5";
 
 export function ProjectsClient({
   projects,
@@ -131,11 +134,11 @@ export function ProjectsClient({
         style={{ background: "var(--cardbg)" }}
       >
         <div className={`${ROW_GRID} border-b border-[var(--hair)] p-[10px_18px] font-mono rv:font-sans text-[9px] rv:text-overline font-semibold uppercase tracking-[1.6px] text-[var(--ink4)]`}>
-          <span>GATES</span>
           <span>CODE</span>
           <span>PROJECT</span>
           <span>PROGRESS</span>
           <span>STATUS</span>
+          <span>CHECK-IN</span>
           <span className="text-right">TEAM</span>
           <span />
         </div>
@@ -148,11 +151,6 @@ export function ProjectsClient({
               onClick={() => openProject(p.id)}
               className={`${ROW_GRID} w-full border-b border-[var(--hair2)] p-[11px_18px] text-left transition-[transform,background] duration-200 last:border-0 hover:translate-x-[3px] hover:bg-[var(--wash)]`}
             >
-              <span className="flex gap-[3px]">
-                {gateCells(p.avgProgress, p.status).map((tok, i) => (
-                  <span key={i} className="size-2 rounded-[2px]" style={{ background: `var(${tok})` }} />
-                ))}
-              </span>
               <span className="font-mono text-[10.5px] tracking-[.5px] text-[var(--ink4)]">{p.code}</span>
               <span className="min-w-0">
                 <span className="block truncate text-[13px] font-semibold tracking-[-.1px] text-[var(--qink)]">{p.name}</span>
@@ -170,6 +168,23 @@ export function ProjectsClient({
               >
                 {m.label}
               </span>
+              {/* DM1.73 (Wave C, C4): this week's check-in — RAG dot + confirmation state. */}
+              {p.checkin ? (
+                <span className="flex items-center gap-1.5" title="This week's check-in">
+                  <span
+                    className="size-2 flex-none rounded-full"
+                    style={{ background: `var(${RAG_TOKEN[p.checkin.rag]})` }}
+                  />
+                  <span
+                    className="font-mono text-[9px] font-semibold uppercase tracking-[.8px]"
+                    style={{ color: p.checkin.confirmed ? "var(--ink4)" : "var(--warn)" }}
+                  >
+                    {p.checkin.confirmed ? "confirmed" : "unconfirmed"}
+                  </span>
+                </span>
+              ) : (
+                <span className="font-mono text-[10.5px] text-[var(--ink5)]" title="No check-in this week">—</span>
+              )}
               <span className="text-right font-mono text-[10.5px] text-[var(--ink4)]">{p.memberCount}</span>
               <ChevronRight className="size-3 text-[var(--ink5)]" />
             </button>

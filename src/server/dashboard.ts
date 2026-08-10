@@ -1,5 +1,6 @@
 import { withTenant, type TenantContext } from "@/lib/tenant";
-import { projectRag, ragCounts } from "@/server/health";
+import { projectRag, ragCounts, worstStatus } from "@/server/health";
+import { checkpointProgressByProject } from "@/server/checkpoints";
 
 // ── Derived-value helpers (docs/09-ui-spec.md "Derived values") ──────────────
 // These mirror docs/design-reference-exec-dashboard.html's own helpers (avgPct, sc(),
@@ -47,29 +48,14 @@ export function avgProgress(
   return Math.round(sum / project.orgStatuses.length);
 }
 
-/** Parses display-string budgets like "KES 2.8B" / "KES 830M" into a number of KES.
- * Phase A budgets are display strings, not a real money type (docs/05-data-model.md) —
- * this is a best-effort sum for the dashboard KPI, not a financial calculation. */
-export function parseBudget(budget: string | null | undefined): number {
-  if (!budget) return 0;
-  const match = budget.match(/([\d,.]+)\s*([MB])/i);
-  if (!match) return 0;
-  const num = parseFloat(match[1].replace(/,/g, ""));
-  const multiplier = match[2].toUpperCase() === "B" ? 1_000_000_000 : 1_000_000;
-  return num * multiplier;
-}
-
-export function formatBudget(amount: number): string {
-  if (amount >= 1_000_000_000) return `KES ${(amount / 1_000_000_000).toFixed(1)}B`;
-  if (amount >= 1_000_000) return `KES ${Math.round(amount / 1_000_000)}M`;
-  return `KES ${Math.round(amount).toLocaleString()}`;
-}
-
 // ── Data access ────────────────────────────────────────────────────────────
 
 async function getProjectsWithStatus(ctx: TenantContext): Promise<ProjectWithStatus[]> {
+  // DM1.73 (T8): active delivery only — the same filter the pipeline sections use
+  // (pipeline.ts), so the portfolio cards and the dashboard can never disagree on counts.
   return withTenant(ctx, (tx) =>
     tx.project.findMany({
+      where: { status: { notIn: ["Completed", "Cancelled"] } },
       select: {
         id: true,
         code: true,
@@ -87,34 +73,6 @@ async function getProjectsWithStatus(ctx: TenantContext): Promise<ProjectWithSta
   );
 }
 
-export interface DashboardSummary {
-  totalItems: number;
-  portfolioCount: number;
-  onTrack: number;
-  atRisk: number;
-  overdue: number;
-  totalBudget: string;
-}
-
-export async function getDashboardSummary(ctx: TenantContext): Promise<DashboardSummary> {
-  const [projects, portfolios] = await Promise.all([
-    getProjectsWithStatus(ctx),
-    withTenant(ctx, (tx) => tx.portfolio.findMany({ select: { targetBudget: true } })),
-  ]);
-
-  const { onTrack, atRisk, overdue } = ragCounts(projects);
-  const totalBudget = portfolios.reduce((sum, p) => sum + parseBudget(p.targetBudget), 0);
-
-  return {
-    totalItems: projects.length,
-    portfolioCount: portfolios.length,
-    onTrack,
-    atRisk,
-    overdue,
-    totalBudget: formatBudget(totalBudget),
-  };
-}
-
 // The portfolio × subsidiary heatmap that lived here left with the amended docs/18 §6:
 // its signal is the per-section RAG+Δ on the dashboard's portfolio sections (DM1.30),
 // and the rollout heatmap returns per-portfolio with M-D's market tracks.
@@ -123,6 +81,8 @@ export interface PortfolioCardData {
   id: string;
   name: string;
   category: string; // Approved | Exploring | Shelved (M-P1b)
+  /** DM1.73: canonical worst-status RAG from health.ts — index pages stop hand-rolling dots. */
+  rag: "OnTrack" | "AtRisk" | "Overdue";
   viewKind: string;
   budget: string | null;
   itemCount: number;
@@ -140,12 +100,16 @@ export async function getPortfolioCards(ctx: TenantContext): Promise<PortfolioCa
     withTenant(ctx, (tx) => tx.orgUnit.findMany({ select: { id: true, code: true, flag: true } })),
   ]);
   const orgUnitById = new Map(orgUnits.map((o) => [o.id, o]));
+  // DM1.73 (T3): checkpoint-derived % wins wherever a gate template exists.
+  const checkpointProgress = await withTenant(ctx, (tx) =>
+    checkpointProgressByProject(tx, projects.map((p) => p.id)),
+  );
 
   return portfolios.map((portfolio) => {
     const items = projects.filter((p) => p.portfolioId === portfolio.id);
     const { onTrack, atRisk, overdue } = ragCounts(items);
     const avg = items.length
-      ? Math.round(items.reduce((sum, p) => sum + avgProgress(p), 0) / items.length)
+      ? Math.round(items.reduce((sum, p) => sum + avgProgress(p, checkpointProgress), 0) / items.length)
       : 0;
     const orgUnitIds = new Set(items.flatMap((p) => p.orgStatuses.map((os) => os.orgUnitId)));
 
@@ -153,6 +117,7 @@ export async function getPortfolioCards(ctx: TenantContext): Promise<PortfolioCa
       id: portfolio.id,
       name: portfolio.name,
       category: portfolio.category,
+      rag: worstStatus(items.map((i) => i.status)),
       viewKind: portfolio.viewKind,
       budget: portfolio.targetBudget,
       itemCount: items.length,
@@ -174,6 +139,7 @@ export interface ProgrammeCardData {
   id: string;
   name: string;
   category: string;
+  rag: "OnTrack" | "AtRisk" | "Overdue";
   portfolioId: string | null;
   portfolioName: string | null;
   itemCount: number;
@@ -193,16 +159,20 @@ export async function getProgrammeCards(ctx: TenantContext): Promise<ProgrammeCa
       }),
     ),
   ]);
+  const checkpointProgress = await withTenant(ctx, (tx) =>
+    checkpointProgressByProject(tx, projects.map((p) => p.id)),
+  );
   return programmes.map((programme) => {
     const items = projects.filter((p) => p.programmeId === programme.id);
     const { onTrack, atRisk, overdue } = ragCounts(items);
     const avg = items.length
-      ? Math.round(items.reduce((sum, p) => sum + avgProgress(p), 0) / items.length)
+      ? Math.round(items.reduce((sum, p) => sum + avgProgress(p, checkpointProgress), 0) / items.length)
       : 0;
     return {
       id: programme.id,
       name: programme.name,
       category: programme.category,
+      rag: worstStatus(items.map((i) => i.status)),
       portfolioId: programme.portfolioId,
       portfolioName: programme.portfolio?.name ?? null,
       itemCount: items.length,

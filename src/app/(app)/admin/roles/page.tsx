@@ -22,7 +22,7 @@ export default async function AdminRolesPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
-      <AdminHeader
+      <AdminHeader canManageIam={can(ctx, "iam:manage")}
         subtitle={
           canManage
             ? "Edit each role's permissions. Changes apply on the affected user's next sign-in. PlatformSuperAdmin is fixed at full access."

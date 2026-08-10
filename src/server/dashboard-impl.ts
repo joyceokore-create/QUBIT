@@ -1,4 +1,5 @@
 import { withTenant, type TenantContext } from "@/lib/tenant";
+import { getDeltaFeed, type DeltaFeed } from "@/server/delta";
 import { projectRag, type Rag } from "@/server/health";
 
 /**
@@ -83,60 +84,66 @@ export interface ImplDashboard {
   /** Milestone due dates on rollout projects within the next 30 days. */
   calendar: ImplCalendarEvent[];
   handoverDocs: ImplHandoverDoc[];
+  /** DM1.73 (T3): "since you last looked" for every persona, not just the exec. */
+  delta: DeltaFeed;
 }
 
 export async function getImplDashboard(ctx: TenantContext, now = new Date()): Promise<ImplDashboard> {
-  const live = await withTenant(ctx, async (tx) => {
-    const [led, memberships] = await Promise.all([
-      tx.project.findMany({ where: { leadUserId: ctx.userId }, select: { id: true } }),
-      tx.projectMember.findMany({ where: { userId: ctx.userId }, select: { projectId: true } }),
-    ]);
-    const projectIds = [...new Set([...led.map((p) => p.id), ...memberships.map((m) => m.projectId)])];
-    if (!projectIds.length) return { projects: [], milestones: [], blockers: [], docs: [], gateRows: [], templates: [] };
+  // DM1.73 (T3): the delta feed joins the payload (and advances lastDashboardSeenAt).
+  const [delta, live] = await Promise.all([
+    getDeltaFeed(ctx),
+    withTenant(ctx, async (tx) => {
+      const [led, memberships] = await Promise.all([
+        tx.project.findMany({ where: { leadUserId: ctx.userId }, select: { id: true } }),
+        tx.projectMember.findMany({ where: { userId: ctx.userId }, select: { projectId: true } }),
+      ]);
+      const projectIds = [...new Set([...led.map((p) => p.id), ...memberships.map((m) => m.projectId)])];
+      if (!projectIds.length) return { projects: [], milestones: [], blockers: [], docs: [], gateRows: [], templates: [] };
 
-    const [projects, milestones, blockers, docs] = await Promise.all([
-      tx.project.findMany({
-        where: { id: { in: projectIds }, status: { notIn: ["Completed", "Cancelled"] } },
-        select: { id: true, code: true, name: true, status: true },
-        orderBy: { name: "asc" },
-      }),
-      tx.projectMilestone.findMany({
-        where: { projectId: { in: projectIds } },
-        select: { id: true, projectId: true, name: true, status: true, dueDate: true },
-        orderBy: [{ dueDate: "asc" }, { orderIndex: "asc" }],
-      }),
-      tx.blocker.findMany({
-        where: { projectId: { in: projectIds }, status: "Open" },
+      const [projects, milestones, blockers, docs] = await Promise.all([
+        tx.project.findMany({
+          where: { id: { in: projectIds }, status: { notIn: ["Completed", "Cancelled"] } },
+          select: { id: true, code: true, name: true, status: true },
+          orderBy: { name: "asc" },
+        }),
+        tx.projectMilestone.findMany({
+          where: { projectId: { in: projectIds } },
+          select: { id: true, projectId: true, name: true, status: true, dueDate: true },
+          orderBy: [{ dueDate: "asc" }, { orderIndex: "asc" }],
+        }),
+        tx.blocker.findMany({
+          where: { projectId: { in: projectIds }, status: "Open" },
+          select: {
+            id: true, projectId: true, description: true, severity: true, dateRaised: true,
+            owner: { select: { name: true } },
+          },
+          orderBy: { dateRaised: "asc" },
+        }),
+        tx.projectDocument.findMany({
+          // M8-B vocabulary: documents awaiting a named approver's decision.
+          where: { projectId: { in: projectIds }, status: "InReview" },
+          select: { id: true, projectId: true, title: true, createdAt: true },
+          orderBy: { createdAt: "asc" },
+        }),
+      ]);
+      // M8: the real gates. Ordered so "next open gate" means the next one in the template.
+      const gateRows = await tx.checkpointStatus.findMany({
+        where: { projectId: { in: projectIds }, orgUnitId: null },
         select: {
-          id: true, projectId: true, description: true, severity: true, dateRaised: true,
-          owner: { select: { name: true } },
+          projectId: true, state: true, overrideReason: true,
+          checkpoint: { select: { name: true, orderIndex: true, templateId: true } },
         },
-        orderBy: { dateRaised: "asc" },
-      }),
-      tx.projectDocument.findMany({
-        // M8-B vocabulary: documents awaiting a named approver's decision.
-        where: { projectId: { in: projectIds }, status: "InReview" },
-        select: { id: true, projectId: true, title: true, createdAt: true },
-        orderBy: { createdAt: "asc" },
-      }),
-    ]);
-    // M8: the real gates. Ordered so "next open gate" means the next one in the template.
-    const gateRows = await tx.checkpointStatus.findMany({
-      where: { projectId: { in: projectIds }, orgUnitId: null },
-      select: {
-        projectId: true, state: true, overrideReason: true,
-        checkpoint: { select: { name: true, orderIndex: true, templateId: true } },
-      },
-    });
-    const templates = await tx.project.findMany({
-      where: { id: { in: projectIds }, checkpointTemplateId: { not: null } },
-      select: {
-        id: true,
-        checkpointTemplate: { select: { checkpoints: { select: { id: true, name: true, orderIndex: true }, orderBy: { orderIndex: "asc" } } } },
-      },
-    });
-    return { projects, milestones, blockers, docs, gateRows, templates };
-  });
+      });
+      const templates = await tx.project.findMany({
+        where: { id: { in: projectIds }, checkpointTemplateId: { not: null } },
+        select: {
+          id: true,
+          checkpointTemplate: { select: { checkpoints: { select: { id: true, name: true, orderIndex: true }, orderBy: { orderIndex: "asc" } } } },
+        },
+      });
+      return { projects, milestones, blockers, docs, gateRows, templates };
+    }),
+  ]);
 
   const milestonesByProject = new Map<string, typeof live.milestones>();
   for (const m of live.milestones) {
@@ -253,5 +260,5 @@ export async function getImplDashboard(ctx: TenantContext, now = new Date()): Pr
     ageDays: Math.max(0, Math.floor((now.getTime() - d.createdAt.getTime()) / day)),
   }));
 
-  return { nextGoLive, pilots, issues, calendar, handoverDocs };
+  return { nextGoLive, pilots, issues, calendar, handoverDocs, delta };
 }

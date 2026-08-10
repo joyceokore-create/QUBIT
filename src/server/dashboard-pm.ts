@@ -1,6 +1,9 @@
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { isoWeekId } from "@/lib/iso-week";
+import { getDeltaFeed, type DeltaFeed } from "@/server/delta";
 import { listWorkload } from "@/server/resources";
+import { checkpointProgressByProject } from "@/server/checkpoints";
+import { avgProgress } from "@/server/dashboard";
 
 /**
  * PM preset data (docs/17 §3): "Are my projects on track this week, and what's stuck
@@ -48,12 +51,16 @@ export interface PmDashboard {
   /** docs/16 §5 — effectivePct is leave-aware; onLeaveUntil drives the badge. */
   teamLoad: { userId: string; name: string; totalPct: number; effectivePct: number; onLeaveUntil: Date | null }[];
   myProjectCount: number;
+  /** DM1.73 (T3): "since you last looked" for every persona, not just the exec. */
+  delta: DeltaFeed;
 }
 
 export async function getPmDashboard(ctx: TenantContext, now = new Date()): Promise<PmDashboard> {
   const isoWeek = isoWeekId(now);
-  const [workload, live] = await Promise.all([
+  // DM1.73 (T3): the delta feed joins the payload (and advances lastDashboardSeenAt).
+  const [workload, delta, live] = await Promise.all([
     listWorkload(ctx),
+    getDeltaFeed(ctx),
     withTenant(ctx, async (tx) => {
       const [projects, checkIns, openBlockers, draftGroups, joinRequests, slipping, myMemberUserIds, milestones, weekAgoSnaps] =
         await Promise.all([
@@ -115,7 +122,10 @@ export async function getPmDashboard(ctx: TenantContext, now = new Date()): Prom
           acks: { select: { projectId: true } },
         },
       });
-      return { projects, checkIns, openBlockers, draftGroups, joinRequests, slipping, myMemberUserIds, milestones, weekAgoSnaps, submittedReports };
+      // DM1.73 (T3): the My-projects table shows the same checkpoint-derived % as the
+      // pipeline sections below it — one progress definition per page.
+      const checkpointProgress = await checkpointProgressByProject(tx, projects.map((p) => p.id));
+      return { projects, checkIns, openBlockers, draftGroups, joinRequests, slipping, myMemberUserIds, milestones, weekAgoSnaps, submittedReports, checkpointProgress };
     }),
   ]);
 
@@ -156,7 +166,8 @@ export async function getPmDashboard(ctx: TenantContext, now = new Date()): Prom
       title: `${j.user.name} asked to join`,
       project: j.project.name,
       meta: `${ageDays(j.createdAt)}d waiting`,
-      href: "/my-tasks",
+      // DM1.73 (T10): /my-tasks is a bare redirect to /board — link straight there.
+      href: "/board",
     })),
     ...myDrafts.map((g) => ({
       kind: "drafts" as const,
@@ -170,7 +181,8 @@ export async function getPmDashboard(ctx: TenantContext, now = new Date()): Prom
       title: b.description.slice(0, 80),
       project: b.project.name,
       meta: `open ${ageDays(b.createdAt)}d`,
-      href: b.taskId ? `/projects/${b.projectId}?tab=Board&task=${b.taskId}` : `/projects/${b.projectId}?tab=Deadlines`,
+      // DM1.73 (T10): ?tab=Deadlines is retired (aliases to Overview) — say Overview.
+      href: b.taskId ? `/projects/${b.projectId}?tab=Board&task=${b.taskId}` : `/projects/${b.projectId}?tab=Overview`,
     })),
     ...mySlipping.slice(0, 5).map((t) => ({
       kind: "slipping" as const,
@@ -215,9 +227,7 @@ export async function getPmDashboard(ctx: TenantContext, now = new Date()): Prom
   }
   const myProjects: PmProjectRow[] = myActive
     .map((p) => {
-      const progress = p.orgStatuses.length
-        ? Math.round(p.orgStatuses.reduce((a, o) => a + o.progress, 0) / p.orgStatuses.length)
-        : 0;
+      const progress = avgProgress(p, live.checkpointProgress);
       const then = weekAgoProgress.get(p.id);
       const nm = nextMilestoneByProject.get(p.id) ?? null;
       return {
@@ -246,5 +256,6 @@ export async function getPmDashboard(ctx: TenantContext, now = new Date()): Prom
     actionQueue,
     teamLoad,
     myProjectCount: myActive.length,
+    delta,
   };
 }

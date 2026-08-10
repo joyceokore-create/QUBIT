@@ -5,41 +5,58 @@ import { isMemberOnly, visibleNavItems } from "@/components/layout/nav-items";
 const labels = (v: Parameters<typeof visibleNavItems>[0]) => visibleNavItems(v).map((n) => n.label);
 
 describe("visibleNavItems", () => {
-  // M-P4a widened docs/32 §0.3's "slim four" to five: intake is deliberately universal
-  // (`idea:create` sits in BASE — a good idea can come from anywhere), so hiding Ideas
-  // from members would make the permission unreachable. Everything else stays estate-free.
-  it("members get the slim five: Dashboard · My Board · Ideas · Projects · Reports", () => {
+  // DM1.73 — back to docs/32 §0.3's slim four: Ideas is memberHidden now (the intake
+  // form stays reachable for members via direct link; `idea:create` remains in BASE),
+  // Programmes merged into Portfolios, and Staffing merged into People (?tab=requests).
+  it("members get the slim four: Dashboard · My Board · Projects · Reports", () => {
     expect(labels({ canAccessAdmin: false, canStaff: false, memberOnly: true })).toEqual([
       "Dashboard",
       "My Board",
-      "Ideas",
       "Projects",
       "Reports",
     ]);
   });
 
-  it("a PM keeps the estate views plus Staffing, without admin", () => {
+  it("a PM keeps the estate views, without admin", () => {
     const pm = labels({ canAccessAdmin: false, canStaff: true, memberOnly: false });
     expect(pm).toContain("Portfolios");
-    expect(pm).toContain("Programmes");
-    expect(pm).toContain("Staffing");
+    // DM1.73: staffing requests live on People (?tab=requests); People is the pill.
+    expect(pm).toContain("People");
+    expect(pm).not.toContain("Programmes");
+    expect(pm).not.toContain("Staffing");
     expect(pm).not.toContain("Admin");
     expect(pm).not.toContain("Teams");
   });
 
-  it("an executive (no staffing, no admin) browses the estate but not Staffing", () => {
+  it("an executive (no staffing, no admin) browses the estate", () => {
     const exec = labels({ canAccessAdmin: false, canStaff: false, memberOnly: false });
     expect(exec).toContain("Portfolios");
-    expect(exec).toContain("Programmes");
-    expect(exec).not.toContain("Staffing");
+    expect(exec).toContain("People");
+    expect(exec).not.toContain("Programmes"); // DM1.73 — merged into Portfolios
+    expect(exec).not.toContain("Staffing"); // DM1.73 — merged into People
   });
 
   it("a Head gets everything", () => {
     const head = labels({ canAccessAdmin: true, canStaff: true, memberOnly: false });
     expect(head).toContain("Admin");
-    expect(head).toContain("Teams");
-    expect(head).toContain("Staffing");
-    expect(head).toContain("Programmes");
+    // DM1.73 (T6): Teams lives inside the Admin sub-nav now — the top-level pill was a
+    // dead end (nav gated admin:access, the page gated iam:manage).
+    expect(head).not.toContain("Teams");
+    // DM1.73: Programmes and Staffing pills are gone even for the Head — portfolios
+    // and People (?tab=requests) carry those surfaces now.
+    expect(head).not.toContain("Programmes");
+    expect(head).not.toContain("Staffing");
+    expect(head).toEqual([
+      "Dashboard",
+      "My Board",
+      "Ideas",
+      "Portfolios",
+      "Projects",
+      "Risks",
+      "People",
+      "Reports",
+      "Admin",
+    ]);
   });
 });
 

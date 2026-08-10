@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { needsAttention, portfolioHealth, projectRag, ragRank } from "@/server/health";
+import { derivedRag, needsAttention, portfolioHealth, projectRag, ragRank } from "@/server/health";
 
 // The ONE health engine (docs/16-revamp-plan.md §10). worstStatus/ragCounts keep their
 // long-standing cases in tests/unit/dashboard.test.ts.
@@ -51,5 +51,31 @@ describe("portfolioHealth", () => {
 
   it("returns zeros for an empty portfolio (no division by zero)", () => {
     expect(portfolioHealth([])).toEqual({ total: 0, onTrack: 0, needAttention: 0, planning: 0, pct: 0 });
+  });
+});
+
+// DM1.73 (Wave C, T4) — the derived-signals RAG. "Computed" computes.
+describe("derivedRag", () => {
+  it("is Green when nothing is wrong", () => {
+    expect(derivedRag({ status: "OnTrack" })).toBe("Green");
+    expect(derivedRag({ status: "Planning" })).toBe("Green");
+  });
+
+  it("goes Amber on any single trouble signal", () => {
+    expect(derivedRag({ status: "OnTrack", openBlockers: 1 })).toBe("Amber");
+    expect(derivedRag({ status: "OnTrack", overdueTasks: 2 })).toBe("Amber");
+    expect(derivedRag({ status: "OnTrack", milestonesSlipped: 1 })).toBe("Amber");
+    expect(derivedRag({ status: "AtRisk" })).toBe("Amber");
+  });
+
+  it("goes Red when late, gate-blocked, or stuck AND late", () => {
+    expect(derivedRag({ status: "Overdue" })).toBe("Red");
+    expect(derivedRag({ status: "OnTrack", gatesBlocked: 1 })).toBe("Red");
+    expect(derivedRag({ status: "OnTrack", openBlockers: 1, overdueTasks: 1 })).toBe("Red");
+  });
+
+  it("Completed/Cancelled are always Green — not in delivery", () => {
+    expect(derivedRag({ status: "Completed", openBlockers: 3, overdueTasks: 9 })).toBe("Green");
+    expect(derivedRag({ status: "Cancelled", gatesBlocked: 2 })).toBe("Green");
   });
 });

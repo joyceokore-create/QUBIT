@@ -3,6 +3,7 @@ import { isoWeekId } from "@/lib/iso-week";
 import { avgProgress } from "@/server/dashboard";
 import { checkpointProgressByProject, gateTicksByProject, type CheckpointState } from "@/server/checkpoints";
 import { projectRag, ragRank, worstStatus, type Rag } from "@/server/health";
+import { effectiveRag } from "@/server/checkins";
 import { PIPELINE_STAGES, type PipelineStage } from "@/server/projects";
 
 /**
@@ -150,7 +151,12 @@ export async function getPortfolioSections(ctx: TenantContext, now = new Date())
           },
           orderBy: [{ priority: "asc" }, { name: "asc" }],
         }),
-        tx.checkIn.findMany({ where: { isoWeek }, select: { projectId: true, status: true, narrative: true } }),
+        tx.checkIn.findMany({
+          where: { isoWeek },
+          // DM1.73 (Wave C, T5): the fields effectiveRag needs — the week's check-in
+          // (override-aware) is the display RAG wherever one exists.
+          select: { projectId: true, status: true, narrative: true, computedRag: true, ragOverride: true, overrideExpiresAt: true },
+        }),
         tx.risk.groupBy({ by: ["projectId"], where: { status: { notIn: ["Closed", "Mitigated"] } }, _count: { _all: true } }),
         tx.projectMilestone.findMany({ where: { status: { not: "Done" }, dueDate: { not: null } }, select: { projectId: true, dueDate: true } }),
         tx.projectTask.groupBy({
@@ -195,6 +201,11 @@ export async function getPortfolioSections(ctx: TenantContext, now = new Date())
   const rows = live.projects.map((p) => {
     const checkin = checkinByProject.get(p.id);
     const confirmed = checkin?.status === "Confirmed";
+    // DM1.73 (Wave C, T5): one display RAG — the week's effective check-in RAG when a
+    // check-in exists (override-aware, computed from live signals), else the status RAG.
+    // This closes the hole where a PM overrode a check-in to Red and the estate still
+    // showed Green because it read the typed status.
+    const displayRag = checkin ? effectiveRag(checkin, now) : projectRag(p.status);
     return {
       id: p.id,
       code: p.code,
@@ -218,7 +229,7 @@ export async function getPortfolioSections(ctx: TenantContext, now = new Date())
         milestonesUpcoming: milestonesUp.get(p.id) ?? 0,
         milestonesOverdue: milestonesOver.get(p.id) ?? 0,
         velocity7d: velocityByProject.get(p.id) ?? 0,
-        health: projectRag(p.status),
+        health: displayRag,
         resources: membersByProject.get(p.id) ?? 0,
       },
     };
@@ -230,17 +241,30 @@ export async function getPortfolioSections(ctx: TenantContext, now = new Date())
       // Rows with a null portfolioId (pre-backfill writes, raw inserts) fold into the
       // Unassigned section rather than vanishing — the display self-heals (18 §0.5).
       const children = rows.filter((r) => r.portfolioId === portfolio.id || (isUnassigned && r.portfolioId === null));
-      const statuses = children.map((c) => c.status);
-      const current = statuses.length ? worstStatus(statuses) : "OnTrack";
-      const prevStatuses = children.map((c) => lastWeekStatus.get(c.id)).filter((s): s is string => !!s);
-      const prev = prevStatuses.length === children.length && children.length > 0 ? worstStatus(prevStatuses) : null;
+      // DM1.73 (Wave C, T5): the section badge is the worst of its children's DISPLAY
+      // RAGs (check-in aware); the WoW Δ below stays snapshot-status based so it
+      // compares like with like.
+      const ragOrder: Rag[] = ["Green", "Amber", "Red"];
+      const sectionRag: Rag = children.length
+        ? ragOrder[Math.max(...children.map((c) => ragOrder.indexOf(c.chips.health)))]
+        : "Green";
+      // DM1.73 (T9): the Δ used to require EVERY child to have a week-old snapshot, so
+      // one new project nulled the whole section. Now it compares like with like — the
+      // subset of children that HAVE history, then vs now — and is null only when NO
+      // child has a snapshot.
+      const withHistory = children.filter((c) => lastWeekStatus.has(c.id));
+      const prev = withHistory.length ? worstStatus(withHistory.map((c) => lastWeekStatus.get(c.id)!)) : null;
+      const currentOfHistory = withHistory.length ? worstStatus(withHistory.map((c) => c.status)) : null;
       return {
         id: portfolio.id,
         name: portfolio.name,
         category: portfolio.category,
         viewKind: portfolio.viewKind === "Rollout" ? ("Rollout" as const) : ("Pipeline" as const),
-        rag: projectRag(current),
-        ragDelta: prev === null ? null : (Math.sign(ragRank(current) - ragRank(prev)) as -1 | 0 | 1),
+        rag: sectionRag,
+        ragDelta:
+          prev === null || currentOfHistory === null
+            ? null
+            : (Math.sign(ragRank(currentOfHistory) - ragRank(prev)) as -1 | 0 | 1),
         progress: children.length ? Math.round(children.reduce((a, c) => a + c.progress, 0) / children.length) : 0,
         openBlockers: children.reduce((a, c) => a + c.openBlockers, 0),
         ownerName: portfolio.ownerId ? (ownerNameById.get(portfolio.ownerId) ?? null) : null,

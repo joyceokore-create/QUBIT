@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { projectRag, ragRank } from "@/server/health";
 
@@ -129,7 +130,8 @@ export function summarizeDeltas(
     items.push({ tone: "bad", text: `${plural(n, "blocker")} opened on ${nameOf(projectId)}`, href: `/projects/${projectId}` });
   }
   if (assignedToMe > 0) {
-    items.push({ tone: "warn", text: `${plural(assignedToMe, "task")} assigned to you`, href: "/my-tasks" });
+    // DM1.73 (T10): /my-tasks is a bare redirect to /board — link straight there.
+    items.push({ tone: "warn", text: `${plural(assignedToMe, "task")} assigned to you`, href: "/board" });
   }
   for (const [projectId, n] of blockersResolved) {
     items.push({ tone: "ok", text: `${plural(n, "blocker")} resolved on ${nameOf(projectId)}`, href: `/projects/${projectId}` });
@@ -147,40 +149,71 @@ export interface DeltaFeed {
   since: Date;
 }
 
+/** Resolve the viewer's feed window: since their last visit, floored to at least the
+ * last 24h so a quick refresh doesn't blank the feed. Read-only — never advances. */
+async function feedWindow(tx: Prisma.TransactionClient, userId: string, now: Date) {
+  const dayAgo = new Date(now.getTime() - 24 * 3_600_000);
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 3_600_000);
+  const viewer = await tx.user.findUnique({
+    where: { id: userId },
+    select: { lastDashboardSeenAt: true },
+  });
+  const lastSeen = viewer?.lastDashboardSeenAt ?? weekAgo;
+  return { viewer, since: lastSeen < dayAgo ? lastSeen : dayAgo };
+}
+
+// DM1.73 (Wave C): the shared feed guts — window query + name lookup + summarise —
+// refactored out of getDeltaFeed so the portfolio-scoped variant reuses the same
+// queries instead of duplicating them. Optional `scope` keeps only events that resolve
+// to one of those projects (an unscopable event like a bare task.assigned drops out —
+// on a scoped surface "somewhere else in the estate" is noise, not news).
+async function collectDeltaItems(
+  tx: Prisma.TransactionClient,
+  since: Date,
+  viewerId: string,
+  limit: number,
+  scope?: Set<string>,
+): Promise<DeltaItem[]> {
+  const raw = await tx.domainEvent.findMany({
+    where: { createdAt: { gt: since } },
+    orderBy: { createdAt: "asc" },
+    take: 500,
+    select: { type: true, entityType: true, entityId: true, actorId: true, payload: true, createdAt: true },
+  });
+  const projectIdOf = (e: DeltaEvent): string | null => {
+    const payload = (e.payload ?? {}) as { projectId?: string };
+    return payload.projectId ?? (e.entityType === "project" ? e.entityId : null);
+  };
+  const events = scope
+    ? raw.filter((e) => {
+        const pid = projectIdOf(e);
+        return pid !== null && scope.has(pid);
+      })
+    : raw;
+
+  const projectIds = new Set<string>();
+  for (const e of events) {
+    const pid = projectIdOf(e);
+    if (pid) projectIds.add(pid);
+  }
+  const projects = projectIds.size
+    ? await tx.project.findMany({ where: { id: { in: [...projectIds] } }, select: { id: true, name: true } })
+    : [];
+  const projectNameById = new Map(projects.map((p) => [p.id, p.name]));
+
+  return summarizeDeltas(events, projectNameById, viewerId, limit);
+}
+
 /**
  * Events since the viewer's last visit (floor: always at least the last 24h, so a quick
  * refresh doesn't blank the feed). Advances lastDashboardSeenAt at most hourly.
  */
 export async function getDeltaFeed(ctx: TenantContext, limit = 8): Promise<DeltaFeed> {
   const now = new Date();
-  const dayAgo = new Date(now.getTime() - 24 * 3_600_000);
-  const weekAgo = new Date(now.getTime() - 7 * 24 * 3_600_000);
 
   return withTenant(ctx, async (tx) => {
-    const viewer = await tx.user.findUnique({
-      where: { id: ctx.userId },
-      select: { lastDashboardSeenAt: true },
-    });
-    const lastSeen = viewer?.lastDashboardSeenAt ?? weekAgo;
-    const since = lastSeen < dayAgo ? lastSeen : dayAgo;
-
-    const events = await tx.domainEvent.findMany({
-      where: { createdAt: { gt: since } },
-      orderBy: { createdAt: "asc" },
-      take: 500,
-      select: { type: true, entityType: true, entityId: true, actorId: true, payload: true, createdAt: true },
-    });
-
-    const projectIds = new Set<string>();
-    for (const e of events) {
-      const payload = (e.payload ?? {}) as { projectId?: string };
-      if (payload.projectId) projectIds.add(payload.projectId);
-      if (e.entityType === "project") projectIds.add(e.entityId);
-    }
-    const projects = projectIds.size
-      ? await tx.project.findMany({ where: { id: { in: [...projectIds] } }, select: { id: true, name: true } })
-      : [];
-    const projectNameById = new Map(projects.map((p) => [p.id, p.name]));
+    const { viewer, since } = await feedWindow(tx, ctx.userId, now);
+    const items = await collectDeltaItems(tx, since, ctx.userId, limit);
 
     // Guard on the row's existence — a stale session for a reseeded/deleted user must
     // degrade to the default window, never 500 the dashboard.
@@ -188,6 +221,27 @@ export async function getDeltaFeed(ctx: TenantContext, limit = 8): Promise<Delta
       await tx.user.updateMany({ where: { id: ctx.userId }, data: { lastDashboardSeenAt: now } });
     }
 
-    return { items: summarizeDeltas(events, projectNameById, ctx.userId, limit), since };
+    return { items, since };
+  });
+}
+
+/**
+ * DM1.73 (Wave C, C3) — the portfolio status page's "What changed" card: the same
+ * feed, filtered to the given projects. Deliberately does NOT advance
+ * lastDashboardSeenAt: the pointer marks the DASHBOARD as seen, and glancing at one
+ * portfolio must not swallow the rest of the estate's news from the next dashboard
+ * visit. Same read window as the dashboard so the two surfaces tell one story.
+ */
+export async function getDeltaFeedForProjects(
+  ctx: TenantContext,
+  projectIds: string[],
+  take = 10,
+): Promise<DeltaFeed> {
+  const now = new Date();
+  return withTenant(ctx, async (tx) => {
+    const { since } = await feedWindow(tx, ctx.userId, now);
+    if (projectIds.length === 0) return { items: [], since };
+    const items = await collectDeltaItems(tx, since, ctx.userId, take, new Set(projectIds));
+    return { items, since };
   });
 }

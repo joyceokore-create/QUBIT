@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { businessDaysBetween } from "@/server/nudger";
-import { mergeNudgesIntoPriorities } from "@/server/dashboard-v2";
+import { businessDaysBetween } from "@/lib/board-lens";
+import { mergeNudgesIntoPriorities } from "@/server/dashboard-exec";
 import type { MyNudge } from "@/server/nudger";
 import type { BriefingItem } from "@/server/relevance";
 

@@ -11,8 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 // evented server-side. Read-only render without the gate (§10 acceptance: test both
 // ways). Gates come from can()/canWriteProject — never here.
 
-const STAGES = ["Exploring", "Evaluating", "Approved", "Paused"] as const;
-const PRIORITIES = ["High", "Med", "Low", "New", "Strat", "Paused"] as const;
+import { PIPELINE_STAGES as STAGES, PROJECT_PRIORITIES as PRIORITIES } from "@/lib/project-enums";
 const STAGE_TOKEN: Record<string, string> = { Exploring: "--qinfo", Evaluating: "--warn", Approved: "--ok", Paused: "--ink4" };
 
 export function GovernanceEditor({

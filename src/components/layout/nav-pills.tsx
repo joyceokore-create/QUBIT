@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { isNavActive, visibleNavItems } from "./nav-items";
+import { activeNavHref, visibleNavItems } from "./nav-items";
 
 interface NavPillsProps {
   /** Admin + Teams pills render only when the viewer holds `admin:access` (SuperAdmin + heads). */
@@ -17,8 +17,11 @@ export function NavPills({ canAccessAdmin, canStaff, memberOnly }: NavPillsProps
 
   return (
     <nav className="flex flex-1 gap-1">
-      {visibleNavItems({ canAccessAdmin, canStaff, memberOnly }).map((tab) => {
-        const active = isNavActive(pathname, tab.href);
+      {(() => {
+        const items = visibleNavItems({ canAccessAdmin, canStaff, memberOnly });
+        const activeHref = activeNavHref(pathname, items);
+        return items.map((tab) => {
+        const active = tab.href === activeHref;
         return (
           <Link
             key={tab.href}
@@ -33,7 +36,8 @@ export function NavPills({ canAccessAdmin, canStaff, memberOnly }: NavPillsProps
             {tab.label}
           </Link>
         );
-      })}
+        });
+      })()}
     </nav>
   );
 }

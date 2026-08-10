@@ -51,6 +51,8 @@ This is the entry point. Read documents in this order.
     - **29-p1c-assignment-capacity.md** — dated allocations + capacity/leave-aware assignment.
     - **30-p1d-resource-requests.md** — PM raise → Head fill staffing flow (new model).
     - **31-p1e-org-setup-wizard.md** — one-time organisation setup wizard.
+      RETIRED (DM1.72) — single-tenant Riverbank has nothing left to configure;
+      kept as the record of what was built and why it went.
     Pairs with `wireframes/qubit-wizards-wireframes.html`.
     **Build status:** P1-A…P1-D shipped 2026-08-04 (DM1.51–54) via
     **27-p1-create-assign-execution.md** — its §5 reconciles the shipped build against
@@ -76,6 +78,11 @@ This is the entry point. Read documents in this order.
     milestones in flight, unfinished P0 foundations (backups, health endpoint), P5 scope,
     deferred promises (PDF/M9-B, Phase-C budget, Q summaries), security follow-ups, code
     health, and the production feature flags awaiting credentials. Compiled 2026-08-06.
+
+30. **37-declutter-audit.md** — the 2026-08-10 declutter & status-clarity audit
+    (four parallel code audits: nav/dashboards, workspace, reporting chain,
+    create/assign) and its four-wave plan. All four waves SHIPPED (DM1.73):
+    A (trust fixes), B (declutter), C (status engine), D (workflow completeness).
 
 ## Document readiness checklist
 

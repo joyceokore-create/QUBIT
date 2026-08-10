@@ -4,8 +4,9 @@ import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { isoWeekId, weekWindow } from "@/lib/iso-week";
 import { avgProgress } from "@/server/dashboard";
+import { checkpointProgressByProject } from "@/server/checkpoints";
 import { emitDomainEvent } from "@/server/events";
-import { projectRag, type Rag } from "@/server/health";
+import { derivedRag, type Rag } from "@/server/health";
 import { acknowledgedMemberLines } from "@/server/member-reports";
 
 /**
@@ -70,7 +71,7 @@ export async function computeCheckInDraft(
       where: { type, createdAt: { gte: start }, payload: { path: ["projectId"], equals: projectId } },
     });
 
-  const [project, tasksCompleted, blockersOpened, blockersResolved, msDone, msSlipped, overdueTasks, prevSnapshot] =
+  const [project, tasksCompleted, blockersOpened, blockersResolved, msDone, msSlipped, overdueTasks, prevSnapshot, openBlockers, gatesBlocked] =
     await Promise.all([
       tx.project.findUniqueOrThrow({
         where: { id: projectId },
@@ -95,9 +96,15 @@ export async function computeCheckInDraft(
         orderBy: { day: "desc" },
         select: { progress: true },
       }),
+      // DM1.73 (Wave C, T4) — the live signals the computed RAG now derives from.
+      tx.blocker.count({ where: { projectId, status: "Open" } }),
+      tx.checkpointStatus.count({ where: { projectId, orgUnitId: null, state: "Blocked" } }),
     ]);
 
-  const progress = avgProgress(project);
+  // DM1.73 (T3): % is checkpoint-derived when the project has a gate template — the
+  // same rule as the pipeline table — so the check-in never disagrees with the dashboard.
+  const checkpointProgress = await checkpointProgressByProject(tx, [projectId]);
+  const progress = avgProgress({ id: projectId, orgStatuses: project.orgStatuses }, checkpointProgress);
   const facts = {
     tasksCompleted,
     blockersOpened,
@@ -113,7 +120,15 @@ export async function computeCheckInDraft(
   // report is not yet the PM's word.
   const memberLines = await acknowledgedMemberLines(tx, projectId, isoWeekId(now));
   return {
-    computedRag: projectRag(project.status),
+    // DM1.73 (Wave C, T4): "COMPUTED" finally computes — gates, blockers, tasks and
+    // slipped milestones feed the RAG; the typed status is one signal, not the verdict.
+    computedRag: derivedRag({
+      status: project.status,
+      overdueTasks,
+      openBlockers,
+      milestonesSlipped: msSlipped.length,
+      gatesBlocked,
+    }),
     draft: { ...facts, lines: [...buildDraftLines(facts), ...memberLines] },
   };
 }
@@ -377,6 +392,31 @@ export async function listReportIndex(ctx: TenantContext, now = new Date()): Pro
           : null,
       };
     });
+  });
+}
+
+/**
+ * DM1.73 (Wave C, C4) — check-in freshness for list surfaces: one query over the
+ * CURRENT iso week's check-ins, keyed by project. `rag` is the override-aware
+ * effectiveRag (the same display RAG the pipeline table shows), `confirmed` says
+ * whether the lead has signed it yet. Absent key = no check-in this week.
+ */
+export async function checkinSummaryByProject(
+  ctx: TenantContext,
+  now = new Date(),
+): Promise<Map<string, { rag: Rag; confirmed: boolean; isoWeek: string }>> {
+  const isoWeek = isoWeekId(now);
+  return withTenant(ctx, async (tx) => {
+    const rows = await tx.checkIn.findMany({
+      where: { isoWeek },
+      select: { projectId: true, status: true, computedRag: true, ragOverride: true, overrideExpiresAt: true },
+    });
+    return new Map(
+      rows.map((r) => [
+        r.projectId,
+        { rag: effectiveRag(r, now), confirmed: r.status === "Confirmed", isoWeek },
+      ]),
+    );
   });
 }
 

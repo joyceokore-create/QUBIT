@@ -17,6 +17,9 @@ interface Serialized extends Omit<MemberReportView, "submittedAt" | "acks"> {
 export function MemberReportComposer() {
   const [report, setReport] = useState<Serialized | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
+  // DM1.73 (T5): queries & concerns to the PM ride the same PATCH as notes, so this
+  // composer covers the whole report — the workspace tab is no longer the only way in.
+  const [queries, setQueries] = useState<Record<string, string>>({});
   const [narrative, setNarrative] = useState("");
   const [busy, setBusy] = useState<"save" | "submit" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +35,9 @@ export function MemberReportComposer() {
       setNarrative(json.mine.narrative ?? "");
       setNotes(
         Object.fromEntries((json.mine.draft.sections ?? []).map((s) => [s.projectId, s.note ?? ""])),
+      );
+      setQueries(
+        Object.fromEntries((json.mine.draft.sections ?? []).map((s) => [s.projectId, s.query ?? ""])),
       );
     })();
     return () => {
@@ -56,7 +62,13 @@ export function MemberReportComposer() {
     const patch = await fetch("/api/member-reports", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ narrative: narrative.trim() || null, notes }),
+      body: JSON.stringify({
+        narrative: narrative.trim() || null,
+        notes,
+        // DM1.73 (T5): the PATCH route already accepted `queries` — the composer just
+        // never sent them.
+        queries: Object.fromEntries(Object.entries(queries).map(([k, v]) => [k, v.trim() || null])),
+      }),
     });
     if (!patch.ok) {
       setError((await patch.json().catch(() => null))?.error?.message ?? "Could not save.");
@@ -100,8 +112,10 @@ export function MemberReportComposer() {
             key={s.projectId}
             section={s}
             note={notes[s.projectId] ?? ""}
+            query={queries[s.projectId] ?? ""}
             editable={editable}
             onNote={(v) => setNotes((prev) => ({ ...prev, [s.projectId]: v }))}
+            onQuery={(v) => setQueries((prev) => ({ ...prev, [s.projectId]: v }))}
             ack={report.acks.find((a) => a.projectId === s.projectId) ?? null}
           />
         ))
@@ -168,14 +182,18 @@ function StatusChip({ status }: { status: string }) {
 function SectionCard({
   section,
   note,
+  query,
   editable,
   onNote,
+  onQuery,
   ack,
 }: {
   section: MemberReportSection;
   note: string;
+  query: string;
   editable: boolean;
   onNote: (v: string) => void;
+  onQuery: (v: string) => void;
   ack: { byName: string; comment: string | null; at: string } | null;
 }) {
   return (
@@ -202,7 +220,7 @@ function SectionCard({
           <ItemList label="Still in flight" items={section.doing} />
         </div>
       )}
-      <div className="border-t border-[var(--hair2)] p-[10px_16px]">
+      <div className="flex flex-col gap-2 border-t border-[var(--hair2)] p-[10px_16px]">
         <textarea
           value={note}
           onChange={(e) => onNote(e.target.value)}
@@ -210,6 +228,20 @@ function SectionCard({
           rows={2}
           maxLength={1000}
           placeholder="Add more detail for this project…"
+          className="w-full resize-y rounded-[10px] border border-[var(--w07)] bg-[var(--wash)] p-2 text-[12px] text-[var(--ink2)] outline-none focus:border-[var(--brand)] disabled:opacity-70"
+        />
+        {/* DM1.73 (T5): the M-P3a query field, previously workspace-only — the /reports
+            composer now edits the whole section object. */}
+        <label className="font-mono text-[8.5px] font-bold uppercase tracking-[1.2px] text-[var(--ink4)]">
+          Queries &amp; concerns for your PM
+        </label>
+        <textarea
+          value={query}
+          onChange={(e) => onQuery(e.target.value)}
+          disabled={!editable}
+          rows={2}
+          maxLength={500}
+          placeholder="e.g. Has the launch date moved? It affects my test plan."
           className="w-full resize-y rounded-[10px] border border-[var(--w07)] bg-[var(--wash)] p-2 text-[12px] text-[var(--ink2)] outline-none focus:border-[var(--brand)] disabled:opacity-70"
         />
       </div>

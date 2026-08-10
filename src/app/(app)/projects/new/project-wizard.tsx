@@ -7,28 +7,32 @@ import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { Chip, OptionCard, WizardCard, WizardShell } from "@/components/wizard/wizard-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { draftKey, nextStep, prevStep, settleStep, type WizardStep } from "@/lib/wizard";
+import { assignmentWarnings } from "@/lib/capacity";
+import { PROJECT_ROLES } from "@/lib/roles";
+import { draftKey, nextStep, prevStep, type WizardStep } from "@/lib/wizard";
 
 /**
- * Project wizard (docs/26 §5.3): Basics → Type & delivery → Markets → Team → Docs &
- * requirements → Integration → Review. The Team step is capacity-aware: every row shows
- * the candidate's booked load and leave, over-allocation and leave-window collisions
- * WARN (never block — the PM may know something the calendar does not), and accepted
- * warnings travel to the server for the audit blob.
+ * Project wizard (docs/26 §5.3), decluttered DM1.73: Basics → Team → Review.
+ * Basics absorbed Type & delivery and Markets (three related "where/what" choices, one
+ * screen); Docs & requirements is gone (its own copy said "entirely skippable" — the
+ * Documents register handles it post-create) and so is Integration (connectable later
+ * from workspace → Integrations, where the webhook secret flow lives anyway).
  *
- * Draft policy: everything resumes from localStorage EXCEPT the YouTrack token and any
- * attached file — a secret and megabytes respectively; neither belongs in web storage.
+ * The Team step is capacity-aware: every row shows the candidate's booked load and
+ * leave, over-allocation and leave-window collisions WARN (never block — the PM may
+ * know something the calendar does not), and accepted warnings travel to the server
+ * for the audit blob. A row with a role but NO person is valid — it becomes a
+ * ResourceRequest on create (docs/30 §5), so the team shape is never lost.
+ *
+ * Draft policy: everything resumes from localStorage.
  */
 
 const STEPS: WizardStep[] = [
   { key: "basics", label: "Basics" },
-  { key: "delivery", label: "Type & delivery" },
-  { key: "markets", label: "Markets" },
   { key: "team", label: "Team" },
-  { key: "docs", label: "Docs & requirements" },
-  { key: "integration", label: "Integration" },
   { key: "review", label: "Review" },
 ];
+const NO_SKIPS = new Set<string>();
 
 interface Portfolio {
   id: string;
@@ -64,6 +68,8 @@ interface Person {
   totalPct: number;
   effectivePct: number;
   onLeaveUntil: string | null;
+  /** Role hats this person holds across projects — drives the alternates soft sort. */
+  roles: string[];
 }
 
 interface TeamRow {
@@ -86,11 +92,6 @@ interface Draft {
   marketIds: string[];
   marketsTouched: boolean;
   team: TeamRow[];
-  docTitle: string;
-  docKind: string;
-  docContent: string;
-  ytBaseUrl: string;
-  ytProjectKey: string;
 }
 
 const EMPTY: Draft = {
@@ -105,11 +106,6 @@ const EMPTY: Draft = {
   marketIds: [],
   marketsTouched: false,
   team: [],
-  docTitle: "",
-  docKind: "BRD",
-  docContent: "",
-  ytBaseUrl: "",
-  ytProjectKey: "",
 };
 
 /** Mirrors src/server/projects.ts projectCodeBase for the live "auto: XYZ" hint. */
@@ -132,7 +128,6 @@ export function ProjectWizard({
   people,
   preselectedPortfolioId,
   fromIdea,
-  youtrackEnabled,
 }: {
   userId: string;
   portfolios: Portfolio[];
@@ -142,9 +137,9 @@ export function ProjectWizard({
   markets: Market[];
   people: Person[];
   preselectedPortfolioId: string | null;
-  /** M-P4a — the accepted idea this project comes from (docs/35 §1). */
-  fromIdea: { id: string; title: string; problem: string } | null;
-  youtrackEnabled: boolean;
+  /** M-P4a — the accepted idea this project comes from (docs/35 §1). DM1.73: sponsor
+   * and expected value now survive the handoff instead of being dropped at the door. */
+  fromIdea: { id: string; title: string; problem: string; sponsor: string; expectedValue: string | null } | null;
 }) {
   const router = useRouter();
   const { busy, error, setError, mutate } = useAdminMutation();
@@ -154,17 +149,14 @@ export function ProjectWizard({
   const [d, setD] = useState<Draft>({
     ...EMPTY,
     portfolioId: preselectedPortfolioId ?? "",
-    name: fromIdea?.title ?? "",
+    name: fromIdea?.title.slice(0, 120) ?? "", // capped at the server limit (idea titles allow 140)
     description: fromIdea?.problem.slice(0, 500) ?? "",
   });
   const [loaded, setLoaded] = useState(false);
-  // Never drafted: the token (secret) and the file (size).
-  const [ytToken, setYtToken] = useState("");
-  const [file, setFile] = useState<{ name: string; data: string } | null>(null);
 
   // M-P4a seeds, hoisted so the resume effect can depend on plain strings (the fromIdea
   // object identity would change every render).
-  const seedName = fromIdea?.title ?? "";
+  const seedName = fromIdea?.title.slice(0, 120) ?? "";
   const seedDescription = fromIdea?.problem.slice(0, 500) ?? "";
 
   useEffect(() => {
@@ -190,41 +182,47 @@ export function ProjectWizard({
     }
   }, [d, key, loaded]);
 
-  const skipped = useMemo(() => new Set<string>(youtrackEnabled ? [] : ["integration"]), [youtrackEnabled]);
-  const step = settleStep(STEPS, d.step, skipped);
+  // DM1.73 — clamp resumes of pre-declutter drafts (saved on steps 3–6) into range.
+  const step = Math.min(Math.max(d.step, 0), STEPS.length - 1);
   const cur = STEPS[step].key;
   const set = (patch: Partial<Draft>) => setD((c) => ({ ...c, ...patch }));
   const go = (i: number) => set({ step: i });
 
   const portfolio = portfolios.find((p) => p.id === d.portfolioId) ?? null;
   const personById = useMemo(() => new Map(people.map((p) => [p.userId, p])), [people]);
-  // Markets pre-fill from the portfolio until the user touches the step (docs/26 §5.3).
+  // Markets pre-fill from the portfolio until the user touches the chips (docs/26 §5.3).
   const effectiveMarkets = d.marketsTouched ? d.marketIds : (portfolio?.defaultMarkets ?? []);
 
+  // DM1.73 — rows without a person are not an error: they become resource requests.
+  const filledTeam = d.team.filter((t) => t.userId);
+  const unfilledSeats = d.team.filter((t) => !t.userId);
+
   // ── Capacity warnings (docs/26 §4.3): informative, acceptable, audited.
+  // DM1.73 — computed by the shared src/lib/capacity.ts (leave-aware effectivePct).
   const warnings = useMemo(() => {
     const out: string[] = [];
     for (const row of d.team) {
       const p = personById.get(row.userId);
       if (!p) continue;
-      const projected = p.totalPct + row.allocationPct;
-      if (projected > 100) out.push(`${p.name} would be at ${projected}% (over-allocated)`);
-      if (p.onLeaveUntil) {
-        const back = new Date(p.onLeaveUntil);
-        if (!row.startDate || new Date(row.startDate) <= back) {
-          out.push(`${p.name} is on leave until ${back.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`);
-        }
-      }
+      out.push(...assignmentWarnings(p, row.allocationPct, { start: row.startDate || null, end: row.endDate || null }));
     }
     return out;
   }, [d.team, personById]);
 
-  /** Same-role alternates for an over-allocated row: least loaded first, not already picked. */
-  function alternatesFor(_row: TeamRow): Person[] {
+  /** Alternates for an over-allocated row — role-fit SOFT sort (people already wearing
+   * this row's role hat somewhere sort first), then leave-aware load; excludes people
+   * already picked and people on leave inside the row's window. DM1.73: previously
+   * claimed "same-role" while ignoring the row entirely. */
+  function alternatesFor(row: TeamRow): Person[] {
     const chosen = new Set(d.team.map((t) => t.userId));
+    const fit = (p: Person) => (p.roles.includes(row.role) ? 0 : 1);
     return people
-      .filter((p) => !chosen.has(p.userId) && !p.onLeaveUntil)
-      .sort((a, b) => a.totalPct - b.totalPct)
+      .filter((p) => {
+        if (chosen.has(p.userId)) return false;
+        if (p.onLeaveUntil && (!row.startDate || new Date(row.startDate) <= new Date(p.onLeaveUntil))) return false;
+        return true;
+      })
+      .sort((a, b) => fit(a) - fit(b) || a.effectivePct - b.effectivePct)
       .slice(0, 2);
   }
 
@@ -233,25 +231,21 @@ export function ProjectWizard({
       if (d.name.trim().length < 2) return setError("Name is required."), false;
       if (!d.portfolioId) return setError("Every project belongs to a portfolio."), false;
     }
-    if (stepKey === "team") {
-      if (d.team.some((t) => !t.userId)) return setError("Every team row needs a person — or remove the row."), false;
-    }
-    if (stepKey === "integration" && (d.ytBaseUrl || d.ytProjectKey || ytToken)) {
-      if (!d.ytBaseUrl || !d.ytProjectKey || !ytToken) {
-        return setError("YouTrack needs base URL, project key AND token — or leave all three empty."), false;
-      }
-    }
     setError(null);
     return true;
   }
 
   async function create() {
-    for (const k of ["basics", "team", "integration"]) {
-      if (!validate(k)) {
-        go(STEPS.findIndex((s) => s.key === k));
-        return;
-      }
+    if (!validate("basics")) {
+      go(STEPS.findIndex((s) => s.key === "basics"));
+      return;
     }
+    // DM1.73 — the idea's expected value rides the description with an explicit prefix:
+    // Project has no dedicated field for it (decision noted in project-wizard.ts).
+    const desc = d.description.trim();
+    const description = fromIdea?.expectedValue
+      ? `${desc}${desc ? "\n\n" : ""}Expected value: ${fromIdea.expectedValue}`.slice(0, 500)
+      : desc;
     await mutate(
       "/api/projects/wizard",
       "POST",
@@ -259,33 +253,29 @@ export function ProjectWizard({
         name: d.name.trim(),
         fromIdeaId: fromIdea?.id ?? undefined,
         code: d.code.trim() || undefined,
-        description: d.description.trim() || undefined,
+        description: description || undefined,
+        // DM1.73 — the idea's sponsor becomes the project's business owner.
+        businessOwner: fromIdea?.sponsor || undefined,
         portfolioId: d.portfolioId,
         programmeId: d.programmeId || undefined,
         checkpointTemplateId: d.checkpointTemplateId || undefined,
         pipelineStage: d.pipelineStage,
         marketIds: effectiveMarkets,
-        team: d.team.map((t) => ({
+        team: filledTeam.map((t) => ({
           userId: t.userId,
           role: t.role,
           allocationPct: t.allocationPct,
           startDate: t.startDate ? new Date(t.startDate).toISOString() : undefined,
           endDate: t.endDate ? new Date(t.endDate).toISOString() : undefined,
         })),
-        document:
-          d.docTitle.trim() && (d.docContent.trim() || file)
-            ? {
-                title: d.docTitle.trim(),
-                kind: d.docKind,
-                format: file ? "pdf" : "text",
-                content: file ? undefined : d.docContent,
-                fileData: file?.data,
-              }
-            : undefined,
-        youtrack:
-          youtrackEnabled && d.ytBaseUrl && d.ytProjectKey && ytToken
-            ? { baseUrl: d.ytBaseUrl, projectKey: d.ytProjectKey, token: ytToken }
-            : undefined,
+        // DM1.73 (docs/30 §5) — unfilled seats raise resource requests server-side, in
+        // the same transaction as the project itself.
+        unfilledSeats: unfilledSeats.map((t) => ({
+          role: t.role,
+          allocationPct: t.allocationPct,
+          startDate: t.startDate ? new Date(t.startDate).toISOString() : undefined,
+          endDate: t.endDate ? new Date(t.endDate).toISOString() : undefined,
+        })),
         acceptedWarnings: warnings,
       },
       {
@@ -297,11 +287,7 @@ export function ProjectWizard({
             /* ignore */
           }
           const id = (data as { project?: { id?: string } } | undefined)?.project?.id;
-          // docs/27 §5 gap 3: an attached BRD/URS lands you on the register, where the
-          // M8-C extraction ("Review Q's suggestions") is one click away — extraction
-          // itself stays human-gated in the workspace, never run inside the mutation.
-          const hadDoc = Boolean(d.docTitle.trim() && (d.docContent.trim() || file));
-          router.push(id ? `/projects/${id}${hadDoc ? "?tab=Documents" : ""}` : "/projects");
+          router.push(id ? `/projects/${id}` : "/projects");
         },
       },
     );
@@ -314,8 +300,6 @@ export function ProjectWizard({
       /* ignore */
     }
     setD({ ...EMPTY, portfolioId: preselectedPortfolioId ?? "" });
-    setYtToken("");
-    setFile(null);
   }
 
   function applyTeamTemplate(t: TeamTemplate) {
@@ -331,12 +315,12 @@ export function ProjectWizard({
     <WizardShell
       steps={STEPS}
       current={step}
-      skipped={skipped}
+      skipped={NO_SKIPS}
       onStep={go}
-      onBack={() => go(prevStep(STEPS, step, skipped))}
+      onBack={() => go(prevStep(STEPS, step, NO_SKIPS))}
       onNext={() => {
         if (!validate(cur)) return;
-        go(nextStep(STEPS, step, skipped));
+        go(nextStep(STEPS, step, NO_SKIPS));
       }}
       onCreate={create}
       onCreateAnother={createAnother}
@@ -349,7 +333,7 @@ export function ProjectWizard({
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label htmlFor="pj-name" className={LABEL}>Project name</label>
-              <Input id="pj-name" value={d.name} onChange={(e) => set({ name: e.target.value })} className="mt-1.5" autoFocus />
+              <Input id="pj-name" value={d.name} maxLength={120} onChange={(e) => set({ name: e.target.value })} className="mt-1.5" autoFocus />
             </div>
             <div>
               <label htmlFor="pj-code" className={LABEL}>Code · auto-suggested</label>
@@ -401,21 +385,21 @@ export function ProjectWizard({
             <label htmlFor="pj-desc" className={LABEL}>Description (optional)</label>
             <Input id="pj-desc" value={d.description} onChange={(e) => set({ description: e.target.value })} className="mt-1.5" />
           </div>
-        </WizardCard>
-      )}
 
-      {cur === "delivery" && (
-        <WizardCard title="What kind of delivery is this?">
-          <div className="grid gap-3 sm:grid-cols-2">
-            {templates.map((t) => (
-              <OptionCard
-                key={t.id}
-                on={d.checkpointTemplateId === t.id}
-                onClick={() => set({ checkpointTemplateId: d.checkpointTemplateId === t.id ? "" : t.id })}
-                title={t.name}
-                desc={t.gates.join(" → ")}
-              />
-            ))}
+          {/* DM1.73 — Type & delivery folded in (was its own step). */}
+          <div className="mt-4">
+            <span className={LABEL}>Delivery template</span>
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+              {templates.map((t) => (
+                <OptionCard
+                  key={t.id}
+                  on={d.checkpointTemplateId === t.id}
+                  onClick={() => set({ checkpointTemplateId: d.checkpointTemplateId === t.id ? "" : t.id })}
+                  title={t.name}
+                  desc={t.gates.join(" → ")}
+                />
+              ))}
+            </div>
           </div>
           <div className="mt-3">
             <span className={LABEL}>Pipeline stage</span>
@@ -427,44 +411,42 @@ export function ProjectWizard({
               ))}
             </div>
           </div>
-          <p className="mt-3 text-[11.5px] text-[var(--ink4)]">
-            The template decides the Delivery tab&apos;s gates; % is always derived from gate states, never typed.
-            Later stage moves stay a governance action on the workspace.
-          </p>
-        </WizardCard>
-      )}
 
-      {cur === "markets" && (
-        <WizardCard title="Where will it go live?">
-          {markets.length === 0 ? (
-            <p className="text-[12px] text-[var(--ink4)]">No market org units exist yet.</p>
-          ) : (
-            <div>
-              {markets.map((m) => {
-                const on = effectiveMarkets.includes(m.id);
-                return (
-                  <Chip
-                    key={m.id}
-                    on={on}
-                    onClick={() =>
-                      set({
-                        marketsTouched: true,
-                        marketIds: on ? effectiveMarkets.filter((x) => x !== m.id) : [...effectiveMarkets, m.id],
-                      })
-                    }
-                  >
-                    {m.flag ? `${m.flag} ` : ""}
-                    {m.code}
-                  </Chip>
-                );
-              })}
-              <p className="mt-2 text-[11px] text-[var(--ink4)]">
-                {portfolio && !d.marketsTouched && (portfolio.defaultMarkets.length ?? 0) > 0
-                  ? `Pre-filled from ${portfolio.name} — trim or extend per project.`
-                  : "Pick the subsidiaries this project targets."}
-              </p>
+          {/* DM1.73 — Markets folded in (was its own step); portfolio prefill kept. */}
+          {markets.length > 0 && (
+            <div className="mt-3">
+              <span className={LABEL}>Markets</span>
+              <div className="mt-2">
+                {markets.map((m) => {
+                  const on = effectiveMarkets.includes(m.id);
+                  return (
+                    <Chip
+                      key={m.id}
+                      on={on}
+                      onClick={() =>
+                        set({
+                          marketsTouched: true,
+                          marketIds: on ? effectiveMarkets.filter((x) => x !== m.id) : [...effectiveMarkets, m.id],
+                        })
+                      }
+                    >
+                      {m.flag ? `${m.flag} ` : ""}
+                      {m.code}
+                    </Chip>
+                  );
+                })}
+                <p className="mt-2 text-[11px] text-[var(--ink4)]">
+                  {portfolio && !d.marketsTouched && (portfolio.defaultMarkets.length ?? 0) > 0
+                    ? `Pre-filled from ${portfolio.name} — trim or extend per project.`
+                    : "Pick the subsidiaries this project targets."}
+                </p>
+              </div>
             </div>
           )}
+          <p className="mt-3 text-[11.5px] text-[var(--ink4)]">
+            The template decides the Delivery tab&apos;s gates; % is always derived from gate states, never typed.
+            Documents and integrations connect later from the workspace.
+          </p>
         </WizardCard>
       )}
 
@@ -493,17 +475,17 @@ export function ProjectWizard({
             <div className="flex flex-col gap-2">
               {d.team.map((row, i) => {
                 const p = row.userId ? personById.get(row.userId) : null;
-                const projected = p ? p.totalPct + row.allocationPct : 0;
-                const over = p && projected > 100;
-                const leave = p?.onLeaveUntil ? new Date(p.onLeaveUntil) : null;
-                const leaveClash = leave && (!row.startDate || new Date(row.startDate) <= leave);
+                const rowWarnings = p
+                  ? assignmentWarnings(p, row.allocationPct, { start: row.startDate || null, end: row.endDate || null })
+                  : [];
+                const over = p ? p.effectivePct + row.allocationPct > 100 : false;
                 return (
                   <div key={i} className="rounded-[10px] border border-[var(--w08)] p-2.5">
                     <div className="grid items-end gap-2 sm:grid-cols-[1fr_150px_80px_110px_110px_32px]">
                       <div>
                         <span className={LABEL}>Person</span>
                         <select value={row.userId} onChange={(e) => setRow(i, { userId: e.target.value })} className={SELECT}>
-                          <option value="">— pick —</option>
+                          <option value="">— unfilled → resource request —</option>
                           {people.map((pp) => (
                             <option key={pp.userId} value={pp.userId} disabled={d.team.some((t, j) => j !== i && t.userId === pp.userId)}>
                               {pp.name} · {pp.totalPct}% booked{pp.onLeaveUntil ? " · on leave" : ""}
@@ -514,7 +496,7 @@ export function ProjectWizard({
                       <div>
                         <span className={LABEL}>Role hat</span>
                         <select value={row.role} onChange={(e) => setRow(i, { role: e.target.value })} className={SELECT}>
-                          {["Project Manager", "Technical Lead", "Developer", "QA Engineer", "Implementor", "Business Analyst", "UX Designer"].map((r) => (
+                          {PROJECT_ROLES.map((r) => (
                             <option key={r}>{r}</option>
                           ))}
                         </select>
@@ -548,14 +530,18 @@ export function ProjectWizard({
                         <Trash2 />
                       </Button>
                     </div>
-                    {(over || leaveClash) && p && (
+                    {!row.userId && (
+                      <p className="mt-2 text-[11.5px] text-[var(--ink4)]">
+                        → will raise a resource request for 1 {row.role} · {row.allocationPct}% to the Head of PMs.
+                      </p>
+                    )}
+                    {rowWarnings.length > 0 && p && (
                       <p className="mt-2 rounded-[8px] bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] px-2.5 py-1.5 text-[11.5px] text-[var(--warn)]">
-                        ⚠ {over ? `${p.name} would be at ${projected}% next fortnight.` : ""}
-                        {leaveClash ? ` ${p.name} is on leave until ${leave!.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}.` : ""}
+                        ⚠ {rowWarnings.join(". ")}.
                         {over && alternatesFor(row).length > 0 && (
                           <>
                             {" "}
-                            Least-loaded alternates:{" "}
+                            Alternates ({row.role} first, least loaded):{" "}
                             {alternatesFor(row).map((a, k) => (
                               <button
                                 key={a.userId}
@@ -564,7 +550,7 @@ export function ProjectWizard({
                                 onClick={() => setRow(i, { userId: a.userId })}
                               >
                                 {k > 0 ? " · " : ""}
-                                {a.name} ({a.totalPct}%)
+                                {a.name} ({a.effectivePct}%)
                               </button>
                             ))}
                           </>
@@ -577,87 +563,9 @@ export function ProjectWizard({
             </div>
           )}
           <p className="mt-3 text-[11px] text-[var(--ink4)]">
+            A row without a person is fine — creating the project raises a resource request for that seat.
             Warnings inform, they never block — accepted ones are recorded in the audit trail.
           </p>
-        </WizardCard>
-      )}
-
-      {cur === "docs" && (
-        <WizardCard title="Anything to read before the build?">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label htmlFor="doc-title" className={LABEL}>Document title (optional)</label>
-              <Input id="doc-title" value={d.docTitle} onChange={(e) => set({ docTitle: e.target.value })} className="mt-1.5" placeholder="e.g. BRD — Mobile Banking v2" />
-            </div>
-            <div>
-              <span className={LABEL}>Kind</span>
-              <select value={d.docKind} onChange={(e) => set({ docKind: e.target.value })} className={SELECT}>
-                {["BRD", "URS", "SRS", "Plan", "Other"].map((k) => (
-                  <option key={k}>{k}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div className="mt-3">
-            <span className={LABEL}>PDF file — or paste text below</span>
-            <input
-              type="file"
-              accept="application/pdf"
-              className="mt-1.5 block w-full text-[12px] text-[var(--ink3)] file:mr-3 file:rounded-lg file:border file:border-[var(--w10)] file:bg-transparent file:px-3 file:py-1.5 file:text-[12px] file:font-semibold file:text-[var(--ink2)]"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (!f) return setFile(null);
-                if (f.size > 2 * 1024 * 1024) {
-                  setError("PDFs over 2 MB — add them from the workspace register after create.");
-                  e.target.value = "";
-                  return;
-                }
-                const reader = new FileReader();
-                reader.onload = () => setFile({ name: f.name, data: String(reader.result).split(",")[1] ?? "" });
-                reader.readAsDataURL(f);
-              }}
-            />
-            {file && <p className="mt-1 text-[11px] text-[var(--ok)]">✓ {file.name} attached (not saved in the draft — re-attach if you leave)</p>}
-          </div>
-          <div className="mt-3">
-            <label htmlFor="doc-content" className={LABEL}>Text content</label>
-            <textarea
-              id="doc-content"
-              rows={4}
-              value={d.docContent}
-              onChange={(e) => set({ docContent: e.target.value })}
-              className="mt-1.5 w-full rounded-lg border border-input bg-background p-3 text-sm"
-            />
-          </div>
-          <p className="mt-2 text-[11.5px] text-[var(--ink4)]">
-            Entirely skippable — the register accepts documents any time. Once a BRD/URS is in the register, the
-            workspace offers requirement extraction with human approval of every candidate (docs/26 §9).
-          </p>
-        </WizardCard>
-      )}
-
-      {cur === "integration" && (
-        <WizardCard title="Where does the truth come from?">
-          <p className="text-[12px] leading-relaxed text-[var(--ink3)]">
-            Link the YouTrack project and the board mirrors it read-only. Without a connection the Board tab shows an
-            honest &quot;not connected&quot; state — never an empty lie. Connectable later from workspace → Integrations;
-            the repository (commit automation) connects there too, because it mints a webhook secret you must copy once.
-          </p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
-            <div>
-              <label htmlFor="yt-url" className={LABEL}>Base URL</label>
-              <Input id="yt-url" value={d.ytBaseUrl} onChange={(e) => set({ ytBaseUrl: e.target.value })} placeholder="https://yt.example.com" className="mt-1.5" />
-            </div>
-            <div>
-              <label htmlFor="yt-key" className={LABEL}>Project key</label>
-              <Input id="yt-key" value={d.ytProjectKey} onChange={(e) => set({ ytProjectKey: e.target.value })} placeholder="MB2" className="mt-1.5 font-mono" />
-            </div>
-            <div>
-              <label htmlFor="yt-token" className={LABEL}>Token</label>
-              <Input id="yt-token" type="password" value={ytToken} onChange={(e) => setYtToken(e.target.value)} className="mt-1.5" />
-              <p className="mt-1 text-[10.5px] text-[var(--ink4)]">Stored encrypted; never in the draft.</p>
-            </div>
-          </div>
         </WizardCard>
       )}
 
@@ -678,14 +586,9 @@ export function ProjectWizard({
                 ["Markets", marketCodes(effectiveMarkets)],
                 [
                   "Team",
-                  d.team.length
-                    ? `${d.team.length} people${warnings.length ? ` · ${warnings.length} warning${warnings.length > 1 ? "s" : ""} accepted` : ""}`
+                  filledTeam.length || unfilledSeats.length
+                    ? `${filledTeam.length} people${unfilledSeats.length ? ` · ${unfilledSeats.length} unfilled seat${unfilledSeats.length > 1 ? "s" : ""}` : ""}${warnings.length ? ` · ${warnings.length} warning${warnings.length > 1 ? "s" : ""} accepted` : ""}`
                     : "— staff later",
-                ],
-                ["Docs", d.docTitle.trim() && (d.docContent.trim() || file) ? `${d.docKind} · ${d.docTitle}` : "—"],
-                [
-                  "Integration",
-                  youtrackEnabled && d.ytProjectKey && d.ytBaseUrl && ytToken ? `YouTrack ${d.ytProjectKey}` : "not connected",
                 ],
               ].map(([l, v]) => (
                 <tr key={l} className="border-b border-[var(--w06)] last:border-0">
@@ -695,6 +598,16 @@ export function ProjectWizard({
               ))}
             </tbody>
           </table>
+          {/* DM1.73 (docs/30 §5) — the unfilled seats promise, spelled out. */}
+          {unfilledSeats.length > 0 && (
+            <ul className="mt-3 flex flex-col gap-1 rounded-[8px] bg-[var(--wash2)] px-3 py-2 text-[11.5px] text-[var(--ink3)]">
+              {unfilledSeats.map((s, i) => (
+                <li key={i}>
+                  1 {s.role} · {s.allocationPct}% → will raise a resource request
+                </li>
+              ))}
+            </ul>
+          )}
           {warnings.length > 0 && (
             <div className="mt-3 rounded-[8px] bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] px-3 py-2 text-[11.5px] text-[var(--warn)]">
               Creating accepts: {warnings.join("; ")}.

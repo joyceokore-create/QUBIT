@@ -28,7 +28,7 @@ export default async function RisksPage() {
   if (!can(ctx, "risk:read")) {
     return (
       <div className="flex flex-1 flex-col gap-[22px] p-[26px]">
-        <Breadcrumb items={[{ label: "Group Overview", href: "/dashboard" }, { label: "Risks & Issues" }]} />
+        <Breadcrumb items={[{ label: "Dashboard", href: "/dashboard" }, { label: "Risks & Issues" }]} />
         <Forbidden />
       </div>
     );
@@ -49,7 +49,7 @@ export default async function RisksPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-[22px] p-[26px]">
-      <Breadcrumb items={[{ label: "Group Overview", href: "/dashboard" }, { label: "Risks & Issues" }]} />
+      <Breadcrumb items={[{ label: "Dashboard", href: "/dashboard" }, { label: "Risks & Issues" }]} />
 
       <div className="flex items-center justify-between">
         <div>

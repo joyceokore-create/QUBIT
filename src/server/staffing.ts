@@ -3,6 +3,7 @@
 // every transition is audited and the raiser is notified. The asker never resolves their
 // own ask: raising is delivery-owner-scoped (access.ts), resolving is staffing:manage.
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 import { audit } from "@/lib/audit";
 import { can } from "@/lib/rbac";
 import { canRaiseResourceRequest } from "@/lib/access";
@@ -28,6 +29,69 @@ export const RaiseRequestInput = z.object({
 });
 export type RaiseRequestInputT = z.infer<typeof RaiseRequestInput>;
 
+/**
+ * DM1.73 — tx-level request creation, shared by raiseResourceRequest (below) and the
+ * project wizard's unfilled-seat handoff (src/server/project-wizard.ts), so both paths
+ * write the same audit row and notify the same Heads. Authorisation is the CALLER's
+ * job: raiseResourceRequest checks canRaiseResourceRequest; the wizard is creating the
+ * project itself, which is licence enough to ask for its team.
+ */
+export async function createResourceRequestInTx(
+  tx: Prisma.TransactionClient,
+  ctx: TenantContext,
+  seat: {
+    projectId: string;
+    role: string;
+    allocationPct: number;
+    windowStart: Date;
+    windowEnd: Date;
+    note?: string | null;
+  },
+) {
+  const project = await tx.project.findUniqueOrThrow({
+    where: { id: seat.projectId },
+    select: { id: true, code: true, name: true },
+  });
+  const request = await tx.resourceRequest.create({
+    data: {
+      tenantId: ctx.tenantId,
+      projectId: project.id,
+      raisedById: ctx.userId,
+      role: seat.role,
+      allocationPct: seat.allocationPct,
+      windowStart: seat.windowStart,
+      windowEnd: seat.windowEnd,
+      note: seat.note ?? null,
+    },
+  });
+  await audit(tx, ctx, {
+    action: "create",
+    entityType: "resource_request",
+    entityId: request.id,
+    after: { projectId: project.id, role: request.role, allocationPct: request.allocationPct },
+  });
+  // Notify everyone who can fill it (the Heads) — staffing leaves the side channel.
+  const heads = await tx.roleAssignment.findMany({
+    where: { role: { in: ["HeadOfProjects", "PlatformSuperAdmin"] } },
+    select: { userId: true },
+  });
+  await emitDomainEvent(tx, ctx, {
+    type: "resource_request.created",
+    entityType: "resource_request",
+    entityId: request.id,
+    payload: { projectCode: project.code, role: request.role, allocationPct: request.allocationPct },
+    notify: [...new Set(heads.map((h) => h.userId))]
+      .filter((id) => id !== ctx.userId)
+      .map((userId) => ({
+        userId,
+        kind: "resource_request.created",
+        message: `${project.code} asks for 1 ${request.role} · ${request.allocationPct}%.`,
+        link: "/staffing",
+      })),
+  });
+  return request;
+}
+
 export async function raiseResourceRequest(ctx: TenantContext, input: RaiseRequestInputT) {
   if (new Date(input.windowStart) > new Date(input.windowEnd)) {
     throw new StaffingError("The window cannot end before it starts.", "BAD_WINDOW");
@@ -35,50 +99,16 @@ export async function raiseResourceRequest(ctx: TenantContext, input: RaiseReque
   if (!(await canRaiseResourceRequest(ctx, input.projectId))) {
     throw new StaffingError("Only the project's lead or PM can raise a request for it.", "FORBIDDEN");
   }
-  return withTenant(ctx, async (tx) => {
-    const project = await tx.project.findUniqueOrThrow({
-      where: { id: input.projectId },
-      select: { id: true, code: true, name: true },
-    });
-    const request = await tx.resourceRequest.create({
-      data: {
-        tenantId: ctx.tenantId,
-        projectId: project.id,
-        raisedById: ctx.userId,
-        role: input.role,
-        allocationPct: input.allocationPct,
-        windowStart: new Date(input.windowStart),
-        windowEnd: new Date(input.windowEnd),
-        note: input.note ?? null,
-      },
-    });
-    await audit(tx, ctx, {
-      action: "create",
-      entityType: "resource_request",
-      entityId: request.id,
-      after: { projectId: project.id, role: request.role, allocationPct: request.allocationPct },
-    });
-    // Notify everyone who can fill it (the Heads) — staffing leaves the side channel.
-    const heads = await tx.roleAssignment.findMany({
-      where: { role: { in: ["HeadOfProjects", "PlatformSuperAdmin"] } },
-      select: { userId: true },
-    });
-    await emitDomainEvent(tx, ctx, {
-      type: "resource_request.created",
-      entityType: "resource_request",
-      entityId: request.id,
-      payload: { projectCode: project.code, role: request.role, allocationPct: request.allocationPct },
-      notify: [...new Set(heads.map((h) => h.userId))]
-        .filter((id) => id !== ctx.userId)
-        .map((userId) => ({
-          userId,
-          kind: "resource_request.created",
-          message: `${project.code} asks for 1 ${request.role} · ${request.allocationPct}%.`,
-          link: "/staffing",
-        })),
-    });
-    return request;
-  });
+  return withTenant(ctx, (tx) =>
+    createResourceRequestInTx(tx, ctx, {
+      projectId: input.projectId,
+      role: input.role,
+      allocationPct: input.allocationPct,
+      windowStart: new Date(input.windowStart),
+      windowEnd: new Date(input.windowEnd),
+      note: input.note ?? null,
+    }),
+  );
 }
 
 export interface ResourceRequestRow {
@@ -149,18 +179,30 @@ export interface BenchRow {
   awayDaysInWindow: number;
 }
 
-/** Candidates for a window: every active user, least booked first, leave surfaced.
- * Role hats are per-project, so the bench is role-agnostic — the fill assigns the hat. */
-export async function benchFor(ctx: TenantContext, windowStart: Date, windowEnd: Date): Promise<BenchRow[]> {
+/** Candidates for a window: every active user, leave surfaced. DM1.73 (docs/29 §3) —
+ * when the request names a role, people who hold (or have held) that role hat on any
+ * project sort FIRST, then by load: a role-fit SOFT sort, never a hard filter — the
+ * fill still assigns whatever hat the request asked for. */
+export async function benchFor(
+  ctx: TenantContext,
+  windowStart: Date,
+  windowEnd: Date,
+  role?: string,
+): Promise<BenchRow[]> {
   return withTenant(ctx, async (tx) => {
-    const [users, allocations, absences] = await Promise.all([
+    const [users, allocations, absences, roleHolders] = await Promise.all([
       tx.user.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true } }),
       tx.projectMember.groupBy({ by: ["userId"], _sum: { allocationPct: true } }),
       tx.absence.findMany({
         where: { startDate: { lte: windowEnd }, endDate: { gte: windowStart } },
         select: { userId: true, startDate: true, endDate: true },
       }),
+      // DM1.73 — the one extra query the soft sort costs.
+      role
+        ? tx.projectMember.findMany({ where: { role }, select: { userId: true }, distinct: ["userId"] })
+        : Promise.resolve([] as { userId: string }[]),
     ]);
+    const fitsRole = new Set(roleHolders.map((r) => r.userId));
     const loadByUser = new Map(allocations.map((a) => [a.userId, a._sum.allocationPct ?? 0]));
     const awayByUser = new Map<string, number>();
     for (const a of absences) {
@@ -176,7 +218,13 @@ export async function benchFor(ctx: TenantContext, windowStart: Date, windowEnd:
         totalPct: loadByUser.get(u.id) ?? 0,
         awayDaysInWindow: awayByUser.get(u.id) ?? 0,
       }))
-      .sort((a, b) => a.totalPct - b.totalPct || a.awayDaysInWindow - b.awayDaysInWindow);
+      // Role holders first (soft), then least booked, leave-in-window as tie-break.
+      .sort(
+        (a, b) =>
+          Number(fitsRole.has(b.userId)) - Number(fitsRole.has(a.userId)) ||
+          a.totalPct - b.totalPct ||
+          a.awayDaysInWindow - b.awayDaysInWindow,
+      );
   });
 }
 

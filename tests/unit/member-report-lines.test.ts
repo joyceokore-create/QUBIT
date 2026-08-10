@@ -2,7 +2,7 @@
 // (docs/18 §5.1.1). The member may rewrite these lines in the composer — this is the
 // starting draft, not the final word.
 import { describe, expect, it } from "vitest";
-import { buildSectionLines } from "@/server/member-reports";
+import { ackedSectionLines, buildSectionLines } from "@/server/member-reports";
 
 const item = (id: string, aging = false) => ({ id, title: `Task ${id}`, status: "InProgress", aging });
 
@@ -33,6 +33,35 @@ describe("buildSectionLines", () => {
   it("says a quiet week honestly instead of inventing progress", () => {
     expect(buildSectionLines({ done: [], doing: [], blockersRaised: [], blockersResolved: [] })).toEqual([
       "No tracked movement on this project this week.",
+    ]);
+  });
+});
+
+// DM1.73 (T6): what an acknowledged section folds into the PM's check-in draft —
+// including the member's query, which the PM previously had to re-type.
+describe("ackedSectionLines", () => {
+  it("folds done count, note AND query into the PM's draft", () => {
+    const lines = ackedSectionLines("Amina", {
+      done: [item("a"), item("b")],
+      note: "Payments retries now idempotent.",
+      query: "Has the TZ launch date moved?",
+    });
+    expect(lines).toEqual([
+      "Amina: 2 items completed",
+      "Amina: Payments retries now idempotent.",
+      "Amina asks: Has the TZ launch date moved?",
+    ]);
+  });
+
+  it("singular done count, no empty lines for missing note/query", () => {
+    expect(ackedSectionLines("Ben", { done: [item("a")], note: null, query: null })).toEqual([
+      "Ben: 1 item completed",
+    ]);
+  });
+
+  it("a query alone still reaches the PM", () => {
+    expect(ackedSectionLines("Cara", { done: [], note: null, query: "Who owns the DR runbook?" })).toEqual([
+      "Cara asks: Who owns the DR runbook?",
     ]);
   });
 });

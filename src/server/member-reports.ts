@@ -210,15 +210,13 @@ export const SaveMemberReportInput = z.object({
   narrative: z.string().trim().max(1000).nullable().optional(),
   /** Per-project member additions, keyed by projectId. */
   notes: z.record(z.string(), z.string().trim().max(1000).nullable()).optional(),
-  /** Edited summary lines, keyed by projectId — the member may rewrite the machine's words. */
-  lines: z.record(z.string(), z.array(z.string().trim().max(300)).max(20)).optional(),
   /** M-P3a — queries & concerns to the PM, keyed by projectId. */
   queries: z.record(z.string(), z.string().trim().max(500).nullable()).optional(),
 });
 export type SaveMemberReportInputT = z.infer<typeof SaveMemberReportInput>;
 
 /** Save the member's edits. Facts are NEVER overwritten by the client — only the
- * narrative, per-project notes and the (editable) summary lines. */
+ * narrative, per-project notes and queries. */
 export async function saveMyReport(
   ctx: TenantContext,
   input: SaveMemberReportInputT,
@@ -241,7 +239,9 @@ export async function saveMyReport(
       ...s,
       note: input.notes?.[s.projectId] !== undefined ? (input.notes[s.projectId] ?? null) : s.note,
       query: input.queries?.[s.projectId] !== undefined ? (input.queries[s.projectId] ?? null) : (s.query ?? null),
-      lines: input.lines?.[s.projectId] ?? s.lines,
+      // DM1.73: the `lines` client write path was removed — no UI ever sent it, and an
+      // open write path over machine-generated facts is an attack surface, not a feature.
+      lines: s.lines,
     }));
     const data = {
       draft: { sections } as unknown as Prisma.InputJsonValue,
@@ -465,6 +465,22 @@ export async function acknowledgeReport(
   });
 }
 
+/** DM1.73 (T6): fold ONE acknowledged section into the PM's check-in draft lines — pure,
+ * so the wording is unit-testable without a DB. Done-count and note as before, plus the
+ * member's query ("<Name> asks: …"), which used to be silently dropped here and had to
+ * be re-typed by the PM. */
+export function ackedSectionLines(
+  name: string,
+  section: Pick<MemberReportSection, "done" | "note" | "query">,
+): string[] {
+  const lines: string[] = [];
+  const done = section.done.length;
+  if (done) lines.push(`${name}: ${done} item${done === 1 ? "" : "s"} completed`);
+  if (section.note) lines.push(`${name}: ${section.note}`);
+  if (section.query) lines.push(`${name} asks: ${section.query}`);
+  return lines;
+}
+
 /** Acknowledged member sections for a project this week — folded into the PM's
  * check-in draft (§5.1.4) so the weekly loop closes without re-typing. */
 export async function acknowledgedMemberLines(
@@ -481,9 +497,7 @@ export async function acknowledgedMemberLines(
     const draft = a.memberReport.draft as unknown as MemberReportDraft;
     const section = draft.sections?.find((s) => s.projectId === projectId);
     if (!section) continue;
-    const done = section.done.length;
-    if (done) lines.push(`${a.memberReport.user.name}: ${done} item${done === 1 ? "" : "s"} completed`);
-    if (section.note) lines.push(`${a.memberReport.user.name}: ${section.note}`);
+    lines.push(...ackedSectionLines(a.memberReport.user.name, section));
   }
   return lines;
 }

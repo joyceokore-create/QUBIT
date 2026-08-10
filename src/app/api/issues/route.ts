@@ -11,7 +11,9 @@ export async function GET(req: Request) {
     status: searchParams.get("status") ?? undefined,
     severity: searchParams.get("severity") ?? undefined,
     ownerId: searchParams.get("owner") ?? undefined,
-    projectId: searchParams.get("project") ?? undefined,
+    // DM1.73: the workspace Register calls with ?projectId=; the /risks page's older
+    // ?project= form keeps working.
+    projectId: searchParams.get("projectId") ?? searchParams.get("project") ?? undefined,
     q: searchParams.get("q") ?? undefined,
   });
   return NextResponse.json({ items });

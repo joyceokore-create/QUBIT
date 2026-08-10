@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { audit } from "@/lib/audit";
 import { isoWeekId } from "@/lib/iso-week";
 import { avgProgress } from "@/server/dashboard";
+import { checkpointProgressByProject } from "@/server/checkpoints";
 import { portfolioHealth, projectRag } from "@/server/health";
 import type { JobDefinition } from "@/server/jobs/types";
 
@@ -58,11 +59,14 @@ export const nightlySnapshot: JobDefinition = {
     const risksByProject = new Map(riskAgg.filter((r) => r.projectId).map((r) => [r.projectId as string, r._count._all]));
     const overdueByProject = new Map(overdueAgg.map((r) => [r.projectId, r._count._all]));
 
+    // DM1.73 (T3): snapshots store the same checkpoint-derived % the live surfaces show,
+    // so WoW deltas compare like with like.
+    const checkpointProgress = await checkpointProgressByProject(tx, projects.map((p) => p.id));
     for (const p of projects) {
       const snapshot = {
         status: p.status,
         rag: projectRag(p.status),
-        progress: avgProgress(p),
+        progress: avgProgress(p, checkpointProgress),
         tasksOpen: openByProject.get(p.id) ?? 0,
         tasksCompleted: completedByProject.get(p.id) ?? 0,
         tasksOverdue: overdueByProject.get(p.id) ?? 0,

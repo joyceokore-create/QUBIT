@@ -1,11 +1,9 @@
 import Link from "next/link";
 import { ArrowRight, CircleCheckBig, Play, ShieldAlert } from "lucide-react";
 import type { DevDashboard } from "@/server/dashboard-dev";
-import type { PortfolioSectionsData } from "@/server/pipeline";
 import type { MyTaskRow } from "@/server/project-tasks";
 import { FirstLoginChecklist } from "@/components/dashboard/presets/first-login-checklist";
-import { PortfolioSections } from "@/components/dashboard/portfolio-sections";
-import { CARD, Empty, Panel } from "@/components/dashboard/presets/v2-sections";
+import { CARD, ChangedSection, Empty, Panel } from "@/components/dashboard/presets/v2-sections";
 
 // Developer preset (docs/17 §4): ONE focus task — a decision made for them — then
 // queue buckets, boards, and this week's momentum. Nothing portfolio-level: a developer
@@ -96,11 +94,9 @@ function QueueBuckets({ d }: { d: DevDashboard }) {
 
 export function DeveloperPreset({
   d,
-  sections,
   showChecklist,
 }: {
   d: DevDashboard;
-  sections: PortfolioSectionsData;
   showChecklist: boolean;
 }) {
   return (
@@ -108,8 +104,8 @@ export function DeveloperPreset({
       <FirstLoginChecklist group="developer" show={showChecklist} />
       <FocusHero d={d} />
       <QueueBuckets d={d} />
-      {/* Amended docs/18 §6: the shared portfolio sections scoped to MY projects. */}
-      <PortfolioSections data={sections} scope="mine" />
+      {/* DM1.73 (T4): the portfolio sections are gone from here — docs/17 §4: "Nothing
+          portfolio-level on a developer dashboard." */}
       <Panel title="Done this week" sub="MOMENTUM">
         {d.doneThisWeek.length ? (
           d.doneThisWeek.map((t) => (
@@ -123,6 +119,8 @@ export function DeveloperPreset({
           <Empty>Nothing completed yet this week — the list fills as you ship.</Empty>
         )}
       </Panel>
+      {/* DM1.73 (T3): the delta feed renders for every persona, not just the exec. */}
+      <ChangedSection delta={d.delta} />
     </>
   );
 }

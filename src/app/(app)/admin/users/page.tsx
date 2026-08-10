@@ -77,7 +77,7 @@ export default async function AdminUsersPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
-      <AdminHeader
+      <AdminHeader canManageIam={can(ctx, "iam:manage")}
         subtitle={`${users.length} ${users.length === 1 ? "user" : "users"} · directory, roles & access for ${session.user.tenantName}`}
         action={
           canInvite ? (

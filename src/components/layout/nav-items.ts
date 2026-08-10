@@ -2,14 +2,11 @@ import {
   LayoutDashboard,
   ListChecks,
   Briefcase,
-  Boxes,
   FolderKanban,
   Lightbulb,
   TriangleAlert,
-  Users,
   Contact,
   BarChart3,
-  UserPlus,
   Shield,
   type LucideIcon,
 } from "lucide-react";
@@ -33,14 +30,18 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "My Board", href: "/board", icon: ListChecks }, // docs/18 §4 — the daily surface
-  { label: "Ideas", href: "/ideas", icon: Lightbulb }, // M-P4a — intake is for everyone
+  // DM1.73 — Ideas is memberHidden: docs/32 §0.3 keeps a member's nav to Dashboard ·
+  // My Board · Projects · Reports. `idea:create` stays in BASE, so the intake form
+  // remains reachable for members via direct link — it just isn't a nav pill.
+  { label: "Ideas", href: "/ideas", memberHidden: true, icon: Lightbulb }, // M-P4a — intake is for everyone
   { label: "Portfolios", href: "/portfolios", memberHidden: true, icon: Briefcase }, // M-P1b (docs/25 W1)
-  { label: "Programmes", href: "/programmes", memberHidden: true, icon: Boxes }, // M-W1a (docs/32)
+  // DM1.73 — Programmes merged into Portfolios: every programme card linked to its
+  // parent portfolio anyway; programmes are managed from the portfolio detail page.
   { label: "Projects", href: "/projects", icon: FolderKanban },
   { label: "Risks", href: "/risks", memberHidden: true, icon: TriangleAlert },
-  { label: "Teams", href: "/admin/teams", perm: "admin:access", icon: Users },
+  // DM1.73 — Staffing merged into People (?tab=requests); the People page gates the
+  // requests tab on project:create, so PMs (not memberOnly) still reach it.
   { label: "People", href: "/people", memberHidden: true, icon: Contact },
-  { label: "Staffing", href: "/staffing", perm: "project:create", icon: UserPlus }, // M-P1d — resource requests
   { label: "Reports", href: "/reports", icon: BarChart3 },
   { label: "Admin", href: "/admin", perm: "admin:access", icon: Shield },
 ];
@@ -74,4 +75,14 @@ export function isMemberOnly(personas: readonly string[]): boolean {
 /** Active when the path equals the href or sits under it (section root). */
 export function isNavActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/** DM1.73 (T6) — exactly ONE nav item is active: the longest matching href. Prefix
+ * matching alone lit two pills at once for nested sections (e.g. /admin/teams). */
+export function activeNavHref(pathname: string, items: readonly NavItem[]): string | null {
+  let best: string | null = null;
+  for (const n of items) {
+    if (isNavActive(pathname, n.href) && (best === null || n.href.length > best.length)) best = n.href;
+  }
+  return best;
 }

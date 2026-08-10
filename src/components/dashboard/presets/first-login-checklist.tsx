@@ -9,19 +9,22 @@ import { CheckCheck, X } from "lucide-react";
 // column, not localStorage, so it holds across devices. Executives get none (§1.3:
 // straight to value).
 
+// DM1.73 — links point where the work actually happens: the board is the task surface
+// (/my-tasks is folded into it by the declutter), and team + allocations are edited on
+// the project workspace's Setup tab, not the read-only /people view.
 const ITEMS: Record<string, { text: string; href: string }[]> = {
   developer: [
-    { text: "Confirm the tasks assigned to you", href: "/my-tasks" },
+    { text: "Confirm the tasks assigned to you", href: "/board" },
     { text: "Open your project board (dev lens)", href: "/projects" },
-    { text: "Flag anything already stuck as blocked", href: "/my-tasks" },
+    { text: "Flag anything already stuck as blocked", href: "/board" },
   ],
   pm: [
-    { text: "Confirm your team + allocations", href: "/people" },
+    { text: "Confirm your team + allocations — open your project → Setup tab", href: "/projects" },
     { text: "Review this week's check-in drafts", href: "/projects" },
-    { text: "Clear pending approvals in your queue", href: "/my-tasks" },
+    { text: "Clear pending approvals in your queue", href: "/board" },
   ],
   qa: [
-    { text: "Review your test queue", href: "/my-tasks" },
+    { text: "Review your test queue", href: "/board" },
     { text: "Triage unassigned bugs", href: "/projects" },
     { text: "Check aging items in QA", href: "/projects" },
   ],

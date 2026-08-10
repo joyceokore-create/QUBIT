@@ -14,19 +14,8 @@ import { CARD } from "@/lib/surface";
 // plus the week's focus & blockers — the "Where We Are" + "Critical Focus" slides as one
 // live page. Reached by clicking a cell on the rollout heatmap.
 
-const STATE_TOK: Record<string, string> = {
-  Done: "--ok",
-  InProgress: "--qinfo",
-  Blocked: "--bad",
-  NotStarted: "--ink4",
-};
-// Same wording as the workspace checkpoint matrix — the raw enum is never shown.
-const STATE_LABEL: Record<string, string> = {
-  Done: "Done",
-  InProgress: "In progress",
-  Blocked: "Blocked",
-  NotStarted: "Not started",
-};
+// One shared presentation map (DM1.73) — the raw enum is never shown.
+import { CHECKPOINT_STATE_TOK as STATE_TOK, CHECKPOINT_STATE_LABEL as STATE_LABEL } from "@/lib/checkpoint-view";
 
 export default async function MarketTrackPage({
   params,

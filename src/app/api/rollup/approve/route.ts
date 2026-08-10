@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/api-guard";
 import { approveRollup, RollupError } from "@/server/portfolio-reports";
 
-const Body = z.object({ narrative: z.string().trim().min(5).max(1000) });
+const Body = z.object({ narrative: z.string().trim().min(5).max(1000), acknowledgeUnsent: z.boolean().optional() });
 
 // M-P3b — the approve step the Head queue has been honestly deferring since M-W1b.
 export async function POST(req: Request) {
@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     );
   }
   try {
-    return NextResponse.json({ data: await approveRollup(guard.ctx, parsed.data.narrative) }, { status: 201 });
+    return NextResponse.json({ data: await approveRollup(guard.ctx, parsed.data.narrative, new Date(), { acknowledgeUnsent: parsed.data.acknowledgeUnsent }) }, { status: 201 });
   } catch (e) {
     if (e instanceof RollupError) {
       const status = e.code === "FORBIDDEN" ? 403 : 409;

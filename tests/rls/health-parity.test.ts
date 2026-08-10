@@ -5,7 +5,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import type { TenantContext } from "@/lib/tenant";
-import { getDashboardV2 } from "@/server/dashboard-v2";
 import { getExecutiveDashboard } from "@/server/dashboard-exec";
 import { generateReport } from "@/server/q/report";
 import { needsAttention } from "@/server/health";
@@ -39,13 +38,10 @@ describe("health parity — dashboard vs Q", () => {
 
   it("agrees on totals and the exact needs-attention set for every project, both tenants", async () => {
     for (const t of tenants) {
-      const dashboard = await getDashboardV2(t.ctx);
+      // DM1.73: dashboard-v2 (dead code) was deleted; the exec preset IS the dashboard
+      // surface under parity test — same engine as Q, enforced below.
+      const dashboard = await getExecutiveDashboard(t.ctx);
       const report = await generateReport(t.ctx, { type: "portfolio", tenantName: t.name });
-
-      // The executive preset (docs/17 §2) is a third surface — same engine, same numbers.
-      const exec = await getExecutiveDashboard(t.ctx);
-      expect(exec.health).toEqual(dashboard.health);
-      expect(exec.projects.map((p) => p.code).sort()).toEqual(dashboard.projects.map((p) => p.code).sort());
       const data = report.data as {
         totals: { projects: number; onTrack: number; atRisk: number; overdue: number; completed: number };
         needsAttention: AttentionRow[];

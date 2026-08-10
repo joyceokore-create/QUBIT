@@ -11,18 +11,20 @@ import { TeamsTable } from "./teams-table";
 
 // Teams now uses the same shell as every other admin screen (docs/21 M-O2b): AdminHeader
 // + the standard max-w-[1360px] main wrapper + AdminTable — no Breadcrumb, no local
-// CARD/ROW constants. Gate unchanged: iam:manage.
+// CARD/ROW constants. Gate: teams:manage:all (Heads) or iam:manage (SuperAdmin).
 export default async function AdminTeamsPage() {
   const session = await auth();
   if (!session?.user) return null;
   const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
-  if (!can(ctx, "iam:manage")) return <Forbidden />;
+  // DM1.73 (T6): both Heads hold teams:manage:all (rbac.ts) — the old iam:manage gate
+  // made the Teams surface a dead end for the exact roles meant to manage teams.
+  if (!can(ctx, "teams:manage:all") && !can(ctx, "iam:manage")) return <Forbidden />;
 
   const [teams, users] = await Promise.all([listTeams(ctx), listUsers(ctx)]);
 
   return (
     <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
-      <AdminHeader
+      <AdminHeader canManageIam={can(ctx, "iam:manage")}
         subtitle={`${teams.length} cross-functional ${teams.length === 1 ? "team" : "teams"}`}
         action={
           <TeamFormDialog

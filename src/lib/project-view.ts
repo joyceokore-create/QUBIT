@@ -24,14 +24,3 @@ export function projectRank(status: string): number {
 export function statusBarTok(status: string): string {
   return status === "Overdue" ? "--bad" : status === "AtRisk" ? "--warn" : status === "Planning" ? "--qinfo" : "--ok";
 }
-
-/**
- * 8-cell stage-gate strip derived from progress + status: passed cells (stD), one active
- * cell (stL when the project is late/at-risk, else stA), then pending cells (stP).
- */
-export function gateCells(pct: number, status: string): string[] {
-  const passed = Math.max(0, Math.min(8, Math.round((pct / 100) * 8)));
-  const late = status === "AtRisk" || status === "Overdue";
-  const active = status === "Completed" ? "--stD" : late ? "--stL" : "--stA";
-  return Array.from({ length: 8 }, (_, i) => (i < passed ? "--stD" : i === passed ? active : "--stP"));
-}

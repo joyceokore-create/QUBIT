@@ -13,8 +13,9 @@ import { Button } from "@/components/ui/button";
 const CATEGORY_ORDER = ["Approved", "Exploring", "Shelved"] as const;
 
 function PortfolioCard({ p }: { p: PortfolioCardData }) {
+  // DM1.73: RAG from the one health engine (worstStatus), not a hand-rolled local rule.
   const rag =
-    p.overdue > 0 ? "var(--bad)" : p.atRisk > 0 ? "var(--warn)" : p.itemCount > 0 ? "var(--ok)" : "var(--ink5)";
+    p.itemCount === 0 ? "var(--ink5)" : p.rag === "Overdue" ? "var(--bad)" : p.rag === "AtRisk" ? "var(--warn)" : "var(--ok)";
   return (
     <Link
       href={`/portfolios/${p.id}`}

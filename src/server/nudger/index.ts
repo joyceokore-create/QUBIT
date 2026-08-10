@@ -5,6 +5,7 @@ import { isoWeekId } from "@/lib/iso-week";
 import { absentUserIds } from "@/server/absence";
 import { emitDomainEvent } from "@/server/events";
 import { NUDGE_THRESHOLDS as T } from "@/server/nudger/config";
+import { businessDaysBetween } from "@/lib/board-lens";
 
 /**
  * The nudger (M3; matrix from docs/15 §6.4). Signals fire against live delivery data,
@@ -23,22 +24,13 @@ export const NUDGE_SIGNALS = [
   "milestone_at_risk",
   "checkin_unconfirmed",
   "member_report_unsent",
+  // DM1.73 (T8): the two THIS-week chasers — the prevWeek chasers above only catch
+  // misses after the Friday 17:00 deadline has already passed.
+  "member_report_unacknowledged",
+  "checkin_unsent_to_head",
 ] as const;
 export type NudgeSignal = (typeof NUDGE_SIGNALS)[number];
 
-/** Whole business days (Mon–Fri) elapsed between two instants. Pure, unit-tested. */
-export function businessDaysBetween(from: Date, to: Date): number {
-  if (to <= from) return 0;
-  let count = 0;
-  const d = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()));
-  const end = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate()));
-  while (d < end) {
-    d.setUTCDate(d.getUTCDate() + 1);
-    const dow = d.getUTCDay();
-    if (dow !== 0 && dow !== 6) count++;
-  }
-  return count;
-}
 
 export interface NudgeCandidate {
   signal: NudgeSignal;
@@ -172,7 +164,8 @@ export async function collectCandidates(tx: Prisma.TransactionClient, now: Date)
       entityId: b.id,
       projectId: b.projectId,
       message: `Blocker open ${ageDays}d on ${b.project.name}: ${b.description.slice(0, 80)}`,
-      link: b.taskId ? boardLink(b.projectId, b.taskId) : `/projects/${b.projectId}?tab=Deadlines`,
+      // DM1.73: the Deadlines tab retired with M-P3a — milestones live on Overview now.
+      link: b.taskId ? boardLink(b.projectId, b.taskId) : `/projects/${b.projectId}?tab=Overview`,
       // docs/15 names only the 7-day head escalation; owner-level nudge until then,
       // then PM + HeadOfProjects together (recorded in DECISIONS.md).
       level: ageDays >= T.blockerHeadDays ? 2 : 0,
@@ -214,10 +207,81 @@ export async function collectCandidates(tx: Prisma.TransactionClient, now: Date)
       entityId: m.id,
       projectId: m.projectId,
       message: `Milestone "${m.name}" due ${m.dueDate!.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} on ${m.project.name} with open tasks`,
-      link: `/projects/${m.projectId}?tab=Deadlines`,
+      // DM1.73: the Deadlines tab retired with M-P3a — milestones live on Overview now.
+      link: `/projects/${m.projectId}?tab=Overview`,
       level: 0,
       recipientsByLevel: [pm(m.projectId)],
     });
+  }
+
+  // DM1.73 (T8): THIS week's loop, not just last week's post-mortem. Both signals ride
+  // the ordinary weekday-morning `nudger` job (deployment.md: 07:30 Mon–Fri) and the
+  // standard `entityId:signal:isoWeek` dedupe — one ping per week, escalation-free.
+  const isoWeek = isoWeekId(now);
+
+  // A submitted member report a lead/PM has not acknowledged yet. Same lookup shape as
+  // collectMemberReportChase, but for the CURRENT week and routed to the leads of the
+  // still-pending sections instead of the member — the report is theirs to sign off.
+  const unackedReports = await tx.memberReport.findMany({
+    where: { isoWeek, status: "Submitted" },
+    select: {
+      id: true,
+      userId: true,
+      draft: true,
+      user: { select: { name: true } },
+      acks: { select: { projectId: true } },
+    },
+  });
+  for (const r of unackedReports) {
+    const draft = r.draft as { sections?: { projectId: string }[] } | null;
+    const acked = new Set(r.acks.map((a) => a.projectId));
+    const pending = (draft?.sections ?? []).map((s) => s.projectId).filter((id) => !acked.has(id));
+    // Never nudge the author about their own report (a PM allocated to a project they
+    // lead files a member section for it too).
+    const recipients = [...new Set(pending.flatMap((id) => pm(id)))].filter((id) => id !== r.userId);
+    if (!recipients.length) continue;
+    candidates.push({
+      signal: "member_report_unacknowledged",
+      entityType: "member_report",
+      entityId: r.id,
+      projectId: pending.length === 1 ? pending[0] : null,
+      message: `${r.user.name}'s weekly report is waiting for your acknowledgement`,
+      link: "/reports?tab=team",
+      level: 0,
+      recipientsByLevel: [recipients],
+    });
+  }
+
+  // This week's check-in Confirmed but never "Sent to the Head" (M-P3a's
+  // `submittedToHeadAt`), so the Head's roll-up would flag it UNSENT. Friday 17:00 is the
+  // promised deadline; the nudger cron only runs weekday MORNINGS, so the simplest honest
+  // gate is day-of-week — fire from Friday onward in the ISO week (Fri/Sat/Sun). Under
+  // the current crontab that means Friday's 07:30 run; a check-in confirmed later on
+  // Friday is only caught if an afternoon run is scheduled — stated here, not faked
+  // with a wider window.
+  const dow = now.getUTCDay(); // 0 Sun … 6 Sat — UTC, like isoWeekId/weekWindow
+  if (dow === 5 || dow === 6 || dow === 0) {
+    const unsentCheckins = await tx.checkIn.findMany({
+      where: {
+        isoWeek,
+        status: "Confirmed",
+        submittedToHeadAt: null,
+        project: { status: { notIn: ["Completed", "Cancelled"] } },
+      },
+      select: { id: true, projectId: true, project: { select: { name: true } } },
+    });
+    for (const c of unsentCheckins) {
+      candidates.push({
+        signal: "checkin_unsent_to_head",
+        entityType: "check_in",
+        entityId: c.id,
+        projectId: c.projectId,
+        message: `${c.project.name}'s check-in is confirmed but was never sent to the Head — send it before the roll-up`,
+        link: `/projects/${c.projectId}?tab=Reports`,
+        level: 0,
+        recipientsByLevel: [pm(c.projectId)],
+      });
+    }
   }
 
   return candidates;
