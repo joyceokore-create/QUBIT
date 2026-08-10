@@ -331,6 +331,8 @@ export interface ReportIndexRow {
   projectId: string;
   code: string;
   name: string;
+  /** M-D2 — the reports index groups by portfolio, so the row carries its own. */
+  portfolioName: string;
   pmName: string | null;
   latest: { isoWeek: string; status: "Confirmed" | "Draft"; rag: Rag; sentToHead: boolean } | null;
 }
@@ -352,6 +354,7 @@ export async function listReportIndex(ctx: TenantContext, now = new Date()): Pro
         code: true,
         name: true,
         lead: { select: { name: true } },
+        portfolio: { select: { name: true } },
         checkIns: { orderBy: { isoWeek: "desc" }, take: 1 },
       },
       orderBy: { name: "asc" },
@@ -362,6 +365,7 @@ export async function listReportIndex(ctx: TenantContext, now = new Date()): Pro
         projectId: p.id,
         code: p.code,
         name: p.name,
+        portfolioName: p.portfolio?.name ?? "Unassigned",
         pmName: p.lead?.name ?? null,
         latest: ci
           ? {

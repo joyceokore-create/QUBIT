@@ -14,8 +14,19 @@ export type UserGroup = (typeof USER_GROUPS)[number];
 /** Landing priority when no primary/last choice applies (docs/17 §1.1). */
 const LANDING_PRIORITY: UserGroup[] = ["executive", "pm", "implementor", "qa", "developer"];
 
-/** Tenant roles that imply the executive persona. */
-const EXECUTIVE_ROLES = ["Executive", "HeadOfProjects", "HeadOfQA", "PlatformSuperAdmin"];
+/** Tenant roles that imply the executive persona. NOTE: PlatformSuperAdmin is NOT here.
+ * A super admin is not an executive wearing a different hat — they hold every access in
+ * the tenant, so they get EVERY persona (see derivedGroups) and the shell labels them as
+ * a super admin rather than pretending they are one of the five. */
+const EXECUTIVE_ROLES = ["Executive", "HeadOfProjects", "HeadOfQA"];
+
+/** The all-access role. Presentation only — RBAC already treats "*" as every permission. */
+export const SUPERADMIN_ROLE = "PlatformSuperAdmin";
+
+/** True when the viewer holds the tenant's all-access role. */
+export function isSuperAdmin(tenantRoles: readonly string[]): boolean {
+  return tenantRoles.includes(SUPERADMIN_ROLE);
+}
 
 const CATEGORY_GROUP: Record<ProjectRoleCategory, UserGroup | null> = {
   PM: "pm",
@@ -49,6 +60,9 @@ export function derivedGroups({ membershipCategories, tenantRoles, leadsProjects
   }
   if (tenantRoles.some((r) => EXECUTIVE_ROLES.includes(r))) groups.add("executive");
   if (leadsProjects) groups.add("pm");
+  // A super admin sees every view — they are not assigned a persona, they can wear all
+  // of them. Landing still follows LANDING_PRIORITY (executive first).
+  if (isSuperAdmin(tenantRoles)) for (const g of USER_GROUPS) groups.add(g);
   return [...groups];
 }
 

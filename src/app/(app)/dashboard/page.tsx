@@ -4,7 +4,7 @@ import { FileBarChart } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { withTenant } from "@/lib/tenant";
 import { can } from "@/lib/rbac";
-import { isUserGroup } from "@/lib/personas";
+import { isSuperAdmin, isUserGroup } from "@/lib/personas";
 import { getDevDashboard } from "@/server/dashboard-dev";
 import { getExecutiveDashboard } from "@/server/dashboard-exec";
 import { getImplDashboard } from "@/server/dashboard-impl";
@@ -62,9 +62,25 @@ export default async function DashboardPage({
     <div>
       {/* Header strip: identity + persona switcher + Reports tab (§6 — link, not a copy) */}
       <div className="mx-auto flex w-full max-w-[1360px] flex-wrap items-center gap-3.5 px-6 pt-[18px] [animation:rise_.5s_cubic-bezier(.22,1,.36,1)_both]">
-        <span className="font-mono rv:font-sans text-[10.5px] rv:text-overline font-semibold tracking-[2.4px] text-[var(--ink4)]">
-          {persona.toUpperCase()} VIEW · {session.user.tenantName?.toUpperCase()}
-        </span>
+        {/* A super admin is not an executive — they hold every access, so say so and let
+            the switcher move them through any view rather than labelling them a persona. */}
+        {isSuperAdmin(session.user.roles) ? (
+          <span className="flex items-center gap-2">
+            <span
+              className="rounded-[5px] px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[1px]"
+              style={{ color: "var(--brand)", background: "color-mix(in oklab, var(--brand) 12%, transparent)" }}
+            >
+              Super admin
+            </span>
+            <span className="font-mono rv:font-sans text-[10.5px] rv:text-overline font-semibold tracking-[2.4px] text-[var(--ink4)]">
+              ALL ACCESS · {session.user.tenantName?.toUpperCase()} · VIEWING AS {persona.toUpperCase()}
+            </span>
+          </span>
+        ) : (
+          <span className="font-mono rv:font-sans text-[10.5px] rv:text-overline font-semibold tracking-[2.4px] text-[var(--ink4)]">
+            {persona.toUpperCase()} VIEW · {session.user.tenantName?.toUpperCase()}
+          </span>
+        )}
         <PersonaSwitcher personas={personas} active={persona} />
         <Link href="/reports" className="flex items-center gap-1.5 font-mono text-[9.5px] font-bold uppercase tracking-[.8px] text-[var(--ink4)] transition-colors hover:text-[var(--qink)]">
           <FileBarChart className="size-3" /> Reports

@@ -11,6 +11,7 @@ import { MemberReportComposer } from "@/components/reports/member-report-compose
 import { TeamReports } from "@/components/reports/team-reports";
 import { PortfolioSections } from "@/components/dashboard/portfolio-sections";
 import { RolloutHeatmap } from "@/components/dashboard/rollout-heatmap";
+import { CheckinQueue } from "@/components/reports/checkin-queue";
 import { CARD, RAG_TOKEN } from "@/lib/surface";
 
 // M-P3c (docs/34 §1, docs/25 §6) — the THIN reports index. Authoring lives in the
@@ -23,7 +24,7 @@ import { CARD, RAG_TOKEN } from "@/lib/surface";
 // The standalone generate centre RETIRED here — Q's drawer still builds scoped pulls,
 // and share links under /reports/s/[token] keep working.
 
-type TabKey = "status" | "markets" | "focus" | "mine" | "team" | "projects" | "rollups";
+type TabKey = "status" | "markets" | "focus" | "mine" | "team" | "checkins" | "rollups";
 
 type Ctx = { tenantId: string; userId: string; roles: string[]; permissions?: string[] };
 
@@ -52,7 +53,7 @@ export default async function ReportsPage({
     ...(leads
       ? [
           { key: "team" as const, label: "Team reports" },
-          { key: "projects" as const, label: isHead ? "All project reports" : "My projects' reports" },
+          { key: "checkins" as const, label: isHead ? "Project check-ins" : "My projects' check-ins" },
         ]
       : []),
     ...(canReports ? [{ key: "rollups" as const, label: "Roll-ups" }] : []),
@@ -97,7 +98,7 @@ export default async function ReportsPage({
       {tab === "focus" && <FocusTab ctx={ctx} />}
       {tab === "mine" && <MineTab ctx={ctx} />}
       {tab === "team" && <TeamReports />}
-      {tab === "projects" && <ProjectReportsTab ctx={ctx} isHead={isHead} />}
+      {tab === "checkins" && <CheckinsTab ctx={ctx} isHead={isHead} />}
       {tab === "rollups" && <RollupsTab ctx={ctx} isHead={isHead} />}
     </main>
   );
@@ -274,64 +275,11 @@ async function MineTab({ ctx }: { ctx: Ctx }) {
   );
 }
 
-/** Project reports — my led projects (or all, for the Head), deep-linking into the
- * workspace Reports tab where authoring lives. */
-async function ProjectReportsTab({ ctx, isHead }: { ctx: Ctx; isHead: boolean }) {
+/** Check-ins — the per-project queue, grouped into portfolio tabs (M-D2). This moved off
+ * the exec dashboard, which now shows only the shape of the week and links here. */
+async function CheckinsTab({ ctx, isHead }: { ctx: Ctx; isHead: boolean }) {
   const rows = await listReportIndex(ctx);
-  return (
-    <>
-      <p className="text-[12.5px] text-[var(--ink3)]">
-        {isHead
-          ? "Every active project's latest report. Writing and confirming happens in each workspace's Reports tab."
-          : "Your projects' latest reports. Confirm and send from each workspace's Reports tab."}
-      </p>
-      <div className={CARD} style={{ background: "var(--cardbg)" }}>
-        {rows.length === 0 ? (
-          <p className="p-[12px_16px] text-[12px] text-[var(--ink5)]">No active projects{isHead ? "" : " led by you"} yet.</p>
-        ) : (
-          rows.map((r) => (
-            <div key={r.projectId} className="flex flex-wrap items-center gap-2.5 border-b border-[var(--hair2)] p-[10px_16px] last:border-0">
-              {r.latest ? (
-                <span className="size-2 flex-none rounded-full" style={{ background: `var(${RAG_TOKEN[r.latest.rag]})` }} />
-              ) : (
-                <span className="size-2 flex-none rounded-full border border-[var(--w10)]" />
-              )}
-              <span className="w-[86px] flex-none font-mono text-[10px] uppercase text-[var(--ink4)]">{r.code}</span>
-              <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-[var(--qink)]">{r.name}</span>
-              {isHead && <span className="flex-none text-[11px] text-[var(--ink4)]">{r.pmName ?? "unassigned"}</span>}
-              {r.latest ? (
-                <>
-                  <span className="flex-none font-mono text-[10px] text-[var(--ink4)]">{r.latest.isoWeek.replace("-W", " W")}</span>
-                  <span
-                    className="flex-none rounded-[5px] px-1.5 py-0.5 font-mono text-[8.5px] font-bold uppercase tracking-[.6px]"
-                    style={{
-                      color: `var(${r.latest.status === "Confirmed" ? "--ok" : "--warn"})`,
-                      background: `color-mix(in oklab, var(${r.latest.status === "Confirmed" ? "--ok" : "--warn"}) 10%, transparent)`,
-                    }}
-                  >
-                    {r.latest.status}
-                  </span>
-                  {r.latest.sentToHead && (
-                    <span className="flex-none rounded-full px-2 py-0.5 font-mono text-[8.5px] font-bold uppercase tracking-[.6px]" style={{ color: "var(--ok)", background: "color-mix(in oklab, var(--ok) 10%, transparent)" }}>
-                      sent to Head
-                    </span>
-                  )}
-                </>
-              ) : (
-                <span className="flex-none font-mono text-[9px] uppercase text-[var(--ink5)]">no report yet</span>
-              )}
-              <Link
-                href={`/projects/${r.projectId}?tab=Reports`}
-                className="flex-none rounded-[7px] border border-[var(--w07)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)]"
-              >
-                Open Reports →
-              </Link>
-            </div>
-          ))
-        )}
-      </div>
-    </>
-  );
+  return <CheckinQueue rows={rows} isHead={isHead} />;
 }
 
 /** Roll-ups — the archive of the Head's weekly roll-up: CSV export now, PDF deferred

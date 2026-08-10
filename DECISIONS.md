@@ -2338,3 +2338,32 @@ feature milestone deliberately: a bad disk on the box had no recovery path.
 **Verified**: lint/typecheck/build green, 824/824 (3 new); the health gate proved itself on
 its own first deploy (`{"status":"ok","db":"ok","latencyMs":1}`); backup + restore-verify
 run twice on the box; dump permissions, cron idempotency and scratch-DB cleanup all checked.
+
+## DM1.70 — A super admin is not a persona; the dashboard stops listing every project
+
+Three corrections from Joyce, 2026-08-07.
+
+- **`PlatformSuperAdmin` no longer implies the "executive" persona.** It was in
+  `EXECUTIVE_ROLES`, so the super admin was shown as an executive — a role they do not
+  hold. They now derive **every** persona (all five views are theirs to switch between)
+  and the dashboard header labels them **Super admin · ALL ACCESS · viewing as X** rather
+  than pretending they are one of the five. Presentation only — RBAC already granted `*`.
+  Personas are baked into the session (DM1.7), so an existing session picks this up at the
+  next sign-in, not immediately.
+- **The exec dashboard stopped listing all 25–37 projects.** The check-in panel is now
+  four KPIs plus one link; the per-project queue moved to **/reports?tab=checkins**,
+  grouped into **portfolio tabs** (All · AI Initiatives · ZED ERP · Swipe · Unassigned)
+  with an outstanding count per tab and an "outstanding only" filter. One place to work
+  through them instead of an endless list wedged between the exec's other panels.
+- **PMs already could not reach /admin** — `admin:access` is granted to
+  PlatformSuperAdmin, HeadOfProjects and HeadOfQA only, the nav item is permission-gated,
+  and `(app)/admin/layout.tsx` refuses the whole subtree with `<Forbidden/>`. Verified,
+  not changed. PMs do keep **Staffing** (`project:create`), which is intended (M-P1d).
+
+Also fixed a pre-existing flaky assertion found in passing: the PM action-queue test took
+the FIRST blocker row and asserted its title, so seed data outranking the fixture failed a
+test that had nothing to do with the code under test. It now scopes to its own fixture.
+
+**Verified**: lint/typecheck/build green, 824/824. Live: super-admin badge with all five
+persona tabs, dashboard link reading "Work through the 25 project check-ins", the new tab
+filtering to 3 rows for Market Rollout with no leakage, no console errors.

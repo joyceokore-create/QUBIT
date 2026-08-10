@@ -116,8 +116,11 @@ describe("M1b dashboard presets", () => {
     expect(kinds).toContain("drafts");
     expect(kinds).toContain("blocker");
     expect(kinds).toContain("slipping");
-    const blockerRow = d.actionQueue.find((r) => r.kind === "blocker")!;
-    expect(blockerRow.title).toContain("Waiting on DBA window");
+    // Scope to THIS suite's own blocker. Taking the first "blocker" row asserted against
+    // whatever the seed happens to rank highest, so the test failed for reasons that had
+    // nothing to do with the code under test.
+    const blockerRows = d.actionQueue.filter((r) => r.kind === "blocker");
+    expect(blockerRows.some((r) => r.title.includes("Waiting on DBA window"))).toBe(true);
   });
 
   it("PM: scope is a default filter, never a wall (DM1.20)", async () => {

@@ -4,7 +4,6 @@ import { ArrowRight } from "lucide-react";
 import type { DecisionQueueRow, ExecutiveDashboard, HeadQueueRow } from "@/server/dashboard-exec";
 import { RollupStrip } from "@/components/dashboard/rollup-strip";
 import { groupSectionsByCategory } from "@/server/pipeline";
-import { statusBarTok } from "@/lib/project-view";
 import { Sparkline } from "@/components/dashboard/sparkline";
 import { NeedsAttentionList } from "@/components/dashboard/needs-attention";
 import { PortfolioSections } from "@/components/dashboard/portfolio-sections";
@@ -157,14 +156,19 @@ function PortfolioCards({ d }: { d: ExecutiveDashboard }) {
 /** docs/32 M-W1b — Head of PMs only: this week's check-in state per active project.
  * Review-only; the approve step arrives with the Head roll-up (PortfolioReport, P3). */
 function HeadQueue({ rows, awaiting }: { rows: HeadQueueRow[]; awaiting: boolean }) {
+  // M-D2: the dashboard shows the SHAPE of the week, not 30-odd rows. The per-project
+  // queue lives on the reports page, grouped by portfolio — one place to work through
+  // them instead of an endless list wedged between the exec's other panels.
+  const confirmed = rows.filter((r) => r.checkIn === "Confirmed").length;
+  const unconfirmed = rows.length - confirmed;
   const kpis = [
-    { n: rows.filter((r) => r.checkIn === "Confirmed").length, label: "PM check-ins in", tok: "--ok" },
-    { n: rows.filter((r) => r.checkIn !== "Confirmed").length, label: "Unconfirmed", tok: "--warn" },
+    { n: confirmed, label: "PM check-ins in", tok: "--ok" },
+    { n: unconfirmed, label: "Unconfirmed", tok: "--warn" },
     { n: rows.filter((r) => r.status === "Overdue" || r.status === "AtRisk").length, label: "Red/amber projects", tok: "--bad" },
     { n: awaiting ? 1 : 0, label: "Awaiting my approval", tok: "--qinfo", note: awaiting ? "this week's roll-up" : "all signed" },
   ];
   return (
-    <Panel title="PM check-ins this week" sub={`${rows.filter((r) => r.checkIn !== "Confirmed").length} NOT CONFIRMED`}>
+    <Panel title="PM check-ins this week" sub={`${unconfirmed} NOT CONFIRMED`}>
       <div className="grid grid-cols-2 gap-2.5 p-[10px_16px_2px] sm:grid-cols-4">
         {kpis.map((k) => (
           <div key={k.label} className="rounded-[10px] border border-[var(--w08)] p-2.5">
@@ -174,47 +178,14 @@ function HeadQueue({ rows, awaiting }: { rows: HeadQueueRow[]; awaiting: boolean
           </div>
         ))}
       </div>
-      <div className="flex flex-col">
-        {rows.length === 0 && <Empty>No active projects.</Empty>}
-        {rows.map((r) => {
-          const dot = `var(${statusBarTok(r.status)})`;
-          return (
-            <Link
-              key={r.projectId}
-              href={`/projects/${r.projectId}`}
-              className="group flex items-center gap-3 border-b border-[var(--w06)] py-2 text-[12.5px] last:border-0 hover:bg-[var(--wash2)]"
-            >
-              <span className="size-2 flex-none rounded-full" style={{ background: dot }} />
-              <span className="min-w-0 flex-1 truncate font-semibold text-[var(--qink)]">
-                {r.code} · {r.name}
-              </span>
-              <span className="hidden text-[11px] text-[var(--ink4)] sm:block">{r.pmName ?? "no PM"}</span>
-              <span
-                className="rounded-full px-2 py-0.5 text-[10px] font-bold"
-                style={
-                  r.checkIn === "Confirmed"
-                    ? { background: "color-mix(in oklab, var(--ok) 12%, transparent)", color: "var(--ok)" }
-                    : r.checkIn === "Draft"
-                      ? { background: "color-mix(in oklab, var(--warn) 12%, transparent)", color: "var(--warn)" }
-                      : { background: "var(--wash2)", color: "var(--ink4)" }
-                }
-              >
-                {r.checkIn === "None" ? "No check-in" : r.checkIn}
-              </span>
-              <span className="hidden flex-none items-center gap-1 rounded-[7px] border border-[var(--w10)] px-2 py-1 font-mono text-[9px] font-bold text-[var(--ink3)] group-hover:text-[var(--brand)] sm:flex">
-                Review <ArrowRight className="size-2.5" />
-              </span>
-            </Link>
-          );
-        })}
-      </div>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <a href="/api/export?kind=projects" className="rounded-[8px] border border-[var(--w10)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--ink2)]">
-          ⤓ Export projects (CSV)
-        </a>
-        <a href="/api/export?kind=allocations" className="rounded-[8px] border border-[var(--w10)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--ink2)]">
-          ⤓ Export allocations (CSV)
-        </a>
+      <div className="flex flex-wrap items-center gap-2 p-[10px_16px_14px]">
+        <Link
+          href="/reports?tab=checkins"
+          className="flex items-center gap-1.5 rounded-[8px] bg-[var(--brand)] px-3 py-1.5 text-[11.5px] font-bold text-[var(--onbrand)]"
+        >
+          Work through the {rows.length} project check-ins <ArrowRight className="size-3" />
+        </Link>
+        <span className="text-[11px] text-[var(--ink4)]">grouped by portfolio on the reports page</span>
       </div>
     </Panel>
   );
