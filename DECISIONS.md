@@ -2554,3 +2554,35 @@ Two things worth recording from writing it:
   build → approve), so the test also guards that guarantee.
 
 **Verified**: lint/typecheck green, 844/844 (2 new).
+
+## DM1.75 — The scheduled jobs were documented but never installed (production)
+
+Chasing docs/37's honest note about the nudger's morning-only schedule turned up something
+larger: **none of the scheduled jobs had ever run in production.** The box crontab held
+only the backup lines from DM1.69, `CRON_SECRET` was not set in `.env.production`, and
+`project_snapshot`, `portfolio_snapshot`, `nudge` and `job_run` were all at **zero rows**.
+
+Consequences that were live until today, and worth being blunt about:
+- **Every week-on-week delta and sparkline had no history to read.** The exec health trend,
+  the PM's Δ column and the "what changed" feed were not wrong — they correctly showed
+  "no history" — but the feature was dark, and would have stayed dark indefinitely.
+- **No nudge had ever fired.** The whole M3 nudger, its escalation ladder, leave-aware
+  rerouting and snooze machinery were unreachable in production.
+
+Fixed:
+- **`scripts/run-cron-job.sh <job>`** — reads `CRON_SECRET` from `.env.production` at run
+  time and calls the internal endpoint. Deliberately NOT the curl line docs/deployment.md
+  showed: that put the secret in the crontab, where `crontab -l` and every crontab backup
+  would carry it, duplicated per job. The crontab now holds only a job name. Uses
+  `curl --fail` so an HTTP error is an exit code rather than a silently logged error body.
+- **`scripts/install-cron.sh`** — idempotent (`# qubit-job` lines replaced, the backup
+  lines untouched). Schedule: nightly-snapshot 23:55 daily · nudger 07:30 Mon–Fri ·
+  **nudger 17:30 Friday** (the deadline sweep docs/37 said the morning-only cron could not
+  cover) · checkin-chase 10:00 Monday.
+- `CRON_SECRET` generated **on the box** with `openssl rand`, appended to
+  `.env.production` (timestamped backup taken first), app container recreated so it reads.
+
+**Verified on production**: all three jobs ran green — nightly-snapshot wrote **37 project
+snapshots + 1 portfolio snapshot**, nudger created **4 nudges** (`task_stale`),
+checkin-chase correctly found nothing (no unconfirmed check-in last week); `job_run` shows
+3 × Succeeded; and `crontab -l` contains no secret.

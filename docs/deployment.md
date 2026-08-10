@@ -135,6 +135,18 @@ the schema (or run migrations as an owner). Everything else is unchanged.
 
 ## Scheduled jobs (M1+)
 
+> **Installed via `scripts/install-cron.sh` (DM1.75), not by hand.** The crontab lines
+> below are the historical documentation of the schedule; the installer is what actually
+> puts them on the box, and it routes every job through `scripts/run-cron-job.sh <job>`
+> so **`CRON_SECRET` never appears in the crontab** (where `crontab -l` and every crontab
+> backup would carry it). Re-running the installer is idempotent.
+>
+> These jobs were documented here for months but had never been installed: before
+> DM1.75 the box crontab held only the backup lines, `CRON_SECRET` was unset, and
+> `project_snapshot` / `portfolio_snapshot` / `nudge` / `job_run` were all EMPTY in
+> production — so every week-on-week delta and sparkline had no history to read and no
+> nudge had ever fired.
+
 The app exposes `POST /api/internal/cron` (guarded by `CRON_SECRET`, DM1.15 №4). The
 box's crontab drives it — one line per job. Nightly snapshots (KPI sparklines, delta
 feed, M2 check-in drafts) run at 23:55 East Africa Time:
