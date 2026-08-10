@@ -2398,3 +2398,29 @@ the surface. Joyce spotted their absence ("there was a wizard in place for this"
 now walks all five rungs plus provenance — including the retired-member case — and the
 rail/panel were read back from the live page (`Draft (computed)` current, "0 of 5 member
 updates · 2/3 gates done · 1 open blocker", no "Deleted user").
+
+## DM1.72 — The org-setup wizard retires; bulk people import survives it
+
+Joyce, 2026-08-07: "this system will only be for riverbank and its brand colours are
+already coded." A first-run wizard for configuring brand, markets, departments,
+checkpoint templates and a first portfolio has nothing left to configure when there is
+one tenant and all of that is settled.
+
+- **Removed**: `/setup` (page + wizard), `/api/org-setup/[action]`, `src/server/
+  org-setup.ts`, the "Finish setting up QUBIT" banner in the app shell, and the
+  `tenant.setup_completed_at` column that existed only to decide whether to show it.
+- **KEPT, relocated**: the CSV people import. Deleting it with the wizard would have
+  destroyed the only bulk-invite path days before the YouTrack user list arrives — the
+  wizard was pointless, that step is not. It is now `src/server/people-import.ts` +
+  `/api/admin/people-import`, surfaced as an **Import people (CSV)** panel on
+  Admin → Users, and re-gated from super-admin-only to **`users:invite`**, so the Head
+  of PMs can onboard their own people (minting a Super Admin stays separately guarded
+  inside `createUser`, so a CSV column cannot escalate).
+- docs/31-p1e keeps its place in the pack as the record of what was built and why it
+  went; it is marked retired rather than deleted.
+
+**Verified**: lint/typecheck/build green, 829/829. The old wizard test was replaced by
+`tests/rls/people-import.test.ts`, which pins what actually matters now: parsing reports
+bad rows by line BEFORE any write, good rows land as INVITED with a null password and a
+copyable invite link, a duplicate fails alone instead of aborting the batch, and a plain
+member cannot invite at all.

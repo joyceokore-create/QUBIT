@@ -24,7 +24,6 @@ model Tenant {
   // M-P1e (docs/31) — stamped when the org-setup wizard finishes; NULL shows the
   // "finish setting up" banner to Super Admins. Existing tenants were backfilled
   // (they were bootstrapped by script/seed, not by the wizard).
-  setupCompletedAt DateTime? @map("setup_completed_at")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 

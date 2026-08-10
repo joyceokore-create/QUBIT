@@ -5,6 +5,7 @@ import type { AdminUserSummary } from "@/server/users";
 import type { DepartmentSummary } from "@/server/departments";
 import { UserRowActions } from "./user-row-actions";
 import { CARD_GLASS as CARD } from "@/lib/surface";
+import { PeopleImportPanel } from "@/components/admin/people-import-panel";
 
 export interface AdminInsight {
   text: string;
@@ -85,6 +86,8 @@ export function UsersClient({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* DM1.72 — bulk invite, relocated here when the org-setup wizard retired. */}
+      <PeopleImportPanel />
       {/* Onboarding overview — each tile filters the directory */}
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6 [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.06s_both]">
         <div className={`${CARD} p-[14px_16px]`} style={{ background: "radial-gradient(300px 120px at 50% -40%, color-mix(in oklab, var(--ok) 16%, transparent), transparent 65%), var(--cardbg)" }}>
