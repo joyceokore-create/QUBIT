@@ -2530,3 +2530,27 @@ review pass over the full diff (its four findings — a broken RLS roll-up test,
 local-time nudger gate, a self-nudging PM, an idea-title overflow — are fixed). The RLS
 suite needs the Prisma engine binary, unavailable in the cloud sandbox this was authored
 in — run `pnpm test` + `pnpm build` locally before deploying. docs/37 holds the full audit.
+
+## DM1.74 — "One health engine" is now enforced across the chain, not just asserted
+
+docs/37 Part 3 §2's last open item. DM1.73 fixed the read paths so a PM's RAG override
+reaches every surface; nothing stopped the next surface from growing its own
+classification again. `tests/rls/rag-parity-chain.test.ts` closes that:
+
+- A confirmed check-in with a **Red override on an OnTrack project** must read Red on the
+  estate (pipeline rows → dashboard, /projects, portfolio pages), in the Head's roll-up,
+  and in the roll-up **CSV** an executive receives. Any surface that reverts to
+  `Project.status` fails the suite.
+- Flipping the typed status to Overdue underneath must not make the surfaces disagree —
+  they are pinned equal to each other, not just to a literal.
+
+Two things worth recording from writing it:
+- The display RAG lives at `PipelineRow.chips.health`, not a top-level field — a
+  reasonable-looking guess returned null and the test failed honestly rather than passing
+  on a wrong path.
+- The fixture originally confirmed a check-in and approved the roll-up without sending it
+  to the Head, and `approveRollup` **refused** with `UNSENT_CHECKINS` — DM1.73's T7 fix
+  working exactly as intended. The fixture now walks the real chain (confirm → send →
+  build → approve), so the test also guards that guarantee.
+
+**Verified**: lint/typecheck green, 844/844 (2 new).
