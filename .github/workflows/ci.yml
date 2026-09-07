@@ -41,6 +41,10 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # `pnpm install` does not run prisma's postinstall generate here (hoisted linker),
+      # and `migrate deploy` never generates — without this every downstream step that
+      # imports @prisma/client dies with MODULE_NOT_FOUND.
+      - run: pnpm prisma generate
       - run: pnpm prisma migrate deploy
       - run: pnpm prisma db seed
       - run: pnpm lint
@@ -72,6 +76,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm prisma generate
       - run: pnpm prisma migrate deploy
       - run: pnpm prisma db seed
       - run: npx playwright install --with-deps chromium
