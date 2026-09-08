@@ -1,0 +1,3 @@
+# Default reviewers for everything. Only enforced if "require review from Code Owners"
+# is enabled in branch protection; otherwise this just powers automatic review requests.
+* @joyceokore-create @almwilu
