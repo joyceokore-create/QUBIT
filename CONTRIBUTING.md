@@ -6,16 +6,18 @@ first; when in doubt, they win.
 
 ## Workflow at a glance
 
-1. Branch off `main`, do one milestone/change per branch, open a PR.
+1. Branch off `Development`, do one milestone/change per branch, open a PR **targeting `Development`**.
 2. CI (`gates`) must be green and one teammate must approve.
 3. Squash-merge with a Conventional-Commits PR title. The branch auto-deletes.
-4. Deploy only from green `main`, via `./scripts/deploy.sh`.
+4. To release: open a `Development` → `main` PR. Deploy only from green `main`, via `./scripts/deploy.sh`.
 
-Nobody pushes directly to `main` — including repo admins.
+Nobody pushes directly to `main` or `Development` — including repo admins.
 
 ## Branches
 
-- Branch from up-to-date `main`: `git switch main && git pull && git switch -c <type>/<short-name>`
+- `main` — what runs in production. Only receives `Development` → `main` release PRs.
+- `Development` — the integration branch all feature PRs target.
+- Branch from up-to-date `Development`: `git switch Development && git pull && git switch -c <type>/<short-name>`
 - Types mirror commit types: `feat/…`, `fix/…`, `docs/…`, `ci/…`, `refactor/…`, `chore/…`, `test/…`
 - Keep branches short-lived (days, not weeks). One milestone or one coherent change per PR —
   the same scope discipline as `docs/10-build-plan.md`'s "one milestone at a time".
