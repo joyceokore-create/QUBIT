@@ -55,6 +55,7 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null }: 
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(ssoError);
   const [loading, setLoading] = useState(false);
+  const [ssoLoading, setSsoLoading] = useState(false);
   const [org, setOrg] = useState<OrgLookup>({ status: "idle" });
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -101,9 +102,11 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null }: 
 
   function handleMicrosoftSignIn() {
     setError(null);
-    // Full-page redirect out to Entra; MFA (if the org requires it) happens there, and a
-    // completed Microsoft authentication comes back as an active session.
-    void signIn(SSO_PROVIDER_ID, { redirectTo: callbackUrl });
+    // The spinner stays on until the full-page redirect to Entra actually navigates away;
+    // MFA (if the org requires it) happens there, and a completed Microsoft authentication
+    // comes back as an active session.
+    setSsoLoading(true);
+    void signIn(SSO_PROVIDER_ID, { redirectTo: callbackUrl }).catch(() => setSsoLoading(false));
   }
 
   const resolved = org.status === "found";
@@ -129,26 +132,38 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null }: 
           : "Your organization is resolved from your email — no picker."}
       </p>
 
+      {/* SSO configured → Microsoft is the ONLY sign-in method (the reference design).
+          The password form below exists solely as the fallback while SSO is not set up. */}
       {ssoEnabled && (
         <>
           <button
             type="button"
             onClick={handleMicrosoftSignIn}
-            className="flex w-full items-center justify-center gap-2.5 rounded-[11px] bg-[#1f1f1f] px-[13px] py-[11px] text-[13.5px] font-semibold text-white outline-none transition-transform hover:-translate-y-[2px] focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#1f1f1f]"
+            disabled={ssoLoading}
+            aria-busy={ssoLoading}
+            className="flex w-full items-center justify-center gap-2.5 rounded-[11px] bg-[#1f1f1f] px-[13px] py-[11px] text-[13.5px] font-semibold text-white outline-none transition-transform hover:-translate-y-[2px] focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#1f1f1f] disabled:translate-y-0 disabled:opacity-75"
             style={{ boxShadow: "0 4px 20px rgba(0,0,0,.35)" }}
           >
-            <MicrosoftMark />
-            Continue with Microsoft
+            {ssoLoading ? (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="size-[15px] animate-spin rounded-full border-2 border-white/30 border-t-white"
+                />
+                Connecting to Microsoft…
+              </>
+            ) : (
+              <>
+                <MicrosoftMark />
+                Continue with Microsoft
+              </>
+            )}
           </button>
-
-          <div className="mt-5 mb-4 flex items-center gap-2.5" aria-hidden="true">
-            <span className="flex-1 border-b border-[var(--l-hair)]" />
-            <span className="font-sans text-[9px] font-semibold uppercase tracking-[1.6px] text-[var(--l-ink-3)]">or</span>
-            <span className="flex-1 border-b border-[var(--l-hair)]" />
-          </div>
+          {error && <p role="alert" className="mt-3 text-[12px] text-[var(--l-err)]">{error}</p>}
         </>
       )}
 
+      {!ssoEnabled && (
       <form onSubmit={handleSubmit} className="flex flex-col gap-2.5" noValidate>
         <input id="email" type="email" autoComplete="email" required placeholder="you@company.com" className={INPUT_CLASS} value={email} onChange={(e) => setEmail(e.target.value)} />
 
@@ -183,8 +198,9 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null }: 
           {loading ? "Signing in…" : "Sign in"}
         </button>
       </form>
+      )}
 
-      {SHOW_QUICK_SIGN_INS && (
+      {!ssoEnabled && SHOW_QUICK_SIGN_INS && (
         <>
           <div className="mt-5 mb-2.5 flex items-center gap-2.5">
             <span className="flex-1 border-b border-[var(--l-hair)]" />

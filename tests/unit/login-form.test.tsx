@@ -26,11 +26,16 @@ describe("LoginForm (SSO-era)", () => {
     expect(screen.queryByRole("button", { name: /continue with microsoft/i })).toBeNull();
   });
 
-  it("shows the Microsoft button when SSO is configured, and it starts the Entra flow", () => {
+  it("SSO configured → Microsoft-only: the password form and quick sign-in disappear", () => {
     render(<LoginForm callbackUrl="/dashboard" ssoEnabled />);
     const ms = screen.getByRole("button", { name: /continue with microsoft/i });
+    expect(document.querySelector("#email")).toBeNull();
+    expect(document.querySelector("#password")).toBeNull();
+    expect(screen.queryByRole("button", { name: /riverbank/i })).toBeNull();
     fireEvent.click(ms);
     expect(signIn).toHaveBeenCalledWith("microsoft-entra-id", { redirectTo: "/dashboard" });
+    // Loader state: the button disables and announces progress until the redirect navigates.
+    expect(screen.getByRole("button", { name: /connecting to microsoft/i })).toBeDisabled();
   });
 
   it("renders an SSO callback error", () => {
