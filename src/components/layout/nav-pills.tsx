@@ -10,15 +10,18 @@ interface NavPillsProps {
   canStaff: boolean;
   /** docs/32 §0.3 — member-only viewers get the slim nav. */
   memberOnly: boolean;
+  /** Viewer's canonical roles + the module→allowedRoles registry, for module gating. */
+  roles?: readonly string[];
+  moduleAllowedRoles?: Record<string, readonly string[]>;
 }
 
-export function NavPills({ canAccessAdmin, canStaff, memberOnly }: NavPillsProps) {
+export function NavPills({ canAccessAdmin, canStaff, memberOnly, roles, moduleAllowedRoles }: NavPillsProps) {
   const pathname = usePathname();
 
   return (
     <nav className="flex flex-1 gap-1">
       {(() => {
-        const items = visibleNavItems({ canAccessAdmin, canStaff, memberOnly });
+        const items = visibleNavItems({ canAccessAdmin, canStaff, memberOnly, roles, moduleAllowedRoles });
         const activeHref = activeNavHref(pathname, items);
         return items.map((tab) => {
         const active = tab.href === activeHref;

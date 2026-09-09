@@ -4,19 +4,19 @@ import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { hashPassword, validatePasswordPolicy, isPasswordReused, pushPasswordHistory } from "@/lib/password";
 import { mintInvite } from "@/server/invites";
-import { ROLE_PERMISSIONS } from "@/lib/rbac";
+import { assignableRoleNames } from "@/server/role-permissions";
 import { derivedGroups, USER_GROUPS } from "@/lib/personas";
 import { PROJECT_ROLES, projectRoleCategory } from "@/lib/roles";
 import { mfaRequired } from "@/lib/mfa-policy";
-
-const ROLE_KEYS = Object.keys(ROLE_PERMISSIONS) as [string, ...string[]];
 
 export const CreateUserInput = z.object({
   name: z.string().min(1),
   email: z.string().email(),
   // M-O3 (docs/22): no admin-supplied password. The invitee sets their own via an emailed
   // one-time link, so a temp password is never generated, displayed, or transported.
-  roles: z.array(z.enum(ROLE_KEYS)).min(1),
+  // Role names are validated in the engine against canonical + ACTIVE custom roles —
+  // a static enum can't know the tenant's custom roles.
+  roles: z.array(z.string().min(1)).min(1),
   departmentId: z.string().min(1).nullable().optional(),
   // Optional placement at invite time — so PMs/developers land on a team + project.
   teamId: z.string().min(1).nullable().optional(),
@@ -31,7 +31,8 @@ export const CreateUserInput = z.object({
 export type CreateUserInput = z.infer<typeof CreateUserInput>;
 
 export const UpdateRolesInput = z.object({
-  roles: z.array(z.enum(ROLE_KEYS)).min(1),
+  // Validated in updateUserRoles against canonical + ACTIVE custom roles (see CreateUserInput).
+  roles: z.array(z.string().min(1)).min(1),
 });
 export type UpdateRolesInput = z.infer<typeof UpdateRolesInput>;
 
@@ -207,6 +208,13 @@ export async function createUser(ctx: TenantContext, input: CreateUserInput): Pr
       throw new UserAdminError("A user with this email already exists.", "EMAIL_TAKEN");
     }
 
+    // Role names must be canonical or an ACTIVE custom role of this tenant.
+    const validRoles = new Set(await assignableRoleNames(tx, ctx.tenantId));
+    const unknownRoles = input.roles.filter((r) => !validRoles.has(r));
+    if (unknownRoles.length > 0) {
+      throw new UserAdminError(`Unknown or inactive role: ${unknownRoles.join(", ")}.`, "BAD_ROLE");
+    }
+
     // Optional org unit — validate it belongs to this tenant (RLS scopes the lookup).
     if (input.departmentId) {
       const dept = await tx.department.findUnique({ where: { id: input.departmentId }, select: { id: true } });
@@ -296,6 +304,15 @@ export async function updateUserRoles(
   await withTenant(ctx, async (tx) => {
     const current = await tx.roleAssignment.findMany({ where: { userId } });
     const currentRoles = current.map((r) => r.role);
+
+    // Only roles being ADDED must be canonical or ACTIVE custom — keeping an existing
+    // assignment (even of a since-deactivated custom role) is always allowed, so editing
+    // a user's other roles never trips over a deactivated one they already hold.
+    const validRoles = new Set(await assignableRoleNames(tx, ctx.tenantId));
+    const unknownRoles = roles.filter((r) => !currentRoles.includes(r) && !validRoles.has(r));
+    if (unknownRoles.length > 0) {
+      throw new UserAdminError(`Unknown or inactive role: ${unknownRoles.join(", ")}.`, "BAD_ROLE");
+    }
 
     // Privilege-escalation guard: only a Super Admin may promote someone TO Super Admin.
     // (Revoking an existing grant, or a no-op, is unaffected.)

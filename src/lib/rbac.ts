@@ -17,6 +17,7 @@
 // preserves those by granting them to the appropriate canonical roles; each route migrates
 // to the finer-grained new keys / src/lib/access.ts helpers in its own phase (see DECISIONS.md).
 import type { TenantContext } from "@/lib/tenant";
+import { CATALOGUE_PERMISSION_CODES } from "@/lib/catalogue";
 
 /** The six tenant roles the product consolidated to (PROMPT §1). Multi-role users allowed. */
 export const CANONICAL_ROLES = [
@@ -98,6 +99,8 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     "admin:access",
     "users:invite",
     "teams:manage:all",
+    "app_modules:read", // browse the module/permission registry (tuma's *_VIEW grants)
+    "permissions:read",
     "portfolio:create", // docs/27 §1.4 — New portfolio is Exec/Head territory
     "programme:create",
     "staffing:manage", // docs/26 §4.3 — fill/decline resource requests, see the bench
@@ -123,6 +126,8 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     "admin:access",
     "users:invite",
     "teams:manage:all",
+    "app_modules:read",
+    "permissions:read",
     "project:create",
     "project:stage", // docs/18 §7 — governance fields, not delivery scope
     "budget:read",
@@ -160,53 +165,10 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
   Member: [...BASE],
 };
 
-/** The fixed, browsable permission catalogue (FR-IAM-04). Extend as new modules land. */
-export const PERMISSION_CATALOGUE = [
-  // Reads
-  "dashboard:read",
-  "portfolio:read",
-  "programme:read",
-  "project:read",
-  "risk:read",
-  "issue:read",
-  "task:read",
-  "blocker:read",
-  "milestone:read",
-  "document:read",
-  "reports:read",
-  // Admin & IAM
-  "admin:access",
-  "users:invite",
-  "users:create",
-  "users:suspend",
-  "users:roles",
-  "users:reset",
-  "roles:manage", // edit role → permission sets (PlatformSuperAdmin only)
-  "departments:manage",
-  // Teams
-  "teams:create",
-  "teams:manage:own",
-  "teams:manage:all",
-  // Projects & delivery
-  "project:create",
-  "project:write",
-  "project:update",
-  "project:stage",
-  "project:join:request",
-  "milestone:write",
-  "task:write",
-  "risk:write",
-  "issue:write",
-  "blocker:write",
-  // Budget & reporting
-  "budget:read",
-  "report:resource:self",
-  "report:resource:others",
-  "report:portfolio",
-  // Front of funnel (M-P4a)
-  "idea:create",
-  "idea:triage",
-] as const;
+/** The browsable permission catalogue (FR-IAM-04). Now DERIVED from src/lib/catalogue.ts,
+ * the single source of truth that also seeds the `permission` table. Kept as a named export
+ * so existing consumers (roles editor, validation) are unchanged. */
+export const PERMISSION_CATALOGUE: readonly string[] = CATALOGUE_PERMISSION_CODES;
 
 export interface Scope {
   type: "portfolio" | "orgUnit" | "project" | "department";

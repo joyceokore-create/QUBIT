@@ -37,9 +37,11 @@ interface UserRowActionsProps {
   canGrantSuperAdmin?: boolean;
   /** users:reset — admin-initiated password reset links (M-O3). Super Admin only. */
   canResetPassword?: boolean;
+  /** ACTIVE custom role names — offered in the edit-roles dialog. */
+  customRoles?: string[];
 }
 
-export function UserRowActions({ user, currentUserId, departments, users, canManage, canGrantSuperAdmin = false, canResetPassword = false }: UserRowActionsProps) {
+export function UserRowActions({ user, currentUserId, departments, users, canManage, canGrantSuperAdmin = false, canResetPassword = false, customRoles = [] }: UserRowActionsProps) {
   const { busy, mutate } = useAdminMutation();
   const [editOpen, setEditOpen] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(false);
@@ -159,7 +161,7 @@ export function UserRowActions({ user, currentUserId, departments, users, canMan
         </AlertDialogContent>
       </AlertDialog>
 
-      <EditRolesDialog user={user} open={editOpen} onOpenChange={setEditOpen} canGrantSuperAdmin={canGrantSuperAdmin} />
+      <EditRolesDialog user={user} open={editOpen} onOpenChange={setEditOpen} canGrantSuperAdmin={canGrantSuperAdmin} customRoles={customRoles} />
       <EditGroupsDialog user={user} open={groupsOpen} onOpenChange={setGroupsOpen} />
       <EditDepartmentDialog
         user={user}

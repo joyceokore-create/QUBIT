@@ -8,6 +8,7 @@ import { prisma } from "../src/lib/db";
 import { withTenant } from "../src/lib/tenant";
 import { hashPassword } from "../src/lib/password";
 import { portfolioHealth } from "../src/server/health";
+import { syncCatalogue } from "../src/server/catalogue-sync";
 
 // LOCAL DEV / DEMO ONLY — every seeded user shares this password so any of them can be
 // used to test role-based views. Never reused for real accounts or non-local environments.
@@ -1719,6 +1720,12 @@ async function main() {
     const exists = await prisma.accessRequest.findFirst({ where: { email: r.email } });
     if (!exists) await prisma.accessRequest.create({ data: r });
   }
+
+  // Global RBAC catalogue (app_module + permission) — mirrored from src/lib/catalogue.ts.
+  // Idempotent; also runs on server boot via src/instrumentation.ts, but seeding it here
+  // means a freshly seeded DB (and the test suite) has the catalogue present.
+  const cat = await syncCatalogue(prisma);
+  console.log(`Synced catalogue: ${cat.modules} modules, ${cat.permissions} permissions.`);
 
   console.log(`Seeded ${riverbank.name} (slug: ${riverbank.slug}) + fixture ${demoB.name} (slug: ${demoB.slug}).`);
 }

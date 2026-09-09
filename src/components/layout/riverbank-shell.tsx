@@ -16,6 +16,8 @@ interface RiverbankShellProps {
   canAccessAdmin: boolean;
   canStaff: boolean;
   memberOnly: boolean;
+  roles?: readonly string[];
+  moduleAllowedRoles?: Record<string, readonly string[]>;
   canSwitchTenant: boolean;
   tenants: { slug: string; name: string }[];
   tenantSlug: string;
@@ -32,6 +34,8 @@ export function RiverbankShell({
   canAccessAdmin,
   canStaff,
   memberOnly,
+  roles,
+  moduleAllowedRoles,
   canSwitchTenant,
   tenants,
   tenantSlug,
@@ -101,7 +105,7 @@ export function RiverbankShell({
     };
   }, [mobileOpen]);
 
-  const items = visibleNavItems({ canAccessAdmin, canStaff, memberOnly });
+  const items = visibleNavItems({ canAccessAdmin, canStaff, memberOnly, roles, moduleAllowedRoles });
   const activeHref = activeNavHref(pathname, items);
   // Labels show when expanded on desktop, or always inside the mobile drawer.
   const labelled = open || mobileOpen;

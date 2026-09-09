@@ -55,6 +55,7 @@ model Tenant {
   projectMilestones   ProjectMilestone[]
   sharedReports       SharedReport[]
   rolePermissions     RolePermission[]
+  customRoles         CustomRole[]
   joinRequests        JoinRequest[]
 
   // ── Revamp M0–M2 backbone (docs/16-revamp-plan.md §10) ──
@@ -764,6 +765,61 @@ model RolePermission {
   @@unique([tenantId, role, permission])
   @@index([tenantId, role])
   @@map("role_permission")
+}
+
+// GLOBAL platform catalogue — the feature-module registry and permission catalogue
+// (tuma's app_modules + permissions). Deliberately tenant-LESS and NOT under RLS (see
+// prisma/rls.sql): the catalogue is identical for every tenant, not tenant data — same
+// exception as the `tenant` table. Mirrored from src/lib/catalogue.ts by syncCatalogue()
+// on seed and on every deploy; `can()` never reads these (enforcement stays on the
+// session's baked permission strings).
+model AppModule {
+  code         String       @id
+  name         String
+  description  String?
+  allowedRoles String[]     @map("allowed_roles") // canonical roles whose nav may reach this module
+  status       String       @default("Active") // Active | Deactivated
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  permissions  Permission[]
+
+  @@map("app_module")
+}
+
+model Permission {
+  code       String    @id // the "resource:action[:qualifier]" string
+  actionName String    @map("action_name")
+  moduleCode String    @map("module_code")
+  module     AppModule @relation(fields: [moduleCode], references: [code])
+  status     String    @default("Active") // Active | Deactivated
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  @@index([moduleCode])
+  @@map("permission")
+}
+
+// Admin-created permission bundles (tuma-style "user groups") alongside the six canonical
+// roles. The bundle's PERMISSIONS live in RolePermission keyed by `name` (same replace
+// semantics as canonical overrides); assignments live in RoleAssignment by name. Never
+// hard-deleted — deactivated roles keep their rows but resolve to ZERO permissions at
+// login (fail-closed; see src/server/role-permissions.ts). Names may not collide with
+// canonical roles; enforced in app code case-insensitively.
+model CustomRole {
+  id                 String   @id @default(uuid())
+  tenantId           String   @map("tenant_id")
+  tenant             Tenant   @relation(fields: [tenantId], references: [id])
+  name               String
+  description        String?
+  status             String   @default("Active") // Active | Deactivated
+  deactivationReason String?  @map("deactivation_reason")
+  createdById        String?  @map("created_by_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, name])
+  @@index([tenantId, status])
+  @@map("custom_role")
 }
 
 // Project join requests (PROMPT §2/§5/§6). Anyone may request to join a project; the project's

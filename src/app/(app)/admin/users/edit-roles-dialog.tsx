@@ -24,9 +24,11 @@ interface EditRolesDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Only a Super Admin may grant the Super Admin role (mirrors the server guard, M-O1). */
   canGrantSuperAdmin?: boolean;
+  /** ACTIVE custom role names of the tenant (from the server page) — offered alongside built-ins. */
+  customRoles?: string[];
 }
 
-export function EditRolesDialog({ user, open, onOpenChange, canGrantSuperAdmin = false }: EditRolesDialogProps) {
+export function EditRolesDialog({ user, open, onOpenChange, canGrantSuperAdmin = false, customRoles = [] }: EditRolesDialogProps) {
   const { busy, error, setError, mutate } = useAdminMutation();
   const [roles, setRoles] = useState<string[]>(user.roles);
 
@@ -40,9 +42,14 @@ export function EditRolesDialog({ user, open, onOpenChange, canGrantSuperAdmin =
   // Hide Super Admin from anyone who can't grant it — unless the user already holds it, in
   // which case show it locked so its presence is visible but not editable.
   const alreadySuper = user.roles.includes(SUPER_ADMIN_ROLE);
-  const visibleRoles = ROLE_KEYS.filter(
+  // Built-ins + active custom roles + anything the user already holds (a deactivated custom
+  // role must stay visible so unticking it is a deliberate act, not a silent side effect).
+  const assignable = [...ROLE_KEYS, ...customRoles.filter((r) => !ROLE_KEYS.includes(r))];
+  const held = user.roles.filter((r) => !assignable.includes(r));
+  const visibleRoles = [...assignable, ...held].filter(
     (r) => r !== SUPER_ADMIN_ROLE || canGrantSuperAdmin || alreadySuper,
   );
+  const inactive = new Set(held);
 
   function toggleRole(role: string, checked: boolean) {
     setRoles((prev) => (checked ? [...prev, role] : prev.filter((r) => r !== role)));
@@ -82,6 +89,7 @@ export function EditRolesDialog({ user, open, onOpenChange, canGrantSuperAdmin =
                 />
                 {role}
                 {locked && <span className="text-xs text-ink-3">(Super Admin only)</span>}
+                {inactive.has(role) && <span className="text-xs text-ink-3">(deactivated — grants nothing)</span>}
               </label>
             );
           })}

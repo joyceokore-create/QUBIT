@@ -47,6 +47,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ? await prisma.tenant.findMany({ orderBy: { name: "asc" }, select: { slug: true, name: true } })
     : [];
 
+  // Module registry (global, no RLS) → nav gating by each module's allowedRoles.
+  const moduleRows = isRiverbank
+    ? await prisma.appModule.findMany({ where: { status: "Active" }, select: { code: true, allowedRoles: true } })
+    : [];
+  const moduleAllowedRoles = Object.fromEntries(moduleRows.map((m) => [m.code, m.allowedRoles]));
+
   return (
     <div data-tenant={session.user.tenantSlug} style={brandStyle} className="app-shell relative isolate min-h-screen bg-background">
       <TenantScope slug={session.user.tenantSlug} />
@@ -59,6 +65,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 canAccessAdmin={canAccessAdmin}
                 canStaff={canStaff}
                 memberOnly={memberOnly}
+                roles={session.user.roles}
+                moduleAllowedRoles={moduleAllowedRoles}
                 canSwitchTenant={canSwitchTenant}
                 tenants={tenants}
                 tenantSlug={session.user.tenantSlug}

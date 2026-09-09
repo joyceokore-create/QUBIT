@@ -24,26 +24,29 @@ export interface NavItem {
   perm?: "admin:access" | "project:create";
   /** Hidden when the viewer's persona groups are all member categories (dev/qa/impl). */
   memberHidden?: true;
+  /** App-module (src/lib/catalogue.ts) this surface belongs to — gates it on the module's
+   * allowedRoles when the module registry is loaded (see visibleNavItems). */
+  module?: string;
   icon: LucideIcon;
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "My Board", href: "/board", icon: ListChecks }, // docs/18 §4 — the daily surface
+  { label: "Dashboard", href: "/dashboard", module: "DASHBOARD", icon: LayoutDashboard },
+  { label: "My Board", href: "/board", module: "PROJECTS", icon: ListChecks }, // docs/18 §4 — the daily surface
   // DM1.73 — Ideas is memberHidden: docs/32 §0.3 keeps a member's nav to Dashboard ·
   // My Board · Projects · Reports. `idea:create` stays in BASE, so the intake form
   // remains reachable for members via direct link — it just isn't a nav pill.
-  { label: "Ideas", href: "/ideas", memberHidden: true, icon: Lightbulb }, // M-P4a — intake is for everyone
-  { label: "Portfolios", href: "/portfolios", memberHidden: true, icon: Briefcase }, // M-P1b (docs/25 W1)
+  { label: "Ideas", href: "/ideas", memberHidden: true, module: "IDEAS", icon: Lightbulb }, // M-P4a — intake is for everyone
+  { label: "Portfolios", href: "/portfolios", memberHidden: true, module: "PORTFOLIOS", icon: Briefcase }, // M-P1b (docs/25 W1)
   // DM1.73 — Programmes merged into Portfolios: every programme card linked to its
   // parent portfolio anyway; programmes are managed from the portfolio detail page.
-  { label: "Projects", href: "/projects", icon: FolderKanban },
-  { label: "Risks", href: "/risks", memberHidden: true, icon: TriangleAlert },
+  { label: "Projects", href: "/projects", module: "PROJECTS", icon: FolderKanban },
+  { label: "Risks", href: "/risks", memberHidden: true, module: "RISKS", icon: TriangleAlert },
   // DM1.73 — Staffing merged into People (?tab=requests); the People page gates the
   // requests tab on project:create, so PMs (not memberOnly) still reach it.
-  { label: "People", href: "/people", memberHidden: true, icon: Contact },
-  { label: "Reports", href: "/reports", icon: BarChart3 },
-  { label: "Admin", href: "/admin", perm: "admin:access", icon: Shield },
+  { label: "People", href: "/people", memberHidden: true, module: "TEAMS", icon: Contact },
+  { label: "Reports", href: "/reports", module: "REPORTS", icon: BarChart3 },
+  { label: "Admin", href: "/admin", perm: "admin:access", module: "ADMIN_IAM", icon: Shield },
 ];
 
 export interface NavViewer {
@@ -51,6 +54,11 @@ export interface NavViewer {
   canStaff: boolean;
   /** True when every persona group the viewer holds is a member category (docs/32 §0.3). */
   memberOnly: boolean;
+  /** The viewer's canonical roles, used for module allowedRoles gating. */
+  roles?: readonly string[];
+  /** module code → allowedRoles, from the app_module registry. When absent (registry not
+   * loaded / empty), module gating is skipped and the existing perm/memberHidden rules stand. */
+  moduleAllowedRoles?: Record<string, readonly string[]>;
 }
 
 /** The one nav filter (M-W1a) — both shells consume this, so they cannot drift. */
@@ -59,6 +67,15 @@ export function visibleNavItems(viewer: NavViewer): NavItem[] {
     if (n.perm === "admin:access" && !viewer.canAccessAdmin) return false;
     if (n.perm === "project:create" && !viewer.canStaff) return false;
     if (n.memberHidden && viewer.memberOnly) return false;
+    // Module gating: hide a surface when its module lists allowedRoles and the viewer holds
+    // none of them. Skipped entirely if the registry wasn't provided (fail-open to today's
+    // behaviour) or the module has no entry.
+    if (n.module && viewer.moduleAllowedRoles && viewer.roles) {
+      const allowed = viewer.moduleAllowedRoles[n.module];
+      if (allowed && allowed.length > 0 && !viewer.roles.some((r) => allowed.includes(r))) {
+        return false;
+      }
+    }
     return true;
   });
 }

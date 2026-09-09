@@ -30,6 +30,13 @@ export async function Topbar() {
   const memberOnly = isMemberOnly(session.user.personas ?? []);
   const canSwitchTenant = can(ctx, "tenant:switch");
 
+  // Module registry (global table, no RLS) → nav gating by each module's allowedRoles.
+  const moduleRows = await prisma.appModule.findMany({
+    where: { status: "Active" },
+    select: { code: true, allowedRoles: true },
+  });
+  const moduleAllowedRoles = Object.fromEntries(moduleRows.map((m) => [m.code, m.allowedRoles]));
+
   // Tenant list only needed (and only queried) for the switcher. The tenant
   // table has no RLS and names aren't sensitive (they appear on the landing page).
   const tenants = canSwitchTenant
@@ -54,7 +61,13 @@ export async function Topbar() {
         <span className="font-heading text-[16.5px] font-bold tracking-[2.5px] text-[var(--tbinkS)]">QUBIT</span>
       </Link>
 
-      <NavPills canAccessAdmin={canAccessAdmin} canStaff={canStaff} memberOnly={memberOnly} />
+      <NavPills
+        canAccessAdmin={canAccessAdmin}
+        canStaff={canStaff}
+        memberOnly={memberOnly}
+        roles={session.user.roles}
+        moduleAllowedRoles={moduleAllowedRoles}
+      />
 
       <NotificationBell />
       <ThemeToggle />

@@ -1,11 +1,10 @@
 import { auth } from "@/lib/auth";
 import { can, PERMISSION_CATALOGUE } from "@/lib/rbac";
+import { prisma } from "@/lib/db";
 import { listRolePermissions } from "@/server/role-permissions";
 import { AdminHeader } from "../admin-header";
 import { RolesEditor } from "./roles-editor";
-
-const CARD =
-  "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]";
+import { ModuleCatalogue } from "./module-catalogue";
 
 export default async function AdminRolesPage() {
   const session = await auth();
@@ -19,6 +18,27 @@ export default async function AdminRolesPage() {
 
   const roles = await listRolePermissions(ctx);
   const canManage = can(ctx, "roles:manage");
+  const canViewCatalogue = can(ctx, "app_modules:read") || canManage;
+
+  // Global catalogue (app_module + permission) — the DB source of truth, shown as a
+  // browsable, module-grouped registry (tuma's App Modules / Permissions views).
+  const modules = canViewCatalogue
+    ? await prisma.appModule.findMany({
+        where: { status: "Active" },
+        orderBy: { name: "asc" },
+        select: {
+          code: true,
+          name: true,
+          description: true,
+          allowedRoles: true,
+          permissions: {
+            where: { status: "Active" },
+            orderBy: { code: "asc" },
+            select: { code: true, actionName: true },
+          },
+        },
+      })
+    : [];
 
   return (
     <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
@@ -32,19 +52,7 @@ export default async function AdminRolesPage() {
 
       <RolesEditor roles={roles} catalogue={[...PERMISSION_CATALOGUE]} canManage={canManage} />
 
-      <div className={`${CARD} p-[16px_18px] [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.1s_both]`} style={{ background: "var(--cardbg)" }}>
-        <div className="mb-2.5 flex items-baseline gap-2.5">
-          <span className="font-heading text-[13.5px] rv:text-heading-xs font-bold text-[var(--qink)]">Permission catalogue</span>
-          <span className="font-mono rv:font-sans text-[9.5px] rv:text-overline tracking-[1.2px] text-[var(--ink4)]">FR-IAM-04</span>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {PERMISSION_CATALOGUE.map((p) => (
-            <span key={p} className="rounded-[5px] border border-[var(--hair)] px-2 py-1 font-mono text-[9.5px] tracking-[.3px] text-[var(--ink3)]">
-              {p}
-            </span>
-          ))}
-        </div>
-      </div>
+      {canViewCatalogue && <ModuleCatalogue modules={modules} />}
     </main>
   );
 }

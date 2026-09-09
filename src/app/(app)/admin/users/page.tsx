@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/rbac";
+import { can, CANONICAL_ROLES } from "@/lib/rbac";
 import { listUsers } from "@/server/users";
+import { listAssignableRoles } from "@/server/role-permissions";
 import { listDepartments } from "@/server/departments";
 import { listTeams } from "@/server/teams";
 import { listProjects } from "@/server/projects";
@@ -67,12 +68,15 @@ export default async function AdminUsersPage() {
   const canGrantSuperAdmin = ctx.roles.includes("PlatformSuperAdmin"); // mirrors the server guard (M-O1)
   const canResetPassword = can(ctx, "users:reset"); // M-O3 — stricter than users:invite
 
-  const [users, departments, teams, projects] = await Promise.all([
+  const [users, departments, teams, projects, assignableRoles] = await Promise.all([
     listUsers(ctx),
     listDepartments(ctx),
     listTeams(ctx),
     listProjects(ctx, {}),
+    listAssignableRoles(ctx),
   ]);
+  // Custom roles only — the dialog already knows the built-ins.
+  const customRoles = assignableRoles.filter((r) => !(CANONICAL_ROLES as readonly string[]).includes(r));
   const insights = buildInsights(users);
 
   return (
@@ -90,7 +94,7 @@ export default async function AdminUsersPage() {
           ) : undefined
         }
       />
-      <UsersClient users={users} departments={departments} currentUserId={session.user.id} insights={insights} canManage={canManageUsers} canGrantSuperAdmin={canGrantSuperAdmin} canResetPassword={canResetPassword} />
+      <UsersClient users={users} departments={departments} currentUserId={session.user.id} insights={insights} canManage={canManageUsers} canGrantSuperAdmin={canGrantSuperAdmin} canResetPassword={canResetPassword} customRoles={customRoles} />
     </main>
   );
 }

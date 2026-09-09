@@ -53,7 +53,7 @@ describe("Admin/IAM user lifecycle", () => {
     const { user: user } = await createUser(adminCtx, {
       name: "Test Lifecycle User",
       email: TEST_EMAIL,
-      roles: ["Contributor", "Viewer"],
+      roles: ["ProjectManager", "Member"],
     });
 
     const rows = await withTenant(adminCtx, (tx) =>
@@ -65,14 +65,14 @@ describe("Admin/IAM user lifecycle", () => {
 
     const listed = await listUsers(adminCtx);
     const found = listed.find((u) => u.id === user.id);
-    expect(found?.roles.sort()).toEqual(["Contributor", "Viewer"]);
+    expect(found?.roles.sort()).toEqual(["Member", "ProjectManager"]);
   });
 
   it("diffs role changes and audits grants/revokes separately", async () => {
     const { user: user } = await createUser(adminCtx, {
       name: "Test Lifecycle User",
       email: TEST_EMAIL,
-      roles: ["Viewer"],
+      roles: ["Member"],
     });
 
     await updateUserRoles(adminCtx, user.id, ["ProjectManager"]);
@@ -93,7 +93,7 @@ describe("Admin/IAM user lifecycle", () => {
     const { user: user } = await createUser(adminCtx, {
       name: "Test Lifecycle User",
       email: TEST_EMAIL,
-      roles: ["Viewer"],
+      roles: ["Member"],
     });
 
     await setUserStatus(adminCtx, user.id, "SUSPENDED");
@@ -109,7 +109,7 @@ describe("Admin/IAM user lifecycle", () => {
     const { user: user } = await createUser(adminCtx, {
       name: "Test Lifecycle User",
       email: TEST_EMAIL,
-      roles: ["Viewer"],
+      roles: ["Member"],
     });
 
     await softDeleteUser(adminCtx, user.id);
@@ -146,7 +146,7 @@ describe("Admin/IAM user lifecycle", () => {
     const { user: user } = await createUser(adminCtx, {
       name: "Test Lifecycle User",
       email: TEST_EMAIL,
-      roles: ["Viewer"],
+      roles: ["Member"],
     });
 
     const riverbankCtx: TenantContext = {
