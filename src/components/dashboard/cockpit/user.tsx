@@ -1,5 +1,7 @@
 import type { CockpitData, CockpitProject } from "@/server/dashboard-cockpit";
 import { RagChip, Freshness } from "./primitives";
+import { CockpitPageHead } from "./page-head";
+import { AskQBrief } from "./ask-q-brief";
 
 const CARD = "rounded-[16px] border border-[var(--cardbd)] p-[16px_18px]";
 const cardStyle = { background: "var(--cardbg)" } as const;
@@ -14,10 +16,12 @@ export function UserCockpit({ data, viewerId }: { data: CockpitData; viewerId: s
 
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <h1 className="text-[22px] font-semibold tracking-tight text-[var(--qink)]">My work</h1>
-        <p className="mt-1 text-[14px] text-[var(--ink2)]">{mine.length} project{mine.length === 1 ? "" : "s"} you&apos;re on. {attention.length} need attention.</p>
-      </div>
+      <CockpitPageHead
+        title="My work"
+        subtitle={`${mine.length} project${mine.length === 1 ? "" : "s"} you're on. ${attention.length} need attention.`}
+      />
+
+      {mine.length > 0 && <AskQBrief level="user" data={data} viewerId={viewerId} />}
 
       {mine.length === 0 ? (
         <div className={`${CARD} text-center text-[var(--ink3)]`} style={cardStyle}>

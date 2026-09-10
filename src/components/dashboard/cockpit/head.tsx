@@ -1,6 +1,8 @@
 import type { CockpitData, CockpitProject } from "@/server/dashboard-cockpit";
 import { calcRagCounts, CALC_ORDER } from "@/server/dashboard-cockpit";
 import { Tile, RagBar, RagChip, DisputeGap, Freshness, RagTrend } from "./primitives";
+import { CockpitPageHead } from "./page-head";
+import { AskQBrief } from "./ask-q-brief";
 
 const CARD = "rounded-[16px] border border-[var(--cardbd)] p-[16px_18px]";
 const cardStyle = { background: "var(--cardbg)" } as const;
@@ -22,10 +24,10 @@ export function HeadCockpit({ data }: { data: CockpitData }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <h1 className="text-[22px] font-semibold tracking-tight text-[var(--qink)]">Head of PMs — supervision & escalation</h1>
-        <p className="mt-1 text-[14px] text-[var(--ink2)]">{active.length} active initiatives across {data.pms.length} PMs. Exceptions first: disputes, stale reporting, and what needs escalating upward.</p>
-      </div>
+      <CockpitPageHead
+        title="Head of PMs — supervision & escalation"
+        subtitle={`${active.length} active initiatives across ${data.pms.length} PMs. Exceptions first: disputes, stale reporting, and what needs escalating upward.`}
+      />
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
         <Tile value={active.length} label="Active initiatives" detail={`${counts.R} red · ${counts.A} amber · ${counts.G} green`}><RagBar counts={counts} /></Tile>
@@ -33,6 +35,8 @@ export function HeadCockpit({ data }: { data: CockpitData }) {
         <Tile value={stale.length} label="Stale status updates" detail={`${stale.filter((p) => p.freshnessDays > 14).length} older than 14 days`} hot={stale.some((p) => p.freshnessDays > 14)} jump="head-stale" />
         <Tile value={escalate.length} label="To escalate upward" detail="red risks / passed targets" jump="head-escal" />
       </div>
+
+      <AskQBrief level="head" data={data} viewerId="" />
 
       <section>
         <div className="mb-3 flex items-baseline justify-between gap-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">By project manager</h2><span className="text-[12px] text-[var(--ink4)]">Click a PM to open their view</span></div>

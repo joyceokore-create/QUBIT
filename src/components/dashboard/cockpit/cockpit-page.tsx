@@ -32,20 +32,28 @@ export async function CockpitPage({
   level,
   roles,
   viewerId,
+  scope,
 }: {
   ctx: TenantContext;
   level: DashboardLevel;
   roles: readonly string[];
   viewerId: string;
+  scope?: string;
 }) {
   const now = new Date();
-  const data = await getCockpitData(ctx, now);
+  const full = await getCockpitData(ctx, now);
   const allowed = allowedLevels(roles).filter((l) => BUILT_LEVELS.includes(l));
   const stats = level === "superadmin" ? await adminStats(ctx) : null;
 
+  // Portfolio scope filter (server round-trip so tiles and lists stay consistent).
+  const portfolios = [...new Set(full.projects.map((p) => p.portfolioName).filter((n): n is string => !!n))].sort();
+  const activeScope = scope && portfolios.includes(scope) ? scope : "all";
+  const projects = activeScope === "all" ? full.projects : full.projects.filter((p) => p.portfolioName === activeScope);
+  const data = { ...full, projects, pms: full.pms.filter((pm) => projects.some((p) => p.pmId === pm.id)) };
+
   return (
     <main className="mx-auto flex w-full max-w-[1280px] flex-col gap-5 p-[24px_24px_72px]">
-      <CockpitInteractive level={level} allowed={allowed} projects={data.projects}>
+      <CockpitInteractive level={level} allowed={allowed} projects={data.projects} portfolios={portfolios} scope={activeScope}>
         {level === "superadmin" && stats ? (
           <SuperadminCockpit data={data} stats={stats} />
         ) : level === "exec" ? (

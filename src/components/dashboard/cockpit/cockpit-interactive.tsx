@@ -12,6 +12,8 @@ interface Props {
   level: DashboardLevel;
   allowed: DashboardLevel[];
   projects: CockpitProject[];
+  portfolios: string[];
+  scope: string;
   children: React.ReactNode;
 }
 
@@ -24,14 +26,34 @@ const fmt = (d: Date | string | null) =>
  * a project drawer (click any [data-open]), section jumps ([data-jump]), a project search,
  * and the level switcher. Keeps client JS to a single component.
  */
-export function CockpitInteractive({ level, allowed, projects, children }: Props) {
+export function CockpitInteractive({ level, allowed, projects, portfolios, scope, children }: Props) {
   const router = useRouter();
   const params = useSearchParams();
   const rootRef = useRef<HTMLDivElement>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [compact, setCompact] = useState(false);
   const byId = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
   const open = openId ? byId.get(openId) : null;
+
+  // Restore the density preference once mounted (SSR-safe).
+  useEffect(() => {
+    setCompact(window.localStorage.getItem("qubit.cockpit.compact") === "1");
+  }, []);
+  function toggleCompact() {
+    setCompact((c) => {
+      const next = !c;
+      window.localStorage.setItem("qubit.cockpit.compact", next ? "1" : "0");
+      return next;
+    });
+  }
+
+  function setParam(key: string, value: string, remove?: boolean) {
+    const sp = new URLSearchParams(params.toString());
+    if (remove || value === "all") sp.delete(key);
+    else sp.set(key, value);
+    router.push(`/dashboard?${sp.toString()}`);
+  }
 
   // Search: hide non-matching project cards/rows in place (reference behaviour).
   useEffect(() => {
@@ -64,7 +86,7 @@ export function CockpitInteractive({ level, allowed, projects, children }: Props
   }
 
   return (
-    <div ref={rootRef} onClick={onClick}>
+    <div ref={rootRef} onClick={onClick} className={compact ? "cockpit-compact" : undefined}>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         {allowed.length > 1 && (
           <div className="inline-flex rounded-lg border border-[var(--hair)] bg-[var(--wash2)] p-0.5" role="group" aria-label="Dashboard level">
@@ -85,6 +107,17 @@ export function CockpitInteractive({ level, allowed, projects, children }: Props
             ))}
           </div>
         )}
+        {portfolios.length > 1 && (
+          <select
+            aria-label="Portfolio scope"
+            value={scope}
+            onChange={(e) => setParam("scope", e.target.value)}
+            className="rounded-lg border border-[var(--hair)] bg-[var(--wash2)] px-2.5 py-1.5 text-[13px] text-[var(--qink)] outline-none"
+          >
+            <option value="all">All portfolios</option>
+            {portfolios.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        )}
         <input
           type="search"
           value={query}
@@ -93,6 +126,15 @@ export function CockpitInteractive({ level, allowed, projects, children }: Props
           aria-label="Find a project"
           className="ml-auto w-[min(240px,60vw)] rounded-lg border border-[var(--hair)] bg-[var(--wash2)] px-3 py-1.5 text-[13px] text-[var(--qink)] outline-none placeholder:text-[var(--ink4)] focus-visible:ring-2 focus-visible:ring-[var(--brand-light)]"
         />
+        <button
+          type="button"
+          onClick={toggleCompact}
+          aria-pressed={compact}
+          title="Toggle compact density"
+          className="grid size-[34px] place-items-center rounded-lg border border-[var(--hair)] text-[var(--ink2)] hover:bg-[var(--wash2)] aria-pressed:bg-[var(--qink)] aria-pressed:text-[var(--bg)]"
+        >
+          ≡
+        </button>
       </div>
 
       {children}

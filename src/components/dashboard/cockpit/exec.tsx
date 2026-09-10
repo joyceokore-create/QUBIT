@@ -1,6 +1,8 @@
 import type { CockpitData, CockpitProject } from "@/server/dashboard-cockpit";
 import { calcRagCounts, CALC_ORDER } from "@/server/dashboard-cockpit";
 import { Tile, RagBar, RagChip, DisputeGap, DimensionSquares, RagTrend, RiskList } from "./primitives";
+import { CockpitPageHead } from "./page-head";
+import { AskQBrief } from "./ask-q-brief";
 
 const CARD = "rounded-[16px] border border-[var(--cardbd)] p-[16px_18px]";
 const cardStyle = { background: "var(--cardbg)" } as const;
@@ -29,10 +31,10 @@ export function ExecCockpit({ data }: { data: CockpitData }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <h1 className="text-[22px] font-semibold tracking-tight text-[var(--qink)]">Executive — portfolio health & decisions</h1>
-        <p className="mt-1 text-[14px] text-[var(--ink2)]">{all.length} initiatives across the pipeline. Delivery is moving; a concentrated set of decisions gates progress.</p>
-      </div>
+      <CockpitPageHead
+        title="Executive — portfolio health & decisions"
+        subtitle={`${all.length} initiatives across the pipeline. Delivery is moving; a concentrated set of decisions gates progress.`}
+      />
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
         <Tile value={all.length} label="Initiatives in the pipeline" detail={`${approved.length} approved & funded`} />
@@ -40,6 +42,8 @@ export function ExecCockpit({ data }: { data: CockpitData }) {
         <Tile value={approved.length} label="Approved portfolio RAG" detail={`${counts.R} red · ${counts.A} amber · ${counts.G} green`}><RagBar counts={counts} /></Tile>
         <Tile value={decisions.length} label="Decisions needing action" detail={`${decisions.filter((d) => d.freshnessDays > 30).length} older than 30 days`} hot={decisions.length > 0} jump="exec-decisions" />
       </div>
+
+      <AskQBrief level="exec" data={data} viewerId="" />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr]">
         <section id="exec-decisions" className={CARD} style={cardStyle}>

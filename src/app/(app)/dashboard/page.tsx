@@ -12,7 +12,7 @@ import { Forbidden } from "@/components/forbidden";
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ level?: string }>;
+  searchParams: Promise<{ level?: string; scope?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) return null;
@@ -24,8 +24,8 @@ export default async function DashboardPage({
   };
   if (!can(ctx, "dashboard:read")) return <Forbidden />;
 
-  const { level: requestedLevel } = await searchParams;
+  const { level: requestedLevel, scope } = await searchParams;
   const level = resolveRequestedLevel(ctx.roles, requestedLevel);
 
-  return <CockpitPage ctx={ctx} level={level} roles={ctx.roles} viewerId={ctx.userId} />;
+  return <CockpitPage ctx={ctx} level={level} roles={ctx.roles} viewerId={ctx.userId} scope={scope} />;
 }

@@ -1,6 +1,8 @@
 import type { CockpitData, CockpitProject } from "@/server/dashboard-cockpit";
 import { calcRagCounts, CALC_ORDER } from "@/server/dashboard-cockpit";
 import { Tile, RagBar, ProjectStripCard, RiskList, DisputeGap, Freshness } from "./primitives";
+import { CockpitPageHead } from "./page-head";
+import { AskQBrief } from "./ask-q-brief";
 
 const CARD = "rounded-[16px] border border-[var(--cardbd)] p-[16px_18px]";
 const cardStyle = { background: "var(--cardbg)" } as const;
@@ -40,12 +42,10 @@ export function PmCockpit({ data, viewerId, now }: { data: CockpitData; viewerId
 
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <h1 className="text-[22px] font-semibold tracking-tight text-[var(--qink)]">My projects</h1>
-        <p className="mt-1 text-[14px] text-[var(--ink2)]">
-          {mine.length} project{mine.length === 1 ? "" : "s"}{previewingAll ? " (previewing all — you lead none)" : " owned"}. Red first, then nearest gate. Actions merge into one queue.
-        </p>
-      </div>
+      <CockpitPageHead
+        title="My projects"
+        subtitle={`${mine.length} project${mine.length === 1 ? "" : "s"}${previewingAll ? " (previewing all — you lead none)" : " owned"}. Red first, then nearest gate. Actions merge into one queue.`}
+      />
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
         <Tile value={mine.length} label="Projects owned" detail={`${counts.R} red · ${counts.A} amber · ${counts.G} green`}><RagBar counts={counts} /></Tile>
@@ -53,6 +53,8 @@ export function PmCockpit({ data, viewerId, now }: { data: CockpitData; viewerId
         <Tile value={soon} label="Gates & milestones ≤ 7 days" detail="upcoming" jump="pm-queue" />
         <Tile value={disputes} label="RAG disputes" detail="reported greener than calculated" />
       </div>
+
+      <AskQBrief level="pm" data={data} viewerId={viewerId} />
 
       <section>
         <div className="mb-3 flex items-baseline justify-between gap-3">

@@ -882,3 +882,7 @@
   --rv-active: #b81c22;
 }
 
+
+/* Cockpit compact density (the ≡ toggle) — tightens the reference's spacing. */
+.cockpit-compact section { padding-top: 12px; padding-bottom: 12px; }
+.cockpit-compact table td { padding-top: 6px; padding-bottom: 6px; }
