@@ -22,8 +22,9 @@ test.describe("golden path (Demo Org B fixture super-admin)", () => {
     await page.waitForURL("**/dashboard**");
   });
 
-  test("dashboard renders a persona with live content", async ({ page }) => {
-    await expect(page.getByText(/Good (morning|afternoon|evening|day)/)).toBeVisible();
+  test("dashboard renders the RBAC-level cockpit", async ({ page }) => {
+    // A super admin lands on the Superadmin cockpit (Executive view + platform-admin strip).
+    await expect(page.getByRole("heading", { name: "Platform administration" })).toBeVisible();
     await expect(page.getByText("Demo Org B", { exact: false }).first()).toBeVisible();
   });
 
