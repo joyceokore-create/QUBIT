@@ -96,7 +96,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // redirects before any session is minted.
     async signIn({ user, account, profile }) {
       if (account?.provider !== SSO_PROVIDER_ID) return true; // credentials: authorize() decides
-      const email = profile?.email?.toLowerCase();
+      // Entra may omit the `email` claim (populated only when the directory user has a
+      // `mail` attribute); the sign-in address then lives in the UPN (preferred_username).
+      const claims = profile as { email?: string; preferred_username?: string; upn?: string } | undefined;
+      const email = (claims?.email ?? claims?.preferred_username ?? claims?.upn)?.toLowerCase();
       if (!email) return SSO_DENIED_REDIRECT;
 
       const rateLimitKey = `sso:${email}`;
