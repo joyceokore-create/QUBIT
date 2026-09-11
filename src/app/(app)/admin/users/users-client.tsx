@@ -38,6 +38,7 @@ export function UsersClient({
   canManage,
   canGrantSuperAdmin = false,
   canResetPassword = false,
+  customRoles = [],
 }: {
   users: AdminUserSummary[];
   departments: DepartmentSummary[];
@@ -50,6 +51,8 @@ export function UsersClient({
   canGrantSuperAdmin?: boolean;
   /** users:reset — admin-initiated password reset links (M-O3). */
   canResetPassword?: boolean;
+  /** ACTIVE custom role names — offered in the edit-roles dialog. */
+  customRoles?: string[];
 }) {
   const [seg, setSeg] = useState<Segment>("all");
 
@@ -165,7 +168,7 @@ export function UsersClient({
                       {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : <span className="font-semibold text-[var(--warn)]">Never</span>}
                     </span>
                     <span className="flex justify-end">
-                      <UserRowActions user={u} currentUserId={currentUserId} departments={departments} users={users} canManage={canManage} canGrantSuperAdmin={canGrantSuperAdmin} canResetPassword={canResetPassword} />
+                      <UserRowActions user={u} currentUserId={currentUserId} departments={departments} users={users} canManage={canManage} canGrantSuperAdmin={canGrantSuperAdmin} canResetPassword={canResetPassword} customRoles={customRoles} />
                     </span>
                   </div>
                 );

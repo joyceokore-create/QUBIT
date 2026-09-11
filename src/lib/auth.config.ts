@@ -4,7 +4,9 @@ import type { NextAuthConfig } from "next-auth";
 // runtime, which cannot load the Prisma query engine, so providers (which need DB access)
 // are added separately in src/lib/auth.ts (Node runtime only).
 export const authConfig = {
-  pages: { signIn: "/login" },
+  // error: "/login" keeps OAuth-callback failures on our own page (?error=<code>)
+  // instead of the unstyled Auth.js error page.
+  pages: { signIn: "/login", error: "/login" },
   session: {
     strategy: "jwt",
     maxAge: 60 * 60 * 24, // 24h — NFR-04

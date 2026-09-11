@@ -100,7 +100,13 @@ BEGIN
     -- M-P3b (docs/34) — the Head of PMs' weekly roll-up.
     'portfolio_report',
     -- M-P4a (docs/35) — idea intake & triage, the front of the funnel.
-    'idea'
+    'idea',
+    -- Custom roles (tuma-style permission bundles) — admin-created, deactivate-only.
+    'custom_role'
+    -- NOTE: `app_module` and `permission` are deliberately NOT listed. They are the GLOBAL
+    -- platform catalogue (tuma's app_modules/permissions) — identical for every tenant, not
+    -- tenant data, and carry no tenant_id — exactly like the `tenant` table, which is also
+    -- excluded here. Seeded from src/lib/catalogue.ts by syncCatalogue().
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);

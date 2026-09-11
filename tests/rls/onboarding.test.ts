@@ -15,7 +15,7 @@ describe("Onboarding tracking", () => {
     if (!k) throw new Error("Seed required.");
     const admin = await withTenant({ tenantId: k.id, userId: "seed" }, (tx) => tx.user.findFirstOrThrow({ where: { status: "ACTIVE" } }));
     demoB = { tenantId: k.id, userId: admin.id, roles: ["PlatformSuperAdmin"] };
-    await createUser(demoB, { name: "Invitee One", email, roles: ["Contributor"] });
+    await createUser(demoB, { name: "Invitee One", email, roles: ["Member"] });
   });
 
   afterAll(async () => {
@@ -44,7 +44,7 @@ describe("Onboarding tracking", () => {
     const project = await createProject(demoB, { code: `OB-${Date.now().toString().slice(-6)}`, name: "OB", type: "Project", priority: "Med", status: "Planning" });
     const placedEmail = `placed_${Date.now()}@demo-b.example.invalid`;
     await createUser(demoB, {
-      name: "Placed User", email: placedEmail, roles: ["Contributor"],
+      name: "Placed User", email: placedEmail, roles: ["Member"],
       teamId: team.id, projectId: project.id, projectRole: "Developer",
     });
     const u = (await listUsers(demoB)).find((x) => x.email === placedEmail)!;

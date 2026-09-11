@@ -103,7 +103,7 @@ describe("Department lifecycle", () => {
     const { user: user } = await createUser(ctx, {
       name: "Test Dept Report",
       email: TEST_EMAIL_REPORT,
-      roles: ["Viewer"],
+      roles: ["Member"],
     });
 
     await updateUserDepartment(ctx, user.id, { departmentId: department.id, managerId: null });
@@ -116,12 +116,12 @@ describe("Department lifecycle", () => {
     const { user: manager } = await createUser(ctx, {
       name: "Test Dept Manager",
       email: TEST_EMAIL_MANAGER,
-      roles: ["Viewer"],
+      roles: ["Member"],
     });
     const { user: report } = await createUser(ctx, {
       name: "Test Dept Report",
       email: TEST_EMAIL_REPORT,
-      roles: ["Viewer"],
+      roles: ["Member"],
     });
 
     await expect(updateUserDepartment(ctx, report.id, { departmentId: null, managerId: report.id })).rejects.toThrow(
@@ -144,12 +144,12 @@ describe("Department lifecycle", () => {
     const { user: manager } = await createUser(ctx, {
       name: "Test Dept Manager",
       email: TEST_EMAIL_MANAGER,
-      roles: ["Viewer"],
+      roles: ["Member"],
     });
     const { user: report } = await createUser(ctx, {
       name: "Test Dept Report",
       email: TEST_EMAIL_REPORT,
-      roles: ["Viewer"],
+      roles: ["Member"],
     });
     await updateUserDepartment(ctx, report.id, { departmentId: null, managerId: manager.id });
     const department = await createDepartment(ctx, { name: `${TEST_PREFIX} Headed`, headUserId: manager.id });
