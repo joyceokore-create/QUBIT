@@ -35,7 +35,6 @@ export function PmCockpit({ data, viewerId, now }: { data: CockpitData; viewerId
   const counts = calcRagCounts(mine);
   const queue = buildQueue(mine, now);
   const disputes = mine.filter((p) => p.dispute).length;
-  const soon = queue.filter((q) => q.kind === "soon").length;
   const dueNow = queue.filter((q) => q.kind === "due").length;
   const risks = mine.flatMap((p) => p.risks.map((r) => ({ ...r, projectName: p.name }))).sort((a, b) => (a.severity === "R" ? 0 : 1) - (b.severity === "R" ? 0 : 1)).slice(0, 6);
   const rollout = mine.find((p) => p.markets.length > 0);
@@ -47,50 +46,46 @@ export function PmCockpit({ data, viewerId, now }: { data: CockpitData; viewerId
         subtitle={`${mine.length} project${mine.length === 1 ? "" : "s"}${previewingAll ? " (previewing all — you lead none)" : " owned"}. Red first, then nearest gate. Actions merge into one queue.`}
       />
 
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
-        <Tile value={mine.length} label="Projects owned" detail={`${counts.R} red · ${counts.A} amber · ${counts.G} green`}><RagBar counts={counts} /></Tile>
-        <Tile value={dueNow} label="Overdue / unresolved" detail="need action" hot={dueNow > 0} jump="pm-queue" />
-        <Tile value={soon} label="Gates & milestones ≤ 7 days" detail="upcoming" jump="pm-queue" />
-        <Tile value={disputes} label="RAG disputes" detail="reported greener than calculated" />
+      <div className="grid grid-cols-3 gap-3">
+        <Tile value={mine.length} label="Projects owned" detail={`${counts.R} red · ${counts.A} amber`}><RagBar counts={counts} /></Tile>
+        <Tile value={dueNow} label="Overdue / unresolved" detail="need action" hot={dueNow > 0} />
+        <Tile value={disputes} label="RAG disputes" detail="reported greener" />
       </div>
 
       <AskQBrief level="pm" data={data} viewerId={viewerId} />
 
-      <section>
-        <div className="mb-3 flex items-baseline justify-between gap-3">
-          <h2 className="text-[15px] font-semibold text-[var(--qink)]">Project strip</h2>
-          <span className="text-[12px] text-[var(--ink4)]">Click a card for the status-report view</span>
+      {/* Lead: what to do next. */}
+      <section id="pm-queue" className={CARD} style={cardStyle}>
+        <div className="mb-3 flex items-baseline justify-between gap-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">Work queue</h2><span className="text-[12px] text-[var(--ink4)]">{queue.length} items</span></div>
+        <div className="flex flex-col">
+          {queue.length === 0 && <span className="text-[12px] text-[var(--ink4)]">Nothing needs action — nice.</span>}
+          {queue.map((q, i) => (
+            <div key={i} className="grid grid-cols-[14px_1fr_auto] items-start gap-3 border-t border-[var(--hair)] py-2.5 first:border-t-0 first:pt-0">
+              <span className="mt-1.5 size-2.5 rounded-sm" style={{ background: KIND_COLOR[q.kind] }} />
+              <div className="min-w-0"><b className="block font-semibold text-[var(--qink)]">{q.title}</b><span className="text-[13px] text-[var(--ink3)]">{q.detail}</span></div>
+              <div className="flex flex-col items-end gap-1 whitespace-nowrap text-[12px] text-[var(--ink4)]">
+                <button data-open={q.project.id} className="rounded bg-[var(--wash2)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--ink2)]">{q.project.name}</button>
+                <span>{q.when}</span>
+              </div>
+            </div>
+          ))}
         </div>
+      </section>
+
+      <section data-secondary className={CARD} style={cardStyle}>
+        <div className="mb-3 flex items-baseline justify-between gap-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">All my projects</h2><span className="text-[12px] text-[var(--ink4)]">click a card for detail</span></div>
         <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-3">
           {mine.map((p) => <div key={p.id} className="cockpit-card"><ProjectStripCard p={p} /></div>)}
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <section id="pm-queue" className={CARD} style={cardStyle}>
-          <div className="mb-3 flex items-baseline justify-between gap-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">Work queue</h2><span className="text-[12px] text-[var(--ink4)]">{queue.length} items</span></div>
-          <div className="flex flex-col">
-            {queue.length === 0 && <span className="text-[12px] text-[var(--ink4)]">Nothing needs action — nice.</span>}
-            {queue.map((q, i) => (
-              <div key={i} className="grid grid-cols-[14px_1fr_auto] items-start gap-3 border-t border-[var(--hair)] py-2.5 first:border-t-0 first:pt-0">
-                <span className="mt-1.5 size-2.5 rounded-sm" style={{ background: KIND_COLOR[q.kind] }} />
-                <div className="min-w-0"><b className="block font-semibold text-[var(--qink)]">{q.title}</b><span className="text-[13px] text-[var(--ink3)]">{q.detail}</span></div>
-                <div className="flex flex-col items-end gap-1 whitespace-nowrap text-[12px] text-[var(--ink4)]">
-                  <button data-open={q.project.id} className="rounded bg-[var(--wash2)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--ink2)]">{q.project.name}</button>
-                  <span>{q.when}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-        <section className={CARD} style={cardStyle}>
-          <div className="mb-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">Top risks on my projects</h2></div>
-          <RiskList risks={risks} />
-        </section>
-      </div>
+      <section data-secondary className={CARD} style={cardStyle}>
+        <div className="mb-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">Top risks on my projects</h2></div>
+        <RiskList risks={risks} />
+      </section>
 
       {rollout && (
-        <section className={CARD} style={cardStyle}>
+        <section data-secondary className={CARD} style={cardStyle}>
           <div className="mb-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">{rollout.name} — market rollout</h2></div>
           <div className="flex items-center gap-2 text-[13px] text-[var(--ink3)]"><Freshness days={rollout.freshnessDays} /><DisputeGap p={rollout} /></div>
         </section>

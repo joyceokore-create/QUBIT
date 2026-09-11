@@ -64,13 +64,19 @@ export function CockpitInteractive({ level, allowed, projects, portfolios, scope
     const root = rootRef.current;
     if (!root) return;
     const collapsed = new Set<string>(JSON.parse(window.localStorage.getItem(`qubit.cockpit.collapsed.${level}`) ?? "[]"));
+    // Sections the user has explicitly toggled — so a `data-secondary` section can DEFAULT to
+    // collapsed (the "minimal, one focus per level" layout) until the user chooses otherwise.
+    const touched = new Set<string>(JSON.parse(window.localStorage.getItem(`qubit.cockpit.touched.${level}`) ?? "[]"));
     const persist = () => window.localStorage.setItem(`qubit.cockpit.collapsed.${level}`, JSON.stringify([...collapsed]));
+    const persistTouched = () => window.localStorage.setItem(`qubit.cockpit.touched.${level}`, JSON.stringify([...touched]));
     const cleanups: (() => void)[] = [];
     root.querySelectorAll<HTMLElement>(":scope section").forEach((section) => {
       const h2 = section.querySelector<HTMLElement>("h2");
       if (!h2 || h2.dataset.collapsible) return;
       h2.dataset.collapsible = "1";
       const key = section.id || h2.textContent?.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-") || "";
+      // Secondary sections start collapsed unless the user has already touched them.
+      if (section.hasAttribute("data-secondary") && !touched.has(key)) collapsed.add(key);
       const apply = (isCollapsed: boolean) => {
         section.querySelectorAll<HTMLElement>(":scope > *").forEach((child) => {
           if (child.contains(h2)) return;
@@ -91,7 +97,9 @@ export function CockpitInteractive({ level, allowed, projects, portfolios, scope
       const onClick = () => {
         if (collapsed.has(key)) collapsed.delete(key);
         else collapsed.add(key);
+        touched.add(key);
         persist();
+        persistTouched();
         render();
       };
       h2.addEventListener("click", onClick);

@@ -162,12 +162,15 @@ export function ProjectStripCard({ p }: { p: CockpitProject }) {
     >
       <div className="flex items-start justify-between gap-2">
         <b className="text-[14px] font-semibold leading-tight text-[var(--qink)]">{p.name}</b>
-        <RagChip rag={p.calculated} />
+        <span className="flex items-center gap-1.5">
+          {p.dispute && (
+            <span className="size-2 rounded-full" style={{ background: "var(--bad)" }} title={`Reported greener (${p.reported}) than calculated (${p.calculated})`} />
+          )}
+          <RagChip rag={p.calculated} />
+        </span>
       </div>
-      <div className="text-[12px] text-[var(--ink2)]">{p.status} · {p.pct}%</div>
-      <div className="flex items-center gap-2"><DimensionSquares p={p} /><DisputeGap p={p} /></div>
       <div className="flex items-center justify-between gap-2 text-[12px] text-[var(--ink4)]">
-        <span>{p.nextMilestone ? p.nextMilestone.name : "no milestone set"}</span>
+        <span className="truncate text-[var(--ink2)]">{p.nextMilestone ? p.nextMilestone.name : `${p.status} · ${p.pct}%`}</span>
         <Freshness days={p.freshnessDays} />
       </div>
     </button>

@@ -45,6 +45,13 @@ export function HeadCockpit({ data }: { data: CockpitData }) {
   }
   const topConflicts = conflicts.slice(0, 6);
 
+  // Merged exceptions — the Head's one focus. Priority: escalate → dispute → stale.
+  const exceptions: { p: CockpitProject; color: string; line: string }[] = [
+    ...escalate.map((p) => ({ p, color: "var(--bad)", line: `${p.redRisks > 0 ? `${p.redRisks} red risk(s)` : ""}${p.targetPassed ? (p.redRisks > 0 ? " · target passed" : "Target passed") : ""}`.trim() || "Needs escalation" })),
+    ...disputes.map((p) => ({ p, color: "var(--brand)", line: `Reported ${p.reported}, calculates ${p.calculated}` })),
+    ...stale.map((p) => ({ p, color: p.freshnessDays > 14 ? "var(--bad)" : "var(--warn)", line: `No update in ${p.freshnessDays}d` })),
+  ].slice(0, 14);
+
   return (
     <div className="flex flex-col gap-5">
       <CockpitPageHead
@@ -52,16 +59,25 @@ export function HeadCockpit({ data }: { data: CockpitData }) {
         subtitle={`${active.length} active initiatives across ${data.pms.length} PMs. Exceptions first: disputes, stale reporting, and what needs escalating upward.`}
       />
 
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
-        <Tile value={active.length} label="Active initiatives" detail={`${counts.R} red · ${counts.A} amber · ${counts.G} green`}><RagBar counts={counts} /></Tile>
-        <Tile value={disputes.length} label="RAG disputes" detail="reported greener than calculated" hot={disputes.length > 0} jump="head-disputes" />
-        <Tile value={stale.length} label="Stale status updates" detail={`${stale.filter((p) => p.freshnessDays > 14).length} older than 14 days`} hot={stale.some((p) => p.freshnessDays > 14)} jump="head-stale" />
-        <Tile value={escalate.length} label="To escalate upward" detail="red risks / passed targets" jump="head-escal" />
+      <div className="grid grid-cols-3 gap-3">
+        <Tile value={active.length} label="Active initiatives" detail={`${counts.R} red · ${counts.A} amber`}><RagBar counts={counts} /></Tile>
+        <Tile value={disputes.length} label="RAG disputes" detail="reported greener" hot={disputes.length > 0} />
+        <Tile value={stale.length} label="Stale updates" detail={`${stale.filter((p) => p.freshnessDays > 14).length} over 14 days`} hot={stale.some((p) => p.freshnessDays > 14)} />
       </div>
 
       <AskQBrief level="head" data={data} viewerId="" />
 
-      <section>
+      {/* Lead: everything off-track, one prioritized list (escalate → dispute → stale). */}
+      <section id="head-exceptions" className={CARD} style={cardStyle}>
+        <div className="mb-3 flex items-baseline justify-between gap-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">Exceptions</h2><span className="text-[12px] text-[var(--ink4)]">{exceptions.length} items · needs your attention</span></div>
+        <div className="flex flex-col">
+          {exceptions.length === 0 ? <Empty>Nothing off-track — no disputes, stale updates or escalations.</Empty> : exceptions.map((x, i) => (
+            <QueueRow key={i} p={x.p} color={x.color} line={x.line} />
+          ))}
+        </div>
+      </section>
+
+      <section data-secondary>
         <div className="mb-3 flex items-baseline justify-between gap-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">By project manager</h2><span className="text-[12px] text-[var(--ink4)]">Click a PM to open their view</span></div>
         <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
           {pmCards.map(({ pm, mine, cc, disputes: d, onTime }) => (
@@ -82,29 +98,7 @@ export function HeadCockpit({ data }: { data: CockpitData }) {
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Panel id="head-disputes" title="RAG disputes" sub="reported vs calculated">
-          {disputes.length === 0 ? <Empty>No disputes — reported matches calculated.</Empty> : disputes.map((p) => (
-            <QueueRow key={p.id} p={p} color="var(--brand)" line={<>reported {p.reported} · calculates {p.calculated}</>} />
-          ))}
-        </Panel>
-        <Panel id="head-stale" title="Reporting compliance" sub="weekly update expected">
-          {stale.length === 0 ? <Empty>Everyone is current.</Empty> : stale.map((p) => (
-            <QueueRow key={p.id} p={p} color={p.freshnessDays > 14 ? "var(--bad)" : "var(--warn)"} line={<Freshness days={p.freshnessDays} />} />
-          ))}
-        </Panel>
-        <Panel id="head-escal" title="Escalate upward" sub="red risks / passed targets">
-          {escalate.length === 0 ? <Empty>Nothing to escalate.</Empty> : escalate.map((p) => (
-            <QueueRow key={p.id} p={p} color="var(--bad)" line={<>{p.redRisks > 0 ? `${p.redRisks} red risk(s)` : ""}{p.targetPassed ? (p.redRisks > 0 ? " · target passed" : "target passed") : ""}</>} />
-          ))}
-        </Panel>
-        <section className={CARD} style={cardStyle}>
-          <div className="mb-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">Reported RAG · active portfolio · 8 weeks</h2></div>
-          {data.trend.series.length ? <RagTrend series={data.trend.series} weeks={data.trend.weeks} title="Projects by reported RAG" /> : <Empty>Trend builds as nightly snapshots accrue.</Empty>}
-        </section>
-      </div>
-
-      <section id="head-tracker" className={CARD} style={cardStyle}>
+      <section data-secondary id="head-tracker" className={CARD} style={cardStyle}>
         <div className="mb-3 flex items-baseline justify-between gap-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">Stage-gate tracker</h2><span className="text-[12px] text-[var(--ink4)]">gates derived from % complete · red first</span></div>
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
@@ -138,7 +132,7 @@ export function HeadCockpit({ data }: { data: CockpitData }) {
         </div>
       </section>
 
-      <section className={CARD} style={cardStyle}>
+      <section data-secondary className={CARD} style={cardStyle}>
         <div className="mb-3 flex items-baseline justify-between gap-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">Resource conflicts</h2><span className="text-[12px] text-[var(--ink4)]">next 4 weeks · derived from load & gate dates</span></div>
         <div className="flex flex-col gap-2">
           {topConflicts.length === 0 ? <Empty>No load or gate-date conflicts detected.</Empty> : topConflicts.map((c, i) => (
@@ -150,18 +144,15 @@ export function HeadCockpit({ data }: { data: CockpitData }) {
           ))}
         </div>
       </section>
+
+      <section data-secondary className={CARD} style={cardStyle}>
+        <div className="mb-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">Reported RAG · active portfolio</h2></div>
+        {data.trend.series.length ? <RagTrend series={data.trend.series} weeks={data.trend.weeks} title="Projects by reported RAG" /> : <Empty>Trend builds as nightly snapshots accrue.</Empty>}
+      </section>
     </div>
   );
 }
 
-function Panel({ id, title, sub, children }: { id: string; title: string; sub?: string; children: React.ReactNode }) {
-  return (
-    <section id={id} className={CARD} style={cardStyle}>
-      <div className="mb-3 flex items-baseline justify-between gap-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">{title}</h2>{sub && <span className="text-[12px] text-[var(--ink4)]">{sub}</span>}</div>
-      <div className="flex flex-col">{children}</div>
-    </section>
-  );
-}
 function QueueRow({ p, color, line }: { p: CockpitProject; color: string; line: React.ReactNode }) {
   return (
     <div className="grid grid-cols-[14px_1fr_auto] items-start gap-3 border-t border-[var(--hair)] py-2.5 first:border-t-0 first:pt-0">

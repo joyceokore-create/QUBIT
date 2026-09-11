@@ -1,5 +1,5 @@
 import type { CockpitData, CockpitProject } from "@/server/dashboard-cockpit";
-import { RagChip, Freshness } from "./primitives";
+import { ProjectStripCard } from "./primitives";
 import { CockpitPageHead } from "./page-head";
 import { AskQBrief } from "./ask-q-brief";
 
@@ -29,18 +29,7 @@ export function UserCockpit({ data, viewerId }: { data: CockpitData; viewerId: s
         </div>
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
-          {mine.map((p) => (
-            <div key={p.id} className="cockpit-card">
-              <button data-open={p.id} className="flex w-full min-w-0 flex-col gap-2 rounded-[10px] border p-3 text-left" style={{ background: "var(--cardbg)", borderColor: "var(--cardbd)", borderLeft: `4px solid ${{ G: "var(--ok)", A: "var(--warn)", R: "var(--bad)", N: "var(--ink4)" }[p.calculated]}` }}>
-                <div className="flex items-start justify-between gap-2"><b className="text-[14px] font-semibold leading-tight text-[var(--qink)]">{p.name}</b><RagChip rag={p.calculated} /></div>
-                <div className="text-[12px] text-[var(--ink2)]">{p.status} · {p.pct}%</div>
-                <div className="flex items-center justify-between gap-2 text-[12px] text-[var(--ink4)]">
-                  <span>{p.nextMilestone ? p.nextMilestone.name : "no milestone set"}</span>
-                  <Freshness days={p.freshnessDays} />
-                </div>
-              </button>
-            </div>
-          ))}
+          {mine.map((p) => <div key={p.id} className="cockpit-card"><ProjectStripCard p={p} /></div>)}
         </div>
       )}
     </div>

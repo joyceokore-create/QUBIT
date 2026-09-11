@@ -1,9 +1,5 @@
 import type { CockpitData } from "@/server/dashboard-cockpit";
-import { Tile } from "./primitives";
 import { ExecCockpit } from "./exec";
-
-const CARD = "rounded-[16px] border border-[var(--cardbd)] p-[16px_18px]";
-const cardStyle = { background: "var(--cardbg)" } as const;
 
 export interface AdminStats {
   users: number;
@@ -12,27 +8,30 @@ export interface AdminStats {
   modules: number;
 }
 
-// Super Admin = the Executive cockpit plus a platform-admin strip (IAM + catalogue health
-// from the RBAC work). The level switcher (in CockpitInteractive) lets them inspect any level.
+// Super Admin = a slim platform-admin stat row (IAM + catalogue health from the RBAC work)
+// above the decluttered Executive cockpit. The level switcher lets them inspect any level.
 export function SuperadminCockpit({ data, stats }: { data: CockpitData; stats: AdminStats }) {
+  const stat = (v: number, label: string) => (
+    <span className="flex items-baseline gap-1.5">
+      <b className="text-[15px] font-semibold text-[var(--qink)]">{v}</b>
+      <span className="text-[12px] text-[var(--ink3)]">{label}</span>
+    </span>
+  );
   return (
     <div className="flex flex-col gap-5">
-      <section className={CARD} style={cardStyle}>
-        <div className="mb-3 flex items-baseline justify-between gap-3">
-          <h2 className="text-[15px] font-semibold text-[var(--qink)]">Platform administration</h2>
-          <div className="flex gap-2 text-[12px]">
-            <a href="/admin/users" className="rounded bg-[var(--wash2)] px-2 py-1 font-semibold text-[var(--ink2)]">Users</a>
-            <a href="/admin/roles" className="rounded bg-[var(--wash2)] px-2 py-1 font-semibold text-[var(--ink2)]">Roles</a>
-            <a href="/admin/audit" className="rounded bg-[var(--wash2)] px-2 py-1 font-semibold text-[var(--ink2)]">Audit</a>
-          </div>
-        </div>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
-          <Tile value={stats.activeUsers} label="Active users" detail={`${stats.users} total`} />
-          <Tile value={stats.customRoles} label="Custom roles" detail="beyond the six built-in" />
-          <Tile value={stats.modules} label="App modules" detail="permission catalogue" />
-          <Tile value={data.projects.length} label="Projects" detail="across the tenant" />
-        </div>
-      </section>
+      {/* One slim admin row — not a second dashboard. */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-[12px] border border-[var(--cardbd)] px-4 py-2.5" style={{ background: "var(--cardbg)" }}>
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ink4)]">Platform</span>
+        {stat(stats.activeUsers, "active users")}
+        {stat(stats.customRoles, "custom roles")}
+        {stat(stats.modules, "app modules")}
+        {stat(data.projects.length, "projects")}
+        <span className="ml-auto flex gap-2 text-[12px]">
+          <a href="/admin/users" className="rounded bg-[var(--wash2)] px-2 py-1 font-semibold text-[var(--ink2)]">Users</a>
+          <a href="/admin/roles" className="rounded bg-[var(--wash2)] px-2 py-1 font-semibold text-[var(--ink2)]">Roles</a>
+          <a href="/admin/audit" className="rounded bg-[var(--wash2)] px-2 py-1 font-semibold text-[var(--ink2)]">Audit</a>
+        </span>
+      </div>
 
       <ExecCockpit data={data} />
     </div>
