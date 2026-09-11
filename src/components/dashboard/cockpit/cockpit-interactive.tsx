@@ -14,8 +14,11 @@ interface Props {
   projects: CockpitProject[];
   portfolios: string[];
   scope: string;
+  period: string;
   children: React.ReactNode;
 }
+
+const PERIOD_LABEL: Record<string, string> = { "4w": "4 weeks", "8w": "8 weeks", "13w": "Quarter (13w)" };
 
 const fmt = (d: Date | string | null) =>
   d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" }) : "—";
@@ -26,7 +29,7 @@ const fmt = (d: Date | string | null) =>
  * a project drawer (click any [data-open]), section jumps ([data-jump]), a project search,
  * and the level switcher. Keeps client JS to a single component.
  */
-export function CockpitInteractive({ level, allowed, projects, portfolios, scope, children }: Props) {
+export function CockpitInteractive({ level, allowed, projects, portfolios, scope, period, children }: Props) {
   const router = useRouter();
   const params = useSearchParams();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -54,6 +57,49 @@ export function CockpitInteractive({ level, allowed, projects, portfolios, scope
     else sp.set(key, value);
     router.push(`/dashboard?${sp.toString()}`);
   }
+
+  // Section collapse: enhance each <section> that has a heading with a caret toggle, persisted
+  // per level (reference behaviour). Runs after render so it works on server-rendered sections.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const collapsed = new Set<string>(JSON.parse(window.localStorage.getItem(`qubit.cockpit.collapsed.${level}`) ?? "[]"));
+    const persist = () => window.localStorage.setItem(`qubit.cockpit.collapsed.${level}`, JSON.stringify([...collapsed]));
+    const cleanups: (() => void)[] = [];
+    root.querySelectorAll<HTMLElement>(":scope section").forEach((section) => {
+      const h2 = section.querySelector<HTMLElement>("h2");
+      if (!h2 || h2.dataset.collapsible) return;
+      h2.dataset.collapsible = "1";
+      const key = section.id || h2.textContent?.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-") || "";
+      const apply = (isCollapsed: boolean) => {
+        section.querySelectorAll<HTMLElement>(":scope > *").forEach((child) => {
+          if (child.contains(h2)) return;
+          child.style.display = isCollapsed ? "none" : "";
+        });
+      };
+      const caret = document.createElement("span");
+      caret.setAttribute("aria-hidden", "true");
+      caret.style.cssText = "display:inline-block;margin-right:6px;transition:transform .12s;color:var(--ink4)";
+      caret.textContent = "▾";
+      h2.style.cursor = "pointer";
+      h2.prepend(caret);
+      const render = () => {
+        const c = collapsed.has(key);
+        caret.style.transform = c ? "rotate(-90deg)" : "none";
+        apply(c);
+      };
+      const onClick = () => {
+        if (collapsed.has(key)) collapsed.delete(key);
+        else collapsed.add(key);
+        persist();
+        render();
+      };
+      h2.addEventListener("click", onClick);
+      cleanups.push(() => h2.removeEventListener("click", onClick));
+      render();
+    });
+    return () => cleanups.forEach((fn) => fn());
+  }, [level, scope, period]);
 
   // Search: hide non-matching project cards/rows in place (reference behaviour).
   useEffect(() => {
@@ -118,6 +164,14 @@ export function CockpitInteractive({ level, allowed, projects, portfolios, scope
             {portfolios.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         )}
+        <select
+          aria-label="Trend period"
+          value={period}
+          onChange={(e) => setParam("period", e.target.value, e.target.value === "8w")}
+          className="rounded-lg border border-[var(--hair)] bg-[var(--wash2)] px-2.5 py-1.5 text-[13px] text-[var(--qink)] outline-none"
+        >
+          {Object.entries(PERIOD_LABEL).map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+        </select>
         <input
           type="search"
           value={query}

@@ -1,6 +1,7 @@
 import type { CockpitData, CockpitProject } from "@/server/dashboard-cockpit";
 import { calcRagCounts, CALC_ORDER } from "@/server/dashboard-cockpit";
-import { Tile, RagBar, RagChip, DisputeGap, Freshness, RagTrend } from "./primitives";
+import { GATE_KEYS, GATE_LABELS } from "@/server/dashboard-cockpit";
+import { Tile, RagBar, RagChip, DisputeGap, Freshness, RagTrend, GateCell } from "./primitives";
 import { CockpitPageHead } from "./page-head";
 import { AskQBrief } from "./ask-q-brief";
 
@@ -21,6 +22,28 @@ export function HeadCockpit({ data }: { data: CockpitData }) {
   });
 
   const tracker = active.slice().sort((a, b) => CALC_ORDER[a.calculated] - CALC_ORDER[b.calculated] || b.freshnessDays - a.freshnessDays);
+
+  // Resource conflicts, derived from real data: PMs carrying 3+ red/amber projects, and PMs
+  // with two projects whose next gate falls in the same week.
+  const conflicts: { severity: "R" | "A"; title: string; detail: string; who: string }[] = [];
+  for (const pm of data.pms) {
+    const mine = active.filter((p) => p.pmId === pm.id);
+    const trouble = mine.filter((p) => p.calculated !== "G");
+    if (trouble.length >= 3) {
+      conflicts.push({ severity: "A", title: `${pm.name} carries ${trouble.length} red/amber projects`, detail: trouble.slice(0, 3).map((p) => p.name).join(", "), who: `${pm.name} · ${mine.length} projects` });
+    }
+    const dated = mine.filter((p) => p.nextMilestone?.dueDate);
+    for (let i = 0; i < dated.length; i++) {
+      for (let j = i + 1; j < dated.length; j++) {
+        const da = new Date(dated[i].nextMilestone!.dueDate!).getTime();
+        const db = new Date(dated[j].nextMilestone!.dueDate!).getTime();
+        if (Math.abs(da - db) <= 7 * 86_400_000) {
+          conflicts.push({ severity: "R", title: `${dated[i].name} and ${dated[j].name} have gates in the same week`, detail: `Both under ${pm.name} — one may slip.`, who: pm.name });
+        }
+      }
+    }
+  }
+  const topConflicts = conflicts.slice(0, 6);
 
   return (
     <div className="flex flex-col gap-5">
@@ -81,13 +104,15 @@ export function HeadCockpit({ data }: { data: CockpitData }) {
         </section>
       </div>
 
-      <section className={CARD} style={cardStyle}>
-        <div className="mb-3 flex items-baseline justify-between gap-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">Delivery tracker</h2><span className="text-[12px] text-[var(--ink4)]">red first</span></div>
+      <section id="head-tracker" className={CARD} style={cardStyle}>
+        <div className="mb-3 flex items-baseline justify-between gap-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">Stage-gate tracker</h2><span className="text-[12px] text-[var(--ink4)]">gates derived from % complete · red first</span></div>
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-wide text-[var(--ink4)]">
-                <th className="px-2.5 py-2">Project</th><th className="px-2.5 py-2">PM</th><th className="px-2.5 py-2">Status</th><th className="px-2.5 py-2">%</th><th className="px-2.5 py-2">RAG</th><th className="px-2.5 py-2">Updated</th>
+                <th className="px-2.5 py-2">Project</th><th className="px-2.5 py-2">PM</th>
+                {GATE_KEYS.map((k) => <th key={k} className="px-1 py-2 text-center">{GATE_LABELS[k]}</th>)}
+                <th className="px-2.5 py-2">%</th><th className="px-2.5 py-2">RAG</th><th className="px-2.5 py-2">Updated</th>
               </tr>
             </thead>
             <tbody>
@@ -95,7 +120,7 @@ export function HeadCockpit({ data }: { data: CockpitData }) {
                 <tr key={p.id} data-open={p.id} className="cursor-pointer border-t border-[var(--hair)] hover:bg-[var(--wash2)]">
                   <td className="px-2.5 py-2"><span className="font-semibold text-[var(--qink)]">{p.name}</span></td>
                   <td className="px-2.5 py-2 text-[var(--ink3)]">{p.pmName ?? "—"}</td>
-                  <td className="px-2.5 py-2 text-[var(--ink2)]">{p.status}</td>
+                  {GATE_KEYS.map((k) => <td key={k} className="px-1 py-2 text-center"><GateCell state={p.gates[k]} /></td>)}
                   <td className="px-2.5 py-2 num">{p.pct}%</td>
                   <td className="px-2.5 py-2"><span className="inline-flex items-center gap-1.5"><RagChip rag={p.calculated} /><DisputeGap p={p} /></span></td>
                   <td className="px-2.5 py-2"><Freshness days={p.freshnessDays} /></td>
@@ -103,6 +128,26 @@ export function HeadCockpit({ data }: { data: CockpitData }) {
               ))}
             </tbody>
           </table>
+        </div>
+        <div className="mt-2.5 flex flex-wrap gap-3 text-[12px] text-[var(--ink3)]">
+          <span className="inline-flex items-center gap-1.5"><GateCell state="done" /> Complete</span>
+          <span className="inline-flex items-center gap-1.5"><GateCell state="prog" /> In progress</span>
+          <span className="inline-flex items-center gap-1.5"><GateCell state="late" /> Delayed</span>
+          <span className="inline-flex items-center gap-1.5"><GateCell state="block" /> Blocked</span>
+          <span className="inline-flex items-center gap-1.5"><GateCell state="none" /> Not started</span>
+        </div>
+      </section>
+
+      <section className={CARD} style={cardStyle}>
+        <div className="mb-3 flex items-baseline justify-between gap-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">Resource conflicts</h2><span className="text-[12px] text-[var(--ink4)]">next 4 weeks · derived from load & gate dates</span></div>
+        <div className="flex flex-col gap-2">
+          {topConflicts.length === 0 ? <Empty>No load or gate-date conflicts detected.</Empty> : topConflicts.map((c, i) => (
+            <div key={i} className="grid grid-cols-[auto_1fr_auto] items-start gap-2.5 text-[13px]">
+              <span className="mt-1.5 size-2 rounded-full" style={{ background: c.severity === "R" ? "var(--bad)" : "var(--warn)" }} />
+              <div><b className="block font-semibold text-[var(--qink)]">{c.title}</b><span className="text-[12px] text-[var(--ink3)]">{c.detail}</span></div>
+              <span className="whitespace-nowrap text-[12px] text-[var(--ink4)]">{c.who}</span>
+            </div>
+          ))}
         </div>
       </section>
     </div>

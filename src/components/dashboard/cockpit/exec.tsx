@@ -28,6 +28,8 @@ export function ExecCockpit({ data }: { data: CockpitData }) {
 
   const risks = active.flatMap((p) => p.risks.filter((r) => r.severity === "R").map((r) => ({ ...r }))).slice(0, 5);
   const table = approved.slice().sort((a, b) => CALC_ORDER[a.calculated] - CALC_ORDER[b.calculated]);
+  // Group actions — initiatives that need Group support (calculated Red/Amber or passed target).
+  const groupActions = active.filter((p) => p.calculated === "R" || (p.calculated === "A" && p.targetPassed)).sort((a, b) => CALC_ORDER[a.calculated] - CALC_ORDER[b.calculated]).slice(0, 8);
 
   return (
     <div className="flex flex-col gap-5">
@@ -106,6 +108,27 @@ export function ExecCockpit({ data }: { data: CockpitData }) {
           <RiskList risks={risks as CockpitProject["risks"]} />
         </section>
       </div>
+
+      <section className={CARD} style={cardStyle}>
+        <div className="mb-3 flex items-baseline justify-between gap-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">Group actions</h2><span className="text-[12px] text-[var(--ink4)]">initiatives needing Group support · owners abbreviated</span></div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="text-left text-[11px] uppercase tracking-wide text-[var(--ink4)]"><th className="px-2.5 py-2">Action</th><th className="px-2.5 py-2">Owner</th><th className="px-2.5 py-2">Status</th><th className="px-2.5 py-2">RAG</th></tr>
+            </thead>
+            <tbody>
+              {groupActions.length === 0 ? <tr><td colSpan={4} className="px-2.5 py-3 text-[var(--ink4)]">No initiatives currently need Group action.</td></tr> : groupActions.map((p) => (
+                <tr key={p.id} data-open={p.id} className="cursor-pointer border-t border-[var(--hair)] hover:bg-[var(--wash2)]">
+                  <td className="max-w-[36ch] px-2.5 py-2"><span className="font-semibold text-[var(--qink)]">Support {p.name}</span><span className="block text-[12px] text-[var(--ink4)]">{p.desc}</span></td>
+                  <td className="px-2.5 py-2 text-[var(--ink3)]">{p.pmName ?? "—"}</td>
+                  <td className="max-w-[44ch] px-2.5 py-2 text-[var(--ink2)]" style={{ whiteSpace: "normal" }}>{p.update ?? (p.targetPassed ? "Baseline target passed; awaiting decision." : "At risk — needs attention.")}</td>
+                  <td className="px-2.5 py-2"><RagChip rag={p.calculated} solid /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }

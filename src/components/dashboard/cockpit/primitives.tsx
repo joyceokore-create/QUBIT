@@ -4,6 +4,7 @@
 // by the client wrapper via event delegation; cards/rows here just carry data-open / data-jump.
 
 import type { CockpitProject } from "@/server/dashboard-cockpit";
+import { GATE_KEYS, GATE_LABELS } from "@/server/dashboard-cockpit";
 import type { DimRag } from "@/server/rag-dimensions";
 import { DIMENSIONS } from "@/server/rag-dimensions";
 
@@ -74,6 +75,24 @@ export function GateChip({ state }: { state: string }) {
       style={{ background: g.bg, color: g.fg }}
       title={g.title}
     >
+      {g.ch}
+    </span>
+  );
+}
+
+const GATE_CELL: Record<string, { ch: string; bg: string; fg: string; title: string }> = {
+  done: { ch: "✓", bg: "var(--okbg)", fg: "var(--ok)", title: "Complete" },
+  prog: { ch: "●", bg: "var(--brand-light)", fg: "var(--brand)", title: "In progress" },
+  late: { ch: "!", bg: "var(--warnbg)", fg: "var(--warn)", title: "Delayed" },
+  block: { ch: "✕", bg: "var(--badbg)", fg: "var(--bad)", title: "Blocked" },
+  none: { ch: "—", bg: "transparent", fg: "var(--line-2)", title: "Not started" },
+};
+
+/** A derived-gate cell (done | prog | late | block | none) for the gate tracker / market matrix. */
+export function GateCell({ state }: { state: string }) {
+  const g = GATE_CELL[state] ?? GATE_CELL.none;
+  return (
+    <span className="inline-grid size-[22px] place-items-center rounded-full text-[12px] font-bold" style={{ background: g.bg, color: g.fg }} title={g.title}>
       {g.ch}
     </span>
   );
@@ -173,14 +192,22 @@ export function MarketMatrix({ markets }: { markets: CockpitProject["markets"] }
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-separate" style={{ borderSpacing: "0 4px" }}>
+        <thead>
+          <tr className="text-[10px] uppercase tracking-wide text-[var(--ink4)]">
+            <th className="px-2 py-1 text-left">Market</th>
+            {GATE_KEYS.map((k) => <th key={k} className="px-1 py-1">{GATE_LABELS[k]}</th>)}
+            <th className="px-1 py-1">Live</th>
+          </tr>
+        </thead>
         <tbody>
           {markets.map((m) => (
             <tr key={m.market}>
               <td className="rounded-l-md px-2.5 py-1.5 text-left text-[12px] font-semibold" style={{ background: "var(--qink)", color: "var(--bg)" }}>
                 {m.market} <span className="text-[11px] font-normal opacity-70">{m.pct}%</span>
               </td>
-              <td className="rounded-r-md px-2 py-1.5" style={{ background: "var(--wash2)" }}>
-                <span className="inline-block h-3 w-9 rounded-full" style={{ background: m.status === "OnTrack" ? "var(--ok)" : m.status === "Overdue" ? "var(--bad)" : "var(--warn)" }} title={m.status} />
+              {GATE_KEYS.map((k) => <td key={k} className="px-1 py-1 text-center" style={{ background: "var(--wash2)" }}><GateCell state={m.gates[k]} /></td>)}
+              <td className="rounded-r-md px-1 py-1 text-center" style={{ background: "var(--wash2)" }}>
+                <span className="inline-block h-3 w-8 rounded-full" style={{ background: m.status === "OnTrack" ? "var(--ok)" : m.status === "Overdue" ? "var(--bad)" : "var(--warn)" }} title={m.status} />
               </td>
             </tr>
           ))}

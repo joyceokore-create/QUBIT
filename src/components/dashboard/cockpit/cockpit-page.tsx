@@ -2,7 +2,7 @@ import type { TenantContext } from "@/lib/tenant";
 import { withTenant } from "@/lib/tenant";
 import type { DashboardLevel } from "@/lib/dashboard-level";
 import { allowedLevels } from "@/lib/dashboard-level";
-import { getCockpitData } from "@/server/dashboard-cockpit";
+import { getCockpitData, PERIOD_WEEKS } from "@/server/dashboard-cockpit";
 import { CockpitInteractive } from "./cockpit-interactive";
 import { PmCockpit } from "./pm";
 import { HeadCockpit } from "./head";
@@ -33,15 +33,18 @@ export async function CockpitPage({
   roles,
   viewerId,
   scope,
+  period,
 }: {
   ctx: TenantContext;
   level: DashboardLevel;
   roles: readonly string[];
   viewerId: string;
   scope?: string;
+  period?: string;
 }) {
   const now = new Date();
-  const full = await getCockpitData(ctx, now);
+  const activePeriod = period && PERIOD_WEEKS[period] ? period : "8w";
+  const full = await getCockpitData(ctx, now, PERIOD_WEEKS[activePeriod]);
   const allowed = allowedLevels(roles).filter((l) => BUILT_LEVELS.includes(l));
   const stats = level === "superadmin" ? await adminStats(ctx) : null;
 
@@ -53,7 +56,7 @@ export async function CockpitPage({
 
   return (
     <main className="mx-auto flex w-full max-w-[1280px] flex-col gap-5 p-[24px_24px_72px]">
-      <CockpitInteractive level={level} allowed={allowed} projects={data.projects} portfolios={portfolios} scope={activeScope}>
+      <CockpitInteractive level={level} allowed={allowed} projects={data.projects} portfolios={portfolios} scope={activeScope} period={activePeriod}>
         {level === "superadmin" && stats ? (
           <SuperadminCockpit data={data} stats={stats} />
         ) : level === "exec" ? (

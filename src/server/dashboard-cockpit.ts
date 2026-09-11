@@ -11,6 +11,29 @@ import { deriveDimensions, ragPair, isDispute, type DimensionMap, type DimRag } 
 const OPEN_BLOCKER = { status: "Open" as const };
 const RED_ISSUE_SEV = ["High", "Critical"];
 
+// Fixed delivery gates (the reference's columns). QUBIT's checkpoints are tenant-defined, so
+// gate state is DERIVED from overall progress as a monotonic BRD→Go-Live progression — an
+// honest approximation that reproduces the reference's gate columns from real % complete.
+export type GateState = "done" | "prog" | "late" | "block" | "none";
+export const GATE_KEYS = ["brd", "proto", "mvp1", "sit", "uat", "golive"] as const;
+export type GateKey = (typeof GATE_KEYS)[number];
+export const GATE_LABELS: Record<GateKey, string> = { brd: "BRD", proto: "Proto", mvp1: "MVP1", sit: "SIT", uat: "UAT", golive: "Go-Live" };
+const GATE_DONE_AT: Record<GateKey, number> = { brd: 15, proto: 25, mvp1: 45, sit: 65, uat: 85, golive: 100 };
+export type GateMap = Record<GateKey, GateState>;
+
+function deriveGates(pct: number, targetPassed: boolean, gatesBlocked: number): GateMap {
+  const out = {} as GateMap;
+  let currentSet = false;
+  for (const k of GATE_KEYS) {
+    if (pct >= GATE_DONE_AT[k]) out[k] = "done";
+    else if (!currentSet) {
+      out[k] = gatesBlocked > 0 ? "block" : targetPassed ? "late" : "prog";
+      currentSet = true;
+    } else out[k] = "none";
+  }
+  return out;
+}
+
 export interface CockpitRisk {
   id: string;
   title: string;
@@ -22,6 +45,7 @@ export interface CockpitMarket {
   market: string;
   pct: number;
   status: string;
+  gates: GateMap;
 }
 
 export interface CockpitProject {
@@ -47,6 +71,7 @@ export interface CockpitProject {
   openRisks: number;
   redRisks: number;
   overdueTasks: number;
+  gates: GateMap;
   risks: CockpitRisk[];
   markets: CockpitMarket[];
   update: string | null; // latest narrative (status note)
@@ -62,19 +87,19 @@ export interface CockpitData {
   generatedAt: Date;
 }
 
-function buildTrend(snaps: { rag: string; createdAt: Date }[], now: Date): CockpitData["trend"] {
-  // Eight weekly buckets ending this week; each is [Green, Amber, Red] counts.
+function buildTrend(snaps: { rag: string; createdAt: Date }[], now: Date, weeks: number): CockpitData["trend"] {
+  // `weeks` weekly buckets ending this week; each is [Green, Amber, Red] counts.
   const weekMs = 7 * 86_400_000;
   const buckets: { label: string; g: number; a: number; r: number }[] = [];
-  for (let i = 7; i >= 0; i--) {
+  for (let i = weeks - 1; i >= 0; i--) {
     const end = new Date(now.getTime() - i * weekMs);
     buckets.push({ label: end.toLocaleDateString("en-GB", { day: "numeric", month: "short" }), g: 0, a: 0, r: 0 });
   }
-  const start = now.getTime() - 8 * weekMs;
+  const start = now.getTime() - weeks * weekMs;
   for (const s of snaps) {
     const t = s.createdAt.getTime();
     if (t < start) continue;
-    const idx = Math.min(7, Math.floor((t - start) / weekMs));
+    const idx = Math.min(weeks - 1, Math.floor((t - start) / weekMs));
     const b = buckets[idx];
     if (!b) continue;
     if (s.rag === "Green") b.g++;
@@ -86,11 +111,14 @@ function buildTrend(snaps: { rag: string; createdAt: Date }[], now: Date): Cockp
   return { weeks: buckets.map((b) => b.label), series: buckets.map((b) => [b.g, b.a, b.r]) };
 }
 
+// Period → trend window (weeks). "4w" · "8w" (default) · "13w" (quarter).
+export const PERIOD_WEEKS: Record<string, number> = { "4w": 4, "8w": 8, "13w": 13 };
+
 const short: Record<Rag, DimRag> = { Green: "G", Amber: "A", Red: "R" };
 const daysBetween = (a: Date, b: Date) => Math.round((a.getTime() - b.getTime()) / 86_400_000);
 
-export async function getCockpitData(ctx: TenantContext, now = new Date()): Promise<CockpitData> {
-  const since = new Date(now.getTime() - 8 * 7 * 86_400_000);
+export async function getCockpitData(ctx: TenantContext, now = new Date(), trendWeeks = 8): Promise<CockpitData> {
+  const since = new Date(now.getTime() - trendWeeks * 7 * 86_400_000);
   const { rows, userNames, snaps } = await withTenant(ctx, async (tx) => {
     const users = await tx.user.findMany({ select: { id: true, name: true } });
     const snapRows = await tx.projectSnapshot.findMany({
@@ -184,7 +212,12 @@ export async function getCockpitData(ctx: TenantContext, now = new Date()): Prom
 
     const markets: CockpitMarket[] = p.orgStatuses
       .filter((o) => o.orgUnit)
-      .map((o) => ({ market: o.orgUnit!.name, pct: o.progress, status: o.status }));
+      .map((o) => ({
+        market: o.orgUnit!.name,
+        pct: o.progress,
+        status: o.status,
+        gates: deriveGates(o.progress, o.status === "Overdue", 0),
+      }));
 
     return {
       id: p.id,
@@ -211,6 +244,7 @@ export async function getCockpitData(ctx: TenantContext, now = new Date()): Prom
       openRisks,
       redRisks,
       overdueTasks,
+      gates: deriveGates(pct, targetPassed, gatesBlocked),
       risks,
       markets: markets.length > 1 ? markets : [], // a single-market project isn't a rollout
       update: p.statusNote ?? null,
@@ -226,7 +260,7 @@ export async function getCockpitData(ctx: TenantContext, now = new Date()): Prom
     pmMap.set(p.pmId, entry);
   }
 
-  return { projects, pms: [...pmMap.values()], trend: buildTrend(snaps, now), generatedAt: now };
+  return { projects, pms: [...pmMap.values()], trend: buildTrend(snaps, now, trendWeeks), generatedAt: now };
 }
 
 /** RAG count of a project list by calculated RAG (cockpit tiles/bars). */
