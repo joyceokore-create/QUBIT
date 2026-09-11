@@ -15,6 +15,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { groupPermissions } from "@/lib/permission-groups";
+import { primaryRoleLabel } from "@/lib/rbac";
+import { CATALOGUE_PERMISSIONS } from "@/lib/catalogue";
+
+// code → human action name, e.g. "dashboard:read" → "View dashboard".
+const ACTION_NAME = new Map(CATALOGUE_PERMISSIONS.map((p) => [p.code, p.actionName]));
+const actionLabel = (code: string) => ACTION_NAME.get(code) ?? code;
 
 const CARD =
   "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]";
@@ -107,9 +113,12 @@ function PermissionPicker({
             </label>
             <div className="grid grid-cols-1 gap-1 pl-6 sm:grid-cols-2">
               {group.permissions.map((perm) => (
-                <label key={perm} className="flex items-center gap-2 text-[11.5px] text-[var(--ink2)]">
-                  <Checkbox checked={selected.has(perm)} onCheckedChange={(c) => onToggle(perm, c === true)} />
-                  <span className="font-mono tracking-[.2px]">{perm}</span>
+                <label key={perm} className="flex items-start gap-2 text-[11.5px] text-[var(--ink2)]">
+                  <Checkbox checked={selected.has(perm)} onCheckedChange={(c) => onToggle(perm, c === true)} className="mt-0.5" />
+                  <span className="flex flex-col leading-tight">
+                    <span className="text-[12.5px] text-[var(--ink2)]">{actionLabel(perm)}</span>
+                    <span className="font-mono text-[9.5px] tracking-[.2px] text-[var(--ink4)]">{perm}</span>
+                  </span>
                 </label>
               ))}
             </div>
@@ -165,7 +174,7 @@ function RoleCard({ view, catalogue, canManage }: { view: RoleView; catalogue: s
   return (
     <div className={`${CARD} p-[14px_16px] ${deactivated ? "opacity-70" : ""}`} style={{ background: "var(--cardbg)" }}>
       <div className="mb-1.5 flex items-center gap-2">
-        <span className="font-heading text-[13.5px] font-bold text-[var(--qink)]">{view.role}</span>
+        <span className="font-heading text-[13.5px] font-bold text-[var(--qink)]">{primaryRoleLabel([view.role])}</span>
         {view.custom ? (
           <>
             <span className="rounded-[5px] bg-[var(--wash2)] px-1.5 py-0.5 font-mono text-[8.5px] uppercase tracking-[1px] text-[var(--ink3)]">
@@ -230,9 +239,10 @@ function RoleCard({ view, catalogue, canManage }: { view: RoleView; catalogue: s
             view.permissions.map((g) => (
               <span
                 key={g}
-                className="rounded-[5px] bg-[var(--wash2)] px-2 py-1 font-mono text-[9.5px] tracking-[.3px] text-[var(--ink3)]"
+                title={g}
+                className="rounded-[5px] bg-[var(--wash2)] px-2 py-1 text-[10.5px] tracking-[.2px] text-[var(--ink3)]"
               >
-                {g}
+                {actionLabel(g)}
               </span>
             ))
           )}

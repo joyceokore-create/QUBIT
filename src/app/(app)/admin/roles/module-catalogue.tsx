@@ -53,10 +53,10 @@ export function ModuleCatalogue({ modules }: { modules: ModuleView[] }) {
               {m.permissions.map((p) => (
                 <span
                   key={p.code}
-                  title={p.actionName}
-                  className="rounded-[5px] bg-[var(--wash2)] px-2 py-1 font-mono text-[9.5px] tracking-[.3px] text-[var(--ink3)]"
+                  title={p.code}
+                  className="rounded-[5px] bg-[var(--wash2)] px-2 py-1 text-[10.5px] tracking-[.2px] text-[var(--ink3)]"
                 >
-                  {p.code}
+                  {p.actionName}
                 </span>
               ))}
             </div>
