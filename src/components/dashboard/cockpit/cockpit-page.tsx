@@ -3,6 +3,7 @@ import { withTenant } from "@/lib/tenant";
 import type { DashboardLevel } from "@/lib/dashboard-level";
 import { allowedLevels } from "@/lib/dashboard-level";
 import { getCockpitData, PERIOD_WEEKS } from "@/server/dashboard-cockpit";
+import { listWorkload } from "@/server/resources";
 import { CockpitInteractive } from "./cockpit-interactive";
 import { PmCockpit } from "./pm";
 import { HeadCockpit } from "./head";
@@ -32,6 +33,7 @@ export async function CockpitPage({
   level,
   roles,
   viewerId,
+  viewerName,
   scope,
   period,
 }: {
@@ -39,6 +41,7 @@ export async function CockpitPage({
   level: DashboardLevel;
   roles: readonly string[];
   viewerId: string;
+  viewerName?: string;
   scope?: string;
   period?: string;
 }) {
@@ -47,6 +50,11 @@ export async function CockpitPage({
   const full = await getCockpitData(ctx, now, PERIOD_WEEKS[activePeriod]);
   const allowed = allowedLevels(roles).filter((l) => BUILT_LEVELS.includes(l));
   const stats = level === "superadmin" ? await adminStats(ctx) : null;
+  // PM's "My allocation" tile — the viewer's own workload from the existing staffing engine.
+  const allocationPct =
+    level === "pm"
+      ? ((await listWorkload(ctx).catch(() => [])).find((w) => w.userId === viewerId)?.totalPct ?? null)
+      : null;
 
   // Portfolio scope filter (server round-trip so tiles and lists stay consistent).
   const portfolios = [...new Set(full.projects.map((p) => p.portfolioName).filter((n): n is string => !!n))].sort();
@@ -64,7 +72,7 @@ export async function CockpitPage({
         ) : level === "head" ? (
           <HeadCockpit data={data} />
         ) : level === "pm" ? (
-          <PmCockpit data={data} viewerId={viewerId} now={now} />
+          <PmCockpit data={data} viewerId={viewerId} viewerName={viewerName} allocationPct={allocationPct} now={now} />
         ) : (
           <UserCockpit data={data} viewerId={viewerId} />
         )}

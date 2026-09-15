@@ -27,5 +27,5 @@ export default async function DashboardPage({
   const { level: requestedLevel, scope, period } = await searchParams;
   const level = resolveRequestedLevel(ctx.roles, requestedLevel);
 
-  return <CockpitPage ctx={ctx} level={level} roles={ctx.roles} viewerId={ctx.userId} scope={scope} period={period} />;
+  return <CockpitPage ctx={ctx} level={level} roles={ctx.roles} viewerId={ctx.userId} viewerName={session.user.name ?? undefined} scope={scope} period={period} />;
 }

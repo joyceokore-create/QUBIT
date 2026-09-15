@@ -40,9 +40,29 @@ function briefLines(level: DashboardLevel, data: CockpitData, viewerId: string):
   return lines.slice(0, 3);
 }
 
-export function AskQBrief({ level, data, viewerId }: { level: DashboardLevel; data: CockpitData; viewerId: string }) {
+export function AskQBrief({ level, data, viewerId, daily, signee }: { level: DashboardLevel; data: CockpitData; viewerId: string; daily?: boolean; signee?: string }) {
   const lines = briefLines(level, data, viewerId);
   const when = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+
+  if (daily) {
+    // The PM "Daily Brief" card (reference design): crimson gradient, DAILY BRIEF pill.
+    return (
+      <section
+        className="flex h-full flex-col rounded-[14px] p-5 text-white"
+        style={{ background: "linear-gradient(135deg, color-mix(in oklab, var(--brand) 88%, black) 0%, color-mix(in oklab, var(--brand) 55%, black) 100%)" }}
+      >
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-[1.2px]">☀ Daily Brief</span>
+          <span className="text-[11px] text-white/70">Generated {when} today{signee ? ` · ${signee}` : ""}</span>
+        </div>
+        {lines.map((l, i) => (
+          <p key={i} className="mb-2.5 max-w-[70ch] text-[13.5px] leading-relaxed text-white/85"><b className="font-semibold text-white">{l.emphasis}</b> {l.detail}</p>
+        ))}
+        <div className="mt-auto pt-1 text-[11px] text-white/60">Generated from status updates, gate records and RAID items — verify before acting.</div>
+      </section>
+    );
+  }
+
   return (
     <section className="grid grid-cols-[auto_1fr] gap-3.5 rounded-[12px] border border-[var(--cardbd)] p-4" style={{ background: "var(--cardbg)" }}>
       <div className="grid size-[34px] place-items-center rounded-[9px] bg-[var(--qink)] text-[15px] font-bold text-[var(--bg)]">Q</div>
