@@ -7,7 +7,7 @@ import type { DashboardLevel } from "@/lib/dashboard-level";
 
 interface Line { emphasis: string; detail: string }
 
-function briefLines(level: DashboardLevel, data: CockpitData, viewerId: string): Line[] {
+export function briefLines(level: DashboardLevel, data: CockpitData, viewerId: string): Line[] {
   const active = data.projects.filter((p) => !["Completed", "Cancelled"].includes(p.status));
   const disputes = active.filter((p) => p.dispute);
   const stale = active.filter((p) => p.freshnessDays > 14 && p.freshnessDays < 900);
