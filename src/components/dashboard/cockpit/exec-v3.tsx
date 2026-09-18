@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useTheme } from "next-themes";
 import "./pm-v3.css";
-import { Ic, RagChipV3, RagBarV3, RAG_LABEL } from "./pm-v3";
+import { Ic, RagChipV3, RagBarV3, RAG_LABEL, useFullBleed } from "./pm-v3";
 import { TrendChart } from "./head-v3";
 
 // Executive view — markup ported 1:1 from the approved artifact's renderExec().
@@ -55,6 +55,7 @@ export interface ExecV3Props {
 const DIMS = ["Schedule", "Budget", "Scope", "Risk", "Resources", "Quality"];
 
 export function ExecV3(props: ExecV3Props) {
+  useFullBleed();
   const { resolvedTheme, setTheme } = useTheme();
   const [activeNav, setActiveNav] = useState("exec-top");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());

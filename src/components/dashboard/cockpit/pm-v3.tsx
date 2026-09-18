@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import "./pm-v3.css";
 
@@ -54,6 +54,14 @@ export interface PmV3Props {
 }
 
 export const RAG_LABEL: Record<string, string> = { G: "Green", A: "Amber", R: "Red", N: "Not rated" };
+
+/** While mounted, the cockpit's section pane is the ONLY left nav (hides the app sidebar). */
+export function useFullBleed() {
+  useEffect(() => {
+    document.body.classList.add("pmv3-full");
+    return () => document.body.classList.remove("pmv3-full");
+  }, []);
+}
 
 const ICONS: Record<string, string> = {
   grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
@@ -127,6 +135,7 @@ export function Gate({ g }: { g: string }) {
 }
 
 export function PmV3({ viewer, briefLines, generatedAt, projects, ragCounts, stats, queue, risks, collisions, market }: PmV3Props) {
+  useFullBleed();
   const { resolvedTheme, setTheme } = useTheme();
   const [activeNav, setActiveNav] = useState("pm-top");
   const [wqFilter, setWqFilter] = useState("");

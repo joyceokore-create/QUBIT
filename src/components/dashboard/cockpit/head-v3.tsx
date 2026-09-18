@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useTheme } from "next-themes";
 import "./pm-v3.css";
-import { Ic, RagChipV3, RagBarV3, Gate, RAG_LABEL } from "./pm-v3";
+import { Ic, RagChipV3, RagBarV3, Gate, RAG_LABEL, useFullBleed } from "./pm-v3";
 
 // Head of PMs view — markup ported 1:1 from the approved artifact's renderHead().
 
@@ -105,6 +105,7 @@ export function TrendChart({ title, weeks, series, muted }: { title: string; wee
 const AV_COLORS = ["teal", "red", "blue", "violet"];
 
 export function HeadV3(props: HeadV3Props) {
+  useFullBleed();
   const { resolvedTheme, setTheme } = useTheme();
   const [activeNav, setActiveNav] = useState("head-top");
   const [headSort, setHeadSort] = useState<"rag" | "date" | "stale">("rag");
