@@ -1,108 +1,137 @@
-import type { CockpitData, CockpitProject } from "@/server/dashboard-cockpit";
-import { calcRagCounts, CALC_ORDER } from "@/server/dashboard-cockpit";
-import { Tile, RagBar, RagChip, DisputeGap, DimensionSquares, RagTrend, RiskList } from "./primitives";
-import { CockpitPageHead } from "./page-head";
-import { AskQBrief } from "./ask-q-brief";
+import type { CockpitData, CockpitProject, GateKey } from "@/server/dashboard-cockpit";
+import { GATE_KEYS } from "@/server/dashboard-cockpit";
+import { briefLines } from "./ask-q-brief";
+import { ExecV3, type ExecV3Props, type ExecRow } from "./exec-v3";
 
-const CARD = "rounded-[16px] border border-[var(--cardbd)] p-[16px_18px]";
-const cardStyle = { background: "var(--cardbg)" } as const;
-const CATEGORY_ORDER = ["Approved", "Exploring", "Shelved", "Unfiled"];
+// Server wrapper for the Executive view — maps real tenant data into the approved
+// artifact's shape (exec-v3.tsx renders its exact markup).
+
+const STAGE_OF: Record<GateKey, { phase: string; stage: string }> = {
+  brd: { phase: "Planning", stage: "BRD" },
+  proto: { phase: "Planning", stage: "Prototype" },
+  mvp1: { phase: "Execution", stage: "Build / MVP1" },
+  sit: { phase: "Execution", stage: "SIT" },
+  uat: { phase: "Execution", stage: "UAT" },
+  golive: { phase: "Transition", stage: "Go-Live" },
+};
+const PHASES = ["Planning", "Execution", "Transition", "Closure"];
+function stageOf(p: CockpitProject): { phase: string; stage: string } {
+  for (const k of GATE_KEYS) if (p.gates[k] !== "done") return STAGE_OF[k];
+  return { phase: "Closure", stage: "Production" };
+}
+const fmt = (d: Date | string | null) =>
+  d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" }) : "—";
+
+const PRIO_GROUPS: { key: string; label: string; color: string }[] = [
+  { key: "High", label: "High", color: "red" },
+  { key: "Med", label: "Medium", color: "amber" },
+  { key: "Low", label: "Low", color: "accent" },
+  { key: "New", label: "New", color: "grey" },
+  { key: "Strat", label: "Strategic", color: "grey" },
+  { key: "Paused", label: "Paused", color: "grey" },
+];
 
 export function ExecCockpit({ data }: { data: CockpitData }) {
+  const now = data.generatedAt;
   const all = data.projects;
   const active = all.filter((p) => !["Completed", "Cancelled"].includes(p.status));
   const approved = active.filter((p) => p.category === "Approved");
-  const counts = calcRagCounts(approved.length ? approved : active);
+  const pool = approved.length ? approved : active;
+  const ragOrder: Record<string, number> = { R: 0, A: 1, G: 2, N: 3 };
+  const counts = {
+    R: pool.filter((p) => p.calculated === "R").length,
+    A: pool.filter((p) => p.calculated === "A").length,
+    G: pool.filter((p) => p.calculated === "G").length,
+    N: pool.filter((p) => p.calculated === "N").length,
+  };
+  const live = all.filter((p) => p.status === "Completed");
+  const blocked = active.filter((p) => p.openBlockers > 0).length;
 
-  // Decisions needing Group action — derived from real signals (aged red risks, disputes on
-  // passed-target projects, blocked delivery), sorted by staleness.
-  const decisions = active
+  // Decisions & GLC — derived from real escalation signals (the artifact used sample data).
+  const decisionProjects = active
     .filter((p) => p.redRisks > 0 || (p.dispute && p.targetPassed) || (p.calculated === "R" && p.freshnessDays > 7))
     .sort((a, b) => b.freshnessDays - a.freshnessDays)
     .slice(0, 10);
+  const glc: ExecV3Props["glc"] = decisionProjects.slice(0, 6).map((p) => ({
+    a: `Resolve ${p.name} blockers and confirm support required`,
+    o: p.pmName ?? "—",
+    s: p.update ?? (p.targetPassed ? "Baseline target passed; awaiting decision." : "At risk — needs attention."),
+    rag: p.calculated,
+  }));
 
-  const buckets = CATEGORY_ORDER.map((c) => ({ c, n: all.filter((p) => p.category === c).length })).filter((b) => b.n > 0);
-  const maxB = Math.max(1, ...buckets.map((b) => b.n));
-  const bcol: Record<string, string> = { Approved: "var(--ok)", Exploring: "var(--warn)", Shelved: "var(--ink4)", Unfiled: "var(--ink4)" };
+  const bucketDefs: { key: string; label: string; color: string }[] = [
+    { key: "Approved", label: "Approved & in delivery", color: "var(--good)" },
+    { key: "Exploring", label: "Exploring", color: "var(--v3amber)" },
+    { key: "Shelved", label: "Shelved", color: "var(--v3grey)" },
+    { key: "Unfiled", label: "Unfiled", color: "var(--v3grey)" },
+  ];
+  const buckets = bucketDefs
+    .map((b) => ({ label: b.label, color: b.color, n: all.filter((p) => (p.category === b.key) || (b.key === "Unfiled" && !bucketDefs.some((x) => x.key === p.category))).length, names: all.filter((p) => p.category === b.key).map((p) => p.name).join(", ") }))
+    .filter((b) => b.n > 0);
 
-  const risks = active.flatMap((p) => p.risks.filter((r) => r.severity === "R").map((r) => ({ ...r }))).slice(0, 5);
-  const table = approved.slice().sort((a, b) => CALC_ORDER[a.calculated] - CALC_ORDER[b.calculated]);
+  const stageGroups = PHASES.map((phase) => ({ phase, names: pool.filter((p) => stageOf(p).phase === phase).map((p) => p.name) })).filter((g) => g.names.length > 0);
+
+  const rows: ExecRow[] = pool
+    .slice()
+    .sort((x, y) => ragOrder[x.calculated] - ragOrder[y.calculated])
+    .map((p) => {
+      const { phase, stage } = stageOf(p);
+      return {
+        id: p.id,
+        name: p.name,
+        desc: p.desc,
+        sub: p.markets[0]?.market ?? p.portfolioName ?? "—",
+        phase,
+        stage,
+        lpo: p.hasBudget, // budget captured stands in for LPO-issued until an LPO field exists
+        calc: p.calculated,
+        rep: p.reported,
+        dispute: p.dispute,
+        dims: p.dims,
+        target: fmt(p.dueDate),
+        targetPast: p.targetPassed,
+        support: p.update ?? "",
+        prio: PRIO_GROUPS.some((g) => g.key === p.priority) ? p.priority : "New",
+      };
+    });
+
+  const risks = active
+    .flatMap((p) => p.risks.filter((r) => r.severity === "R").map((r) => ({ id: r.id, projectName: p.name, t: r.title, meta: `${r.id} · owner ${r.owner}` })))
+    .slice(0, 5);
 
   return (
-    <div className="flex flex-col gap-5">
-      <CockpitPageHead
-        title="Executive — portfolio health & decisions"
-        subtitle={`${all.length} initiatives across the pipeline. Delivery is moving; a concentrated set of decisions gates progress.`}
-      />
-
-      <div className="grid grid-cols-3 gap-3">
-        <Tile value={approved.length} label="Approved portfolio" detail={`${counts.R} red · ${counts.A} amber`}><RagBar counts={counts} /></Tile>
-        <Tile value={counts.R + counts.A} label="At risk" detail="need attention" hot={counts.R > 0} />
-        <Tile value={decisions.length} label="Decisions needing action" detail={`${decisions.filter((d) => d.freshnessDays > 30).length} over 30 days`} hot={decisions.length > 0} />
-      </div>
-
-      <AskQBrief level="exec" data={data} viewerId="" />
-
-      {/* Lead: what needs a decision (decisions + group actions merged). */}
-      <section id="exec-decisions" className={CARD} style={cardStyle}>
-        <div className="mb-3 flex items-baseline justify-between gap-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">Decisions & group actions</h2><span className="text-[12px] text-[var(--ink4)]">initiatives needing a Group decision · by staleness</span></div>
-        <div className="flex flex-col">
-          {decisions.length === 0 ? <span className="text-[12px] text-[var(--ink4)]">No decisions pending.</span> : decisions.map((p) => (
-            <div key={p.id} className="grid grid-cols-[14px_1fr_auto] items-start gap-3 border-t border-[var(--hair)] py-2.5 first:border-t-0 first:pt-0">
-              <span className="mt-1.5 size-2.5 rounded-sm" style={{ background: p.calculated === "R" ? "var(--bad)" : "var(--warn)" }} />
-              <div className="min-w-0"><b className="block font-semibold text-[var(--qink)]">{p.name}</b><span className="text-[13px] text-[var(--ink3)]">{p.update ?? p.risks[0]?.title ?? (p.targetPassed ? "Target passed; reported greener than calculated" : "At risk")}</span></div>
-              <button data-open={p.id} className="whitespace-nowrap rounded bg-[var(--wash2)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--ink2)]">{p.freshnessDays > 90 ? "no update" : `${p.freshnessDays}d`}</button>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section data-secondary className={CARD} style={cardStyle}>
-        <div className="mb-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">Pipeline at a glance</h2></div>
-        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2.5 gap-y-1.5 text-[12px]">
-          {buckets.map((b) => (
-            <div key={b.c} className="contents">
-              <span className="text-[var(--ink2)]">{b.c}</span>
-              <span className="h-4 overflow-hidden rounded bg-[var(--wash2)]"><i className="block h-full rounded" style={{ width: `${(b.n / maxB) * 100}%`, background: bcol[b.c] }} /></span>
-              <span className="text-right font-semibold num text-[var(--qink)]">{b.n}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section data-secondary className={CARD} style={cardStyle}>
-        <div className="mb-3 flex items-baseline justify-between gap-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">Approved portfolio — status</h2><span className="text-[12px] text-[var(--ink4)]">{approved.length} funded · red first</span></div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wide text-[var(--ink4)]">
-                <th className="px-2.5 py-2">Solution</th><th className="px-2.5 py-2">RAG</th><th className="px-2.5 py-2">Dimensions</th><th className="px-2.5 py-2">%</th><th className="px-2.5 py-2">PM</th>
-              </tr>
-            </thead>
-            <tbody>
-              {table.length === 0 ? <tr><td colSpan={5} className="px-2.5 py-3 text-[var(--ink4)]">No approved-portfolio projects yet.</td></tr> : table.map((p) => (
-                <tr key={p.id} data-open={p.id} className="cursor-pointer border-t border-[var(--hair)] hover:bg-[var(--wash2)]">
-                  <td className="px-2.5 py-2"><span className="font-semibold text-[var(--qink)]">{p.name}</span><span className="block text-[12px] text-[var(--ink4)]">{p.desc}</span></td>
-                  <td className="px-2.5 py-2"><span className="inline-flex items-center gap-1.5"><RagChip rag={p.calculated} /><DisputeGap p={p} /></span></td>
-                  <td className="px-2.5 py-2"><DimensionSquares p={p} /></td>
-                  <td className="px-2.5 py-2 num">{p.pct}%</td>
-                  <td className="px-2.5 py-2 text-[var(--ink3)]">{p.pmName ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section data-secondary className={CARD} style={cardStyle}>
-        <div className="mb-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">Reported RAG trend</h2></div>
-        {data.trend.series.length ? <RagTrend series={data.trend.series} weeks={data.trend.weeks} title="Projects by reported RAG" /> : <span className="text-[12px] text-[var(--ink4)]">Trend builds as nightly snapshots accrue.</span>}
-      </section>
-
-      <section data-secondary className={CARD} style={cardStyle}>
-        <div className="mb-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">Top risks</h2></div>
-        <RiskList risks={risks as CockpitProject["risks"]} />
-      </section>
-    </div>
+    <ExecV3
+      briefLines={briefLines("exec", data, "")}
+      generatedAt={now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+      stats={{
+        all: all.length,
+        approved: pool.length,
+        approvedCounts: counts,
+        live: live.length,
+        liveNames: live.slice(0, 2).map((p) => p.name).join(" · "),
+        blocked,
+        decisions: decisionProjects.length,
+        decisionsOver30: decisionProjects.filter((p) => p.freshnessDays > 30).length,
+        glc: glc.length,
+        glcRed: glc.filter((g) => g.rag === "R").length,
+      }}
+      buckets={buckets}
+      stageGroups={stageGroups}
+      prioGroups={PRIO_GROUPS}
+      rows={rows}
+      trendRep={data.trend}
+      // Calculated-RAG history isn't snapshotted yet — the reported series stands in until it is.
+      trendCalc={data.trend}
+      decisions={decisionProjects.map((p) => ({
+        id: p.id,
+        owner: p.pmName ?? "—",
+        age: p.freshnessDays > 90 ? "no update" : `${p.freshnessDays}d waiting`,
+        sev: p.calculated === "R" ? "R" : "A",
+        t: p.risks.find((r) => r.severity === "R")?.title ?? (p.targetPassed ? `${p.name}: target passed — decide re-baseline or stop` : `${p.name}: at risk`),
+        why: p.update ?? "Escalated from the delivery tracker.",
+      }))}
+      risks={risks}
+      glc={glc}
+    />
   );
 }

@@ -1,167 +1,140 @@
-import type { CockpitData, CockpitProject } from "@/server/dashboard-cockpit";
-import { calcRagCounts, CALC_ORDER } from "@/server/dashboard-cockpit";
+import type { CockpitData, CockpitProject, GateKey } from "@/server/dashboard-cockpit";
 import { GATE_KEYS, GATE_LABELS } from "@/server/dashboard-cockpit";
-import { Tile, RagBar, RagChip, DisputeGap, Freshness, RagTrend, GateCell } from "./primitives";
-import { CockpitPageHead } from "./page-head";
-import { AskQBrief } from "./ask-q-brief";
+import { briefLines } from "./ask-q-brief";
+import { HeadV3, type HeadV3Props, type HeadRow } from "./head-v3";
 
-const CARD = "rounded-[16px] border border-[var(--cardbd)] p-[16px_18px]";
-const cardStyle = { background: "var(--cardbg)" } as const;
+// Server wrapper for the Head of PMs view — maps real tenant data into the approved
+// artifact's shape (head-v3.tsx renders its exact markup).
+
+const STAGE_OF: Record<GateKey, { phase: string; stage: string }> = {
+  brd: { phase: "Planning", stage: "BRD" },
+  proto: { phase: "Planning", stage: "Prototype" },
+  mvp1: { phase: "Execution", stage: "Build / MVP1" },
+  sit: { phase: "Execution", stage: "SIT" },
+  uat: { phase: "Execution", stage: "UAT" },
+  golive: { phase: "Transition", stage: "Go-Live" },
+};
+function stageOf(p: CockpitProject): { phase: string; stage: string } {
+  for (const k of GATE_KEYS) if (p.gates[k] !== "done") return STAGE_OF[k];
+  return { phase: "Closure", stage: "Production" };
+}
+const fmt = (d: Date | string | null) =>
+  d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" }) : "—";
+const initialsOf = (name: string | null) =>
+  (name ?? "").split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || null;
+
+const CATEGORY_BUCKETS: { key: string; label: string; color: string }[] = [
+  { key: "Approved", label: "Approved & in delivery", color: "good" },
+  { key: "Exploring", label: "Exploring", color: "amber" },
+  { key: "Shelved", label: "Shelved", color: "grey" },
+  { key: "Unfiled", label: "Unfiled", color: "teal" },
+];
 
 export function HeadCockpit({ data }: { data: CockpitData }) {
+  const now = data.generatedAt;
   const active = data.projects.filter((p) => !["Completed", "Cancelled"].includes(p.status));
-  const disputes = active.filter((p) => p.dispute);
-  const stale = active.filter((p) => p.freshnessDays > 7 && p.freshnessDays < 900).sort((a, b) => b.freshnessDays - a.freshnessDays);
-  const escalate = active.filter((p) => p.redRisks > 0 || p.targetPassed);
-  const counts = calcRagCounts(active);
-
-  const pmCards = data.pms.map((pm) => {
-    const mine = active.filter((p) => p.pmId === pm.id);
-    const cc = calcRagCounts(mine);
-    return { pm, mine, cc, disputes: mine.filter((p) => p.dispute).length, onTime: mine.filter((p) => p.freshnessDays <= 7).length };
+  const approved = active.filter((p) => p.category === "Approved");
+  const counts = (list: CockpitProject[]) => ({
+    R: list.filter((p) => p.calculated === "R").length,
+    A: list.filter((p) => p.calculated === "A").length,
+    G: list.filter((p) => p.calculated === "G").length,
+    N: list.filter((p) => p.calculated === "N").length,
   });
 
-  const tracker = active.slice().sort((a, b) => CALC_ORDER[a.calculated] - CALC_ORDER[b.calculated] || b.freshnessDays - a.freshnessDays);
+  const disputes = active.filter((p) => p.dispute);
+  const stale = active.filter((p) => p.freshnessDays > 7 && p.freshnessDays < 90).sort((x, y) => y.freshnessDays - x.freshnessDays);
+  // Gate approvals waiting: projects whose derived Go-Live gate is live (in progress/late/blocked).
+  const gatesWaiting = active.filter((p) => ["prog", "late", "block"].includes(p.gates.golive));
+  const escal = active.filter((p) => p.redRisks > 0 || (p.targetPassed && p.calculated !== "G"));
 
-  // Resource conflicts, derived from real data: PMs carrying 3+ red/amber projects, and PMs
-  // with two projects whose next gate falls in the same week.
-  const conflicts: { severity: "R" | "A"; title: string; detail: string; who: string }[] = [];
+  const pmCards: HeadV3Props["pmCards"] = data.pms.map((pm) => {
+    const mine = active.filter((p) => p.pmId === pm.id);
+    return {
+      id: pm.id,
+      initials: initialsOf(pm.name) ?? "PM",
+      name: pm.name,
+      title: "Project Manager",
+      counts: counts(mine),
+      n: mine.length,
+      onTime: mine.filter((p) => p.freshnessDays <= 7).length,
+      disputes: mine.filter((p) => p.dispute).length,
+      allocPct: null, // per-PM allocation joins when workload is threaded per user
+    };
+  });
+
+  const rows: HeadRow[] = active.map((p) => {
+    const { phase, stage } = stageOf(p);
+    return {
+      id: p.id,
+      name: p.name,
+      desc: p.desc,
+      pmInitials: initialsOf(p.pmName),
+      prio: p.priority,
+      phase,
+      stage,
+      gates: GATE_KEYS.map((k) => p.gates[k]),
+      pct: p.pct,
+      calc: p.calculated,
+      rep: p.reported,
+      dispute: p.dispute,
+      target: fmt(p.dueDate),
+      targetPast: p.targetPassed,
+      upd: p.freshnessDays,
+      bucket: CATEGORY_BUCKETS.some((b) => b.key === p.category) ? p.category : "Unfiled",
+      pmId: p.pmId,
+      daysToTarget: p.dueDate ? Math.round((new Date(p.dueDate).getTime() - now.getTime()) / 86_400_000) : 99999,
+    };
+  });
+
+  // Resource conflicts — derived: overloaded PMs and same-week gate collisions.
+  const conflicts: HeadV3Props["conflicts"] = [];
   for (const pm of data.pms) {
     const mine = active.filter((p) => p.pmId === pm.id);
     const trouble = mine.filter((p) => p.calculated !== "G");
-    if (trouble.length >= 3) {
-      conflicts.push({ severity: "A", title: `${pm.name} carries ${trouble.length} red/amber projects`, detail: trouble.slice(0, 3).map((p) => p.name).join(", "), who: `${pm.name} · ${mine.length} projects` });
-    }
+    if (trouble.length >= 3) conflicts.push({ sev: "A", who: pm.name, title: `Carries ${trouble.length} red/amber projects`, desc: trouble.slice(0, 3).map((p) => p.name).join(", ") });
     const dated = mine.filter((p) => p.nextMilestone?.dueDate);
-    for (let i = 0; i < dated.length; i++) {
-      for (let j = i + 1; j < dated.length; j++) {
-        const da = new Date(dated[i].nextMilestone!.dueDate!).getTime();
-        const db = new Date(dated[j].nextMilestone!.dueDate!).getTime();
-        if (Math.abs(da - db) <= 7 * 86_400_000) {
-          conflicts.push({ severity: "R", title: `${dated[i].name} and ${dated[j].name} have gates in the same week`, detail: `Both under ${pm.name} — one may slip.`, who: pm.name });
-        }
-      }
+    for (let i = 0; i < dated.length; i++) for (let j = i + 1; j < dated.length; j++) {
+      const da = new Date(dated[i].nextMilestone!.dueDate!).getTime();
+      const db = new Date(dated[j].nextMilestone!.dueDate!).getTime();
+      if (Math.abs(da - db) <= 7 * 86_400_000) conflicts.push({ sev: "R", who: pm.name, title: `${dated[i].name} and ${dated[j].name} have gates in the same week`, desc: "One may slip — sequence or re-baseline." });
     }
   }
-  const topConflicts = conflicts.slice(0, 6);
-
-  // Merged exceptions — the Head's one focus. Priority: escalate → dispute → stale.
-  const exceptions: { p: CockpitProject; color: string; line: string }[] = [
-    ...escalate.map((p) => ({ p, color: "var(--bad)", line: `${p.redRisks > 0 ? `${p.redRisks} red risk(s)` : ""}${p.targetPassed ? (p.redRisks > 0 ? " · target passed" : "Target passed") : ""}`.trim() || "Needs escalation" })),
-    ...disputes.map((p) => ({ p, color: "var(--brand)", line: `Reported ${p.reported}, calculates ${p.calculated}` })),
-    ...stale.map((p) => ({ p, color: p.freshnessDays > 14 ? "var(--bad)" : "var(--warn)", line: `No update in ${p.freshnessDays}d` })),
-  ].slice(0, 14);
 
   return (
-    <div className="flex flex-col gap-5">
-      <CockpitPageHead
-        title="Head of PMs — supervision & escalation"
-        subtitle={`${active.length} active initiatives across ${data.pms.length} PMs. Exceptions first: disputes, stale reporting, and what needs escalating upward.`}
-      />
-
-      <div className="grid grid-cols-3 gap-3">
-        <Tile value={active.length} label="Active initiatives" detail={`${counts.R} red · ${counts.A} amber`}><RagBar counts={counts} /></Tile>
-        <Tile value={disputes.length} label="RAG disputes" detail="reported greener" hot={disputes.length > 0} />
-        <Tile value={stale.length} label="Stale updates" detail={`${stale.filter((p) => p.freshnessDays > 14).length} over 14 days`} hot={stale.some((p) => p.freshnessDays > 14)} />
-      </div>
-
-      <AskQBrief level="head" data={data} viewerId="" />
-
-      {/* Lead: everything off-track, one prioritized list (escalate → dispute → stale). */}
-      <section id="head-exceptions" className={CARD} style={cardStyle}>
-        <div className="mb-3 flex items-baseline justify-between gap-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">Exceptions</h2><span className="text-[12px] text-[var(--ink4)]">{exceptions.length} items · needs your attention</span></div>
-        <div className="flex flex-col">
-          {exceptions.length === 0 ? <Empty>Nothing off-track — no disputes, stale updates or escalations.</Empty> : exceptions.map((x, i) => (
-            <QueueRow key={i} p={x.p} color={x.color} line={x.line} />
-          ))}
-        </div>
-      </section>
-
-      <section data-secondary>
-        <div className="mb-3 flex items-baseline justify-between gap-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">By project manager</h2><span className="text-[12px] text-[var(--ink4)]">Click a PM to open their view</span></div>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
-          {pmCards.map(({ pm, mine, cc, disputes: d, onTime }) => (
-            <button key={pm.id} data-pm={pm.id} className={`${CARD} flex flex-col gap-2 text-left`} style={cardStyle}>
-              <div className="flex items-center gap-2.5">
-                <span className="grid size-7 place-items-center rounded-full bg-[var(--brand-light)] text-[11px] font-bold text-[var(--brand)]">{pm.name.slice(0, 2).toUpperCase()}</span>
-                <b className="font-semibold text-[var(--qink)]">{pm.name}</b>
-              </div>
-              <RagBar counts={cc} />
-              <div className="grid grid-cols-[1fr_auto] gap-y-0.5 text-[12px] text-[var(--ink3)]">
-                <span>Projects</span><b className="text-right text-[var(--qink)]">{mine.length}</b>
-                <span>Red / amber</span><b className="text-right text-[var(--qink)]">{cc.R} / {cc.A}</b>
-                <span>Updates on time</span><b className="text-right text-[var(--qink)]">{onTime}/{mine.length}</b>
-                <span>RAG disputes</span><b className="text-right text-[var(--qink)]">{d}</b>
-              </div>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section data-secondary id="head-tracker" className={CARD} style={cardStyle}>
-        <div className="mb-3 flex items-baseline justify-between gap-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">Stage-gate tracker</h2><span className="text-[12px] text-[var(--ink4)]">gates derived from % complete · red first</span></div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wide text-[var(--ink4)]">
-                <th className="px-2.5 py-2">Project</th><th className="px-2.5 py-2">PM</th>
-                {GATE_KEYS.map((k) => <th key={k} className="px-1 py-2 text-center">{GATE_LABELS[k]}</th>)}
-                <th className="px-2.5 py-2">%</th><th className="px-2.5 py-2">RAG</th><th className="px-2.5 py-2">Updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tracker.map((p) => (
-                <tr key={p.id} data-open={p.id} className="cursor-pointer border-t border-[var(--hair)] hover:bg-[var(--wash2)]">
-                  <td className="px-2.5 py-2"><span className="font-semibold text-[var(--qink)]">{p.name}</span></td>
-                  <td className="px-2.5 py-2 text-[var(--ink3)]">{p.pmName ?? "—"}</td>
-                  {GATE_KEYS.map((k) => <td key={k} className="px-1 py-2 text-center"><GateCell state={p.gates[k]} /></td>)}
-                  <td className="px-2.5 py-2 num">{p.pct}%</td>
-                  <td className="px-2.5 py-2"><span className="inline-flex items-center gap-1.5"><RagChip rag={p.calculated} /><DisputeGap p={p} /></span></td>
-                  <td className="px-2.5 py-2"><Freshness days={p.freshnessDays} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="mt-2.5 flex flex-wrap gap-3 text-[12px] text-[var(--ink3)]">
-          <span className="inline-flex items-center gap-1.5"><GateCell state="done" /> Complete</span>
-          <span className="inline-flex items-center gap-1.5"><GateCell state="prog" /> In progress</span>
-          <span className="inline-flex items-center gap-1.5"><GateCell state="late" /> Delayed</span>
-          <span className="inline-flex items-center gap-1.5"><GateCell state="block" /> Blocked</span>
-          <span className="inline-flex items-center gap-1.5"><GateCell state="none" /> Not started</span>
-        </div>
-      </section>
-
-      <section data-secondary className={CARD} style={cardStyle}>
-        <div className="mb-3 flex items-baseline justify-between gap-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">Resource conflicts</h2><span className="text-[12px] text-[var(--ink4)]">next 4 weeks · derived from load & gate dates</span></div>
-        <div className="flex flex-col gap-2">
-          {topConflicts.length === 0 ? <Empty>No load or gate-date conflicts detected.</Empty> : topConflicts.map((c, i) => (
-            <div key={i} className="grid grid-cols-[auto_1fr_auto] items-start gap-2.5 text-[13px]">
-              <span className="mt-1.5 size-2 rounded-full" style={{ background: c.severity === "R" ? "var(--bad)" : "var(--warn)" }} />
-              <div><b className="block font-semibold text-[var(--qink)]">{c.title}</b><span className="text-[12px] text-[var(--ink3)]">{c.detail}</span></div>
-              <span className="whitespace-nowrap text-[12px] text-[var(--ink4)]">{c.who}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section data-secondary className={CARD} style={cardStyle}>
-        <div className="mb-3"><h2 className="text-[15px] font-semibold text-[var(--qink)]">Reported RAG · active portfolio</h2></div>
-        {data.trend.series.length ? <RagTrend series={data.trend.series} weeks={data.trend.weeks} title="Projects by reported RAG" /> : <Empty>Trend builds as nightly snapshots accrue.</Empty>}
-      </section>
-    </div>
+    <HeadV3
+      briefLines={briefLines("head", data, "")}
+      generatedAt={now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+      gateLabels={GATE_KEYS.map((k) => GATE_LABELS[k])}
+      buckets={CATEGORY_BUCKETS}
+      stats={{
+        approved: approved.length,
+        approvedCounts: counts(approved.length ? approved : active),
+        disputes: disputes.length,
+        stale: stale.length,
+        stale14: stale.filter((p) => p.freshnessDays > 14).length,
+        gatesWaiting: gatesWaiting.length,
+        gatesOldest: gatesWaiting.length ? `oldest ${Math.max(...gatesWaiting.map((p) => Math.min(p.freshnessDays, 99)))}d` : "none waiting",
+        escal: escal.length,
+        overAlloc: 0,
+        overAllocNames: "",
+      }}
+      pmCards={pmCards}
+      disputes={disputes.map((p) => ({
+        id: p.id,
+        name: p.name,
+        rep: p.reported,
+        calc: p.calculated,
+        pmName: p.pmName ?? "—",
+        drivers: Object.entries(p.dims).filter(([, v]) => v === "R").map(([k]) => k).join(", ") || "—",
+        targetNote: p.targetPassed && p.dueDate ? ` · target ${fmt(p.dueDate)} passed` : "",
+      }))}
+      stale={stale.map((p) => { const { phase, stage } = stageOf(p); return { id: p.id, name: p.name, upd: p.freshnessDays, phase, stage, calcLabel: { G: "Green", A: "Amber", R: "Red", N: "Not rated" }[p.calculated], pmName: p.pmName ?? "unassigned" }; })}
+      gatesWaitingRows={gatesWaiting.map((p) => ({ id: p.id, name: p.name, gate: "Go-Live gate", since: `${Math.min(p.freshnessDays, 99)}d ago`, pmName: p.pmName ?? "—" }))}
+      escalRows={escal.map((p) => ({ id: p.id, name: p.name, t: p.risks.find((r) => r.severity === "R")?.title ?? "Target passed — needs Director / Group action" }))}
+      rows={rows}
+      pms={data.pms.map((pm) => ({ id: pm.id, name: pm.name }))}
+      conflicts={conflicts.slice(0, 6)}
+      trend={data.trend}
+    />
   );
-}
-
-function QueueRow({ p, color, line }: { p: CockpitProject; color: string; line: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-[14px_1fr_auto] items-start gap-3 border-t border-[var(--hair)] py-2.5 first:border-t-0 first:pt-0">
-      <span className="mt-1.5 size-2.5 rounded-sm" style={{ background: color }} />
-      <div className="min-w-0"><b className="block font-semibold text-[var(--qink)]">{p.name}</b><span className="text-[13px] text-[var(--ink3)]">{line}</span></div>
-      <button data-open={p.id} className="rounded bg-[var(--wash2)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--ink2)]">Open</button>
-    </div>
-  );
-}
-function Empty({ children }: { children: React.ReactNode }) {
-  return <span className="text-[12px] text-[var(--ink4)]">{children}</span>;
 }

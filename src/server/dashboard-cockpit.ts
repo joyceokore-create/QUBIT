@@ -58,6 +58,7 @@ export interface CockpitProject {
   pmId: string | null;
   pmName: string | null;
   status: string; // raw delivery status
+  priority: string; // High | Med | Low | New | Strat | Paused
   reported: DimRag;
   calculated: DimRag;
   dispute: boolean;
@@ -132,6 +133,7 @@ export async function getCockpitData(ctx: TenantContext, now = new Date(), trend
         name: true,
         objective: true,
         status: true,
+        priority: true,
         statusNote: true,
         dueDate: true,
         budget: true,
@@ -229,6 +231,7 @@ export async function getCockpitData(ctx: TenantContext, now = new Date(), trend
       pmId: p.leadUserId,
       pmName: p.lead?.name ?? null,
       status: p.status,
+      priority: p.priority,
       reported,
       calculated,
       dispute: isDispute(reported, calculated),

@@ -53,7 +53,7 @@ export interface PmV3Props {
   market: { projectName: string; rows: V3Market[]; gateLabels: string[] } | null;
 }
 
-const RAG_LABEL: Record<string, string> = { G: "Green", A: "Amber", R: "Red", N: "Not rated" };
+export const RAG_LABEL: Record<string, string> = { G: "Green", A: "Amber", R: "Red", N: "Not rated" };
 
 const ICONS: Record<string, string> = {
   grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
@@ -71,7 +71,7 @@ const ICONS: Record<string, string> = {
   bell: '<path d="M6 8a6 6 0 0 1 12 0c0 5 1.5 7 2 8H4c.5-1 2-3 2-8"/><path d="M10 20a2 2 0 0 0 4 0"/>',
 };
 
-function Ic({ name }: { name: string }) {
+export function Ic({ name }: { name: string }) {
   return (
     <svg
       className="ic"
@@ -87,12 +87,12 @@ function Ic({ name }: { name: string }) {
   );
 }
 
-const kindColor = (k: string) => (k === "due" ? "red" : k === "soon" ? "amb" : k === "flag" ? "blue" : "violet");
+export const kindColor = (k: string) => (k === "due" ? "red" : k === "soon" ? "amb" : k === "flag" ? "blue" : "violet");
 
-function RagChipV3({ r }: { r: string }) {
+export function RagChipV3({ r }: { r: string }) {
   return <span className={`rag ${r}`}>{RAG_LABEL[r] ?? "—"}</span>;
 }
-function RagBarV3({ c }: { c: PmV3Props["ragCounts"] }) {
+export function RagBarV3({ c }: { c: { R: number; A: number; G: number; N: number } }) {
   const t = c.R + c.A + c.G + c.N || 1;
   return (
     <div className="ragbar" role="img" aria-label={`Red ${c.R}, Amber ${c.A}, Green ${c.G}`}>
@@ -121,7 +121,7 @@ const gateGlyph: Record<string, { cls: string; ch: string; title: string }> = {
   block: { cls: "block", ch: "✕", title: "Blocked" },
   none: { cls: "none", ch: "—", title: "Not started" },
 };
-function Gate({ g }: { g: string }) {
+export function Gate({ g }: { g: string }) {
   const v = gateGlyph[g] ?? gateGlyph.none;
   return <span className={`gate ${v.cls}`} title={v.title}>{v.ch}</span>;
 }
