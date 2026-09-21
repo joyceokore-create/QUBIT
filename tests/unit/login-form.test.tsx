@@ -9,16 +9,33 @@ import { signIn } from "next-auth/react";
 import { LoginForm } from "@/app/(auth)/login/login-form";
 
 describe("LoginForm (SSO-era)", () => {
-  it("keeps the credential fields and the quick sign-in, with no TOTP affordance", () => {
+  it("keeps the credential fields, the TOTP affordance, and the quick sign-in", () => {
     render(<LoginForm callbackUrl="/dashboard" />);
     expect(screen.getByRole("heading", { name: /sign in/i })).toBeInTheDocument();
     expect(document.querySelector("#email")).toBeTruthy();
     expect(document.querySelector("#password")).toBeTruthy();
-    // TOTP was removed from login — Entra owns MFA when SSO is configured.
-    expect(screen.queryByRole("button", { name: /authenticator code/i })).toBeNull();
+    // Without SSO, the app-level TOTP step is the second factor — the affordance must exist.
+    expect(screen.getByRole("button", { name: /authenticator code/i })).toBeInTheDocument();
     // M10 (DM1.46): Riverbank is the only real tenant — one quick sign-in card.
     expect(screen.getByRole("button", { name: /riverbank/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /kcb/i })).toBeNull();
+  });
+
+  it("reveals the TOTP input on demand and submits the code with the credentials", () => {
+    render(<LoginForm callbackUrl="/dashboard" />);
+    fireEvent.click(screen.getByRole("button", { name: /authenticator code/i }));
+    const totp = document.querySelector("#totpCode") as HTMLInputElement;
+    expect(totp).toBeTruthy();
+    fireEvent.change(document.querySelector("#email")!, { target: { value: "user@example.invalid" } });
+    fireEvent.change(document.querySelector("#password")!, { target: { value: "pw" } });
+    fireEvent.change(totp, { target: { value: "123456" } });
+    fireEvent.submit(document.querySelector("form")!);
+    expect(signIn).toHaveBeenCalledWith("credentials", {
+      email: "user@example.invalid",
+      password: "pw",
+      totpCode: "123456",
+      redirect: false,
+    });
   });
 
   it("hides the Microsoft button until SSO is configured", () => {

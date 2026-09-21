@@ -53,6 +53,8 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null }: 
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [totpCode, setTotpCode] = useState("");
+  const [showTotp, setShowTotp] = useState(false);
   const [error, setError] = useState<string | null>(ssoError);
   const [loading, setLoading] = useState(false);
   const [ssoLoading, setSsoLoading] = useState(false);
@@ -90,10 +92,11 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null }: 
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const result = await signIn("credentials", { email, password, redirect: false });
+    const result = await signIn("credentials", { email, password, totpCode: totpCode || undefined, redirect: false });
     setLoading(false);
     if (!result || result.error) {
-      setError("Invalid email or password.");
+      setShowTotp(true);
+      setError("Invalid email, password, or authentication code.");
       return;
     }
     router.push(callbackUrl);
@@ -187,6 +190,18 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null }: 
 
         <input id="password" type="password" autoComplete="current-password" required placeholder="Password" className={INPUT_CLASS} value={password} onChange={(e) => setPassword(e.target.value)} />
 
+        {showTotp ? (
+          <input id="totpCode" inputMode="numeric" autoComplete="one-time-code" placeholder="6-digit authenticator code" className={INPUT_CLASS} value={totpCode} onChange={(e) => setTotpCode(e.target.value)} />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowTotp(true)}
+            className="self-start rounded-sm text-[11.5px] font-semibold text-[var(--l-ink-3)] outline-none transition-colors hover:text-[var(--login-brand)] focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_55%,transparent)]"
+          >
+            Enter authenticator code
+          </button>
+        )}
+
         {error && <p role="alert" className="text-[12px] text-[var(--l-err)]">{error}</p>}
 
         <button
@@ -224,6 +239,7 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null }: 
       )}
 
       <div className="mt-3.5 text-[11.5px] leading-[1.5] text-[var(--l-ink-3)]">
+        {!ssoEnabled && "You may be asked for a 6-digit authenticator code. "}
         <span className="font-bold text-[var(--l-err)]">Trouble signing in?</span> Contact your administrator.
       </div>
     </AuthShell>

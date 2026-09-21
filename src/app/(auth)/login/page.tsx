@@ -1,4 +1,5 @@
 import { LoginForm } from "./login-form";
+import { sanitizeCallbackUrl } from "@/lib/callback-url";
 import { loginErrorMessage, ssoEnabled } from "@/lib/sso";
 
 // Sign in (design_handoff screen 0b). The form renders its own full-screen,
@@ -10,10 +11,7 @@ export default async function LoginPage({
   searchParams: Promise<{ callbackUrl?: string; error?: string }>;
 }) {
   const { callbackUrl, error } = await searchParams;
-  // Relative-only: a query value like https://evil.example must never become a
-  // post-login redirect target.
-  const safeCallbackUrl =
-    callbackUrl?.startsWith("/") && !callbackUrl.startsWith("//") ? callbackUrl : "/dashboard";
+  const safeCallbackUrl = sanitizeCallbackUrl(callbackUrl);
   return (
     <LoginForm
       callbackUrl={safeCallbackUrl}

@@ -7,6 +7,9 @@ import { authConfig } from "@/lib/auth.config";
 import { withTenant } from "@/lib/tenant";
 import { resolveTenantByEmailDomain } from "@/lib/tenant-domain";
 import { verifyPassword } from "@/lib/password";
+import { decryptMfaSecret, verifyTotp } from "@/lib/mfa";
+import { matchRecoveryCode } from "@/lib/mfa-recovery";
+import { audit } from "@/lib/audit";
 import { checkRateLimit, recordFailure, resetRateLimit } from "@/lib/rate-limit";
 import { derivedGroups, effectiveGroups, landingPersona } from "@/lib/personas";
 import { projectRoleCategory } from "@/lib/roles";
@@ -16,6 +19,7 @@ import { resolvePermissionsForRoles } from "@/server/role-permissions";
 const CredentialsSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+  totpCode: z.string().optional(),
 });
 
 type LoginTenant = NonNullable<Awaited<ReturnType<typeof resolveTenantByEmailDomain>>>;
@@ -143,11 +147,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       credentials: {
         email: {},
         password: {},
+        totpCode: {},
       },
       async authorize(raw) {
+        // SSO configured → Entra (with its MFA/conditional-access policy) is the ONLY
+        // door. The login page hides this form, but hiding is not a control: a direct
+        // POST to /api/auth/callback/credentials must fail too.
+        if (ssoEnabled()) return null;
+
         const parsed = CredentialsSchema.safeParse(raw);
         if (!parsed.success) return null;
-        const { email, password } = parsed.data;
+        const { email, password, totpCode } = parsed.data;
         const normalizedEmail = email.toLowerCase();
         const rateLimitKey = `login:${normalizedEmail}`;
 
@@ -175,13 +185,42 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
+        if (user.mfaSecret) {
+          // Uniform failure for a missing or wrong code — never reveal which factor failed,
+          // nor whether the input was read as a TOTP or a recovery code.
+          const secret = decryptMfaSecret(user.mfaSecret);
+          const totpOk = Boolean(totpCode) && (await verifyTotp(secret, totpCode!));
+          if (!totpOk) {
+            // M-O4: fall back to a single-use recovery code, for the user who still has
+            // the codes but not the phone.
+            const idx = totpCode ? matchRecoveryCode(totpCode, user.mfaRecoveryCodes) : -1;
+            if (idx < 0) {
+              recordFailure(rateLimitKey);
+              return null;
+            }
+            // CONSUME it in the same breath as accepting it: a recovery code that survived
+            // its own use would be a permanent bypass of the second factor.
+            const remaining = user.mfaRecoveryCodes.filter((_, i) => i !== idx);
+            await withTenant({ tenantId: tenant.id, userId: user.id }, async (tx) => {
+              await tx.user.update({ where: { id: user.id }, data: { mfaRecoveryCodes: remaining } });
+              await audit(tx, { tenantId: tenant.id, userId: user.id }, {
+                action: "update",
+                entityType: "user",
+                entityId: user.id,
+                after: { mfa_recovery_used: true, remainingCodes: remaining.length },
+              });
+            });
+          }
+        }
+
         resetRateLimit(rateLimitKey);
         return buildSessionUser(tenant, user);
       },
     }),
     // Active only when all three AZURE_AD_* env vars are set. The issuer pin means only
     // tokens from the org's own directory validate — Entra owns MFA/conditional access,
-    // which is why the app-level TOTP step was removed from login.
+    // and authorize() above refuses password login while SSO is active, so this really
+    // is the only door. Without SSO, the app-level TOTP step in authorize() applies.
     ...(ssoEnabled()
       ? [
           MicrosoftEntraID({
