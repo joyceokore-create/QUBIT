@@ -3,9 +3,27 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import {
+  Menu,
+  X,
+  PanelLeftClose,
+  PanelLeftOpen,
+  ChevronDown,
+  LayoutGrid,
+  Folder,
+  ListChecks,
+  TriangleAlert,
+  CalendarCheck,
+  ArrowLeftRight,
+  Shield,
+  Globe,
+  BarChart3,
+  Circle,
+  type LucideIcon,
+} from "lucide-react";
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { getInitials } from "@/lib/format";
+import { jumpToSection, useCockpitSections } from "@/components/dashboard/cockpit/section-nav";
 import { activeNavHref, visibleNavItems } from "./nav-items";
 import { UserMenu } from "./user-menu";
 import { AskQButton } from "./ask-q-button";
@@ -30,6 +48,19 @@ interface RiverbankShellProps {
 
 const SIDEBAR_KEY = "rv-sidebar-open";
 
+/** Cockpit section icon names (pm-v3 ICONS keys) → the sidebar's lucide set. */
+const SECTION_ICONS: Record<string, LucideIcon> = {
+  grid: LayoutGrid,
+  folder: Folder,
+  list: ListChecks,
+  warn: TriangleAlert,
+  calcheck: CalendarCheck,
+  compare: ArrowLeftRight,
+  shield: Shield,
+  globe: Globe,
+  report: BarChart3,
+};
+
 export function RiverbankShell({
   canAccessAdmin,
   canStaff,
@@ -49,6 +80,10 @@ export function RiverbankShell({
   // Default expanded; sync the persisted preference after mount (SSR-safe).
   const [open, setOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Cockpit sections (published by the mounted dashboard view) render as a
+  // dropdown under the Dashboard item; empty on every other route.
+  const { sections, active: activeSection } = useCockpitSections();
+  const [dashOpen, setDashOpen] = useState(true);
   const asideRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -163,9 +198,13 @@ export function RiverbankShell({
           {items.map((item) => {
             const active = item.href === activeHref;
             const Icon = item.icon;
-            return (
+            // The Dashboard item gains a dropdown of the mounted cockpit's sections
+            // (Overview / Pipeline / Portfolio / …) — the page no longer draws its
+            // own section pane, so this stays the ONE left navigation.
+            const withSections = item.href === "/dashboard" && labelled && sections.length > 0;
+            const link = (
               <Link
-                key={item.href}
+                key={withSections ? undefined : item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 title={labelled ? undefined : item.label}
@@ -173,6 +212,7 @@ export function RiverbankShell({
                 className={[
                   "flex items-center rounded-lg transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white/70",
                   labelled ? "gap-3 px-3 py-2.5" : "mx-auto h-11 w-11 justify-center",
+                  withSections ? "min-w-0 flex-1" : "",
                   active ? "font-semibold text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
                 ].join(" ")}
                 style={active ? { background: "var(--rv-active)" } : undefined}
@@ -180,6 +220,59 @@ export function RiverbankShell({
                 <Icon className="size-[18px] flex-shrink-0" strokeWidth={1.75} aria-hidden />
                 {labelled && <span className="flex-1 text-[13.5px] rv:text-body-sm font-medium">{item.label}</span>}
               </Link>
+            );
+            if (!withSections) return link;
+            return (
+              <div key={item.href}>
+                <div className="flex items-center gap-1">
+                  {link}
+                  <button
+                    type="button"
+                    aria-expanded={dashOpen}
+                    aria-label={dashOpen ? "Collapse dashboard sections" : "Expand dashboard sections"}
+                    onClick={() => setDashOpen((o) => !o)}
+                    className="rounded-lg p-1.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                  >
+                    <ChevronDown className={`size-4 transition-transform ${dashOpen ? "" : "-rotate-90"}`} aria-hidden />
+                  </button>
+                </div>
+                {dashOpen && (
+                  <div className="ml-[21px] mt-1.5 space-y-1 border-l border-white/10 pl-2.5">
+                    {sections.map((s) => {
+                      const SIcon = SECTION_ICONS[s.icon] ?? Circle;
+                      const sActive = s.id === activeSection;
+                      const itemClass = [
+                        "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[12.5px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white/70",
+                        sActive ? "font-semibold text-white" : "font-medium text-white/70 hover:bg-white/10 hover:text-white",
+                      ].join(" ");
+                      if (s.href) {
+                        return (
+                          <Link key={s.id} href={s.href} onClick={() => setMobileOpen(false)} className={itemClass}>
+                            <SIcon className="size-4 flex-shrink-0" strokeWidth={1.75} aria-hidden />
+                            <span>{s.label}</span>
+                          </Link>
+                        );
+                      }
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          aria-current={sActive ? "true" : undefined}
+                          onClick={() => {
+                            jumpToSection(s.id);
+                            setMobileOpen(false);
+                          }}
+                          className={itemClass}
+                          style={sActive ? { background: "var(--rv-active)" } : undefined}
+                        >
+                          <SIcon className="size-4 flex-shrink-0" strokeWidth={1.75} aria-hidden />
+                          <span>{s.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>

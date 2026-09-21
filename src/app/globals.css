@@ -887,8 +887,3 @@
 .cockpit-compact section { padding-top: 12px; padding-bottom: 12px; }
 .cockpit-compact table td { padding-top: 6px; padding-bottom: 6px; }
 
-/* Delivery Cockpit full-bleed: while an artifact view with its own section pane (Overview /
-   Pipeline / …) is mounted, it is THE left navigation — hide the app sidebar so the
-   dashboard never shows two nav panes. Every other route keeps the app sidebar. */
-body.pmv3-full aside[aria-label="Primary"]{display:none}
-body.pmv3-full aside[aria-label="Primary"] + div{margin-left:0 !important}

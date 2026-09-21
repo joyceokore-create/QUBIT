@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useTheme } from "next-themes";
 import "./pm-v3.css";
-import { Ic, RagChipV3, RagBarV3, Gate, RAG_LABEL, useFullBleed } from "./pm-v3";
+import { Ic, RagChipV3, RagBarV3, Gate, RAG_LABEL } from "./pm-v3";
+import { usePublishSections } from "./section-nav";
 
 // Head of PMs view — markup ported 1:1 from the approved artifact's renderHead().
 
@@ -105,9 +105,6 @@ export function TrendChart({ title, weeks, series, muted }: { title: string; wee
 const AV_COLORS = ["teal", "red", "blue", "violet"];
 
 export function HeadV3(props: HeadV3Props) {
-  useFullBleed();
-  const { resolvedTheme, setTheme } = useTheme();
-  const [activeNav, setActiveNav] = useState("head-top");
   const [headSort, setHeadSort] = useState<"rag" | "date" | "stale">("rag");
   const [headPm, setHeadPm] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -116,8 +113,17 @@ export function HeadV3(props: HeadV3Props) {
   const GROUP_LIMIT = 5;
   const toggleExpanded = (key: string) => setExpanded((prev) => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
 
-  const jump = (id: string) => { setActiveNav(id); document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }); };
   const toggleGroup = (key: string) => setCollapsed((prev) => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
+
+  // The section links render in the app sidebar as the Dashboard dropdown.
+  usePublishSections([
+    { id: "head-top", icon: "grid", label: "Overview" },
+    { id: "head-pms", icon: "list", label: "By PM" },
+    { id: "disputes", icon: "warn", label: "Exceptions" },
+    { id: "head-tracker", icon: "calcheck", label: "Tracker" },
+    { id: "head-insights", icon: "compare", label: "Insights" },
+    { id: "custom-reports", icon: "report", label: "Custom Reports", href: "/reports?tab=custom" },
+  ]);
 
   const ragOrder: Record<string, number> = { R: 0, A: 1, G: 2, N: 3 };
   const sortFn =
@@ -127,36 +133,17 @@ export function HeadV3(props: HeadV3Props) {
   const q = search.trim().toLowerCase();
   const filtered = props.rows.filter((r) => (!headPm || r.pmId === headPm) && (!q || `${r.name} ${r.desc} ${r.stage}`.toLowerCase().includes(q)));
 
-  const NAV = [
-    { id: "head-top", icon: "grid", label: "Overview" },
-    { id: "head-pms", icon: "list", label: "By PM" },
-    { id: "disputes", icon: "warn", label: "Exceptions" },
-    { id: "head-tracker", icon: "calcheck", label: "Tracker" },
-    { id: "head-insights", icon: "compare", label: "Insights" },
-  ];
-
   return (
     <div className="pmv3">
       <div style={{ display: "grid", gap: 20 }}>
         <div className="pm-headerbar">
-          <div className="pm-hb-brand"><span className="pm-hb-logo"><Ic name="grid" /></span><b>Qubit</b></div>
           <div className="pm-hb-main">
             <h1>Dashboard</h1>
             <div className="pm-hb-search"><input type="search" placeholder="Search all projects…" aria-label="Search all projects" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
-            <div className="pm-hb-right">
-              <button className="pm-hb-icon" type="button" aria-label="Toggle colour theme" title="Toggle colour theme" onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}>◐</button>
-              <button className="pm-hb-icon" type="button" aria-label="Notifications" title="Notifications"><Ic name="bell" /></button>
-              <div className="pm-hb-user"><span className="pm-hb-avatar">HP</span><div className="pm-hb-usertext"><b>Head of PMs</b><span>Portfolio supervision</span></div></div>
-            </div>
           </div>
         </div>
 
         <div className="pm-shell">
-          <nav className="pm-sidebar" aria-label="Dashboard sections">
-            {NAV.map((n) => (
-              <button key={n.id} type="button" className={activeNav === n.id ? "active" : undefined} onClick={() => jump(n.id)}><Ic name={n.icon} /><span>{n.label}</span></button>
-            ))}
-          </nav>
           <div className="pm-content">
             <div className="pm-toprow" id="head-top">
               <section className="pm-hero">

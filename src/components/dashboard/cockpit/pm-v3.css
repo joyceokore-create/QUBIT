@@ -50,27 +50,14 @@
 .pmv3 .hint{color:var(--muted);font-size:12px}
 .pmv3 .ic{width:16px;height:16px;flex:none}
 
-/* header bar */
-.pmv3 .pm-headerbar{display:grid;grid-template-columns:200px 1fr;gap:20px;align-items:center;background:var(--surface);border-radius:18px;padding:14px 22px;box-shadow:var(--v3shadow)}
-.pmv3 .pm-hb-brand{display:flex;align-items:center;gap:10px;min-width:0}
-.pmv3 .pm-hb-logo{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;background:var(--v3brand);color:#fff;flex:none;line-height:1}
-.pmv3 .pm-hb-logo .ic{width:17px;height:17px}
-.pmv3 .pm-hb-brand b{font-weight:700;font-size:15px;letter-spacing:-.01em;white-space:nowrap}
-.pmv3 .pm-hb-main{display:flex;align-items:center;gap:20px;min-width:0}
+/* header bar — title + search only; brand/theme/bell/avatar live in the app shell now */
+.pmv3 .pm-headerbar{display:flex;align-items:center;gap:20px;background:var(--surface);border-radius:18px;padding:14px 22px;box-shadow:var(--v3shadow)}
+.pmv3 .pm-hb-main{display:flex;flex:1;align-items:center;gap:20px;min-width:0}
 .pmv3 .pm-hb-main h1{font-size:22px;font-weight:700;letter-spacing:-.02em;flex:none}
-.pmv3 .pm-hb-search{flex:1;max-width:340px;min-width:140px}
+.pmv3 .pm-hb-search{flex:1;max-width:340px;min-width:140px;margin-left:auto}
 .pmv3 .pm-hb-search input{width:100%;background:var(--input-bg);border:1px solid var(--line);border-radius:9px;padding:9px 16px;font-size:13px;color:var(--ink);line-height:1.4}
 .pmv3 .pm-hb-search input::placeholder{color:var(--muted)}
-.pmv3 .pm-hb-right{display:flex;align-items:center;gap:12px;flex:none;margin-left:auto}
-.pmv3 .pm-hb-icon{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);color:var(--ink-2);flex:none;line-height:1}
-.pmv3 .pm-hb-icon:hover{background:var(--line)}
-.pmv3 .pm-hb-icon .ic{width:16px;height:16px}
-.pmv3 .pm-hb-user{display:flex;align-items:center;gap:10px;flex:none}
-.pmv3 .pm-hb-avatar{display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:999px;background:var(--teal-wash);color:var(--teal-ink);font-size:13px;font-weight:700;flex:none;line-height:1}
-.pmv3 .pm-hb-usertext b{display:block;font-size:13px;font-weight:600;line-height:1.35}
-.pmv3 .pm-hb-usertext span{display:block;font-size:12px;color:var(--muted);line-height:1.35}
-@media (max-width:980px){.pmv3 .pm-headerbar{grid-template-columns:1fr}.pmv3 .pm-hb-brand{display:none}}
-@media (max-width:640px){.pmv3 .pm-hb-main{flex-wrap:wrap}.pmv3 .pm-hb-search{order:3;max-width:none;flex:1 0 100%}.pmv3 .pm-hb-right{margin-left:0}}
+@media (max-width:640px){.pmv3 .pm-hb-main{flex-wrap:wrap}.pmv3 .pm-hb-search{order:3;max-width:none;flex:1 0 100%}}
 
 /* RAG */
 .pmv3 .rag{display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:12px;padding:2px 8px;border-radius:999px;white-space:nowrap}
@@ -87,15 +74,11 @@
 .pmv3 .leg{display:flex;gap:12px;font-size:12px;color:var(--ink-2);flex-wrap:wrap;align-items:center}
 .pmv3 .leg span{display:inline-flex;align-items:center;gap:5px}
 
-/* PM shell / sidebar / hero / stats */
-.pmv3 .pm-shell{display:grid;grid-template-columns:200px 1fr;gap:20px;align-items:start}
-.pmv3 .pm-sidebar{position:sticky;top:124px;z-index:5;display:flex;flex-direction:column;gap:2px;background:var(--surface);border-radius:18px;padding:10px;box-shadow:var(--v3shadow)}
-.pmv3 .pm-sidebar button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:9px 12px;border-radius:9px;color:var(--ink-2);font-size:13px;font-weight:500}
-.pmv3 .pm-sidebar button .ic{color:var(--muted)}
-.pmv3 .pm-sidebar button:hover{background:var(--surface-2)}
-.pmv3 .pm-sidebar button.active{background:var(--v3brand);color:#fff;font-weight:600;box-shadow:0 4px 14px -4px rgba(237,28,36,.55)}
-.pmv3 .pm-sidebar button.active .ic{color:#fff}
+/* PM shell / hero / stats — single column; the section nav lives in the app sidebar */
+.pmv3 .pm-shell{display:grid;grid-template-columns:1fr;gap:20px;align-items:start}
 .pmv3 .pm-content{display:grid;gap:20px;min-width:0}
+/* Section jumps land below the sticky app topbar, not underneath it. */
+.pmv3 [id]{scroll-margin-top:76px}
 .pmv3 .pm-toprow{display:grid;grid-template-columns:1.15fr 1fr;gap:18px;align-items:stretch}
 .pmv3 .pm-hero{background:radial-gradient(120% 140% at 0% 0%,#ff5b63 0%,var(--v3brand) 45%,#8f1319 100%);color:#fff;border-radius:18px;padding:22px 24px;display:flex;flex-direction:column;gap:12px;min-width:0;box-shadow:0 12px 30px -14px rgba(237,28,36,.6);position:relative;overflow:hidden}
 .pmv3 .pm-hero::after{content:"";position:absolute;inset:0;background:radial-gradient(60% 60% at 100% 100%,rgba(255,255,255,.16),transparent 70%);pointer-events:none}
@@ -150,9 +133,6 @@
 .pmv3 .rag-flag .rag-jump{font-size:11px;font-weight:700;background:var(--red-wash);padding:1px 7px;border-radius:4px;margin-left:2px}
 .pmv3 .pcard-updated{font-size:12px}
 @media (max-width:980px){
-  .pmv3 .pm-shell{grid-template-columns:1fr}
-  .pmv3 .pm-sidebar{position:static;flex-direction:row;overflow-x:auto;gap:6px}
-  .pmv3 .pm-sidebar button{white-space:nowrap;flex:none}
   .pmv3 .pm-toprow{grid-template-columns:1fr}
 }
 @media (max-width:560px){.pmv3 .pm-statgrid{grid-template-columns:repeat(2,1fr);grid-template-rows:auto}}

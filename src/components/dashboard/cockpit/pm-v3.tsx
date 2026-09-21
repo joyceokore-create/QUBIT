@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useTheme } from "next-themes";
+import { useState } from "react";
 import "./pm-v3.css";
+import { usePublishSections } from "./section-nav";
 
 // The PM Delivery Cockpit, markup ported 1:1 from the approved artifact (share
 // 4vzE7RvVgiXTtfNuodTL8R). All data arrives as serializable props mapped from real tenant
@@ -54,14 +54,6 @@ export interface PmV3Props {
 }
 
 export const RAG_LABEL: Record<string, string> = { G: "Green", A: "Amber", R: "Red", N: "Not rated" };
-
-/** While mounted, the cockpit's section pane is the ONLY left nav (hides the app sidebar). */
-export function useFullBleed() {
-  useEffect(() => {
-    document.body.classList.add("pmv3-full");
-    return () => document.body.classList.remove("pmv3-full");
-  }, []);
-}
 
 const ICONS: Record<string, string> = {
   grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
@@ -135,57 +127,36 @@ export function Gate({ g }: { g: string }) {
 }
 
 export function PmV3({ viewer, briefLines, generatedAt, projects, ragCounts, stats, queue, risks, collisions, market }: PmV3Props) {
-  useFullBleed();
-  const { resolvedTheme, setTheme } = useTheme();
-  const [activeNav, setActiveNav] = useState("pm-top");
   const [wqFilter, setWqFilter] = useState("");
   const [search, setSearch] = useState("");
 
-  const jump = (id: string) => {
-    setActiveNav(id);
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-  const q = search.trim().toLowerCase();
-  const shownProjects = q ? projects.filter((p) => `${p.name} ${p.stage} ${p.phase}`.toLowerCase().includes(q)) : projects;
-  const visibleQueue = wqFilter ? queue.filter((i) => i.projectId === wqFilter) : queue;
-
-  const NAV: { id: string; icon: string; label: string }[] = [
+  // The section links render in the app sidebar as the Dashboard dropdown.
+  usePublishSections([
     { id: "pm-top", icon: "grid", label: "Overview" },
     { id: "pm-projects", icon: "folder", label: "My Projects" },
     { id: "pm-queue", icon: "list", label: "Work Queue" },
     { id: "pm-risks", icon: "warn", label: "Risks & Collisions" },
     ...(market ? [{ id: "pm-market", icon: "globe", label: "Market Rollout" }] : []),
-  ];
+    { id: "custom-reports", icon: "report", label: "Custom Reports", href: "/reports?tab=custom" },
+  ]);
+
+  const q = search.trim().toLowerCase();
+  const shownProjects = q ? projects.filter((p) => `${p.name} ${p.stage} ${p.phase}`.toLowerCase().includes(q)) : projects;
+  const visibleQueue = wqFilter ? queue.filter((i) => i.projectId === wqFilter) : queue;
 
   return (
     <div className="pmv3">
       <div style={{ display: "grid", gap: 20 }}>
         <div className="pm-headerbar">
-          <div className="pm-hb-brand"><span className="pm-hb-logo"><Ic name="grid" /></span><b>Qubit</b></div>
           <div className="pm-hb-main">
             <h1>Dashboard</h1>
             <div className="pm-hb-search">
               <input type="search" placeholder="Search my projects…" aria-label="Search my projects" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
-            <div className="pm-hb-right">
-              <button className="pm-hb-icon" type="button" aria-label="Toggle colour theme" title="Toggle colour theme" onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}>◐</button>
-              <button className="pm-hb-icon" type="button" aria-label="Notifications" title="Notifications"><Ic name="bell" /></button>
-              <div className="pm-hb-user">
-                <span className="pm-hb-avatar">{viewer.initials}</span>
-                <div className="pm-hb-usertext"><b>{viewer.name}</b><span>{viewer.title}</span></div>
-              </div>
-            </div>
           </div>
         </div>
 
         <div className="pm-shell">
-          <nav className="pm-sidebar" aria-label="Dashboard sections">
-            {NAV.map((n) => (
-              <button key={n.id} type="button" className={activeNav === n.id ? "active" : undefined} onClick={() => jump(n.id)}>
-                <Ic name={n.icon} /><span>{n.label}</span>
-              </button>
-            ))}
-          </nav>
 
           <div className="pm-content">
             <div className="pm-toprow" id="pm-top">

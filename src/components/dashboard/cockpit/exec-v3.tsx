@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useTheme } from "next-themes";
 import "./pm-v3.css";
-import { Ic, RagChipV3, RagBarV3, RAG_LABEL, useFullBleed } from "./pm-v3";
+import { Ic, RagChipV3, RagBarV3, RAG_LABEL } from "./pm-v3";
+import { usePublishSections } from "./section-nav";
 import { TrendChart } from "./head-v3";
 
 // Executive view — markup ported 1:1 from the approved artifact's renderExec().
@@ -55,52 +55,39 @@ export interface ExecV3Props {
 const DIMS = ["Schedule", "Budget", "Scope", "Risk", "Resources", "Quality"];
 
 export function ExecV3(props: ExecV3Props) {
-  useFullBleed();
-  const { resolvedTheme, setTheme } = useTheme();
-  const [activeNav, setActiveNav] = useState("exec-top");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const GROUP_LIMIT = 5;
   const toggleExpanded = (key: string) => setExpanded((prev) => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
 
-  const jump = (id: string) => { setActiveNav(id); document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }); };
   const toggleGroup = (key: string) => setCollapsed((prev) => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
   const q = search.trim().toLowerCase();
   const filtered = props.rows.filter((r) => !q || `${r.name} ${r.desc} ${r.sub} ${r.stage}`.toLowerCase().includes(q));
   const maxB = Math.max(1, ...props.buckets.map((b) => b.n));
 
-  const NAV = [
+  // The section links render in the app sidebar as the Dashboard dropdown.
+  usePublishSections([
     { id: "exec-top", icon: "grid", label: "Overview" },
     { id: "exec-pipeline", icon: "compare", label: "Pipeline" },
     { id: "exec-portfolio", icon: "folder", label: "Portfolio" },
     { id: "exec-insights", icon: "list", label: "Insights" },
     { id: "decisions", icon: "warn", label: "Decisions" },
     { id: "exec-glc", icon: "shield", label: "GLC" },
-  ];
+    { id: "custom-reports", icon: "report", label: "Custom Reports", href: "/reports?tab=custom" },
+  ]);
 
   return (
     <div className="pmv3">
       <div style={{ display: "grid", gap: 20 }}>
         <div className="pm-headerbar">
-          <div className="pm-hb-brand"><span className="pm-hb-logo"><Ic name="grid" /></span><b>Qubit</b></div>
           <div className="pm-hb-main">
             <h1>Dashboard</h1>
             <div className="pm-hb-search"><input type="search" placeholder="Search all projects…" aria-label="Search all projects" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
-            <div className="pm-hb-right">
-              <button className="pm-hb-icon" type="button" aria-label="Toggle colour theme" title="Toggle colour theme" onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}>◐</button>
-              <button className="pm-hb-icon" type="button" aria-label="Notifications" title="Notifications"><Ic name="bell" /></button>
-              <div className="pm-hb-user"><span className="pm-hb-avatar">EX</span><div className="pm-hb-usertext"><b>Executive</b><span>Group Leadership Committee</span></div></div>
-            </div>
           </div>
         </div>
 
         <div className="pm-shell">
-          <nav className="pm-sidebar" aria-label="Dashboard sections">
-            {NAV.map((n) => (
-              <button key={n.id} type="button" className={activeNav === n.id ? "active" : undefined} onClick={() => jump(n.id)}><Ic name={n.icon} /><span>{n.label}</span></button>
-            ))}
-          </nav>
           <div className="pm-content">
             <div className="pm-toprow" id="exec-top">
               <section className="pm-hero">
