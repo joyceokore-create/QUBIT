@@ -10,6 +10,8 @@ import { listShares } from "@/server/q/shares";
 import { MemberReportComposer } from "@/components/reports/member-report-composer";
 import { TeamReports } from "@/components/reports/team-reports";
 import { CheckinQueue } from "@/components/reports/checkin-queue";
+import { CustomReportBuilder } from "@/components/reports/custom-report-builder";
+import { allowedDatasetKeys } from "@/server/custom-reports";
 import { RollupStrip } from "@/components/dashboard/rollup-strip";
 import { ExportButton } from "@/components/export-button";
 import { CARD, RAG_TOKEN } from "@/lib/surface";
@@ -26,7 +28,7 @@ import { CARD, RAG_TOKEN } from "@/lib/surface";
 // is a drift risk, not a feature. DM1.73 (T2): the Head builds/approves the roll-up here
 // too, not only from the executive dashboard persona.
 
-type TabKey = "mine" | "team" | "checkins" | "focus" | "rollups";
+type TabKey = "mine" | "custom" | "team" | "checkins" | "focus" | "rollups";
 
 type Ctx = { tenantId: string; userId: string; roles: string[]; permissions?: string[] };
 
@@ -46,6 +48,9 @@ export default async function ReportsPage({
   // DM1.73 (T1): 5 tabs, de-jargoned — no internal R1/R2/R3 codenames in the chrome.
   const tabs: { key: TabKey; label: string }[] = [
     { key: "mine", label: "My updates" },
+    // Custom reports — everyone gets the tab; the datasets on offer are permission-
+    // filtered server-side (allowedDatasetKeys) and re-checked at the API route.
+    { key: "custom", label: "Custom reports" },
     ...(leads
       ? [
           { key: "team" as const, label: "Team reports" },
@@ -94,6 +99,7 @@ export default async function ReportsPage({
       </nav>
 
       {tab === "mine" && <MineTab ctx={ctx} />}
+      {tab === "custom" && <CustomTab ctx={ctx} />}
       {tab === "team" && <TeamReports />}
       {tab === "checkins" && <CheckinsTab ctx={ctx} isHead={isHead} />}
       {tab === "focus" && <FocusTab ctx={ctx} />}
@@ -161,6 +167,21 @@ async function FocusTab({ ctx }: { ctx: Ctx }) {
           ))
         )}
       </div>
+    </>
+  );
+}
+
+/** Custom reports — pick a reporting module, tick columns, generate a table + CSV. */
+function CustomTab({ ctx }: { ctx: Ctx }) {
+  const allowed = allowedDatasetKeys(ctx);
+  return (
+    <>
+      <p className="text-[12.5px] text-[var(--ink3)]">
+        Build a one-off report: pick a reporting module, choose exactly the columns you need, and generate it as a
+        table or CSV. Each module lists every column available to you; what you can report on follows your
+        permissions.
+      </p>
+      <CustomReportBuilder allowedDatasets={allowed} />
     </>
   );
 }
