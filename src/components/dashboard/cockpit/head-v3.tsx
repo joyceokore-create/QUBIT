@@ -111,7 +111,10 @@ export function HeadV3(props: HeadV3Props) {
   const [headSort, setHeadSort] = useState<"rag" | "date" | "stale">("rag");
   const [headPm, setHeadPm] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
+  const GROUP_LIMIT = 5;
+  const toggleExpanded = (key: string) => setExpanded((prev) => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
 
   const jump = (id: string) => { setActiveNav(id); document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }); };
   const toggleGroup = (key: string) => setCollapsed((prev) => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
@@ -281,6 +284,9 @@ export function HeadV3(props: HeadV3Props) {
                 const gc = { done: 0, prog: 0, late: 0, block: 0, none: 0 } as Record<string, number>;
                 for (const r of list) for (const s of r.gates) gc[s] = (gc[s] ?? 0) + 1;
                 const gCollapsed = collapsed.has(g.key);
+                const isExpanded = expanded.has(g.key);
+                const shown = isExpanded ? list : list.slice(0, GROUP_LIMIT);
+                const hidden = list.length - shown.length;
                 return (
                   <div className="sgt-group" key={g.key}>
                     <div className="sgt-head">
@@ -294,7 +300,7 @@ export function HeadV3(props: HeadV3Props) {
                         <table className="sgt">
                           <thead><tr><th>Solution</th><th>PM</th><th>Priority</th><th>Stage</th>{props.gateLabels.map((l) => <th className="c" key={l}>{l}</th>)}<th>%</th><th>RAG (calc)</th><th>Target</th><th>Updated</th></tr></thead>
                           <tbody>
-                            {list.map((p) => (
+                            {shown.map((p) => (
                               <tr className="rowbtn" data-open={p.id} tabIndex={0} key={p.id}>
                                 <td><span className="name">{p.name}</span><span className="desc">{p.desc}</span></td>
                                 <td className="pmc">{p.pmInitials ? <span className="av" style={{ width: 22, height: 22, fontSize: 10 }}>{p.pmInitials}</span> : "—"}</td>
@@ -309,6 +315,13 @@ export function HeadV3(props: HeadV3Props) {
                             ))}
                           </tbody>
                         </table>
+                        {(hidden > 0 || isExpanded) && (
+                          <div className="sgt-more">
+                            <button type="button" className="act-btn" onClick={() => toggleExpanded(g.key)}>
+                              {isExpanded ? "Show fewer" : `View ${hidden} more`}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

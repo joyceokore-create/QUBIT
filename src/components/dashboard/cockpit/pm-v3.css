@@ -321,3 +321,6 @@
 .pmv3 .trend{font-size:11px;color:var(--muted)}
 .pmv3 .trend.down{color:var(--red-ink)}
 @media (max-width:980px){.pmv3 .pipeline-split{grid-template-columns:1fr}.pmv3 .ragtrend-row{grid-template-columns:1fr}}
+
+/* View-more control under capped group tables (5 rows shown by default). */
+.pmv3 .sgt-more{display:flex;justify-content:center;padding:10px 0 2px}

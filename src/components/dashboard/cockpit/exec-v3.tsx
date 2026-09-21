@@ -59,7 +59,10 @@ export function ExecV3(props: ExecV3Props) {
   const { resolvedTheme, setTheme } = useTheme();
   const [activeNav, setActiveNav] = useState("exec-top");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
+  const GROUP_LIMIT = 5;
+  const toggleExpanded = (key: string) => setExpanded((prev) => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
 
   const jump = (id: string) => { setActiveNav(id); document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }); };
   const toggleGroup = (key: string) => setCollapsed((prev) => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
@@ -147,6 +150,9 @@ export function ExecV3(props: ExecV3Props) {
                 const list = filtered.filter((r) => r.prio === g.key);
                 if (!list.length) return null;
                 const gCollapsed = collapsed.has(g.key);
+                const isExpanded = expanded.has(g.key);
+                const shown = isExpanded ? list : list.slice(0, GROUP_LIMIT);
+                const hidden = list.length - shown.length;
                 return (
                   <div className="sgt-group" key={g.key}>
                     <div className="sgt-head">
@@ -159,7 +165,7 @@ export function ExecV3(props: ExecV3Props) {
                         <table className="sgt">
                           <thead><tr><th>Solution</th><th>Subsidiary</th><th>Stage</th><th>LPO</th><th>RAG</th><th>Dimensions</th><th>Target</th><th>Support needed</th></tr></thead>
                           <tbody>
-                            {list.map((p) => (
+                            {shown.map((p) => (
                               <tr className="rowbtn" data-open={p.id} tabIndex={0} key={p.id}>
                                 <td><span className="name">{p.name}</span><span className="desc">{p.desc}</span></td>
                                 <td>{p.sub}</td>
@@ -173,6 +179,13 @@ export function ExecV3(props: ExecV3Props) {
                             ))}
                           </tbody>
                         </table>
+                        {(hidden > 0 || isExpanded) && (
+                          <div className="sgt-more">
+                            <button type="button" className="act-btn" onClick={() => toggleExpanded(g.key)}>
+                              {isExpanded ? "Show fewer" : `View ${hidden} more`}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
