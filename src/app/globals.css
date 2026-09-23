@@ -887,3 +887,20 @@
 .cockpit-compact section { padding-top: 12px; padding-bottom: 12px; }
 .cockpit-compact table td { padding-top: 6px; padding-bottom: 6px; }
 
+/* Artifact-style data table — the dashboard cockpit's .sgt look (grey rounded header
+   band, uppercase letter-spaced labels, dotted row separators, bold name + desc line)
+   rebuilt on the APP's tokens so pages outside .pmv3 (Risks & Issues) can match it. */
+.sgt-app { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sgt-app th {
+  background: var(--wash2); color: var(--ink3);
+  font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600;
+  text-align: left; padding: 12px 14px; white-space: nowrap;
+}
+.sgt-app th:first-child { border-radius: 8px 0 0 8px; }
+.sgt-app th:last-child { border-radius: 0 8px 8px 0; }
+.sgt-app td { padding: 14px; border-bottom: 1px dotted var(--hair); vertical-align: middle; white-space: nowrap; }
+.sgt-app tbody tr:last-child td { border-bottom: none; }
+.sgt-app td .name { font-weight: 600; color: var(--qink); }
+.sgt-app td .desc { display: block; color: var(--ink4); font-size: 12px; font-weight: 400; white-space: normal; max-width: 44ch; }
+.sgt-app th.r, .sgt-app td.r { text-align: right; }
+

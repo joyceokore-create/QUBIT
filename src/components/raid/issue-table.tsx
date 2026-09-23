@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { SeverityPill } from "@/components/raid/severity-pill";
 import { IssueRowActions } from "@/components/raid/issue-row-actions";
@@ -62,58 +61,63 @@ export function IssueTable({ issues, users, canUpdate }: IssueTableProps) {
         </div>
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Title</TableHead>
-            <TableHead>Project</TableHead>
-            <TableHead>Severity</TableHead>
-            <TableHead>Owner</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Origin</TableHead>
-            {canUpdate && <TableHead className="text-right">Actions</TableHead>}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {filtered.map((issue) => (
-            <TableRow key={issue.id}>
-              <TableCell className="font-medium">{issue.title}</TableCell>
-              <TableCell className="text-ink-2">{issue.projectCode ?? "—"}</TableCell>
-              <TableCell>
-                <SeverityPill severity={issue.severity} />
-              </TableCell>
-              <TableCell className="text-ink-2">{issue.ownerName ?? "—"}</TableCell>
-              <TableCell>
-                <Badge variant={issue.status === "Closed" ? "outline" : "secondary"}>{issue.status}</Badge>
-              </TableCell>
-              <TableCell className="text-ink-3">
-                {issue.originRiskTitle ? (
-                  <span className="text-[11px]">
-                    <span className="mr-1 rounded-[3px] bg-background px-1.5 py-0.5 text-[9px] font-semibold text-ink-3 uppercase">
-                      From risk
+      {/* Artifact-style table (the dashboard's .sgt look) — see .sgt-app in globals.css. */}
+      <div className="overflow-x-auto px-3 pt-1 pb-3">
+        <table className="sgt-app">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Project</th>
+              <th>Severity</th>
+              <th>Owner</th>
+              <th>Status</th>
+              <th>Origin</th>
+              {canUpdate && <th className="r">Actions</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((issue) => (
+              <tr key={issue.id}>
+                <td>
+                  <span className="name">{issue.title}</span>
+                </td>
+                <td className="text-ink-2">{issue.projectCode ?? "—"}</td>
+                <td>
+                  <SeverityPill severity={issue.severity} />
+                </td>
+                <td className="text-ink-2">{issue.ownerName ?? "—"}</td>
+                <td>
+                  <Badge variant={issue.status === "Closed" ? "outline" : "secondary"}>{issue.status}</Badge>
+                </td>
+                <td className="text-ink-3">
+                  {issue.originRiskTitle ? (
+                    <span className="text-[11px]">
+                      <span className="mr-1 rounded-[3px] bg-background px-1.5 py-0.5 text-[9px] font-semibold text-ink-3 uppercase">
+                        From risk
+                      </span>
+                      {issue.originRiskTitle}
                     </span>
-                    {issue.originRiskTitle}
-                  </span>
-                ) : (
-                  <span className="text-[11px] text-ink-4">No prior risk</span>
+                  ) : (
+                    <span className="text-[11px] text-ink-4">No prior risk</span>
+                  )}
+                </td>
+                {canUpdate && (
+                  <td className="r">
+                    <IssueRowActions issue={issue} users={users} />
+                  </td>
                 )}
-              </TableCell>
-              {canUpdate && (
-                <TableCell className="text-right">
-                  <IssueRowActions issue={issue} users={users} />
-                </TableCell>
-              )}
-            </TableRow>
-          ))}
-          {filtered.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={canUpdate ? 7 : 6} className="text-center text-ink-3">
-                No issues match this filter.
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+              </tr>
+            ))}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={canUpdate ? 7 : 6} className="text-center text-ink-3">
+                  No issues match this filter.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

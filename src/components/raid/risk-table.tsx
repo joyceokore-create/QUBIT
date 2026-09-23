@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { HeatPill } from "@/components/raid/heat-pill";
 import { RiskStatusPill } from "@/components/raid/risk-status-pill";
 import { MessageSquare } from "lucide-react";
@@ -89,58 +88,64 @@ export function RiskTable({ risks, users, canUpdate, viewerId }: RiskTableProps)
         </div>
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Title</TableHead>
-            <TableHead>Project</TableHead>
-            <TableHead>Category</TableHead>
-            <TableHead>Heat</TableHead>
-            <TableHead>Owner</TableHead>
-            <TableHead>Status</TableHead>
-            {canUpdate && <TableHead className="text-right">Actions</TableHead>}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {filtered.map((risk) => (
-            <TableRow key={risk.id}>
-              <TableCell className="font-medium">{risk.title}</TableCell>
-              <TableCell className="text-ink-2">{risk.projectCode ?? "—"}</TableCell>
-              <TableCell className="text-ink-2">{risk.category ?? "—"}</TableCell>
-              <TableCell>
-                <HeatPill probability={risk.probability} impact={risk.impact} />
-              </TableCell>
-              <TableCell className="text-ink-2">{risk.ownerName ?? "—"}</TableCell>
-              <TableCell>
-                <RiskStatusPill status={risk.status} materialised={risk.materialised} />
-              </TableCell>
-              {canUpdate && (
-                <TableCell className="text-right">
-                  <span className="inline-flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setDiscussRisk({ id: risk.id, title: risk.title })}
-                      title="Discuss this risk"
-                      aria-label="Discuss this risk"
-                      className="rounded p-1 text-ink-3 transition-colors hover:text-brand"
-                    >
-                      <MessageSquare className="size-3.5" />
-                    </button>
-                    <RiskRowActions risk={risk} users={users} />
-                  </span>
-                </TableCell>
-              )}
-            </TableRow>
-          ))}
-          {filtered.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={canUpdate ? 7 : 6} className="text-center text-ink-3">
-                No risks match this filter.
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+      {/* Artifact-style table (the dashboard's .sgt look) — see .sgt-app in globals.css. */}
+      <div className="overflow-x-auto px-3 pt-1 pb-3">
+        <table className="sgt-app">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Project</th>
+              <th>Category</th>
+              <th>Heat</th>
+              <th>Owner</th>
+              <th>Status</th>
+              {canUpdate && <th className="r">Actions</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((risk) => (
+              <tr key={risk.id}>
+                <td>
+                  <span className="name">{risk.title}</span>
+                  {risk.mitigation && <span className="desc">{risk.mitigation}</span>}
+                </td>
+                <td className="text-ink-2">{risk.projectCode ?? "—"}</td>
+                <td className="text-ink-2">{risk.category ?? "—"}</td>
+                <td>
+                  <HeatPill probability={risk.probability} impact={risk.impact} />
+                </td>
+                <td className="text-ink-2">{risk.ownerName ?? "—"}</td>
+                <td>
+                  <RiskStatusPill status={risk.status} materialised={risk.materialised} />
+                </td>
+                {canUpdate && (
+                  <td className="r">
+                    <span className="inline-flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setDiscussRisk({ id: risk.id, title: risk.title })}
+                        title="Discuss this risk"
+                        aria-label="Discuss this risk"
+                        className="rounded p-1 text-ink-3 transition-colors hover:text-brand"
+                      >
+                        <MessageSquare className="size-3.5" />
+                      </button>
+                      <RiskRowActions risk={risk} users={users} />
+                    </span>
+                  </td>
+                )}
+              </tr>
+            ))}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={canUpdate ? 7 : 6} className="text-center text-ink-3">
+                  No risks match this filter.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
