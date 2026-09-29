@@ -3,7 +3,7 @@ import { GATE_KEYS, GATE_LABELS } from "@/server/dashboard-cockpit";
 import { briefLines } from "./ask-q-brief";
 import { HeadV3, type HeadV3Props, type HeadRow } from "./head-v3";
 
-// Server wrapper for the Head of PMs view — maps real tenant data into the approved
+// Server wrapper for the Head view — maps real tenant data into the approved
 // artifact's shape (head-v3.tsx renders its exact markup).
 
 const STAGE_OF: Record<GateKey, { phase: string; stage: string }> = {

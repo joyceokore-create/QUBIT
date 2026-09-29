@@ -1,4 +1,4 @@
-// M-P3b (docs/34, docs/19 §6) — the Head of PMs' weekly roll-up: PM check-ins land in
+// M-P3b (docs/34, docs/19 §6) — the Head's weekly roll-up: PM check-ins land in
 // the Head's queue; the Head builds, annotates and APPROVES; the approved roll-up is
 // what the executive reads. Draft is rebuildable from live data; Approved freezes the
 // payload — what the Head signed never mutates underneath the exec.
@@ -20,7 +20,7 @@ export class RollupError extends Error {
 
 function assertHead(ctx: TenantContext): void {
   if (!ctx.roles.some((r) => r === "HeadOfProjects" || r === "PlatformSuperAdmin")) {
-    throw new RollupError("The roll-up is the Head of PMs' to build and approve.", "FORBIDDEN");
+    throw new RollupError("The roll-up is the Head's to build and approve.", "FORBIDDEN");
   }
 }
 

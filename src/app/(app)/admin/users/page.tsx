@@ -6,6 +6,7 @@ import { listDepartments } from "@/server/departments";
 import { listTeams } from "@/server/teams";
 import { listProjects } from "@/server/projects";
 import { Forbidden } from "@/components/forbidden";
+import { ssoEnabled } from "@/lib/sso";
 import { AdminHeader } from "../admin-header";
 import { NewUserDialog } from "./new-user-dialog";
 import { UsersClient, type AdminInsight } from "./users-client";
@@ -90,6 +91,7 @@ export default async function AdminUsersPage() {
               teams={teams.map((t) => ({ id: t.id, name: t.name }))}
               projects={projects.map((p) => ({ id: p.id, code: p.code, name: p.name }))}
               canGrantSuperAdmin={canGrantSuperAdmin}
+              sso={ssoEnabled()}
             />
           ) : undefined
         }

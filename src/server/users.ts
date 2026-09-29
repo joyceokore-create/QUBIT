@@ -8,24 +8,26 @@ import { assignableRoleNames } from "@/server/role-permissions";
 import { derivedGroups, USER_GROUPS } from "@/lib/personas";
 import { PROJECT_ROLES, projectRoleCategory } from "@/lib/roles";
 import { mfaRequired } from "@/lib/mfa-policy";
+import { ssoEnabled } from "@/lib/sso";
 
 export const CreateUserInput = z.object({
   name: z.string().min(1),
   email: z.string().email(),
-  // M-O3 (docs/22): no admin-supplied password. The invitee sets their own via an emailed
-  // one-time link, so a temp password is never generated, displayed, or transported.
-  // Role names are validated in the engine against canonical + ACTIVE custom roles —
-  // a static enum can't know the tenant's custom roles.
+  // No admin-supplied password, ever. Under SSO the person signs in with Microsoft; without
+  // SSO they set their own password via an emailed one-time link (M-O3, docs/22). A temp
+  // password is never generated, displayed, or transported. Role names are validated in the
+  // engine against canonical + ACTIVE custom roles — a static enum can't know the tenant's
+  // custom roles.
   roles: z.array(z.string().min(1)).min(1),
   departmentId: z.string().min(1).nullable().optional(),
   // Optional placement at invite time — so PMs/developers land on a team + project.
   teamId: z.string().min(1).nullable().optional(),
   projectId: z.string().min(1).nullable().optional(),
   projectRole: z.enum(PROJECT_ROLES).nullable().optional(),
-  // Declared dashboard group (docs/17 §1.3) — presentation, never permission. DM1.43:
-  // SINGLE choice — exec, pm, or member(dev/qa/implementor) — so "where they land" is
-  // unambiguous. Derived groups still union in at login; this caps what is DECLARED.
-  userGroups: z.array(z.enum(USER_GROUPS)).max(1).optional(),
+  // Declared dashboard views (docs/17 §1.3) — presentation, never permission. A user may be
+  // given more than one view and switch between them; `primaryGroup` is the one they land on.
+  // Derived groups still union in at login; this only caps what is DECLARED.
+  userGroups: z.array(z.enum(USER_GROUPS)).max(USER_GROUPS.length).optional(),
   primaryGroup: z.enum(USER_GROUPS).nullable().optional(),
 });
 export type CreateUserInput = z.infer<typeof CreateUserInput>;
@@ -185,13 +187,23 @@ export interface CreateUserResult {
   /** The one-time accept link — present only when email is NOT configured (docs/22 §4.1). */
   acceptUrl?: string;
   emailed: boolean;
+  /** True when the account was created SSO-ready (ACTIVE, no invite link) — the SSO path. */
+  sso?: boolean;
 }
 
 /**
- * Invite a user (M-O3, docs/22). Creates them as INVITED with **no usable password**, then
- * mints a one-time token and emails the set-password link. When the mailer isn't
- * configured the link comes back for the admin to copy, so the flow works before Graph is
- * wired on the box — but a temp password is never created either way.
+ * Create a user.
+ *
+ * SSO deployments (all AZURE_AD_* set): Entra is the only sign-in door — `authorize()`
+ * refuses password login while SSO is active — so an invite-to-set-a-password is
+ * meaningless. The account is created ACTIVE with a null hash and `mustChangePassword`
+ * cleared; the person can sign in with Microsoft immediately, provided they exist in the
+ * org directory (the SSO gate maps their email to this ACTIVE user). No link is minted.
+ *
+ * Non-SSO deployments: the original M-O3 flow (docs/22) — created INVITED with **no usable
+ * password**, then a one-time token is minted and the set-password link emailed (or
+ * returned for the admin to copy when the mailer isn't configured). A temp password is
+ * never created either way.
  */
 export async function createUser(ctx: TenantContext, input: CreateUserInput): Promise<CreateUserResult> {
   // Privilege-escalation guard: only a Super Admin may mint another Super Admin. Without
@@ -199,6 +211,9 @@ export async function createUser(ctx: TenantContext, input: CreateUserInput): Pr
   assertMayGrantSuperAdmin(ctx, input.roles);
 
   const email = input.email.toLowerCase();
+  // SSO is the switch between "usable immediately via Microsoft" and "invite-to-set-a-
+  // password". Read once so the account row and the post-commit step agree.
+  const sso = ssoEnabled();
 
   const user = await withTenant(ctx, async (tx) => {
     const existing = await tx.user.findUnique({
@@ -233,14 +248,18 @@ export async function createUser(ctx: TenantContext, input: CreateUserInput): Pr
         tenantId: ctx.tenantId,
         email,
         name: input.name,
-        // INVITED + null hash: the account cannot be signed into until the invitee
-        // consumes their token and sets a password (consumeInviteToken flips it ACTIVE).
-        status: "INVITED",
+        // SSO on: ACTIVE + null hash — usable the moment it exists. Microsoft is the door,
+        //   so there's no password to set and no onboarding gate to clear
+        //   (mustChangePassword stays false; onboardedAt is stamped so records read clean).
+        // SSO off: INVITED + null hash — cannot be signed into until the invitee consumes
+        //   their token and sets a password (consumeInviteToken flips it ACTIVE).
+        status: sso ? "ACTIVE" : "INVITED",
         passwordHash: null,
         departmentId: input.departmentId ?? null,
         userGroups: declaredGroups,
         primaryGroup: input.primaryGroup ?? null,
-        mustChangePassword: true,
+        mustChangePassword: !sso,
+        ...(sso ? { onboardedAt: new Date() } : {}),
       },
     });
 
@@ -278,8 +297,14 @@ export async function createUser(ctx: TenantContext, input: CreateUserInput): Pr
     return user;
   });
 
-  // Minted AFTER the user transaction commits: the token references user.id, and a failed
-  // send must not roll back a successfully created account (the admin can resend).
+  // SSO: nothing to send — the account is already usable via Microsoft.
+  if (sso) {
+    return { user: { id: user.id, name: user.name, email: user.email }, emailed: false, sso: true };
+  }
+
+  // Non-SSO: mint the one-time link AFTER the user transaction commits — the token
+  // references user.id, and a failed send must not roll back a successfully created
+  // account (the admin can resend).
   const { acceptUrl, emailed } = await mintInvite(ctx, user.id, "invite");
   return {
     user: { id: user.id, name: user.name, email: user.email },

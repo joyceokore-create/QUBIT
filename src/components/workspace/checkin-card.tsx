@@ -247,7 +247,7 @@ export function CheckInCard({ projectId }: { projectId: string }) {
         <div className="mt-1 flex items-center gap-2">
           {ci.submittedToHeadAt ? (
             <span className="rounded-full px-2.5 py-1 text-[10.5px] font-semibold" style={{ color: "var(--ok)", background: "color-mix(in oklab, var(--ok) 10%, transparent)" }}>
-              Sent to the Head of PMs · {new Date(ci.submittedToHeadAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+              Sent to the Head · {new Date(ci.submittedToHeadAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
             </span>
           ) : (
             <button
@@ -259,7 +259,7 @@ export function CheckInCard({ projectId }: { projectId: string }) {
               }}
               className="rounded-[8px] border border-[var(--brand)] px-3 py-1.5 text-[11.5px] font-bold text-[var(--brand)]"
             >
-              Send to the Head of PMs →
+              Send to the Head →
             </button>
           )}
           <span className="text-[10px] text-[var(--ink4)]">re-confirming requires a re-send</span>

@@ -258,7 +258,7 @@ async function RollupsTab({ ctx, isHead }: { ctx: Ctx; isHead: boolean }) {
           two doors, zero drift. */}
       {isHead && rollup && <RollupStrip rollup={rollup} />}
       <p className="text-[12.5px] text-[var(--ink3)]">
-        The Head of PMs&apos; weekly roll-up, week by week — frozen at approval, exactly as signed. Server-rendered PDF
+        The Head&apos;s weekly roll-up, week by week — frozen at approval, exactly as signed. Server-rendered PDF
         lands with M9-B; today each week exports as CSV, and shared reports download as print-ready HTML (print to PDF
         from the browser).
       </p>

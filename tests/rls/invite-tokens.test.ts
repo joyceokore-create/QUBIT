@@ -8,6 +8,7 @@ import { withTenant, type TenantContext } from "@/lib/tenant";
 import { hashInviteToken } from "@/lib/invite-token";
 import { consumeInviteToken, InviteError, mintInvite, resendInvite, startPasswordReset } from "@/server/invites";
 import { createUser } from "@/server/users";
+import { disableSso, restoreSso } from "./_sso-env";
 
 const EMAIL = "invite-flow@demo-b.example.invalid";
 const OTHER_EMAIL = "invite-other@demo-b.example.invalid";
@@ -31,6 +32,8 @@ describe("M-O3 invite tokens", () => {
   }
 
   beforeAll(async () => {
+    // This suite tests the non-SSO invite flow; pin SSO off (see _sso-env).
+    disableSso();
     const [demoB, riverbank] = await Promise.all([
       prisma.tenant.findUnique({ where: { slug: "demo-b" } }),
       prisma.tenant.findUnique({ where: { slug: "riverbank" } }),
@@ -44,6 +47,7 @@ describe("M-O3 invite tokens", () => {
 
   afterEach(scrub);
   afterAll(async () => {
+    restoreSso();
     await prisma.$disconnect();
   });
 

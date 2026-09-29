@@ -110,7 +110,7 @@ function DecisionQueue({ d }: { d: ExecutiveDashboard }) {
 // DM1.73 (T1): the PortfolioCards grid is gone — it rendered the SAME portfolios as
 // PortfolioSections below, twice on one page. The sections (with RAG+Δ headers) stay.
 
-/** docs/32 M-W1b — Head of PMs only: this week's check-in state per active project.
+/** docs/32 M-W1b — Head only: this week's check-in state per active project.
  * Review-only; the approve step arrives with the Head roll-up (PortfolioReport, P3). */
 function HeadQueue({ rows, awaiting }: { rows: HeadQueueRow[]; awaiting: boolean }) {
   // M-D2: the dashboard shows the SHAPE of the week, not 30-odd rows. The per-project
@@ -163,7 +163,7 @@ export function ExecutivePreset({ d, firstName }: { d: ExecutiveDashboard; first
           </span>
           <span className="min-w-0 flex-1 text-[13px] text-[var(--ink2)]">“{d.approvedRollup.narrative}”</span>
           {d.approvedRollup.approvedByName && (
-            <span className="font-mono text-[9.5px] text-[var(--ink4)]">— {d.approvedRollup.approvedByName}, Head of PMs</span>
+            <span className="font-mono text-[9.5px] text-[var(--ink4)]">— {d.approvedRollup.approvedByName}, Head</span>
           )}
           {/* DM1.73 (T2): the signed line carries its denominator — coverage + when. */}
           <span className="w-full font-mono text-[9px] uppercase tracking-[.8px] text-[var(--ink4)]">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Ban, Building2, Copy, KeyRound, LayoutDashboard, Mail, MoreHorizontal, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
+import { Ban, Building2, Copy, KeyRound, LayoutDashboard, MoreHorizontal, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
 import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { Button } from "@/components/ui/button";
 import {
@@ -62,14 +62,13 @@ export function UserRowActions({ user, currentUserId, departments, users, canMan
     await mutate(`/api/admin/users/${user.id}/${action}`, "POST");
   }
 
-  async function sendLink(kind: "resend" | "reset-password") {
-    const title = kind === "resend" ? "Invite resent" : "Password reset sent";
+  async function sendResetLink() {
     setCopied(false);
-    await mutate(`/api/admin/users/${user.id}/${kind}`, "POST", undefined, {
-      fallback: kind === "resend" ? "Could not resend the invite." : "Could not start the reset.",
+    await mutate(`/api/admin/users/${user.id}/reset-password`, "POST", undefined, {
+      fallback: "Could not start the reset.",
       onSuccess: (data) => {
         const d = (data ?? {}) as { emailed?: boolean; acceptUrl?: string };
-        setLinkResult({ title, emailed: Boolean(d.emailed), acceptUrl: d.acceptUrl });
+        setLinkResult({ title: "Password reset sent", emailed: Boolean(d.emailed), acceptUrl: d.acceptUrl });
       },
     });
   }
@@ -103,14 +102,8 @@ export function UserRowActions({ user, currentUserId, departments, users, canMan
             <LayoutDashboard style={{ color: "var(--qinfo)" }} />
             Dashboard groups
           </DropdownMenuItem>
-          {canManage && user.status === "INVITED" && (
-            <DropdownMenuItem disabled={busy} onSelect={() => void sendLink("resend")}>
-              <Mail style={{ color: "var(--qinfo)" }} />
-              Resend invite
-            </DropdownMenuItem>
-          )}
           {canResetPassword && user.status === "ACTIVE" && (
-            <DropdownMenuItem disabled={busy} onSelect={() => void sendLink("reset-password")}>
+            <DropdownMenuItem disabled={busy} onSelect={() => void sendResetLink()}>
               <KeyRound style={{ color: "var(--warn)" }} />
               Send password reset
             </DropdownMenuItem>

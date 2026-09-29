@@ -191,7 +191,7 @@ export function ExecV3(props: ExecV3Props) {
 
             <div className="row g12">
               <section className="panel c7" id="decisions">
-                <div className="panel-h"><h2>Decisions waiting on the Group</h2><span className="sub">escalated by the Head of PMs · sorted by age</span></div>
+                <div className="panel-h"><h2>Decisions waiting on the Group</h2><span className="sub">escalated by the Head · sorted by age</span></div>
                 <div className="queue queue-pm">
                   {props.decisions.length === 0 && <span className="hint">No decisions pending</span>}
                   {props.decisions.map((d) => (

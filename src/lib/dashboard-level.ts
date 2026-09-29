@@ -8,7 +8,7 @@ export type DashboardLevel = (typeof DASHBOARD_LEVELS)[number];
 export const LEVEL_LABEL: Record<DashboardLevel, string> = {
   superadmin: "Super Admin",
   exec: "Executive",
-  head: "Head of PMs",
+  head: "Head",
   pm: "Project Manager",
   user: "My work",
 };

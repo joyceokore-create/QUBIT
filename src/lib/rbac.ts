@@ -33,7 +33,7 @@ export type CanonicalRole = (typeof CANONICAL_ROLES)[number];
 /** Human-friendly labels for the canonical roles (for profile/UI display). */
 const ROLE_LABELS: Record<CanonicalRole, string> = {
   PlatformSuperAdmin: "Super Admin",
-  HeadOfProjects: "Head of Projects",
+  HeadOfProjects: "Head",
   HeadOfQA: "Head of QA",
   Executive: "Executive",
   ProjectManager: "Project Manager",

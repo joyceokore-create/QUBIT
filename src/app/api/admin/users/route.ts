@@ -15,9 +15,13 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { user, emailed, acceptUrl } = await createUser(guard.ctx, parsed.data);
-    // acceptUrl is present ONLY when email isn't configured — the admin copies it then.
-    return NextResponse.json({ id: user.id, emailed, ...(acceptUrl ? { acceptUrl } : {}) }, { status: 201 });
+    const { user, emailed, acceptUrl, sso } = await createUser(guard.ctx, parsed.data);
+    // sso: the account is usable via Microsoft immediately, no link. Otherwise acceptUrl is
+    // present ONLY when email isn't configured — the admin copies it then.
+    return NextResponse.json(
+      { id: user.id, emailed, ...(sso ? { sso: true } : {}), ...(acceptUrl ? { acceptUrl } : {}) },
+      { status: 201 },
+    );
   } catch (e) {
     if (e instanceof UserAdminError) {
       return NextResponse.json({ error: { code: e.code, message: e.message } }, { status: 400 });
