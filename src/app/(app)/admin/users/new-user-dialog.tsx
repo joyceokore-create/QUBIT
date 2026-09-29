@@ -36,11 +36,11 @@ interface ProjectOpt {
 const STEPS = ["Details", "Access", "Review"] as const;
 
 export function NewUserDialog({
-  departments = [],
   teams = [],
   projects = [],
   canGrantSuperAdmin = false,
 }: {
+  /** Accepted for call-site compatibility; org unit was removed from this form. */
   departments?: DeptOpt[];
   teams?: TeamOpt[];
   projects?: ProjectOpt[];
@@ -54,7 +54,6 @@ export function NewUserDialog({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<OnboardingRoleKey>("Member");
-  const [departmentId, setDepartmentId] = useState("none");
   const [teamId, setTeamId] = useState("none");
   const [projectId, setProjectId] = useState("none");
   const [projectRole, setProjectRole] = useState<string>("Developer");
@@ -91,10 +90,23 @@ export function NewUserDialog({
     declaredGroup,
     null,
   );
-  const deptName = departmentId === "none" ? "No org unit" : departments.find((d) => d.id === departmentId)?.name ?? "—";
   const teamName = teamId === "none" ? "—" : teams.find((t) => t.id === teamId)?.name ?? "—";
   const projName = projectId === "none" ? "—" : projects.find((p) => p.id === projectId)?.name ?? "—";
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+  // Superadmin is a role, not a persona (docs/17 §1) — it derives every group and lands on
+  // the executive cockpit. Surfacing it as a "dashboard group" is a shortcut: selecting it
+  // sets the PlatformSuperAdmin role and clears any single-persona pin.
+  const superadmin = role === "PlatformSuperAdmin";
+  function handleSuperadmin(on: boolean) {
+    if (on) {
+      setRole("PlatformSuperAdmin");
+      setDeclaredGroup(null);
+    } else {
+      setRole("Member");
+    }
+  }
+  const landingLabel = superadmin ? "Super admin" : GROUP_LABELS[landing];
 
   function reset() {
     setPhase("wizard");
@@ -102,7 +114,6 @@ export function NewUserDialog({
     setName("");
     setEmail("");
     setRole("Member");
-    setDepartmentId("none");
     setTeamId("none");
     setProjectId("none");
     setProjectRole("Developer");
@@ -130,7 +141,7 @@ export function NewUserDialog({
         name,
         email,
         roles: [role],
-        departmentId: departmentId === "none" ? null : departmentId,
+        departmentId: null,
         teamId: teamId === "none" ? null : teamId,
         projectId: projectId === "none" ? null : projectId,
         projectRole: projectId === "none" ? null : projectRole,
@@ -158,13 +169,13 @@ export function NewUserDialog({
   return (
     <Dialog open={open} onOpenChange={(nx) => { setOpen(nx); if (!nx) reset(); }}>
       <DialogTrigger render={<Button />}>
-        <Plus /> Invite user
+        <Plus /> Create a user
       </DialogTrigger>
       <DialogContent className="sm:max-w-[480px]">
         {phase === "wizard" ? (
           <>
             <DialogHeader>
-              <DialogTitle>Invite a user</DialogTitle>
+              <DialogTitle>Create a user</DialogTitle>
               <DialogDescription>Three quick steps — they set their own password from an emailed link.</DialogDescription>
             </DialogHeader>
 
@@ -227,72 +238,65 @@ export function NewUserDialog({
                       })}
                     </div>
                   </div>
-                  {departments.length > 0 && (
-                    <Field label="Org unit (optional)" htmlFor="nu-dept">
-                      <Select
-                        value={departmentId}
-                        onValueChange={(v) => setDepartmentId(v ?? "none")}
-                        items={{ none: "No org unit", ...Object.fromEntries(departments.map((d) => [d.id, d.name])) }}
-                      >
-                        <SelectTrigger id="nu-dept"><SelectValue placeholder="No org unit" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">No org unit</SelectItem>
-                          {departments.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                  )}
-
-                  <div className="rounded-[10px] border border-[var(--w08)] bg-[color-mix(in_oklab,var(--brand)_4%,transparent)] p-3">
-                    <p className="mb-2 text-[11.5px] font-semibold text-ink-2">Place them on day one (optional)</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Select
-                        value={teamId}
-                        onValueChange={(v) => setTeamId(v ?? "none")}
-                        items={{ none: "No team", ...Object.fromEntries(teams.map((t) => [t.id, t.name])) }}
-                      >
-                        <SelectTrigger><SelectValue placeholder="Team" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">No team</SelectItem>
-                          {teams.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <Select
-                        value={projectId}
-                        onValueChange={(v) => setProjectId(v ?? "none")}
-                        items={{ none: "No project", ...Object.fromEntries(projects.map((p) => [p.id, `${p.name} (${p.code})`])) }}
-                      >
-                        <SelectTrigger><SelectValue placeholder="Project" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">No project</SelectItem>
-                          {projects.map((p) => <SelectItem key={p.id} value={p.id}>{p.name} ({p.code})</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    {projectId !== "none" && (
-                      <div className="mt-2">
-                        <Select value={projectRole} onValueChange={(v) => v && setProjectRole(v)}>
-                          <SelectTrigger><SelectValue placeholder="Project role" /></SelectTrigger>
+                  {/* One "day one" card: where they start (team + project) and the dashboard
+                      group they land on. Dashboard group is presentation only, never
+                      permission (docs/17 §1.3, single-choice per DM1.43). */}
+                  <div className="flex flex-col gap-3 rounded-[10px] border border-[var(--w08)] bg-[color-mix(in_oklab,var(--brand)_4%,transparent)] p-3">
+                    <div>
+                      <p className="mb-2 text-[11.5px] font-semibold text-ink-2">Place them on day one (optional)</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Select
+                          value={teamId}
+                          onValueChange={(v) => setTeamId(v ?? "none")}
+                          items={{ none: "No team", ...Object.fromEntries(teams.map((t) => [t.id, t.name])) }}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Team" /></SelectTrigger>
                           <SelectContent>
-                            {PROJECT_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                            <SelectItem value="none">No team</SelectItem>
+                            {teams.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <Select
+                          value={projectId}
+                          onValueChange={(v) => setProjectId(v ?? "none")}
+                          items={{ none: "No project", ...Object.fromEntries(projects.map((p) => [p.id, `${p.name} (${p.code})`])) }}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Project" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No project</SelectItem>
+                            {projects.map((p) => <SelectItem key={p.id} value={p.id}>{p.name} ({p.code})</SelectItem>)}
                           </SelectContent>
                         </Select>
                       </div>
-                    )}
-                  </div>
+                      {projectId !== "none" && (
+                        <div className="mt-2">
+                          <Select value={projectRole} onValueChange={(v) => v && setProjectRole(v)}>
+                            <SelectTrigger><SelectValue placeholder="Project role" /></SelectTrigger>
+                            <SelectContent>
+                              {PROJECT_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
 
-                  {/* Dashboard group (docs/17 §1.3, single-choice per DM1.43) —
-                      presentation only, never permission. */}
-                  <div className="rounded-[10px] border border-[var(--w08)] p-3">
-                    <p className="mb-2 text-[11.5px] font-semibold text-ink-2">Dashboard group</p>
-                    <GroupPicker value={declaredGroup} onChange={setDeclaredGroup} />
-                    <p className="mt-2 flex items-center gap-1.5 text-[11px] text-ink-3">
-                      Will land on:
-                      <span className="rounded-full bg-[color-mix(in_oklab,var(--brand)_10%,transparent)] px-2 py-0.5 font-semibold text-[var(--brand)]">
-                        {GROUP_LABELS[landing]} dashboard
-                      </span>
-                    </p>
-                    <p className="mt-1 text-[11px] text-ink-3">Scope: {SCOPE_LINE[role]}.</p>
+                    <div className="border-t border-[var(--w08)] pt-3">
+                      <p className="mb-2 text-[11.5px] font-semibold text-ink-2">Dashboard group</p>
+                      <GroupPicker
+                        value={declaredGroup}
+                        onChange={setDeclaredGroup}
+                        allowSuperadmin={canGrantSuperAdmin}
+                        superadmin={superadmin}
+                        onSuperadminChange={handleSuperadmin}
+                      />
+                      <p className="mt-2 flex items-center gap-1.5 text-[11px] text-ink-3">
+                        Will land on:
+                        <span className="rounded-full bg-[color-mix(in_oklab,var(--brand)_10%,transparent)] px-2 py-0.5 font-semibold text-[var(--brand)]">
+                          {superadmin ? "Super admin — every dashboard" : `${landingLabel} dashboard`}
+                        </span>
+                      </p>
+                      <p className="mt-1 text-[11px] text-ink-3">Scope: {SCOPE_LINE[role]}.</p>
+                    </div>
                   </div>
                 </>
               )}
@@ -303,10 +307,9 @@ export function NewUserDialog({
                     <Row label="Name" value={name} />
                     <Row label="Email" value={email} />
                     <Row label="Role" value={roleTier.label} />
-                    <Row label="Org unit" value={deptName} />
                     <Row label="Team" value={teamName} />
                     <Row label="Project" value={projectId === "none" ? "—" : `${projName} · ${projectRole}`} />
-                    <Row label="Lands on" value={`${GROUP_LABELS[landing]} dashboard`} />
+                    <Row label="Lands on" value={superadmin ? "Super admin — every dashboard" : `${landingLabel} dashboard`} />
                     <Row label="Can" value={SCOPE_LINE[role]} />
                   </div>
                   <p className="text-xs text-ink-3">
@@ -325,7 +328,7 @@ export function NewUserDialog({
                 {step < STEPS.length - 1 ? (
                   <Button type="button" onClick={next}>Next <ArrowRight className="size-4" /></Button>
                 ) : (
-                  <Button type="submit" disabled={busy}>{busy ? "Inviting…" : "Send invite"}</Button>
+                  <Button type="submit" disabled={busy}>{busy ? "Creating…" : "Create user"}</Button>
                 )}
               </div>
             </form>
@@ -333,7 +336,7 @@ export function NewUserDialog({
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle>User invited</DialogTitle>
+              <DialogTitle>User created</DialogTitle>
               <DialogDescription>
                 {created?.emailed ? (
                   <>
@@ -359,7 +362,7 @@ export function NewUserDialog({
               </div>
             )}
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={reset}>Invite another</Button>
+              <Button type="button" variant="outline" onClick={reset}>Create another</Button>
               <Button type="button" onClick={() => setOpen(false)}>Done</Button>
             </div>
           </>
