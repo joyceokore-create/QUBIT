@@ -41,6 +41,9 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # pnpm's --frozen-lockfile can skip the prisma postinstall, leaving tsx seed.ts to
+      # fail on `Cannot find module '.prisma/client/default'`. Generate the client first.
+      - run: pnpm prisma generate
       - run: pnpm prisma migrate deploy
       - run: pnpm prisma db seed
       # The postgres service makes POSTGRES_USER=qubit a SUPERUSER, which bypasses RLS —
@@ -77,6 +80,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm prisma generate
       - run: pnpm prisma migrate deploy
       - run: pnpm prisma db seed
       - run: npx playwright install --with-deps chromium
