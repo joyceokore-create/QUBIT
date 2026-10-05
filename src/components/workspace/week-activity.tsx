@@ -99,22 +99,24 @@ export function WeekActivity({ projectId }: { projectId: string }) {
   const total = [...grouped.values()].reduce((n, l) => n + l.length, 0);
 
   return (
-    <section className={`${CARD} overflow-hidden`} style={{ background: "var(--cardbg)" }}>
-      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-[var(--hair2)] p-[12px_16px]">
-        <h2 className="font-heading text-[14px] rv:text-heading-xs font-bold text-[var(--qink)]">This week&apos;s tasks</h2>
-        <span className="flex flex-wrap items-baseline gap-x-2.5">
+    <section className={`${CARD} overflow-hidden`} style={{ background: "var(--cardbg)" }} aria-labelledby="week-activity">
+      <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-[var(--hair2)] p-[12px_16px]">
+        <div className="min-w-0">
+          <h2 id="week-activity" className="font-heading text-[14px] rv:text-heading-xs font-bold text-[var(--qink)]">What moved this week</h2>
+          <p className="mt-0.5 text-[10.5px] text-[var(--ink4)]">
+            {mirrored ? "Mirrored from YouTrack. " : "From the board. "}The check-in above is drafted from this.
+          </p>
+        </div>
+        <ul className="flex flex-wrap items-baseline gap-x-2.5" aria-label="Counts by state">
           {GROUPS.map((g) => {
             const c = grouped.get(g.key)!.length;
             return (
-              <span key={g.key} className="font-mono text-[9.5px] uppercase tracking-[.7px] tabular-nums" style={{ color: c ? `var(${g.tok})` : "var(--ink5)" }}>
+              <li key={g.key} className="font-mono text-[9.5px] uppercase tracking-[.7px] tabular-nums" style={{ color: c ? `var(${g.tok})` : "var(--ink5)" }}>
                 <b className="text-[12px]">{c}</b> {g.label}
-              </span>
+              </li>
             );
           })}
-        </span>
-        <span className="ml-auto text-[10px] text-[var(--ink5)]">
-          {mirrored ? "Mirrored from YouTrack — the report drafts from this" : "Read-only — edit tasks on the board"}
-        </span>
+        </ul>
       </header>
 
       {total === 0 ? (

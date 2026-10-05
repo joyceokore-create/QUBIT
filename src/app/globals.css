@@ -904,3 +904,9 @@
 .sgt-app td .desc { display: block; color: var(--ink4); font-size: 12px; font-weight: 400; white-space: normal; max-width: 44ch; }
 .sgt-app th.r, .sgt-app td.r { text-align: right; }
 
+/* Browser surfaces carry the design too. Selection and the caret are tinted from the
+   tenant's brand token, so Riverbank selects red and the default tenant selects green
+   with no per-theme rule. */
+::selection { background: color-mix(in oklab, var(--brand) 22%, transparent); color: var(--qink); }
+input, textarea, [contenteditable="true"] { caret-color: var(--brand); }
+

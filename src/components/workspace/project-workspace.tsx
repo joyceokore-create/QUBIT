@@ -16,6 +16,7 @@ import { ActivityCard } from "@/components/conversation/activity-card";
 import { CommentsSection } from "@/components/conversation/comments-section";
 import { WorkspaceReports } from "@/components/workspace/workspace-reports";
 import { WeekActivity } from "@/components/workspace/week-activity";
+import { ReportHistory } from "@/components/workspace/report-history";
 import { GovernanceEditor } from "@/components/workspace/governance-editor";
 import { CheckpointMatrix } from "@/components/workspace/checkpoint-matrix";
 import { ProjectRegister } from "@/components/workspace/project-register";
@@ -177,11 +178,17 @@ export function ProjectWorkspace({
         {tab === "This week" && (
           <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-[1fr_360px]">
             <div className="flex min-w-0 flex-col gap-3.5">
-              {/* The weekly report — auto-drafted from the task feed below; the PM edits,
-                  sets RAG, confirms and sends to the Head. */}
-              <WorkspaceReports projectId={data.id} isPmView={data.canGovern ?? false} />
-              {/* The evidence the draft is built from — what moved on the tracker this week. */}
-              <WeekActivity projectId={data.id} />
+              {/* One narrative, top to bottom: the act, its evidence, then the trail.
+                  Act + evidence sit tight (gap-2) so they read as one unit; history
+                  stands off at the column's normal rhythm. */}
+              <div className="flex flex-col gap-2">
+                {/* The weekly check-in — auto-drafted from the feed below; the PM edits
+                    the one line, sets RAG, confirms and sends to the Head. */}
+                <WorkspaceReports projectId={data.id} isPmView={data.canGovern ?? false} />
+                {/* The evidence the draft is built from — what moved on the tracker this week. */}
+                <WeekActivity projectId={data.id} />
+              </div>
+              <ReportHistory projectId={data.id} />
             </div>
             <aside className="flex flex-col gap-3.5">
               {/* Multi-market only: per-subsidiary rollout at a glance; full tracks under Delivery. */}

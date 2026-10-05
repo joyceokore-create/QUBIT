@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Clock } from "lucide-react";
 import { CheckInCard } from "@/components/workspace/checkin-card";
-import { CARD, RAG_TOKEN as RAG_TOK } from "@/lib/surface";
+import { CARD } from "@/lib/surface";
 
 /**
  * M-P3a (docs/25 §3.5, docs/34) — the workspace Reports tab, role-composed:
@@ -27,14 +27,6 @@ interface MineJson {
   isoWeek: string;
   draft: { sections: SectionJson[] };
 }
-interface PastReport {
-  id: string;
-  isoWeek: string;
-  rag: "Green" | "Amber" | "Red";
-  narrative: string | null;
-  submittedToHeadAt: string | null;
-}
-
 /** Friday 17:00 is the weekly deadline (docs/19 M3 — the nudger escalates past it).
  * The wireframe's due banner: a weekly update is a DEADLINE, not a form that sits there. */
 function DueBanner() {
@@ -81,22 +73,20 @@ export function WorkspaceReports({
   const [mine, setMine] = useState<MineJson | null>(null);
   const [note, setNote] = useState("");
   const [query, setQuery] = useState("");
-  const [history, setHistory] = useState<PastReport[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Past weeks live in <ReportHistory>, rendered by the tab after the evidence feed, so
+  // the column reads act → evidence → history. This component is only the act.
   const load = useCallback(async () => {
-    const [mineRes, histRes] = await Promise.all([
-      isPmView ? Promise.resolve(null) : fetch("/api/member-reports").then((r) => r.json()).catch(() => null),
-      fetch(`/api/projects/${projectId}/checkin/history`).then((r) => r.json()).catch(() => null),
-    ]);
+    if (isPmView) return; // the PM's act is <CheckInCard>, which loads itself
+    const mineRes = await fetch("/api/member-reports").then((r) => r.json()).catch(() => null);
     if (mineRes?.mine) {
       setMine(mineRes.mine);
       const section = (mineRes.mine.draft?.sections ?? []).find((s: SectionJson) => s.projectId === projectId);
       setNote(section?.note ?? "");
       setQuery(section?.query ?? "");
     }
-    setHistory(histRes?.data ?? []);
   }, [projectId, isPmView]);
   useEffect(() => {
     void load();
@@ -201,25 +191,6 @@ export function WorkspaceReports({
           )}
         </div>
       )}
-
-      <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
-        <div className="mb-2 text-[13px] font-semibold text-foreground">Report history</div>
-        {history.length === 0 && <p className="text-xs text-ink-3">No confirmed reports yet.</p>}
-        <div className="flex flex-col">
-          {history.map((r) => (
-            <div key={r.id} className="flex items-start gap-2.5 border-b border-[var(--w06)] py-2 text-xs last:border-0">
-              <span className="mt-1 size-2 flex-none rounded-full" style={{ background: `var(${RAG_TOK[r.rag]})` }} />
-              <span className="w-[64px] flex-none font-mono text-[10px] text-ink-3">{r.isoWeek.replace("-W", " W")}</span>
-              <span className="min-w-0 flex-1 text-ink-2">{r.narrative ?? "—"}</span>
-              {r.submittedToHeadAt && (
-                <span className="flex-none rounded-full px-2 py-0.5 text-[9.5px] font-bold" style={{ color: "var(--ok)", background: "color-mix(in oklab, var(--ok) 10%, transparent)" }}>
-                  sent to Head
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
