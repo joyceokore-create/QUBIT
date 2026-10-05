@@ -12,6 +12,7 @@ import { SlidePanel } from "@/components/panels/slide-panel";
 import { QProvider } from "@/components/q/q-provider";
 import { QDrawer } from "@/components/q/q-drawer";
 import { AmbientField } from "@/components/layout/ambient-field";
+import { ssoEnabled } from "@/lib/sso";
 
 type BrandStyle = CSSProperties & { "--brand"?: string };
 
@@ -20,9 +21,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!session?.user) {
     redirect("/login");
   }
-  // Invited users must set their own password first. /onboarding lives outside this
-  // layout group, so redirecting here can't loop.
-  if (session.user.mustChangePassword) {
+  // Non-SSO: invited users set their own password first (/onboarding lives outside this
+  // layout group, so redirecting here can't loop). Under Entra SSO, Entra owns password
+  // and MFA — the password onboarding is skipped, so a Microsoft sign-in lands straight in.
+  if (session.user.mustChangePassword && !ssoEnabled()) {
     redirect("/onboarding");
   }
 

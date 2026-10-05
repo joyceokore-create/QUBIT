@@ -4,6 +4,7 @@ import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { hashPassword, validatePasswordPolicy, isPasswordReused, pushPasswordHistory } from "@/lib/password";
 import { mintInvite } from "@/server/invites";
+import { ssoEnabled } from "@/lib/sso";
 import { assignableRoleNames } from "@/server/role-permissions";
 import { derivedGroups, USER_GROUPS } from "@/lib/personas";
 import { PROJECT_ROLES, projectRoleCategory } from "@/lib/roles";
@@ -185,6 +186,9 @@ export interface CreateUserResult {
   /** The one-time accept link — present only when email is NOT configured (docs/22 §4.1). */
   acceptUrl?: string;
   emailed: boolean;
+  /** True when SSO is on: the account is provisioned and the person signs in with their
+   * Microsoft account — no password link is minted or emailed. */
+  sso?: boolean;
 }
 
 /**
@@ -197,6 +201,12 @@ export async function createUser(ctx: TenantContext, input: CreateUserInput): Pr
   // Privilege-escalation guard: only a Super Admin may mint another Super Admin. Without
   // this, a HeadOfProjects/HeadOfQA (who hold `users:invite`) could create one.
   assertMayGrantSuperAdmin(ctx, input.roles);
+
+  // Under Entra SSO (prod), password onboarding is dead weight — Entra owns the password
+  // and MFA, and credentials login is refused. So the invite just PROVISIONS the account
+  // (role + placement); the person signs in with their Microsoft account. No token, no
+  // set-password email, no mustChangePassword gate.
+  const sso = ssoEnabled();
 
   const email = input.email.toLowerCase();
 
@@ -233,14 +243,15 @@ export async function createUser(ctx: TenantContext, input: CreateUserInput): Pr
         tenantId: ctx.tenantId,
         email,
         name: input.name,
-        // INVITED + null hash: the account cannot be signed into until the invitee
+        // SSO: provisioned and ready — Entra authenticates them on first Microsoft
+        // sign-in (no password ever). Non-SSO: INVITED with null hash until the invitee
         // consumes their token and sets a password (consumeInviteToken flips it ACTIVE).
-        status: "INVITED",
+        status: sso ? "ACTIVE" : "INVITED",
         passwordHash: null,
         departmentId: input.departmentId ?? null,
         userGroups: declaredGroups,
         primaryGroup: input.primaryGroup ?? null,
-        mustChangePassword: true,
+        mustChangePassword: !sso,
       },
     });
 
@@ -278,6 +289,11 @@ export async function createUser(ctx: TenantContext, input: CreateUserInput): Pr
     return user;
   });
 
+  // SSO: nothing to mint — the person signs in with their Microsoft account.
+  if (sso) {
+    return { user: { id: user.id, name: user.name, email: user.email }, emailed: false, sso: true };
+  }
+
   // Minted AFTER the user transaction commits: the token references user.id, and a failed
   // send must not roll back a successfully created account (the admin can resend).
   const { acceptUrl, emailed } = await mintInvite(ctx, user.id, "invite");
@@ -285,6 +301,7 @@ export async function createUser(ctx: TenantContext, input: CreateUserInput): Pr
     user: { id: user.id, name: user.name, email: user.email },
     emailed,
     ...(emailed ? {} : { acceptUrl }),
+    sso: false,
   };
 }
 

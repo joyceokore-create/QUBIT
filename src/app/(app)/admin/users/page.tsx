@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { can, CANONICAL_ROLES } from "@/lib/rbac";
+import { ssoEnabled } from "@/lib/sso";
 import { listUsers } from "@/server/users";
 import { listAssignableRoles } from "@/server/role-permissions";
 import { listDepartments } from "@/server/departments";
@@ -90,6 +91,7 @@ export default async function AdminUsersPage() {
               teams={teams.map((t) => ({ id: t.id, name: t.name }))}
               projects={projects.map((p) => ({ id: p.id, code: p.code, name: p.name }))}
               canGrantSuperAdmin={canGrantSuperAdmin}
+              sso={ssoEnabled()}
             />
           ) : undefined
         }

@@ -40,12 +40,15 @@ export function NewUserDialog({
   teams = [],
   projects = [],
   canGrantSuperAdmin = false,
+  sso = false,
 }: {
   departments?: DeptOpt[];
   teams?: TeamOpt[];
   projects?: ProjectOpt[];
   /** Only a Super Admin may invite another Super Admin (mirrors the server guard, M-O1). */
   canGrantSuperAdmin?: boolean;
+  /** Entra SSO is configured: the invitee signs in with Microsoft — no password link. */
+  sso?: boolean;
 }) {
   const { busy, error, setError, mutate } = useAdminMutation();
   const [open, setOpen] = useState(false);
@@ -64,7 +67,7 @@ export function NewUserDialog({
   const [copied, setCopied] = useState(false);
   // M-O3: the invite result, not a password. `acceptUrl` is present only when email isn't
   // configured — then the admin copies the link instead of the mailer sending it.
-  const [created, setCreated] = useState<{ email: string; emailed: boolean; acceptUrl?: string } | null>(null);
+  const [created, setCreated] = useState<{ email: string; emailed: boolean; acceptUrl?: string; sso?: boolean } | null>(null);
 
   // Hide the "Administrator" tier (= PlatformSuperAdmin) from admins who can't grant it.
   const roleTiers = ONBOARDING_ROLE_TIERS.filter((t) => canGrantSuperAdmin || t.key !== "PlatformSuperAdmin");
@@ -140,8 +143,8 @@ export function NewUserDialog({
       {
         fallback: "Could not create the user.",
         onSuccess: (data) => {
-          const d = (data ?? {}) as { emailed?: boolean; acceptUrl?: string };
-          setCreated({ email, emailed: Boolean(d.emailed), acceptUrl: d.acceptUrl });
+          const d = (data ?? {}) as { emailed?: boolean; acceptUrl?: string; sso?: boolean };
+          setCreated({ email, emailed: Boolean(d.emailed), acceptUrl: d.acceptUrl, sso: Boolean(d.sso) });
           setPhase("done");
         },
       },
@@ -165,7 +168,11 @@ export function NewUserDialog({
           <>
             <DialogHeader>
               <DialogTitle>Invite a user</DialogTitle>
-              <DialogDescription>Three quick steps — they set their own password from an emailed link.</DialogDescription>
+              <DialogDescription>
+                {sso
+                  ? "Three quick steps — they sign in with their Riverbank Microsoft account."
+                  : "Three quick steps — they set their own password from an emailed link."}
+              </DialogDescription>
             </DialogHeader>
 
             {/* Step indicator */}
@@ -309,10 +316,17 @@ export function NewUserDialog({
                     <Row label="Lands on" value={`${GROUP_LABELS[landing]} dashboard`} />
                     <Row label="Can" value={SCOPE_LINE[role]} />
                   </div>
-                  <p className="text-xs text-ink-3">
-                    They&apos;ll get an email with a one-time link to set their own password. No
-                    temporary password is created.
-                  </p>
+                  {sso ? (
+                    <p className="text-xs text-ink-3">
+                      They&apos;ll sign in with their Riverbank Microsoft account — no password to set.
+                      Entra handles password and MFA.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-ink-3">
+                      They&apos;ll get an email with a one-time link to set their own password. No
+                      temporary password is created.
+                    </p>
+                  )}
                 </>
               )}
 
@@ -325,7 +339,7 @@ export function NewUserDialog({
                 {step < STEPS.length - 1 ? (
                   <Button type="button" onClick={next}>Next <ArrowRight className="size-4" /></Button>
                 ) : (
-                  <Button type="submit" disabled={busy}>{busy ? "Inviting…" : "Send invite"}</Button>
+                  <Button type="submit" disabled={busy}>{busy ? (sso ? "Adding…" : "Inviting…") : sso ? "Add user" : "Send invite"}</Button>
                 )}
               </div>
             </form>
@@ -333,9 +347,14 @@ export function NewUserDialog({
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle>User invited</DialogTitle>
+              <DialogTitle>{created?.sso ? "User added" : "User invited"}</DialogTitle>
               <DialogDescription>
-                {created?.emailed ? (
+                {created?.sso ? (
+                  <>
+                    <span className="font-medium text-ink-2">{created?.email}</span> can sign in now with their
+                    Riverbank Microsoft account — no password needed.
+                  </>
+                ) : created?.emailed ? (
                   <>
                     An invite email is on its way to{" "}
                     <span className="font-medium text-ink-2">{created?.email}</span>. The link expires in 72 hours.
