@@ -43,6 +43,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm prisma migrate deploy
       - run: pnpm prisma db seed
+      # The postgres service makes POSTGRES_USER=qubit a SUPERUSER, which bypasses RLS —
+      # so the tenant-isolation suite would see every tenant's rows. migrate+seed need
+      # the elevated role; demote it now (it can drop its own superuser) so `pnpm test`
+      # runs under RLS exactly as prod/local do (non-superuser qubit + FORCE RLS).
+      - run: echo 'ALTER ROLE qubit NOSUPERUSER;' | pnpm prisma db execute --stdin --schema prisma/schema.prisma
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
