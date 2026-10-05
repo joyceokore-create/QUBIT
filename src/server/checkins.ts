@@ -77,7 +77,13 @@ export async function computeCheckInDraft(
         where: { id: projectId },
         select: { status: true, orgStatuses: { select: { progress: true } } },
       }),
-      eventCount("task.completed"),
+      // Count completions from ProjectTask state, not domain events: YouTrack-mirrored
+      // tasks are synced (lastActivityAt = issue.updatedAt) but emit NO domain event, so
+      // an event count reads 0 for tracker-driven projects. Reading task state counts
+      // native AND mirrored completions this week alike.
+      tx.projectTask.count({
+        where: { projectId, approvalStatus: { not: "Draft" }, status: "Completed", lastActivityAt: { gte: start } },
+      }),
       eventCount("blocker.opened"),
       eventCount("blocker.resolved"),
       tx.projectMilestone.findMany({

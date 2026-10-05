@@ -3,37 +3,46 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Clock } from "lucide-react";
+import { ArrowLeft, Clock, ArrowRight } from "lucide-react";
 import { formatDate } from "@/components/panels/panel-primitives";
 import { EditProjectDialog } from "@/components/panels/edit-project-dialog";
 import { ProjectResourcesSection } from "@/components/panels/project-resources-section";
 import { ProjectBoard } from "@/components/workspace/project-board";
 import { ProjectMilestonesSection } from "@/components/workspace/project-milestones-section";
 import { DocumentsSection } from "@/components/workspace/documents-section";
-import { StatusUpdatesSection } from "@/components/workspace/status-updates-section";
 import { IntegrationsGrid } from "@/components/workspace/integrations-grid";
 import { AskQAbout } from "@/components/q/ask-q-about";
 import { ActivityCard } from "@/components/conversation/activity-card";
 import { CommentsSection } from "@/components/conversation/comments-section";
 import { WorkspaceReports } from "@/components/workspace/workspace-reports";
+import { WeekActivity } from "@/components/workspace/week-activity";
 import { GovernanceEditor } from "@/components/workspace/governance-editor";
 import { CheckpointMatrix } from "@/components/workspace/checkpoint-matrix";
 import { ProjectRegister } from "@/components/workspace/project-register";
-import { LatestCheckinCard } from "@/components/workspace/latest-checkin-card";
 import { RequirementsPanel } from "@/components/workspace/requirements-panel";
 import { RequestToJoinButton } from "@/components/workspace/request-to-join-button";
 import { statusMeta } from "@/lib/project-view";
 import type { ProjectPanelJson } from "@/components/panels/project-panel-json";
-import { CARD_GLASS as CARD } from "@/lib/surface";
+import { CARD_GLASS as CARD, RAG_TOKEN } from "@/lib/surface";
 
-// DM1.73: 7 tabs → 6. Team + Integrations fold into "Setup"; "Delivery" renders as
-// plain Delivery (the old 22-char "Checkpoints & Rollout" pill label became a one-line
-// description inside the tab).
-const TABS = ["Overview", "Board", "Documents", "Delivery", "Reports", "Setup"] as const;
+// Workspace redesign (docs/38): a "This week" home built for weekly reporting —
+// the auto-drafted report + the YouTrack task feed it draws from, side by side —
+// with Delivery setup, the full Board, Docs & register, and Setup as focused
+// sub-views one click away. Rollout-at-a-glance surfaces here only for multi-market
+// projects; every market's full track lives under Delivery.
+const TABS = ["This week", "Delivery", "Board", "Docs & register", "Setup"] as const;
 type Tab = (typeof TABS)[number];
 
-// Pipeline stage chip tokens — same mapping the GovernanceEditor uses (read-only here;
-// the stage is edited in the Governance card).
+// Old deep links keep landing: retired tab keys alias to their new homes.
+const TAB_ALIASES: Record<string, Tab> = {
+  Overview: "This week",
+  Reports: "This week",
+  Deadlines: "Delivery",
+  Documents: "Docs & register",
+  Team: "Setup",
+  Integrations: "Setup",
+};
+
 const STAGE_TOKEN: Record<string, string> = { Exploring: "--qinfo", Evaluating: "--warn", Approved: "--ok", Paused: "--ink4" };
 
 function initials(name: string) {
@@ -66,24 +75,20 @@ export function ProjectWorkspace({
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>(() => {
-    // M-P3a: old ?tab=Deadlines links land on Overview, where milestones now live.
-    // DM1.73: old ?tab=Team / ?tab=Integrations links land on Setup, which holds both.
-    const aliased =
-      initialTab === "Deadlines" ? "Overview" : initialTab === "Team" || initialTab === "Integrations" ? "Setup" : initialTab;
-    return TABS.includes(aliased as Tab) ? (aliased as Tab) : focusTaskId ? "Board" : "Overview";
+    const aliased = (initialTab && TAB_ALIASES[initialTab]) || initialTab;
+    return TABS.includes(aliased as Tab) ? (aliased as Tab) : focusTaskId ? "Board" : "This week";
   });
   const canEdit = data.canEdit;
-  const canContribute = data.canContribute; // tasks + blockers: any project member
+  const canContribute = data.canContribute;
   const eyebrow = [data.portfolioName, data.programmeName].filter(Boolean).join(" · ") || "Standalone";
   const tl = timeline(data.dueDate);
   const sm = statusMeta(data.status);
-  // Use the same org-status progress the ledger/dashboard show (avgProgress) — since
-  // DM1.73 T3 it is checkpoint-derived server-side, so the hero % is honest. The REAL
-  // stage gates render on the Delivery tab (CheckpointMatrix); the old 8-cell rail that
-  // painted gates out of this percentage was fiction and is gone (trust bug T2).
   const pct = data.avgProgress;
   const barTok = data.status === "Overdue" ? "--bad" : data.status === "AtRisk" ? "--warn" : "--brand";
   const stageTok = STAGE_TOKEN[data.pipelineStage] ?? "--ink4";
+
+  const markets = data.marketTracks ?? [];
+  const multiMarket = markets.length > 1;
 
   return (
     <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-3.5 p-[18px_24px_90px]">
@@ -112,8 +117,6 @@ export function ProjectWorkspace({
               >
                 {data.pipelineStage.toUpperCase()}
               </span>
-              {/* DM1.73: Project.status drives every dashboard RAG — its editor lives
-                  HERE beside the pill, not behind a corner FAB. */}
               {canEdit && <EditProjectDialog project={data} onUpdated={() => router.refresh()} />}
             </div>
             {data.description && <p className="mt-[7px] max-w-[520px] text-[13px] rv:text-body-sm text-[var(--ink3)]">{data.description}</p>}
@@ -171,29 +174,47 @@ export function ProjectWorkspace({
       </div>
 
       <div className="[animation:rise_.5s_cubic-bezier(.22,1,.36,1)_.1s_both]">
-        {tab === "Overview" && (
+        {tab === "This week" && (
           <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-[1fr_360px]">
-            <div className="flex flex-col gap-3.5">
-              {/* M-P3a (docs/25 §3.1) — milestones + the Register live ON Overview; the
-                  weekly check-in is authored on the Reports tab. */}
-              <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
-                <ProjectMilestonesSection projectId={data.id} canEdit={canEdit} />
-              </div>
-              {/* DM1.73 — ONE Register card (Blockers · Risks · Issues · Dependencies ·
-                  Decisions · Lessons) instead of five scattered cards. */}
-              <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
-                <ProjectRegister
-                  projectId={data.id}
-                  canContribute={canContribute}
-                  canGovern={data.canGovern ?? false}
-                  projects={data.allProjects ?? []}
-                />
-              </div>
-              <CommentsSection entityType="project" entityId={data.id} viewerId={viewerId ?? ""} canPromote={canEdit} />
+            <div className="flex min-w-0 flex-col gap-3.5">
+              {/* The weekly report — auto-drafted from the task feed below; the PM edits,
+                  sets RAG, confirms and sends to the Head. */}
+              <WorkspaceReports projectId={data.id} isPmView={data.canGovern ?? false} />
+              {/* The evidence the draft is built from — what moved on the tracker this week. */}
+              <WeekActivity projectId={data.id} />
             </div>
             <aside className="flex flex-col gap-3.5">
-              {/* docs/18 §7 — governance facts, inline-editable by the right roles, merged
-                  with the static details grid (one facts card, not two). */}
+              {/* Multi-market only: per-subsidiary rollout at a glance; full tracks under Delivery. */}
+              {multiMarket && (
+                <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
+                  <div className="mb-2.5 flex items-baseline justify-between">
+                    <span className="text-[13px] font-semibold text-foreground">Rollout by market</span>
+                    <button type="button" onClick={() => setTab("Delivery")} className="flex items-center gap-0.5 text-[10.5px] font-semibold text-[var(--ink4)] transition-colors hover:text-brand">
+                      Delivery <ArrowRight className="size-3" />
+                    </button>
+                  </div>
+                  <div className="flex flex-col">
+                    {markets.map((m) => {
+                      const tok = RAG_TOKEN[m.status] ?? "--ink4";
+                      return (
+                        <Link
+                          key={m.orgUnitId}
+                          href={`/projects/${data.id}/markets/${m.orgUnitId}`}
+                          className="flex items-center gap-2.5 border-b border-[var(--hair2)] py-2 last:border-0 transition-colors hover:text-brand"
+                        >
+                          <span className="size-2 flex-none rounded-full" style={{ background: `var(${tok})` }} aria-hidden />
+                          <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--qink)]">
+                            {m.flag ? `${m.flag} ` : ""}{m.code}
+                          </span>
+                          <span className="flex-none font-mono text-[10.5px] tabular-nums text-[var(--ink4)]">{m.progress}%</span>
+                          <ArrowRight className="size-3 flex-none text-[var(--ink5)]" />
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {/* Governance facts, inline-editable by the right roles. */}
               <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
                 <GovernanceEditor
                   projectId={data.id}
@@ -210,32 +231,22 @@ export function ProjectWorkspace({
                   {data.client && <Def label="Client" value={data.client} />}
                   <Def label="Timeline" value={`${formatDate(data.startDate)} → ${formatDate(data.dueDate)}`} />
                   {data.objective && <Def label="Objective" value={data.objective} />}
-                  {data.mission && <Def label="Mission" value={data.mission} />}
-                </div>
-                {/* M-P4a (docs/35 §1) — provenance: the idea this project was born from. */}
-                {(data.ideaProvenance?.length ?? 0) > 0 && (
-                  <div className="mt-3 border-t border-[var(--hair2)] pt-3">
-                    <div className="mb-1.5 font-mono rv:font-sans text-[9px] rv:text-overline font-semibold uppercase tracking-[1px] text-[var(--ink4)]">Where this came from</div>
-                    <div className="flex flex-col gap-1.5">
-                      {data.ideaProvenance!.map((i) => (
-                        <div key={i.id} className="flex flex-wrap items-baseline gap-2 text-xs">
-                          <span
-                            className="flex-none rounded-[5px] px-1.5 py-0.5 font-mono text-[8.5px] font-bold uppercase tracking-[.6px]"
-                            style={{ color: "var(--ok)", background: "color-mix(in oklab, var(--ok) 10%, transparent)" }}
-                          >
-                            {i.kind === "accepted" ? "idea accepted" : "idea merged in"}
-                          </span>
-                          <span className="min-w-0 flex-1 text-ink-2">{i.title}</span>
-                          {i.submittedByName && <span className="flex-none text-[10.5px] text-ink-3">{i.submittedByName}</span>}
-                        </div>
-                      ))}
+                  {(data.ideaProvenance?.length ?? 0) > 0 && (
+                    <div className="border-t border-[var(--hair2)] pt-3">
+                      <div className="mb-1.5 font-mono rv:font-sans text-[9px] rv:text-overline font-semibold uppercase tracking-[1px] text-[var(--ink4)]">Where this came from</div>
+                      <div className="flex flex-col gap-1.5">
+                        {data.ideaProvenance!.map((i) => (
+                          <div key={i.id} className="flex flex-wrap items-baseline gap-2 text-xs">
+                            <span className="flex-none rounded-[5px] px-1.5 py-0.5 font-mono text-[8.5px] font-bold uppercase tracking-[.6px]" style={{ color: "var(--ok)", background: "color-mix(in oklab, var(--ok) 10%, transparent)" }}>
+                              {i.kind === "accepted" ? "idea accepted" : "idea merged in"}
+                            </span>
+                            <span className="min-w-0 flex-1 text-ink-2">{i.title}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-              {/* docs/25 §3.1 — the latest PM summary report, read-only on Overview. */}
-              <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
-                <LatestCheckinCard projectId={data.id} onOpenReports={() => setTab("Reports")} />
+                  )}
+                </div>
               </div>
               <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
                 <ActivityCard projectId={data.id} />
@@ -243,6 +254,56 @@ export function ProjectWorkspace({
             </aside>
           </div>
         )}
+
+        {tab === "Delivery" && (
+          <div className="flex flex-col gap-3.5">
+            <p className="text-xs text-ink-3">
+              Delivery setup: the checkpoint gates that derive the project&apos;s progress, its schedule, and — for
+              multi-market projects — each subsidiary&apos;s rollout track.
+            </p>
+            <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
+              <CheckpointMatrix projectId={data.id} />
+            </div>
+            <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
+              <ProjectMilestonesSection projectId={data.id} canEdit={canEdit} />
+            </div>
+            <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
+              <div className="mb-2.5 flex items-center justify-between">
+                <span className="text-[13px] font-semibold text-foreground">Market rollout</span>
+                <span className="text-[10.5px] text-ink-3">weekly check-ins live on each market page</span>
+              </div>
+              {markets.length === 0 ? (
+                <p className="text-xs text-ink-3">
+                  No market tracks — this project ships to no subsidiaries yet. Markets are picked in the project
+                  wizard or inherited from a Rollout portfolio.
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                  {markets.map((m) => {
+                    const tok = RAG_TOKEN[m.status] ?? "--brand";
+                    return (
+                      <a
+                        key={m.orgUnitId}
+                        href={`/projects/${data.id}/markets/${m.orgUnitId}`}
+                        className="flex flex-col gap-1 rounded-[10px] border border-[var(--w07)] p-2.5 transition-colors hover:border-[var(--brand)]"
+                      >
+                        <span className="flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
+                          <span className="size-1.5 rounded-full" style={{ background: `var(${tok})` }} aria-hidden />
+                          {m.flag ? `${m.flag} ` : ""}{m.code}
+                        </span>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-[var(--wash2)]">
+                          <div className="h-full rounded-full" style={{ width: `${m.progress}%`, background: `var(${tok})` }} />
+                        </div>
+                        <span className="text-[10.5px] text-ink-3">{m.progress}% · {m.status}</span>
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {tab === "Board" && (
           <ProjectBoard
             projectId={data.id}
@@ -253,65 +314,28 @@ export function ProjectWorkspace({
             initialLens={initialLens}
           />
         )}
-        {tab === "Documents" && (
-          <div className="flex flex-col gap-3.5">
-            <DocumentsSection projectId={data.id} canEdit={canEdit} viewerId={viewerId ?? ""} />
-            {/* docs/16 §6 — requirements live beside the documents they were read from. */}
-            <RequirementsPanel projectId={data.id} />
-          </div>
-        )}
-        {tab === "Delivery" && (
-          <div className="flex flex-col gap-3.5">
-            {/* M-P2b (docs/25 §3 tab 4): the PM-editable delivery surface — gates first,
-                then where it is live. The one-liner replaces the old long tab label. */}
-            <p className="text-xs text-ink-3">
-              Checkpoint gates (they derive the hero %) and the per-market rollout tracks.
-            </p>
-            <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
-              <CheckpointMatrix projectId={data.id} />
+
+        {tab === "Docs & register" && (
+          <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-[1fr_360px]">
+            <div className="flex min-w-0 flex-col gap-3.5">
+              <DocumentsSection projectId={data.id} canEdit={canEdit} viewerId={viewerId ?? ""} />
+              <RequirementsPanel projectId={data.id} />
+              <CommentsSection entityType="project" entityId={data.id} viewerId={viewerId ?? ""} canPromote={canEdit} />
             </div>
-            <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
-              <div className="mb-2.5 flex items-center justify-between">
-                <span className="text-[13px] font-semibold text-foreground">Market rollout</span>
-                <span className="text-[10.5px] text-ink-3">weekly check-ins live on each market page</span>
+            <aside>
+              {/* One register — Blockers · Risks · Issues · Dependencies · Decisions · Lessons. */}
+              <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
+                <ProjectRegister
+                  projectId={data.id}
+                  canContribute={canContribute}
+                  canGovern={data.canGovern ?? false}
+                  projects={data.allProjects ?? []}
+                />
               </div>
-              {(data.marketTracks ?? []).length === 0 ? (
-                <p className="text-xs text-ink-3">
-                  No market tracks — this project ships to no subsidiaries yet. Markets are picked in the
-                  project wizard or inherited from a Rollout portfolio.
-                </p>
-              ) : (
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                  {(data.marketTracks ?? []).map((m) => (
-                    <a
-                      key={m.orgUnitId}
-                      href={`/projects/${data.id}/markets/${m.orgUnitId}`}
-                      className="flex flex-col gap-1 rounded-[10px] border border-[var(--w07)] p-2.5 transition-colors hover:border-[var(--brand)]"
-                    >
-                      <span className="text-[12px] font-semibold text-foreground">
-                        {m.flag ? `${m.flag} ` : ""}
-                        {m.code}
-                      </span>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-[var(--wash2)]">
-                        <div className="h-full rounded-full" style={{ width: `${m.progress}%`, background: "var(--brand)" }} />
-                      </div>
-                      <span className="text-[10.5px] text-ink-3">{m.progress}% · {m.status}</span>
-                    </a>
-                  ))}
-                </div>
-              )}
-            </div>
+            </aside>
           </div>
         )}
-        {tab === "Reports" && (
-          <div className="flex flex-col gap-3.5">
-            {/* DM1.73 — the legacy weekly note (free text + RAG) renders beside the
-                check-in chain that supersedes it, not on Overview. Folding it into the
-                check-in model proper is queued (docs/37). */}
-            <StatusUpdatesSection projectId={data.id} canEdit={canEdit} />
-            <WorkspaceReports projectId={data.id} isPmView={data.canGovern ?? false} />
-          </div>
-        )}
+
         {tab === "Setup" && (
           <div className="flex flex-col gap-3.5">
             <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
@@ -319,7 +343,8 @@ export function ProjectWorkspace({
               <ProjectResourcesSection projectId={data.id} canEdit={canEdit} />
             </div>
             <div className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
-              <div className="mb-2.5 text-[13px] font-semibold text-foreground">Integrations</div>
+              <div className="mb-1 text-[13px] font-semibold text-foreground">Integrations</div>
+              <p className="mb-2.5 text-[11px] text-ink-3">Connect YouTrack here to mirror this project&apos;s tasks and drive the weekly report.</p>
               <IntegrationsGrid projectId={data.id} canEdit={canEdit} />
             </div>
           </div>
