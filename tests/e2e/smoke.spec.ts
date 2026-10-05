@@ -24,7 +24,7 @@ test.describe("golden path (Demo Org B fixture super-admin)", () => {
 
   test("dashboard renders the RBAC-level cockpit", async ({ page }) => {
     // A super admin lands on the Superadmin cockpit (Executive view + slim platform-admin row).
-    await expect(page.getByRole("heading", { name: "Decisions & group actions" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Decisions waiting on the Group" })).toBeVisible();
     await expect(page.getByText("Demo Org B", { exact: false }).first()).toBeVisible();
   });
 
