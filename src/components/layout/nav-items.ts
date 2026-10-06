@@ -1,7 +1,6 @@
 import {
   LayoutDashboard,
   ListChecks,
-  CalendarCheck,
   Briefcase,
   FolderKanban,
   Lightbulb,
@@ -34,9 +33,6 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", module: "DASHBOARD", icon: LayoutDashboard },
   { label: "My Board", href: "/board", module: "PROJECTS", icon: ListChecks }, // docs/18 §4 — the daily surface
-  // docs/38 rethink — the cross-project weekly ritual: confirm every project you run in
-  // one queue. memberHidden: pure members report via My Board, not a project queue.
-  { label: "My week", href: "/my-week", memberHidden: true, module: "REPORTS", icon: CalendarCheck },
   // DM1.73 — Ideas is memberHidden: docs/32 §0.3 keeps a member's nav to Dashboard ·
   // My Board · Projects · Reports. `idea:create` stays in BASE, so the intake form
   // remains reachable for members via direct link — it just isn't a nav pill.

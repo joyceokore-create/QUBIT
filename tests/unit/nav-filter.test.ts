@@ -49,7 +49,6 @@ describe("visibleNavItems", () => {
     expect(head).toEqual([
       "Dashboard",
       "My Board",
-      "My week",
       "Ideas",
       "Portfolios",
       "Projects",
