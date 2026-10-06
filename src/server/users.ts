@@ -309,6 +309,7 @@ export async function createUser(ctx: TenantContext, input: CreateUserInput): Pr
   return {
     user: { id: user.id, name: user.name, email: user.email },
     emailed,
+    sso: false,
     ...(emailed ? {} : { acceptUrl }),
   };
 }

@@ -88,9 +88,12 @@ export async function addRecipient(ctx: TenantContext, input: AddRecipientInput)
       if (!user) throw new RecipientError("No active user with that id.", "NOT_FOUND");
       data = { email: user.email.toLowerCase(), name: user.name, userId: user.id };
     } else {
-      // A typed address that matches a tenant user becomes that user's row.
-      const user = await tx.user.findFirst({ where: { email: { equals: input.email!, mode: "insensitive" } }, select: { id: true, name: true } });
-      data = { email: input.email!, name: user?.name ?? null, userId: user?.id ?? null };
+      // Normalised HERE, not only in the route's schema: the engine is the authority and
+      // the unique key is (tenant, email). A typed address that matches a tenant user
+      // becomes that user's row.
+      const email = input.email!.trim().toLowerCase();
+      const user = await tx.user.findFirst({ where: { email: { equals: email, mode: "insensitive" } }, select: { id: true, name: true } });
+      data = { email, name: user?.name ?? null, userId: user?.id ?? null };
     }
     try {
       const row = await tx.rollupRecipient.create({
