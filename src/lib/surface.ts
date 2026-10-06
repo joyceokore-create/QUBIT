@@ -36,3 +36,8 @@ export function ragFill(rag: string | null | undefined): { background: string } 
 export function ragTokenOf(rag: Rag): string {
   return RAG_TOKEN[rag] ?? "--ink4";
 }
+
+/** The one keyboard-focus treatment for controls on a card: brand ring, offset off the
+ * card surface. Append to any button/link/input className. */
+export const FOCUS =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--cardbg)]";

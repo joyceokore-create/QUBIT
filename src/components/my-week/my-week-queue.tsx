@@ -73,7 +73,9 @@ function RowCard({ row: r, onChange: update }: { row: Row; onChange: (r: Row) =>
     setBusy(false);
     if (res.ok) {
       const d = await res.json();
-      update({ ...r, confirmed: true, status: "Confirmed", narrative: d.data?.narrative ?? narrative, effectiveRag: d.data?.effectiveRag ?? r.effectiveRag });
+      // Milestone A: confirming also sends to the Head in the same transaction, so the row
+      // lands straight in "Reported" instead of showing a stale Send button.
+      update({ ...r, confirmed: true, status: "Confirmed", sentToHead: Boolean(d.data?.submittedToHeadAt), narrative: d.data?.narrative ?? narrative, effectiveRag: d.data?.effectiveRag ?? r.effectiveRag });
       setEditing(false);
     } else {
       setError((await res.json().catch(() => null))?.error?.message ?? "Could not confirm — try again.");

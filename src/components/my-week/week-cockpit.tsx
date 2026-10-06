@@ -1,4 +1,4 @@
-import { weekWindow } from "@/lib/iso-week";
+import { weekRange } from "@/lib/iso-week";
 import { RAG_TOKEN } from "@/lib/surface";
 import type { MyWeekRow } from "@/server/my-week";
 
@@ -19,15 +19,6 @@ function stageOf(r: MyWeekRow): "reported" | "confirmed" | "pending" {
   if (r.confirmed && r.sentToHead) return "reported";
   if (r.confirmed) return "confirmed";
   return "pending";
-}
-
-/** "6–10 Oct" or "29 Sep – 3 Oct" — the working week the report speaks about. */
-function weekRange(now: Date): string {
-  const { start } = weekWindow(now);
-  const fri = new Date(start.getTime() + 4 * 86_400_000);
-  const day = (d: Date) => d.getUTCDate();
-  const mon = (d: Date) => d.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" });
-  return mon(start) === mon(fri) ? `${day(start)}–${day(fri)} ${mon(fri)}` : `${day(start)} ${mon(start)} – ${day(fri)} ${mon(fri)}`;
 }
 
 export function WeekCockpit({ isoWeek, scope, rows }: { isoWeek: string; scope: "owned" | "oversight"; rows: MyWeekRow[] }) {

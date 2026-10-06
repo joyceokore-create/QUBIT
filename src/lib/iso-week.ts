@@ -31,3 +31,12 @@ export function weekWindow(date: Date): WeekWindow {
   const end = new Date(start.getTime() + 7 * 86_400_000);
   return { isoWeek: isoWeekId(date), start, end };
 }
+
+/** "6–10 Oct" or "29 Sep – 3 Oct" — the working week (Mon–Fri) a report speaks about. */
+export function weekRange(now: Date): string {
+  const { start } = weekWindow(now);
+  const fri = new Date(start.getTime() + 4 * 86_400_000);
+  const day = (d: Date) => d.getUTCDate();
+  const mon = (d: Date) => d.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" });
+  return mon(start) === mon(fri) ? `${day(start)}–${day(fri)} ${mon(fri)}` : `${day(start)} ${mon(start)} – ${day(fri)} ${mon(fri)}`;
+}
