@@ -7,7 +7,6 @@ import { listDepartments } from "@/server/departments";
 import { listTeams } from "@/server/teams";
 import { listProjects } from "@/server/projects";
 import { Forbidden } from "@/components/forbidden";
-import { ssoEnabled } from "@/lib/sso";
 import { AdminHeader } from "../admin-header";
 import { NewUserDialog } from "./new-user-dialog";
 import { UsersClient, type AdminInsight } from "./users-client";
