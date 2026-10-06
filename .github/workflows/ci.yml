@@ -46,14 +46,24 @@ jobs:
       - run: pnpm prisma generate
       - run: pnpm prisma migrate deploy
       - run: pnpm prisma db seed
-      # The postgres service makes POSTGRES_USER=qubit a SUPERUSER, which bypasses RLS —
-      # so the tenant-isolation suite would see every tenant's rows. migrate+seed need
-      # the elevated role; demote it now (it can drop its own superuser) so `pnpm test`
-      # runs under RLS exactly as prod/local do (non-superuser qubit + FORCE RLS).
-      - run: echo 'ALTER ROLE qubit NOSUPERUSER;' | pnpm prisma db execute --stdin --schema prisma/schema.prisma
+      # The postgres service makes POSTGRES_USER=qubit the BOOTSTRAP superuser, which
+      # bypasses RLS — so the tenant-isolation suite would see every tenant's rows — and
+      # Postgres refuses to demote the bootstrap role ("must have the SUPERUSER attribute").
+      # migrate+seed need the elevated role; the tests run as a second, non-superuser login
+      # that merely has privileges on the schema, so `pnpm test` runs under RLS exactly as
+      # prod/local do (non-owner role + FORCE RLS). Same intent as the old ALTER ROLE step.
+      - run: |
+          cat <<'SQL' | pnpm prisma db execute --stdin --schema prisma/schema.prisma
+          CREATE ROLE qubit_rls LOGIN PASSWORD 'qubit_rls' NOSUPERUSER NOCREATEDB NOCREATEROLE;
+          GRANT USAGE ON SCHEMA public TO qubit_rls;
+          GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO qubit_rls;
+          GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO qubit_rls;
+          SQL
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+        env:
+          DATABASE_URL: postgresql://qubit_rls:qubit_rls@localhost:5432/qubit_ci?schema=public
       - run: pnpm build
 
   e2e:
