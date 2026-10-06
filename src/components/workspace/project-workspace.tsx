@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -46,6 +46,12 @@ const TAB_ALIASES: Record<string, Tab> = {
 const TRIGGER =
   "flex-none rounded-none px-2.5 py-2 text-[13px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)] data-active:text-[var(--qink)] group-data-horizontal/tabs:after:bottom-[-1px] after:bg-[var(--brand)]";
 
+/** `?tab=` (or a legacy alias) → a tab, or null when it names nothing we have. */
+function resolveTab(raw: string | undefined): Tab | null {
+  const aliased = (raw && TAB_ALIASES[raw]) || raw;
+  return TABS.includes(aliased as Tab) ? (aliased as Tab) : null;
+}
+
 export function ProjectWorkspace({
   data,
   members,
@@ -61,10 +67,18 @@ export function ProjectWorkspace({
   focusTaskId?: string | null;
   initialLens?: "all" | "dev" | "qa" | "impl" | null;
 }) {
-  const [tab, setTab] = useState<Tab>(() => {
-    const aliased = (initialTab && TAB_ALIASES[initialTab]) || initialTab;
-    return TABS.includes(aliased as Tab) ? (aliased as Tab) : focusTaskId ? "Board" : "This week";
-  });
+  const [tab, setTab] = useState<Tab>(() => resolveTab(initialTab) ?? (focusTaskId ? "Board" : "This week"));
+  // Deep links while ALREADY on the page (the board's "Connect under Team →", a bell link
+  // to ?tab=Register, …) re-render this component with a new initialTab rather than
+  // remounting it — follow it, and scroll to the section the hash names once it exists.
+  useEffect(() => {
+    const next = resolveTab(initialTab);
+    if (next) setTab(next);
+    const hash = typeof window !== "undefined" ? window.location.hash.slice(1) : "";
+    if (!hash) return;
+    const t = setTimeout(() => document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    return () => clearTimeout(t);
+  }, [initialTab]);
   const { ci, setCi } = useCheckIn(data.id, data.checkin ?? null);
   const canEdit = data.canEdit;
   const canContribute = data.canContribute;
@@ -236,7 +250,7 @@ export function ProjectWorkspace({
                 <div className="mb-2.5 text-[13px] font-semibold text-foreground">Team</div>
                 <ProjectResourcesSection projectId={data.id} canEdit={canEdit} />
               </div>
-              <div className={`${CARD} p-4`} style={CARD_BG}>
+              <div id="integrations" className={`${CARD} scroll-mt-20 p-4`} style={CARD_BG}>
                 <div className="mb-1 text-[13px] font-semibold text-foreground">Integrations</div>
                 <p className="mb-2.5 text-[11px] text-ink-3">Connect YouTrack here to mirror this project&apos;s tasks and drive the weekly status update.</p>
                 <IntegrationsGrid projectId={data.id} canEdit={canEdit} />
