@@ -21,7 +21,7 @@ describe("Admin › Integrations — bulk YouTrack connect", () => {
   let rbId: string;
   let dbId: string;
   let head: TenantContext;
-  let pm: TenantContext;
+  let member: TenantContext;
   let a: string;
   let b: string;
   let foreign: string;
@@ -34,7 +34,9 @@ describe("Admin › Integrations — bulk YouTrack connect", () => {
     dbId = db.id;
     const [h, p] = await createUsers(rbId, 2, "ytb");
     head = { tenantId: rbId, userId: h.id, roles: ["HeadOfProjects"] };
-    pm = { tenantId: rbId, userId: p.id, roles: ["ProjectManager"] };
+    // ProjectManager holds project:update (the per-project card's gate) and so may bulk
+    // connect too; a plain Member is the role without it.
+    member = { tenantId: rbId, userId: p.id, roles: ["Member"] };
     const mk = (ctx: TenantContext, code: string) =>
       withTenant(ctx, (tx) => tx.project.create({ data: { tenantId: ctx.tenantId, code, name: `Bulk ${code}`, type: "Project", priority: "Med", status: "Planning" }, select: { id: true } }));
     [a, b] = await Promise.all([mk(head, "YTB-A").then((x) => x.id), mk(head, "YTB-B").then((x) => x.id)]);
@@ -108,9 +110,9 @@ describe("Admin › Integrations — bulk YouTrack connect", () => {
     expect(noToken).toMatchObject({ outcome: "error", message: expect.stringContaining("enter the token") });
   });
 
-  it("is gated: PMs cannot, and nothing happens while the feature is off", async () => {
-    await expect(bulkConnectYoutrack(pm, { baseUrl: "https://example.youtrack.cloud", token: "perm:x", syncNow: false, rows: [{ projectId: a, project: "YA" }] })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(listYoutrackConnections(pm)).rejects.toMatchObject({ code: "FORBIDDEN" });
+  it("is gated: Members cannot, and nothing happens while the feature is off", async () => {
+    await expect(bulkConnectYoutrack(member, { baseUrl: "https://example.youtrack.cloud", token: "perm:x", syncNow: false, rows: [{ projectId: a, project: "YA" }] })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(listYoutrackConnections(member)).rejects.toMatchObject({ code: "FORBIDDEN" });
     vi.stubEnv("FEATURE_YOUTRACK", "off"); // any value but 1/true/on reads as off
     await expect(bulkConnectYoutrack(head, { baseUrl: "https://example.youtrack.cloud", token: "perm:x", syncNow: false, rows: [{ projectId: a, project: "YA" }] })).rejects.toMatchObject({ code: "DISABLED" });
     vi.stubEnv("FEATURE_YOUTRACK", "1");
