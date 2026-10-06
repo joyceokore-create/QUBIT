@@ -111,7 +111,7 @@ describe("Admin › Integrations — bulk YouTrack connect", () => {
   it("is gated: PMs cannot, and nothing happens while the feature is off", async () => {
     await expect(bulkConnectYoutrack(pm, { baseUrl: "https://example.youtrack.cloud", token: "perm:x", syncNow: false, rows: [{ projectId: a, project: "YA" }] })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(listYoutrackConnections(pm)).rejects.toMatchObject({ code: "FORBIDDEN" });
-    vi.stubEnv("FEATURE_YOUTRACK", "");
+    vi.stubEnv("FEATURE_YOUTRACK", "off"); // any value but 1/true/on reads as off
     await expect(bulkConnectYoutrack(head, { baseUrl: "https://example.youtrack.cloud", token: "perm:x", syncNow: false, rows: [{ projectId: a, project: "YA" }] })).rejects.toMatchObject({ code: "DISABLED" });
     vi.stubEnv("FEATURE_YOUTRACK", "1");
   });
