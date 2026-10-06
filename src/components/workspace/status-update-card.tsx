@@ -135,7 +135,7 @@ export function StatusUpdateCard({
         <span className="ml-auto inline-flex min-h-[26px] items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-semibold" style={sentPillStyle(sent, legacyUnsent, due)}>
           {sent ? (
             <>
-              <CheckCheck className="size-3.5" aria-hidden /> Sent to Head of PMs · in this week&apos;s roll-up
+              <CheckCheck className="size-3.5" aria-hidden /> Sent to Head · in this week&apos;s roll-up
             </>
           ) : legacyUnsent ? (
             <>
@@ -292,7 +292,7 @@ export function StatusUpdateCard({
               <span className="text-[11px] text-[var(--ink4)]">
                 {savedAt && mounted
                   ? `Draft saved ${savedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`
-                  : `One step — this lands in the Head of PMs' Week ${weekNo} roll-up.`}
+                  : `One step — this lands in the Head's Week ${weekNo} roll-up.`}
               </span>
             </>
           ) : legacyUnsent ? (

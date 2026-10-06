@@ -27,7 +27,7 @@ function canTriage(ctx: TenantContext): boolean {
 
 function assertTriage(ctx: TenantContext): void {
   if (!canTriage(ctx)) {
-    throw new IdeaError("Triage is the Head of PMs' to run.", "FORBIDDEN");
+    throw new IdeaError("Triage is the Head's to run.", "FORBIDDEN");
   }
 }
 

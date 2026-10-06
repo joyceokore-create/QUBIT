@@ -33,7 +33,7 @@ export type CanonicalRole = (typeof CANONICAL_ROLES)[number];
 /** Human-friendly labels for the canonical roles (for profile/UI display). */
 const ROLE_LABELS: Record<CanonicalRole, string> = {
   PlatformSuperAdmin: "Super Admin",
-  HeadOfProjects: "Head of Projects",
+  HeadOfProjects: "Head",
   HeadOfQA: "Head of QA",
   Executive: "Executive",
   ProjectManager: "Project Manager",
@@ -223,7 +223,7 @@ export function can(ctx: TenantContext, permission: string, _scope?: Scope): boo
   });
 }
 
-/** The roll-up / reports "Head" gate used across the reporting chain: the Head of PMs,
+/** The roll-up / reports "Head" gate used across the reporting chain: the Head,
  * or the platform super-admin standing in. Role check only — permissions stay in can(). */
 export function isHeadOfProjects(ctx: { roles: string[] }): boolean {
   return ctx.roles.some((r) => r === "HeadOfProjects" || r === "PlatformSuperAdmin");

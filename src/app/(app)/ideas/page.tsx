@@ -7,7 +7,7 @@ import { IdeasClient } from "./ideas-client";
 
 // M-P4a (docs/35 §1, docs/26 §5.4) — the front of the funnel. Submitting is universal
 // (`idea:create` is in BASE: a good idea can come from anywhere); triage belongs to the
-// Head of PMs, who accepts (→ the project wizard, pre-filled), parks with a reason, or
+// Head, who accepts (→ the project wizard, pre-filled), parks with a reason, or
 // merges into an existing project.
 export default async function IdeasPage() {
   const session = await auth();
@@ -44,7 +44,7 @@ export default async function IdeasPage() {
       <p className="mb-5 text-[12.5px] text-[var(--ink3)]">
         {board.canTriage
           ? "Where projects are born. Accept an idea and the project wizard opens pre-filled; park it and the reason stays on the record."
-          : "Submit an idea — anyone can. The Head of PMs triages it, and you'll be told what was decided and why."}
+          : "Submit an idea — anyone can. The Head triages it, and you'll be told what was decided and why."}
       </p>
       <IdeasClient
         initial={JSON.parse(JSON.stringify(board))}

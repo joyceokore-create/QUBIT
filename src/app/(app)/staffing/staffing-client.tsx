@@ -187,7 +187,7 @@ export function StaffingClient({
             </p>
           )}
           <Button type="button" onClick={() => void raise()} disabled={busy} className="mt-3">
-            {busy ? "Sending…" : "Send to Head of PMs"}
+            {busy ? "Sending…" : "Send to Head"}
           </Button>
         </div>
       )}

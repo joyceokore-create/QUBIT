@@ -23,7 +23,7 @@ import { pdfAvailable } from "@/server/pdf/render";
 /**
  * Milestone B (docs handoff §3) — /reports, composed by role:
  *  - PM: their week (the My week queue, re-homed) · History · Custom reports;
- *  - Head of PMs: the inbox + roll-up rail · Past roll-ups · Custom reports;
+ *  - Head: the inbox + roll-up rail · Past roll-ups · Custom reports;
  *  - Executive: the signed roll-up, 8-week status grid, tiles, decisions · Past weeks ·
  *    Custom reports.
  * The URL is the state: ?week= (any past week), ?tab=, and ?as= (Heads previewing another

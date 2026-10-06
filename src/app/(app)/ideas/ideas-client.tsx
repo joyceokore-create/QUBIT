@@ -168,7 +168,7 @@ export function IdeasClient({
             <p className="mt-1 text-[10.5px] text-[var(--ink4)]">Your suggestion, not a decision — triage confirms it.</p>
           </div>
           {error && <p className="text-[11.5px] text-[var(--bad)]">{error}</p>}
-          {sent && <p className="text-[11.5px] text-[var(--ok)]">Submitted — the Head of PMs has been notified.</p>}
+          {sent && <p className="text-[11.5px] text-[var(--ok)]">Submitted — the Head has been notified.</p>}
           <div>
             <Button type="button" disabled={busy} onClick={() => void submit()}>
               Submit idea

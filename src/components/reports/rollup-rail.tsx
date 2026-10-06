@@ -124,7 +124,7 @@ export function RollupRail({
               )}
               {approved && (
                 <p className="mt-1.5 text-[12px] text-[var(--ink4)]">
-                  Signed by {rollup.approvedByName ?? "the Head of PMs"}
+                  Signed by {rollup.approvedByName ?? "the Head"}
                   {rollup.approvedAt && (
                     <>
                       {" "}

@@ -31,7 +31,7 @@ describe("Milestone D — report data", () => {
     pm = { tenantId: rbId, userId: p.id, roles: ["ProjectManager"] };
     projectId = await withTenant(head, async (tx) => {
       const project = await tx.project.create({
-        data: { tenantId: rbId, code: `RPD-${Date.now().toString(36).toUpperCase()}`, name: "Report data <fixture>", status: "AtRisk", leadUserId: p.id, objective: "Pin the week" },
+        data: { tenantId: rbId, code: `RPD-${Date.now().toString(36).toUpperCase()}`, name: "Report data <fixture>", type: "Project", priority: "Med", status: "AtRisk", leadUserId: p.id, objective: "Pin the week" },
         select: { id: true },
       });
       await tx.blocker.create({ data: { tenantId: rbId, projectId: project.id, description: "Vendor sandbox", severity: "Critical", status: "Open", dateRaised: new Date(NOW.getTime() - 3 * 86_400_000) } });

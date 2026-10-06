@@ -3,7 +3,7 @@
 
 export type ReportsView = "pm" | "head" | "exec";
 
-export const VIEW_LABEL: Record<ReportsView, string> = { pm: "PM", head: "Head of PMs", exec: "Executive" };
+export const VIEW_LABEL: Record<ReportsView, string> = { pm: "PM", head: "Head", exec: "Executive" };
 const VIEWS: ReportsView[] = ["pm", "head", "exec"];
 
 /** The view a person's roles earn them. Head beats Executive (a Head approves). */

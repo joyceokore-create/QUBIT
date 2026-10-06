@@ -124,14 +124,14 @@ describe("portfolio digest", () => {
     expect(html).toContain("Not yet sent — computed status shown.");
     expect(html).not.toMatch(NETWORK);
     expect(spec.footerTemplate).toContain("Internal and confidential");
-    expect(spec.footerTemplate).toContain("RAG approved by the Head of PMs on 9 Oct");
+    expect(spec.footerTemplate).toContain("RAG approved by the Head on 9 Oct");
     expect(spec.margin?.bottom).toBe("0.7in");
     expect(filenameStem).toBe("qubit-rollup-2026-W41");
   });
 
   it("watermarks a draft", () => {
     const { html, spec, filenameStem } = renderDigest(digest("Draft"));
-    expect(html).toContain("Draft — not yet approved by the Head of PMs");
+    expect(html).toContain("Draft — not yet approved by the Head");
     expect(spec.footerTemplate).toContain("not yet approved");
     expect(filenameStem).toBe("qubit-rollup-2026-W41-draft");
   });

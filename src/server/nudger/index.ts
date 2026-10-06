@@ -379,7 +379,7 @@ export async function collectUnsentCheckins(
 }
 
 /**
- * The Head of PMs chases this week's missing updates on demand (the inbox's "Nudge all"
+ * The Head chases this week's missing updates on demand (the inbox's "Nudge all"
  * and per-row "Nudge"). Writes Nudge rows + bells through the same path as the Friday
  * nudger — one audit row, actor = the Head — and nothing twice in a week. Email follows
  * each PM's own channel preference via the digest; nothing is sent from here.
@@ -389,7 +389,7 @@ export async function nudgeUnsentCheckins(
   now = new Date(),
   opts: { projectId?: string } = {},
 ): Promise<{ created: number; escalated: number; skipped: number; targeted: number }> {
-  if (!isHeadOfProjects(ctx)) throw new NudgeError("Chasing this week's updates is the Head of PMs' to do.", "FORBIDDEN");
+  if (!isHeadOfProjects(ctx)) throw new NudgeError("Chasing this week's updates is the Head's to do.", "FORBIDDEN");
   return withTenant(ctx, async (tx) => {
     if (opts.projectId) {
       // RLS: another tenant's project id reads as absent — 404, never a leak.

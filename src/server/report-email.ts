@@ -42,7 +42,7 @@ function appUrl(): string {
 }
 
 export async function emailReport(ctx: TenantContext, input: ExportRequestInput, now = new Date()): Promise<ReportEmailResult> {
-  if (!isHeadOfProjects(ctx)) throw new ReportEmailError("Only the Head of PMs can email reports to the executive list.", "FORBIDDEN");
+  if (!isHeadOfProjects(ctx)) throw new ReportEmailError("Only the Head can email reports to the executive list.", "FORBIDDEN");
   if (!emailEnabled()) throw new ReportEmailError("Email is off for this deployment.", "EMAIL_OFF");
   if (!(await pdfAvailable())) throw new ReportEmailError("PDF rendering is not available on this deployment.", "PDF_UNAVAILABLE");
   const recipients = await listRecipients(ctx);
@@ -69,7 +69,7 @@ export async function emailReport(ctx: TenantContext, input: ExportRequestInput,
       narrative: digest.narrative,
       counts: digest.counts,
       total: digest.total,
-      preparedBy: digest.approvedByName ?? "the Head of PMs",
+      preparedBy: digest.approvedByName ?? "the Head",
       url: `${appUrl()}/reports?week=${report.isoWeek}`,
     });
   } else {
@@ -78,7 +78,7 @@ export async function emailReport(ctx: TenantContext, input: ExportRequestInput,
       isoWeek: report.isoWeek,
       projectCode: report.project?.code ?? "",
       projectName: report.project?.name ?? "",
-      senderName: sender?.name ?? "The Head of PMs",
+      senderName: sender?.name ?? "The Head",
       url: `${appUrl()}/projects/${report.project?.id}?tab=This%20week`,
     });
   }

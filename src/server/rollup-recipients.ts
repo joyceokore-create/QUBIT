@@ -48,7 +48,7 @@ const ENTITY = "rollup_recipient";
 const CANDIDATE_ROLES = ["Executive", "HeadOfProjects", "HeadOfQA"];
 
 function assertHead(ctx: TenantContext): void {
-  if (!isHeadOfProjects(ctx)) throw new RecipientError("The roll-up list is the Head of PMs' to manage.", "FORBIDDEN");
+  if (!isHeadOfProjects(ctx)) throw new RecipientError("The roll-up list is the Head's to manage.", "FORBIDDEN");
 }
 
 export async function listRecipients(ctx: TenantContext): Promise<RecipientRow[]> {

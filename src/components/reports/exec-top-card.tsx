@@ -47,7 +47,7 @@ export function ExecTopCard({
         {approved ? (
           <>
             <p id="exec-top" className="mb-1.5 text-[11.5px] font-semibold text-[var(--ink4)]">
-              Head of PMs · Week {n}
+              Head · Week {n}
               {approved.approvedAt && (
                 <>
                   {" "}
@@ -60,7 +60,7 @@ export function ExecTopCard({
         ) : (
           <>
             <p id="exec-top" className="text-[15px] font-medium text-[var(--qink)]">
-              Week {n} — the Head of PMs hasn&apos;t signed this week&apos;s roll-up yet.
+              Week {n} — the Head hasn&apos;t signed this week&apos;s roll-up yet.
             </p>
             <p className="mt-1 text-[12.5px] text-[var(--ink4)]">
               {inCount.in} of {inCount.total} updates in

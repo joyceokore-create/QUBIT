@@ -304,7 +304,7 @@ async function confirmCheckInTx(
   return { row, computedRag, draft };
 }
 
-/** Send (tx-level): stamp the row, audit, and tell every Head of PMs. */
+/** Send (tx-level): stamp the row, audit, and tell every Head. */
 async function submitToHeadTx(
   tx: Prisma.TransactionClient,
   ctx: TenantContext,

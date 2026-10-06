@@ -187,8 +187,8 @@ export function renderDigest(d: DigestReportData): RenderedReport {
   const pct = (n: number) => `${Math.round((n / sum) * 100)}%`;
   const approved = d.status === "Approved";
   const prepared = approved
-    ? `Prepared by ${esc(d.approvedByName ?? "the Head of PMs")}, ${esc(d.tenantName)} · ${d.approvedAt ? longDate(d.approvedAt) : longDate(d.week.generatedAt)} · Classification: Internal and Confidential`
-    : `Draft — not yet approved by the Head of PMs · ${esc(d.tenantName)} · generated ${longDate(d.week.generatedAt)} · Internal and Confidential`;
+    ? `Prepared by ${esc(d.approvedByName ?? "the Head")}, ${esc(d.tenantName)} · ${d.approvedAt ? longDate(d.approvedAt) : longDate(d.week.generatedAt)} · Classification: Internal and Confidential`
+    : `Draft — not yet approved by the Head · ${esc(d.tenantName)} · generated ${longDate(d.week.generatedAt)} · Internal and Confidential`;
   const rows = d.groups
     .map(
       (g) =>
@@ -210,15 +210,15 @@ export function renderDigest(d: DigestReportData): RenderedReport {
       <span style="display:flex;height:8px;width:180px;overflow:hidden;border-radius:999px;background:#e9e9e9"><span style="width:${pct(c.green)};background:#16a34a"></span><span style="width:${pct(c.amber)};background:#d97706"></span><span style="width:${pct(c.red)};background:#dc2626"></span></span>
       <span style="margin-left:auto">RAG key: <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#16a34a;vertical-align:middle"></span> Green on track · <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#d97706;vertical-align:middle"></span> Amber needs attention · <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#dc2626;vertical-align:middle"></span> Red at risk</span>
     </div>
-    ${d.narrative ? `<p style="font-size:13px;line-height:1.5;color:#231f20;border-left:3px solid ${esc(d.brandColor)};padding-left:12px">“${esc(d.narrative)}”</p>` : `<p style="font-size:12px;color:#9f9f9f;font-style:italic;border-left:3px solid #e9e9e9;padding-left:12px">The Head of PMs has not written this week's line yet.</p>`}
+    ${d.narrative ? `<p style="font-size:13px;line-height:1.5;color:#231f20;border-left:3px solid ${esc(d.brandColor)};padding-left:12px">“${esc(d.narrative)}”</p>` : `<p style="font-size:12px;color:#9f9f9f;font-style:italic;border-left:3px solid #e9e9e9;padding-left:12px">The Head has not written this week's line yet.</p>`}
     <table style="font-size:11px">
       <thead><tr style="background:#231f20;color:#fff;font-size:10px;letter-spacing:.06em;text-transform:uppercase"><th style="text-align:left;padding:7px 10px;font-weight:600;width:22%">Project</th><th style="text-align:left;padding:7px 10px;font-weight:600;width:9%">Status</th><th style="text-align:left;padding:7px 10px;font-weight:600;width:19%">Stage</th><th style="text-align:left;padding:7px 10px;font-weight:600">Update and outlook</th></tr></thead>
       <tbody>${rows || `<tr><td colspan="4" style="padding:14px 10px;color:#9f9f9f;font-style:italic">No projects in this roll-up.</td></tr>`}</tbody>
     </table>
   </div>`;
   const left = approved
-    ? `Status updates as confirmed by project managers in QUBIT for Week ${d.week.number}; RAG approved by the Head of PMs${d.approvedAt ? ` on ${shortDate(d.approvedAt)}` : ""}.`
-    : `Draft roll-up for Week ${d.week.number} — not yet approved by the Head of PMs.`;
+    ? `Status updates as confirmed by project managers in QUBIT for Week ${d.week.number}; RAG approved by the Head${d.approvedAt ? ` on ${shortDate(d.approvedAt)}` : ""}.`
+    : `Draft roll-up for Week ${d.week.number} — not yet approved by the Head.`;
   return {
     html: flowingDocument(`Week ${d.week.number} roll-up`, body),
     spec: { landscape: true, footerTemplate: flowFooter(left), margin: DIGEST_MARGIN },

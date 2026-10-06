@@ -74,6 +74,11 @@ export const ONBOARDING_ROLE_TIERS = [
     desc: "Read-everything portfolio visibility and executive reports.",
   },
   {
+    key: "HeadOfProjects",
+    label: "Head",
+    desc: "Delivery governance across every project — staffing, gates and cross-project reporting.",
+  },
+  {
     key: "ProjectManager",
     label: "Project Manager",
     desc: "Create & manage projects, teams, tasks, milestones and risks.",
@@ -84,6 +89,6 @@ export const ONBOARDING_ROLE_TIERS = [
     desc: "Execute assigned tasks and update their progress.",
   },
 ] as const;
-// HeadOfProjects / HeadOfQA are assigned via "Edit roles" (power-user path), not the
-// onboarding quick-pick — they are governance roles, not a common onboarding tier.
+// HeadOfQA is still assigned via "Edit roles" (power-user path); HeadOfProjects is surfaced
+// here as the "Head" governance tier so a head can be created directly.
 export type OnboardingRoleKey = (typeof ONBOARDING_ROLE_TIERS)[number]["key"];

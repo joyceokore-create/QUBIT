@@ -9,7 +9,7 @@ import { CARD_GLASS as CARD, CARD_BG, FOCUS, ragFill, ragToken } from "@/lib/sur
 import type { Rag } from "@/server/health";
 
 /**
- * Milestone B — the Head of PMs' inbox: every active project's update for the week,
+ * Milestone B — the Head's inbox: every active project's update for the week,
  * grouped by portfolio. A hollow dot is a project that hasn't sent (its computed RAG is
  * shown); Nudge chases its PMs — once per week, the nudger's dedupe makes sure of that.
  */

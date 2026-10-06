@@ -5,7 +5,7 @@ import "./pm-v3.css";
 import { Ic, RagChipV3, RagBarV3, Gate, RAG_LABEL } from "./pm-v3";
 import { usePublishSections } from "./section-nav";
 
-// Head of PMs view — markup ported 1:1 from the approved artifact's renderHead().
+// Head view — markup ported 1:1 from the approved artifact's renderHead().
 
 export interface HeadRow {
   id: string;
@@ -149,7 +149,7 @@ export function HeadV3(props: HeadV3Props) {
               <section className="pm-hero">
                 <div className="pm-hero-top">
                   <span className="pm-hero-tag"><Ic name="sparkle" />Daily Brief</span>
-                  <span className="pm-hero-meta">Generated {props.generatedAt} today · Head of PMs</span>
+                  <span className="pm-hero-meta">Generated {props.generatedAt} today · Head</span>
                 </div>
                 <div className="pm-hero-body">{props.briefLines.map((l, i) => <p key={i}><b>{l.emphasis}</b> {l.detail}</p>)}</div>
                 <p className="pm-hero-foot">Generated from status updates, gate records and RAID items — verify before acting.</p>

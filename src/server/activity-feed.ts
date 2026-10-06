@@ -35,7 +35,7 @@ export function formatActivity(type: string, payload: Record<string, unknown>): 
     case "checkin.confirmed":
       return `confirmed the weekly status update (${String(payload.rag ?? "—")})`;
     case "checkin.submitted_to_head":
-      return "sent the status update to the Head of PMs";
+      return "sent the status update to the Head";
     case "task.nudged":
       return "nudged the assignee of a blocked task";
     case "comment.posted":

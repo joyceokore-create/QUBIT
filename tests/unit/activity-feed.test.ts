@@ -7,7 +7,7 @@ describe("formatActivity", () => {
     expect(formatActivity("blocker.opened", {})).toBe("flagged a blocker");
     // Milestone A vocabulary: the weekly act is a "status update", sent in the same breath.
     expect(formatActivity("checkin.confirmed", { rag: "Green" })).toBe("confirmed the weekly status update (Green)");
-    expect(formatActivity("checkin.submitted_to_head", {})).toBe("sent the status update to the Head of PMs");
+    expect(formatActivity("checkin.submitted_to_head", {})).toBe("sent the status update to the Head");
     expect(formatActivity("task.nudged", {})).toBe("nudged the assignee of a blocked task");
     expect(formatActivity("project.status_changed", { from: "OnTrack", to: "AtRisk" })).toBe(
       "moved the project OnTrack → AtRisk",

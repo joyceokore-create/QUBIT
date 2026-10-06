@@ -201,7 +201,7 @@
 .pmv3 .gate.block{background:var(--red-wash);color:var(--red-ink)}
 .pmv3 .gate.none{color:var(--line-2)}
 
-/* ── Head of PMs + Executive views (same artifact, scoped) ── */
+/* ── Head + Executive views (same artifact, scoped) ── */
 .pmv3 .sgt-group{margin-bottom:22px}
 .pmv3 .sgt-group:last-child{margin-bottom:0}
 .pmv3 .sgt-head{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}

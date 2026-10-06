@@ -51,7 +51,7 @@ describe("M-P3a reports chain joints", () => {
 
   afterAll(async () => {
     await withTenant(pmCtx, async (tx) => {
-      // This suite runs in riverbank: without this, every Head of PMs keeps a fixture
+      // This suite runs in riverbank: without this, every Head keeps a fixture
       // "RPT1 sent its week …" notification and the feed keeps fixture events.
       const checkIns = await tx.checkIn.findMany({ where: { projectId }, select: { id: true } });
       const ids = checkIns.map((c) => c.id);

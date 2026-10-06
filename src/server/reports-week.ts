@@ -11,7 +11,7 @@ import { NUDGE_THRESHOLDS } from "@/server/nudger/config";
  * Milestone B (docs handoff §3) — ONE read model behind /reports, composed per role:
  *  - PM: their own projects' status updates for a week (the My week queue, re-homed),
  *    plus the 8-week grid for History;
- *  - Head of PMs: every active project's update in one inbox, grouped by portfolio, with
+ *  - Head: every active project's update in one inbox, grouped by portfolio, with
  *    the week's roll-up beside it;
  *  - Executive: the approved roll-up, "status by project · last 8 weeks", the week's
  *    G/A/R tiles and the blockers that need a decision.

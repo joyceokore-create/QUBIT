@@ -532,7 +532,7 @@ export function ProjectWizard({
                     </div>
                     {!row.userId && (
                       <p className="mt-2 text-[11.5px] text-[var(--ink4)]">
-                        → will raise a resource request for 1 {row.role} · {row.allocationPct}% to the Head of PMs.
+                        → will raise a resource request for 1 {row.role} · {row.allocationPct}% to the Head.
                       </p>
                     )}
                     {rowWarnings.length > 0 && p && (

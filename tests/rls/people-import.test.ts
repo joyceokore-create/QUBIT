@@ -7,6 +7,7 @@ import { withTenant, type TenantContext } from "@/lib/tenant";
 import { parsePeopleCsv } from "@/lib/people-csv";
 import { importPeople } from "@/server/people-import";
 import { createUsers, cleanupFixtureUsers } from "./_users";
+import { disableSso, restoreSso } from "./_sso-env";
 
 const CSV = `name,email,role,group
 Import One,import.one@fixture.invalid,ProjectManager,pm
@@ -20,6 +21,8 @@ describe("DM1.72 bulk people import", () => {
   let memberCtx: TenantContext;
 
   beforeAll(async () => {
+    // Import issues invite links, which only exist when SSO is off (see _sso-env).
+    disableSso();
     const rb = await prisma.tenant.findUnique({ where: { slug: "riverbank" } });
     if (!rb) throw new Error("Seed required.");
     rbId = rb.id;
@@ -38,6 +41,7 @@ describe("DM1.72 bulk people import", () => {
       await tx.user.deleteMany({ where: { id: { in: ids } } });
     });
     await cleanupFixtureUsers(rbId);
+    restoreSso();
     await prisma.$disconnect();
   });
 
