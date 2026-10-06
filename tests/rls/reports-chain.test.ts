@@ -1,6 +1,7 @@
-// M-P3a (docs/34) — the chain's new joints: the member's query rides the draft JSON,
-// and a confirmed check-in is SENT to the Head explicitly — with re-confirm resetting
-// the stamp so a changed report is never silently substituted.
+// M-P3a (docs/34) — the chain's joints: the member's query rides the draft JSON, and a
+// confirmed check-in reaches the Head. Milestone A made "Confirm & send" ONE act: confirm
+// stamps submittedToHeadAt in the same transaction, and a re-confirm RE-SENDS (a newer
+// stamp) so a changed report is never silently substituted under the Head.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { withTenant, type TenantContext } from "@/lib/tenant";
@@ -50,6 +51,13 @@ describe("M-P3a reports chain joints", () => {
 
   afterAll(async () => {
     await withTenant(pmCtx, async (tx) => {
+      // This suite runs in riverbank: without this, every Head of PMs keeps a fixture
+      // "RPT1 sent its week …" notification and the feed keeps fixture events.
+      const checkIns = await tx.checkIn.findMany({ where: { projectId }, select: { id: true } });
+      const ids = checkIns.map((c) => c.id);
+      await tx.domainEvent.deleteMany({ where: { entityType: "check_in", entityId: { in: ids } } });
+      await tx.auditLog.deleteMany({ where: { entityType: "check_in", entityId: { in: ids } } });
+      await tx.notification.deleteMany({ where: { kind: "checkin.submitted_to_head", message: { contains: "RPT1" } } });
       await tx.checkIn.deleteMany({ where: { projectId } });
       await tx.projectTask.deleteMany({ where: { projectId } });
       await tx.memberReport.deleteMany({ where: { userId: memberCtx.userId } });
@@ -76,17 +84,30 @@ describe("M-P3a reports chain joints", () => {
     expect(again.draft.sections.find((s) => s.projectId === projectId)?.query).toContain("TZ launch date");
   });
 
-  it("submit-to-Head requires a confirmed check-in, stamps it, and re-confirm RESETS it", async () => {
+  it("confirm sends to the Head in the same act; re-confirm RE-SENDS with a newer stamp", async () => {
+    // A never-confirmed week still can't be sent on its own (the legacy re-send door).
     await expect(submitCheckInToHead(pmCtx, projectId)).rejects.toThrow(/Confirm/);
 
-    await confirmCheckIn(pmCtx, projectId, { narrative: "UAT slipped 6 days; vendor fix Thu." });
-    const sent = await submitCheckInToHead(pmCtx, projectId);
-    expect(sent.submittedToHeadAt).not.toBeNull();
+    const T0 = new Date();
+    const first = await confirmCheckIn(pmCtx, projectId, { narrative: "UAT slipped 6 days; vendor fix Thu." }, T0);
+    expect(first.status).toBe("Confirmed");
+    expect(first.submittedToHeadAt).not.toBeNull(); // Milestone A: one act, both stamps
 
-    // The PM edits and re-confirms — the send stamp must clear (never silently swapped).
-    await confirmCheckIn(pmCtx, projectId, { narrative: "Vendor fix landed; UAT resumes Mon." });
+    // The explicit re-send door still works (idempotent re-stamp for legacy rows).
+    const resent = await submitCheckInToHead(pmCtx, projectId, new Date(T0.getTime() + 30_000));
+    expect(resent.submittedToHeadAt).not.toBeNull();
+
+    // The PM edits and re-confirms — the changed report goes up AGAIN with a newer stamp
+    // (never silently swapped under the Head).
+    const again = await confirmCheckIn(
+      pmCtx,
+      projectId,
+      { narrative: "Vendor fix landed; UAT resumes Mon." },
+      new Date(T0.getTime() + 60_000),
+    );
+    expect(again.submittedToHeadAt!.getTime()).toBeGreaterThan(first.submittedToHeadAt!.getTime());
     const history = await listProjectReports(pmCtx, projectId);
-    expect(history[0].submittedToHeadAt).toBeNull();
+    expect(history[0].submittedToHeadAt).not.toBeNull();
     expect(history[0].narrative).toContain("resumes Mon");
   });
 });

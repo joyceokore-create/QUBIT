@@ -154,3 +154,69 @@ export function inviteEmail(opts: {
     text,
   };
 }
+
+/**
+ * Milestone A — a PM's nudge to the assignee of a blocked task. Developers and QA may
+ * not live in QUBIT, so the primary CTA is the YouTrack issue when the task is mirrored;
+ * the QUBIT board link is the secondary door. Says how long it has been blocked and why.
+ */
+export function nudgeEmail(opts: {
+  tenantName: string;
+  brandColor: string;
+  appUrl: string;
+  recipientFirstName: string;
+  nudgerName: string;
+  projectCode: string;
+  projectName: string;
+  taskKey: string | null;
+  taskTitle: string;
+  externalKey: string | null;
+  externalUrl: string | null;
+  blockedDays: number;
+  blockerDescription: string;
+  /** App-relative board link, e.g. "/projects/<id>?tab=Board&task=<taskId>". */
+  taskLink: string;
+}): BrandedEmail {
+  const key = opts.externalKey ?? opts.taskKey ?? "task";
+  const days = `${opts.blockedDays} day${opts.blockedDays === 1 ? "" : "s"}`;
+  const subject = `QUBIT: ${opts.projectCode} · ${key} blocked ${days} — ${opts.nudgerName} needs a word`;
+  const qubitUrl = `${opts.appUrl}${opts.taskLink}`;
+  const primaryUrl = opts.externalUrl ?? qubitUrl;
+  const primaryLabel = opts.externalUrl ? "Open in YouTrack" : "Open in QUBIT";
+  const button = (href: string, label: string) =>
+    `<a href="${escapeHtml(href)}" style="display:inline-block;background:${escapeHtml(opts.brandColor)};color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:11px 20px;border-radius:8px">${escapeHtml(label)}</a>`;
+
+  const body = [
+    `<p style="font-size:14px;line-height:1.6;margin:0 0 16px">Hi ${escapeHtml(opts.recipientFirstName || "there")},</p>`,
+    `<p style="font-size:14px;line-height:1.6;margin:0 0 8px">${escapeHtml(opts.nudgerName)} is asking about <strong>${escapeHtml(key)}</strong> — ${escapeHtml(opts.taskTitle)} on ${escapeHtml(opts.projectCode)} · ${escapeHtml(opts.projectName)}.</p>`,
+    `<p style="font-size:14px;line-height:1.6;margin:0 0 20px;padding:10px 12px;background:#f8fafc;border-radius:8px"><strong>Blocked for ${escapeHtml(days)}:</strong> ${escapeHtml(opts.blockerDescription)}</p>`,
+    `<p style="margin:0 0 12px">${button(primaryUrl, primaryLabel)}</p>`,
+    opts.externalUrl
+      ? `<p style="font-size:12px;line-height:1.6;margin:0 0 16px"><a href="${escapeHtml(qubitUrl)}" style="color:${escapeHtml(opts.brandColor)}">Open in QUBIT</a></p>`
+      : "",
+  ].join("");
+
+  const text = [
+    `Hi ${opts.recipientFirstName || "there"},`,
+    "",
+    `${opts.nudgerName} is asking about ${key} — ${opts.taskTitle} on ${opts.projectCode} · ${opts.projectName}.`,
+    `Blocked for ${days}: ${opts.blockerDescription}`,
+    "",
+    `${primaryLabel}: ${primaryUrl}`,
+    ...(opts.externalUrl ? [`Open in QUBIT: ${qubitUrl}`] : []),
+    "",
+    "Your project manager pressed Nudge. Change how you receive nudges under Notifications in QUBIT.",
+  ].join("\n");
+
+  return {
+    subject,
+    html: shell({
+      tenantName: opts.tenantName,
+      brandColor: opts.brandColor,
+      title: `${key} is blocked — ${opts.projectCode}`,
+      body,
+      footer: "Your project manager pressed Nudge. Change how you receive nudges under Notifications in QUBIT.",
+    }),
+    text,
+  };
+}

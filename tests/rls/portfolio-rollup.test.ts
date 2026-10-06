@@ -70,8 +70,14 @@ describe("M-P3b portfolio roll-up", () => {
 
   it("approve freezes the payload: later check-in changes do not mutate what was signed", async () => {
     await confirmCheckIn(headCtx, projectId, { narrative: "signed state" }, NOW);
-    // DM1.73 (T7): the check-in was confirmed but never SENT to the Head — approving
-    // without acknowledging that is now refused, so "Send to the Head" means something.
+    // Since Milestone A confirmCheckIn also sends. Rows confirmed BEFORE that change can
+    // still sit confirmed-but-unsent in prod, so the DM1.73 (T7) guard stays — put the row
+    // back into that legacy state to keep it covered.
+    await withTenant(headCtx, (tx) =>
+      tx.checkIn.updateMany({ where: { projectId, isoWeek: "2027-W10" }, data: { submittedToHeadAt: null } }),
+    );
+    // DM1.73 (T7): a confirmed-but-never-sent check-in — approving without acknowledging
+    // that is refused, so "Send to the Head" means something.
     await expect(
       approveRollup(headCtx, "Week held steady; RLP1 needs watching.", NOW),
     ).rejects.toMatchObject({ code: "UNSENT_CHECKINS" });

@@ -2,11 +2,28 @@
 // out of project-panel-content.tsx when that dead panel (never rendered since the
 // workspace replaced the sheet panel) was deleted.
 
+import type { CheckInView } from "@/server/checkins";
+
+/** The current week's check-in as it crosses the server → client boundary (dates as ISO
+ * strings, like every other field on this shape) plus whether the viewer may act on it. */
+export type CheckInJson = Omit<CheckInView, "overrideExpiresAt" | "confirmedAt" | "submittedToHeadAt"> & {
+  overrideExpiresAt: string | null;
+  confirmedAt: string | null;
+  submittedToHeadAt: string | null;
+  canConfirm: boolean;
+};
+
 export interface ProjectPanelJson {
   /** M-P2c — dependency-picker candidates (id/code/name of active projects, capped at 300). */
   allProjects?: { id: string; code: string; name: string }[];
-  /** M-P2b — the Delivery tab's market strip (project × subsidiary tracks). */
-  marketTracks?: { orgUnitId: string; code: string; flag: string | null; progress: number; status: string }[];
+  /** M-P2b — the Delivery tab's market strip (project × subsidiary tracks). Milestone A:
+   *  carries this week's RAG by the rollout cell rule (marketRagsForProject). */
+  marketTracks?: { orgUnitId: string; code: string; flag: string | null; progress: number; status: string; rag: "Green" | "Amber" | "Red" }[];
+  /** Milestone A — this week's check-in, computed once on the server so the header's
+   *  Build / In-market chips render with the page and the status card seeds from it. */
+  checkin?: CheckInJson;
+  /** Milestone A — open blockers + risks + issues, for the Register tab badge. */
+  registerOpenCount?: number;
   /** M-P4a — the idea(s) this project came from: accepted into it, or folded in. */
   ideaProvenance?: { id: string; title: string; kind: "accepted" | "merged"; submittedByName: string | null }[];
   id: string;

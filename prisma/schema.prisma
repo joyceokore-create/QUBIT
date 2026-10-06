@@ -319,6 +319,9 @@ model ProjectTask {
   // Touched on every task mutation (incl. commit-driven ones in 6.3); feeds the nudger's
   // staleness check (6.4). Distinct from updatedAt only by intent — set explicitly.
   lastActivityAt       DateTime                @default(now()) @map("last_activity_at")
+  // Milestone A (workspace redesign) — when a PM last nudged this blocked task's assignee;
+  // NULL = never. One nudge per 24h. Deliberately NOT lastActivityAt: a nudge is not progress.
+  lastNudgedAt         DateTime?               @map("last_nudged_at")
   // "Blocked" is a flag, not a status: a task is blocked while an Open Blocker links to it.
   blockers             Blocker[]               @relation("TaskBlockers")
   commitLinks          TaskCommitLink[]        @relation("TaskCommits")

@@ -16,7 +16,7 @@ import {
   saveMyReport,
   submitMyReport,
 } from "@/server/member-reports";
-import { confirmCheckIn, getCheckInProvenance, getCurrentCheckIn, submitCheckInToHead } from "@/server/checkins";
+import { confirmCheckIn, getCheckInProvenance, getCurrentCheckIn } from "@/server/checkins";
 import { approveRollup, buildRollup, getApprovedRollup, getRollup } from "@/server/portfolio-reports";
 import { createUsers, cleanupFixtureUsers } from "./_users";
 
@@ -164,7 +164,7 @@ describe("reporting chain end to end", () => {
     await submitMyReport(qaCtx, NOW);
   });
 
-  it("rung 4 — acknowledged updates feed the check-in, which the PM confirms and sends", async () => {
+  it("rung 4 — acknowledged updates feed the check-in, which the PM confirms — and that sends it", async () => {
     const draft = await getCurrentCheckIn(pmCtx, projectId, NOW);
     expect(draft.status).toBe("Draft");
     // The computed draft carries the team's acknowledged lines — the PM narrates, never
@@ -174,8 +174,8 @@ describe("reporting chain end to end", () => {
     // retypes the facts.
     expect(draft.lines.join(" ")).toMatch(/e2e|complet|item/i);
 
+    // Milestone A: confirming IS sending — one act, both stamps.
     await confirmCheckIn(pmCtx, projectId, { narrative: "Settlement client landed; QA pack green." }, NOW);
-    await submitCheckInToHead(pmCtx, projectId, NOW);
     const sent = await getCurrentCheckIn(pmCtx, projectId, NOW);
     expect(sent.status).toBe("Confirmed");
     expect(sent.submittedToHeadAt).not.toBeNull();

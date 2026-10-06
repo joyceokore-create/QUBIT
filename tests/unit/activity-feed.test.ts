@@ -5,7 +5,10 @@ describe("formatActivity", () => {
   it("narrates the common event types", () => {
     expect(formatActivity("task.completed", {})).toBe("completed a task");
     expect(formatActivity("blocker.opened", {})).toBe("flagged a blocker");
-    expect(formatActivity("checkin.confirmed", { rag: "Green" })).toBe("confirmed the Friday check-in (Green)");
+    // Milestone A vocabulary: the weekly act is a "status update", sent in the same breath.
+    expect(formatActivity("checkin.confirmed", { rag: "Green" })).toBe("confirmed the weekly status update (Green)");
+    expect(formatActivity("checkin.submitted_to_head", {})).toBe("sent the status update to the Head of PMs");
+    expect(formatActivity("task.nudged", {})).toBe("nudged the assignee of a blocked task");
     expect(formatActivity("project.status_changed", { from: "OnTrack", to: "AtRisk" })).toBe(
       "moved the project OnTrack → AtRisk",
     );
