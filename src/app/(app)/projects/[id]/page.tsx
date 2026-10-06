@@ -5,12 +5,16 @@ import { canViewProject } from "@/lib/project-access";
 import { canContributeToProject, canWriteProject } from "@/lib/access";
 import { viewerBoardCategory } from "@/server/board-scope";
 import { withTenant } from "@/lib/tenant";
+import { isoWeekId } from "@/lib/iso-week";
 import { listProjectIdeaProvenance } from "@/server/ideas";
 import { getProjectPanelData } from "@/server/projects";
 import { listProjectMembers } from "@/server/resources";
+import { getCurrentCheckIn } from "@/server/checkins";
+import { marketRagsForProject } from "@/server/rollout";
+import { registerOpenCount } from "@/server/project-register";
 import { Forbidden } from "@/components/forbidden";
 import { ProjectWorkspace } from "@/components/workspace/project-workspace";
-import type { ProjectPanelJson } from "@/components/panels/project-panel-json";
+import type { CheckInJson, ProjectPanelJson } from "@/components/panels/project-panel-json";
 
 export default async function ProjectWorkspacePage({
   params,
@@ -29,11 +33,15 @@ export default async function ProjectWorkspacePage({
 
   if (!(await canViewProject(ctx, id))) return <Forbidden />;
 
-  const [p, members, canContribute, canWrite, membership, portfolios, viewerCategory] = await Promise.all([
+  const [p, members, canContribute, canWrite, checkinView, openCount, membership, portfolios, viewerCategory] = await Promise.all([
     getProjectPanelData(ctx, id),
     listProjectMembers(ctx, id),
     canContributeToProject(ctx, id),
     canWriteProject(ctx, id), // governance + join-request decisions (PM-level)
+    // Milestone A — this week's check-in, once: the header chips render with the page and
+    // the status card seeds from it instead of fetching again on mount.
+    getCurrentCheckIn(ctx, id),
+    registerOpenCount(ctx, id),
     withTenant(ctx, async (tx) => {
       const [lead, m] = await Promise.all([
         tx.project.findFirst({ where: { id, leadUserId: ctx.userId }, select: { id: true } }),
@@ -60,15 +68,19 @@ export default async function ProjectWorkspacePage({
   );
   // M-P4a — where this project came from: the idea(s) accepted into or merged into it.
   const ideaProvenance = await listProjectIdeaProvenance(ctx, id);
-  // M-P2b — the Delivery tab's market tracks (docs/25 §3 tab 4).
-  const marketTracks = await withTenant(ctx, (tx) =>
-    tx.projectOrgStatus.findMany({
-      where: { projectId: id, orgUnit: { kind: "Market" } },
-      select: { orgUnitId: true, progress: true, status: true, orgUnit: { select: { code: true, flag: true } } },
-      orderBy: { orgUnit: { code: "asc" } },
-    }),
-  );
+  // M-P2b — the Delivery tab's market tracks (docs/25 §3 tab 4). Milestone A: through the
+  // rollout cell rule, so each track carries this week's RAG (header chip, status card,
+  // Markets aside all read the same value).
+  const marketTracks = await withTenant(ctx, (tx) => marketRagsForProject(tx, id, isoWeekId(new Date())));
   if (!p) notFound();
+
+  const checkin: CheckInJson = {
+    ...checkinView,
+    overrideExpiresAt: checkinView.overrideExpiresAt?.toISOString() ?? null,
+    confirmedAt: checkinView.confirmedAt?.toISOString() ?? null,
+    submittedToHeadAt: checkinView.submittedToHeadAt?.toISOString() ?? null,
+    canConfirm: canWrite,
+  };
 
   const data: ProjectPanelJson = {
     ...p,
@@ -85,11 +97,14 @@ export default async function ProjectWorkspacePage({
     ideaProvenance,
     marketTracks: marketTracks.map((m) => ({
       orgUnitId: m.orgUnitId,
-      code: m.orgUnit.code,
-      flag: m.orgUnit.flag,
+      code: m.code,
+      flag: m.flag,
       progress: m.progress,
       status: m.status,
+      rag: m.rag,
     })),
+    checkin,
+    registerOpenCount: openCount,
     isMember: membership.isMember, // viewer leads or is allocated → hides "Request to join"
   };
 

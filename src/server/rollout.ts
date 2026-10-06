@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { isoWeekId } from "@/lib/iso-week";
@@ -270,9 +271,57 @@ export async function getMarketFocus(ctx: TenantContext, now = new Date()): Prom
 }
 
 /** Worst-of across RAGs, routed through the health engine's own ranking. */
-function worstRag(rags: Rag[]): Rag {
+export function worstRag(rags: Rag[]): Rag {
   const RAG_TO_STATUS: Record<Rag, string> = { Green: "OnTrack", Amber: "AtRisk", Red: "Overdue" };
   return projectRag(worstStatus(rags.map((r) => RAG_TO_STATUS[r])));
+}
+
+export interface MarketTrackRag {
+  orgUnitId: string;
+  code: string;
+  flag: string | null;
+  /** ProjectOrgStatus.status — the Delivery tab's market cards still read it. */
+  status: string;
+  /** Stored track progress (what the workspace shows today; gate-derived % is the matrix's job). */
+  progress: number;
+  rag: Rag;
+  /** True when this week's MarketCheckIn exists — the RAG is a human's word, not a derivation. */
+  checkedIn: boolean;
+}
+
+/**
+ * Milestone A — one project's market tracks with this week's RAG, by the SAME rule as a
+ * matrix cell (above): the market check-in wins, else the track's status. A track exists
+ * iff a ProjectOrgStatus row exists for a Market org unit. The workspace header, the
+ * status card's In-market block and the Markets aside all read this one function, so
+ * they can never disagree with the rollout heatmap.
+ */
+export async function marketRagsForProject(
+  tx: Prisma.TransactionClient,
+  projectId: string,
+  isoWeek: string,
+): Promise<MarketTrackRag[]> {
+  const [tracks, checkIns] = await Promise.all([
+    tx.projectOrgStatus.findMany({
+      where: { projectId, orgUnit: { kind: "Market" } },
+      select: { orgUnitId: true, status: true, progress: true, orgUnit: { select: { code: true, flag: true } } },
+      orderBy: { orgUnit: { code: "asc" } },
+    }),
+    tx.marketCheckIn.findMany({ where: { projectId, isoWeek }, select: { orgUnitId: true, rag: true } }),
+  ]);
+  const checkInByMarket = new Map(checkIns.map((c) => [c.orgUnitId, c.rag as Rag]));
+  return tracks.map((t) => {
+    const checkIn = checkInByMarket.get(t.orgUnitId);
+    return {
+      orgUnitId: t.orgUnitId,
+      code: t.orgUnit.code,
+      flag: t.orgUnit.flag,
+      status: t.status,
+      progress: t.progress,
+      rag: checkIn ?? projectRag(t.status),
+      checkedIn: checkIn !== undefined,
+    };
+  });
 }
 
 export interface MarketTrackDetail {

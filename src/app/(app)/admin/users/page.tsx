@@ -1,12 +1,12 @@
 import { auth } from "@/lib/auth";
 import { can, CANONICAL_ROLES } from "@/lib/rbac";
+import { ssoEnabled } from "@/lib/sso";
 import { listUsers } from "@/server/users";
 import { listAssignableRoles } from "@/server/role-permissions";
 import { listDepartments } from "@/server/departments";
 import { listTeams } from "@/server/teams";
 import { listProjects } from "@/server/projects";
 import { Forbidden } from "@/components/forbidden";
-import { ssoEnabled } from "@/lib/sso";
 import { AdminHeader } from "../admin-header";
 import { NewUserDialog } from "./new-user-dialog";
 import { UsersClient, type AdminInsight } from "./users-client";

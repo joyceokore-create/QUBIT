@@ -6,7 +6,7 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [main, Development] # Development = the shared integration branch (Joyce + Alex); every merge there runs the gates
   pull_request:
 
 env:
@@ -41,8 +41,16 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # pnpm's --frozen-lockfile can skip the prisma postinstall, leaving tsx seed.ts to
+      # fail on `Cannot find module '.prisma/client/default'`. Generate the client first.
+      - run: pnpm prisma generate
       - run: pnpm prisma migrate deploy
       - run: pnpm prisma db seed
+      # The postgres service makes POSTGRES_USER=qubit a SUPERUSER, which bypasses RLS —
+      # so the tenant-isolation suite would see every tenant's rows. migrate+seed need
+      # the elevated role; demote it now (it can drop its own superuser) so `pnpm test`
+      # runs under RLS exactly as prod/local do (non-superuser qubit + FORCE RLS).
+      - run: echo 'ALTER ROLE qubit NOSUPERUSER;' | pnpm prisma db execute --stdin --schema prisma/schema.prisma
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
@@ -72,6 +80,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm prisma generate
       - run: pnpm prisma migrate deploy
       - run: pnpm prisma db seed
       - run: npx playwright install --with-deps chromium

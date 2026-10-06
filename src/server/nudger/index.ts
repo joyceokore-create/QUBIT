@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
+import { isHeadOfProjects } from "@/lib/rbac";
 import { isoWeekId } from "@/lib/iso-week";
 import { absentUserIds } from "@/server/absence";
 import { emitDomainEvent } from "@/server/events";
@@ -28,8 +29,20 @@ export const NUDGE_SIGNALS = [
   // misses after the Friday 17:00 deadline has already passed.
   "member_report_unacknowledged",
   "checkin_unsent_to_head",
+  // Milestone B: the Head's on-demand "Nudge all" — this week's status update not sent.
+  "checkin_unsent",
 ] as const;
 export type NudgeSignal = (typeof NUDGE_SIGNALS)[number];
+
+export class NudgeError extends Error {
+  constructor(
+    message: string,
+    public code: "FORBIDDEN" | "NOT_FOUND",
+  ) {
+    super(message);
+    this.name = "NudgeError";
+  }
+}
 
 
 export interface NudgeCandidate {
@@ -246,7 +259,7 @@ export async function collectCandidates(tx: Prisma.TransactionClient, now: Date)
       entityId: r.id,
       projectId: pending.length === 1 ? pending[0] : null,
       message: `${r.user.name}'s weekly report is waiting for your acknowledgement`,
-      link: "/reports?tab=team",
+      link: "/reports",
       level: 0,
       recipientsByLevel: [recipients],
     });
@@ -277,7 +290,7 @@ export async function collectCandidates(tx: Prisma.TransactionClient, now: Date)
         entityId: c.id,
         projectId: c.projectId,
         message: `${c.project.name}'s check-in is confirmed but was never sent to the Head — send it before the roll-up`,
-        link: `/projects/${c.projectId}?tab=Reports`,
+        link: `/projects/${c.projectId}?tab=This%20week`,
         level: 0,
         recipientsByLevel: [pm(c.projectId)],
       });
@@ -329,6 +342,64 @@ export async function collectMemberReportChase(
     level: 0,
     recipientsByLevel: [[r.userId]],
   }));
+}
+
+/**
+ * Milestone B — this week's status update not yet CONFIRMED + SENT, per active project
+ * (optionally one project). `entityId` is the project, so the weekly dedupe key makes a
+ * second "Nudge all" a no-op and a project that sends in between drops out on its own.
+ */
+export async function collectUnsentCheckins(
+  tx: Prisma.TransactionClient,
+  now: Date,
+  projectIds?: string[],
+): Promise<NudgeCandidate[]> {
+  const isoWeek = isoWeekId(now);
+  const wk = isoWeek.split("-W")[1];
+  const { pmByProject } = await resolveRecipients(tx);
+  const projects = await tx.project.findMany({
+    where: {
+      status: { notIn: ["Completed", "Cancelled"] },
+      ...(projectIds ? { id: { in: projectIds } } : {}),
+      NOT: { checkIns: { some: { isoWeek, status: "Confirmed", submittedToHeadAt: { not: null } } } },
+    },
+    select: { id: true, code: true },
+    orderBy: { name: "asc" },
+  });
+  return projects.map((p) => ({
+    signal: "checkin_unsent" as const,
+    entityType: "project",
+    entityId: p.id,
+    projectId: p.id,
+    message: `Week ${wk} status update not sent for ${p.code} — confirm & send in the workspace`,
+    link: `/projects/${p.id}?tab=This%20week`,
+    level: 0,
+    recipientsByLevel: [pmByProject.get(p.id) ?? []],
+  }));
+}
+
+/**
+ * The Head chases this week's missing updates on demand (the inbox's "Nudge all"
+ * and per-row "Nudge"). Writes Nudge rows + bells through the same path as the Friday
+ * nudger — one audit row, actor = the Head — and nothing twice in a week. Email follows
+ * each PM's own channel preference via the digest; nothing is sent from here.
+ */
+export async function nudgeUnsentCheckins(
+  ctx: TenantContext,
+  now = new Date(),
+  opts: { projectId?: string } = {},
+): Promise<{ created: number; escalated: number; skipped: number; targeted: number }> {
+  if (!isHeadOfProjects(ctx)) throw new NudgeError("Chasing this week's updates is the Head's to do.", "FORBIDDEN");
+  return withTenant(ctx, async (tx) => {
+    if (opts.projectId) {
+      // RLS: another tenant's project id reads as absent — 404, never a leak.
+      const p = await tx.project.findUnique({ where: { id: opts.projectId }, select: { id: true } });
+      if (!p) throw new NudgeError("Project not found.", "NOT_FOUND");
+    }
+    const cands = await collectUnsentCheckins(tx, now, opts.projectId ? [opts.projectId] : undefined);
+    const r = await applyCandidates(tx, ctx, cands, now);
+    return { ...r, targeted: cands.length };
+  });
 }
 
 /** Create-or-escalate with weekly dedupe. Returns what happened for observability. */

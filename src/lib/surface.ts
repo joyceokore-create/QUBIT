@@ -36,3 +36,17 @@ export function ragFill(rag: string | null | undefined): { background: string } 
 export function ragTokenOf(rag: Rag): string {
   return RAG_TOKEN[rag] ?? "--ink4";
 }
+
+/** The one keyboard-focus treatment for controls on a card: brand ring, offset off the
+ * card surface. Append to any button/link/input className. */
+export const FOCUS =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--cardbg)]";
+
+// ── Milestone A/B: the three button voices and the tab-link look, shared by the
+// workspace status card and the /reports views. One source so the vocabulary can't drift.
+export const PRIMARY = `inline-flex items-center gap-2 rounded-[8px] bg-[var(--brand)] px-4 py-2 text-[13px] font-bold text-[var(--onbrand)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`;
+export const SECONDARY = `inline-flex items-center rounded-[8px] border border-[var(--input)] bg-background px-3.5 py-2 text-[13px] font-semibold text-[var(--ink2)] transition-colors hover:text-[var(--qink)] disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`;
+export const QUIET = `rounded-[6px] px-1.5 py-1 text-[12.5px] font-semibold text-[var(--ink3)] transition-colors hover:text-brand ${FOCUS}`;
+/** An underline tab rendered as a link (URL-driven tabs): idle, plus the active overlay. */
+export const TAB_LINK = `relative flex-none whitespace-nowrap rounded-[4px] px-2.5 py-2 text-[13px] font-semibold text-[var(--ink3)] transition-colors hover:text-[var(--qink)] ${FOCUS}`;
+export const TAB_LINK_ACTIVE = "text-[var(--qink)] after:absolute after:inset-x-0 after:bottom-[-1px] after:h-0.5 after:bg-[var(--brand)]";

@@ -8,6 +8,7 @@ import { checkpointProgressByProject } from "@/server/checkpoints";
 import { emitDomainEvent } from "@/server/events";
 import { derivedRag, type Rag } from "@/server/health";
 import { acknowledgedMemberLines } from "@/server/member-reports";
+import { marketRagsForProject, worstRag, type MarketTrackRag } from "@/server/rollout";
 
 /**
  * Friday check-ins (M2, docs/16-revamp-plan.md §7). The system drafts the weekly status
@@ -59,6 +60,17 @@ export function effectiveRag(
   return row.computedRag as Rag;
 }
 
+/** Milestone A — typed failures the routes map to 409. */
+export class CheckInError extends Error {
+  constructor(
+    message: string,
+    public code: "NOT_CONFIRMED" | "ALREADY_CONFIRMED",
+  ) {
+    super(message);
+    this.name = "CheckInError";
+  }
+}
+
 /** Compute this week's facts for a project (tx-level: callable from jobs and routes). */
 export async function computeCheckInDraft(
   tx: Prisma.TransactionClient,
@@ -77,7 +89,13 @@ export async function computeCheckInDraft(
         where: { id: projectId },
         select: { status: true, orgStatuses: { select: { progress: true } } },
       }),
-      eventCount("task.completed"),
+      // Count completions from ProjectTask state, not domain events: YouTrack-mirrored
+      // tasks are synced (lastActivityAt = issue.updatedAt) but emit NO domain event, so
+      // an event count reads 0 for tracker-driven projects. Reading task state counts
+      // native AND mirrored completions this week alike.
+      tx.projectTask.count({
+        where: { projectId, approvalStatus: { not: "Draft" }, status: "Completed", lastActivityAt: { gte: start } },
+      }),
       eventCount("blocker.opened"),
       eventCount("blocker.resolved"),
       tx.projectMilestone.findMany({
@@ -148,6 +166,49 @@ export interface CheckInView {
   confirmedAt: Date | null;
   /** M-P3a — when the PM sent this confirmed check-in to the Head; null = not sent. */
   submittedToHeadAt: Date | null;
+  // ── Milestone A: two tracks, one view (docs handoff §1.3) ──
+  /** Build track = this check-in's effective RAG (gates + board + RAID). */
+  buildRag: Rag;
+  /** In-market track = worst of this week's market cells; null when the project ships nowhere. */
+  marketRag: Rag | null;
+  /** Worse of the two (or Build alone). */
+  overallRag: Rag;
+  markets: MarketTrackRag[];
+}
+
+type CheckInRow = Prisma.CheckInGetPayload<{ include: { confirmedBy: { select: { name: true } } } }>;
+type BaseView = Omit<CheckInView, "buildRag" | "marketRag" | "overallRag" | "markets">;
+
+/** The persisted row → the view model; the caller adds the dual-track fields. */
+function rowToView(row: CheckInRow, lines: string[], now: Date): BaseView {
+  return {
+    id: row.id,
+    isoWeek: row.isoWeek,
+    status: row.status as "Draft" | "Confirmed",
+    computedRag: row.computedRag as Rag,
+    effectiveRag: effectiveRag(row, now),
+    lines,
+    narrative: row.narrative,
+    ragOverride: row.ragOverride,
+    overrideReason: row.overrideReason,
+    overrideExpiresAt: row.overrideExpiresAt,
+    confirmedByName: row.confirmedBy?.name ?? null,
+    confirmedAt: row.confirmedAt,
+    submittedToHeadAt: row.submittedToHeadAt,
+  };
+}
+
+/** Milestone A — Build + In-market on one view. The market side reuses the rollout cell
+ * rule (marketRagsForProject) so the workspace never disagrees with the heatmap. */
+async function dualTrack(
+  tx: Prisma.TransactionClient,
+  projectId: string,
+  isoWeek: string,
+  buildRag: Rag,
+): Promise<Pick<CheckInView, "buildRag" | "marketRag" | "overallRag" | "markets">> {
+  const markets = await marketRagsForProject(tx, projectId, isoWeek);
+  const marketRag = markets.length ? worstRag(markets.map((m) => m.rag)) : null;
+  return { buildRag, marketRag, overallRag: marketRag ? worstRag([buildRag, marketRag]) : buildRag, markets };
 }
 
 /** This week's check-in — the persisted row when one exists, else a computed draft. */
@@ -160,21 +221,8 @@ export async function getCurrentCheckIn(ctx: TenantContext, projectId: string, n
     });
     if (row) {
       const draft = row.draft as unknown as CheckInDraft;
-      return {
-        id: row.id,
-        isoWeek,
-        status: row.status as "Draft" | "Confirmed",
-        computedRag: row.computedRag as Rag,
-        effectiveRag: effectiveRag(row, now),
-        lines: draft.lines ?? [],
-        narrative: row.narrative,
-        ragOverride: row.ragOverride,
-        overrideReason: row.overrideReason,
-        overrideExpiresAt: row.overrideExpiresAt,
-        confirmedByName: row.confirmedBy?.name ?? null,
-        confirmedAt: row.confirmedAt,
-        submittedToHeadAt: row.submittedToHeadAt,
-      };
+      const base = rowToView(row, draft.lines ?? [], now);
+      return { ...base, ...(await dualTrack(tx, projectId, isoWeek, base.effectiveRag)) };
     }
     const { computedRag, draft } = await computeCheckInDraft(tx, projectId, now);
     return {
@@ -191,6 +239,7 @@ export async function getCurrentCheckIn(ctx: TenantContext, projectId: string, n
       confirmedByName: null,
       confirmedAt: null,
       submittedToHeadAt: null,
+      ...(await dualTrack(tx, projectId, isoWeek, computedRag)),
     };
   });
 }
@@ -209,8 +258,93 @@ export type ConfirmCheckInInputT = z.infer<typeof ConfirmCheckInInput>;
 
 const OVERRIDE_TTL_MS = 7 * 24 * 3_600_000;
 
-/** Confirm this week's check-in (caller must already hold canWriteProject). Facts are
- * recomputed at confirm time so what the lead signs is what the report shows. */
+/** Confirm (tx-level): recompute the facts, upsert the Confirmed row, audit, event. The
+ * stamp is reset here and re-set by submitToHeadTx — so a re-confirm is a re-send. */
+async function confirmCheckInTx(
+  tx: Prisma.TransactionClient,
+  ctx: TenantContext,
+  projectId: string,
+  input: ConfirmCheckInInputT,
+  now: Date,
+) {
+  const isoWeek = isoWeekId(now);
+  const { computedRag, draft } = await computeCheckInDraft(tx, projectId, now);
+  const override = input.ragOverride && input.ragOverride !== computedRag ? input.ragOverride : null;
+  const data = {
+    status: "Confirmed",
+    computedRag,
+    draft: draft as unknown as Prisma.InputJsonValue,
+    narrative: input.narrative,
+    ragOverride: override,
+    overrideReason: override ? (input.overrideReason ?? null) : null,
+    overrideExpiresAt: override ? new Date(now.getTime() + OVERRIDE_TTL_MS) : null,
+    confirmedById: ctx.userId,
+    confirmedAt: now,
+    // M-P3a: a re-confirmed (changed) report must be RE-sent to the Head.
+    submittedToHeadAt: null,
+  };
+  const row = await tx.checkIn.upsert({
+    where: { tenantId_projectId_isoWeek: { tenantId: ctx.tenantId, projectId, isoWeek } },
+    create: { tenantId: ctx.tenantId, projectId, isoWeek, ...data },
+    update: data,
+    include: { confirmedBy: { select: { name: true } }, project: { select: { code: true } } },
+  });
+  await audit(tx, ctx, {
+    action: "update",
+    entityType: "check_in",
+    entityId: row.id,
+    after: { isoWeek, rag: effectiveRag(row, now), override: override ?? undefined, confirmed: true },
+  });
+  await emitDomainEvent(tx, ctx, {
+    type: "checkin.confirmed",
+    entityType: "check_in",
+    entityId: row.id,
+    payload: { projectId, isoWeek, rag: effectiveRag(row, now), overridden: !!override },
+  });
+  return { row, computedRag, draft };
+}
+
+/** Send (tx-level): stamp the row, audit, and tell every Head. */
+async function submitToHeadTx(
+  tx: Prisma.TransactionClient,
+  ctx: TenantContext,
+  row: { id: string; projectId: string; isoWeek: string; project: { code: string } },
+  now: Date,
+): Promise<Date> {
+  await tx.checkIn.update({ where: { id: row.id }, data: { submittedToHeadAt: now } });
+  await audit(tx, ctx, {
+    action: "update",
+    entityType: "check_in",
+    entityId: row.id,
+    after: { isoWeek: row.isoWeek, submittedToHead: true },
+  });
+  const heads = await tx.roleAssignment.findMany({
+    where: { role: "HeadOfProjects" },
+    select: { userId: true },
+  });
+  await emitDomainEvent(tx, ctx, {
+    type: "checkin.submitted_to_head",
+    entityType: "check_in",
+    entityId: row.id,
+    payload: { projectId: row.projectId, isoWeek: row.isoWeek },
+    notify: [...new Set(heads.map((h) => h.userId))]
+      .filter((id) => id !== ctx.userId)
+      .map((userId) => ({
+        userId,
+        kind: "checkin.submitted_to_head",
+        message: `${row.project.code} sent its week ${row.isoWeek.split("-W")[1]} report for your roll-up.`,
+        link: "/reports",
+      })),
+  });
+  return now;
+}
+
+/**
+ * Milestone A — "Confirm & send to Head" is ONE act (docs handoff §1.2): confirm this
+ * week's check-in AND submit it to the Head in a single transaction (caller must hold
+ * canWriteProject). Facts are recomputed at confirm time so what the lead signs is what
+ * the report shows. Re-confirming re-sends: the Heads get a fresh notification.
+ */
 export async function confirmCheckIn(
   ctx: TenantContext,
   projectId: string,
@@ -218,25 +352,55 @@ export async function confirmCheckIn(
   now = new Date(),
 ): Promise<CheckInView> {
   return withTenant(ctx, async (tx) => {
+    const { row, draft } = await confirmCheckInTx(tx, ctx, projectId, input, now);
+    const submittedToHeadAt = await submitToHeadTx(tx, ctx, row, now);
+    const base = rowToView(row, draft.lines, now);
+    return { ...base, submittedToHeadAt, ...(await dualTrack(tx, projectId, row.isoWeek, base.effectiveRag)) };
+  });
+}
+
+export const SaveCheckInDraftInput = z.object({
+  narrative: z.string().trim().max(500).optional(),
+  /** null clears a previously saved override. */
+  ragOverride: z.enum(RAGS).nullable().optional(),
+  overrideReason: z.string().trim().max(300).nullable().optional(),
+});
+export type SaveCheckInDraftInputT = z.infer<typeof SaveCheckInDraftInput>;
+
+/**
+ * Milestone A — "Save draft": keep the PM's line and RAG choice on this week's row
+ * WITHOUT confirming or sending. Nothing downstream reads a draft's override
+ * (effectiveRag requires Confirmed) or narrative (reports filter Confirmed), and the
+ * Friday draft job only refreshes computedRag/draft, so a saved line survives it.
+ * Refused once the week is Confirmed — demoting it would silently pull the project out
+ * of the Head's roll-up; edit and re-confirm instead.
+ */
+export async function saveCheckInDraft(
+  ctx: TenantContext,
+  projectId: string,
+  input: SaveCheckInDraftInputT,
+  now = new Date(),
+): Promise<CheckInView> {
+  return withTenant(ctx, async (tx) => {
     const isoWeek = isoWeekId(now);
+    const where = { tenantId_projectId_isoWeek: { tenantId: ctx.tenantId, projectId, isoWeek } };
+    const existing = await tx.checkIn.findUnique({ where, select: { status: true } });
+    if (existing?.status === "Confirmed") {
+      throw new CheckInError("This week is already confirmed — edit and re-confirm to change it.", "ALREADY_CONFIRMED");
+    }
     const { computedRag, draft } = await computeCheckInDraft(tx, projectId, now);
-    const override = input.ragOverride && input.ragOverride !== computedRag ? input.ragOverride : null;
+    const ragOverride = input.ragOverride ?? null;
     const data = {
-      status: "Confirmed",
       computedRag,
       draft: draft as unknown as Prisma.InputJsonValue,
-      narrative: input.narrative,
-      ragOverride: override,
-      overrideReason: override ? (input.overrideReason ?? null) : null,
-      overrideExpiresAt: override ? new Date(now.getTime() + OVERRIDE_TTL_MS) : null,
-      confirmedById: ctx.userId,
-      confirmedAt: now,
-      // M-P3a: a re-confirmed (changed) report must be RE-sent to the Head.
-      submittedToHeadAt: null,
+      narrative: input.narrative?.trim() || null,
+      ragOverride,
+      overrideReason: ragOverride ? input.overrideReason?.trim() || null : null,
+      overrideExpiresAt: null,
     };
     const row = await tx.checkIn.upsert({
-      where: { tenantId_projectId_isoWeek: { tenantId: ctx.tenantId, projectId, isoWeek } },
-      create: { tenantId: ctx.tenantId, projectId, isoWeek, ...data },
+      where,
+      create: { tenantId: ctx.tenantId, projectId, isoWeek, status: "Draft", ...data },
       update: data,
       include: { confirmedBy: { select: { name: true } } },
     });
@@ -244,34 +408,16 @@ export async function confirmCheckIn(
       action: "update",
       entityType: "check_in",
       entityId: row.id,
-      after: { isoWeek, rag: effectiveRag(row, now), override: override ?? undefined, confirmed: true },
+      after: { isoWeek, draftSaved: true, override: ragOverride ?? undefined },
     });
-    await emitDomainEvent(tx, ctx, {
-      type: "checkin.confirmed",
-      entityType: "check_in",
-      entityId: row.id,
-      payload: { projectId, isoWeek, rag: effectiveRag(row, now), overridden: !!override },
-    });
-    return {
-      id: row.id,
-      isoWeek,
-      status: "Confirmed",
-      computedRag,
-      effectiveRag: effectiveRag(row, now),
-      lines: draft.lines,
-      narrative: row.narrative,
-      ragOverride: row.ragOverride,
-      overrideReason: row.overrideReason,
-      overrideExpiresAt: row.overrideExpiresAt,
-      confirmedByName: row.confirmedBy?.name ?? null,
-      confirmedAt: row.confirmedAt,
-      submittedToHeadAt: row.submittedToHeadAt,
-    };
+    const base = rowToView(row, draft.lines, now);
+    return { ...base, ...(await dualTrack(tx, projectId, isoWeek, base.effectiveRag)) };
   });
 }
 
-/** M-P3a (docs/34) — the PM sends this week's CONFIRMED check-in up the chain. The Head
- * roll-up (M-P3b) builds from submitted reports; re-confirming resets the stamp. */
+/** M-P3a (docs/34) — send this week's CONFIRMED check-in up the chain without editing
+ * it. Since Milestone A confirmCheckIn already sends; this remains for rows confirmed
+ * before that change (confirmed-but-unsent) and as an idempotent re-send. */
 export async function submitCheckInToHead(ctx: TenantContext, projectId: string, now = new Date()) {
   return withTenant(ctx, async (tx) => {
     const isoWeek = isoWeekId(now);
@@ -280,37 +426,10 @@ export async function submitCheckInToHead(ctx: TenantContext, projectId: string,
       include: { project: { select: { code: true, name: true } } },
     });
     if (!row || row.status !== "Confirmed") {
-      throw new Error("Confirm the check-in first — the Head reviews what you signed.");
+      throw new CheckInError("Confirm the check-in first — the Head reviews what you signed.", "NOT_CONFIRMED");
     }
-    const updated = await tx.checkIn.update({
-      where: { id: row.id },
-      data: { submittedToHeadAt: now },
-    });
-    await audit(tx, ctx, {
-      action: "update",
-      entityType: "check_in",
-      entityId: row.id,
-      after: { isoWeek, submittedToHead: true },
-    });
-    const heads = await tx.roleAssignment.findMany({
-      where: { role: "HeadOfProjects" },
-      select: { userId: true },
-    });
-    await emitDomainEvent(tx, ctx, {
-      type: "checkin.submitted_to_head",
-      entityType: "check_in",
-      entityId: row.id,
-      payload: { projectId, isoWeek },
-      notify: [...new Set(heads.map((h) => h.userId))]
-        .filter((id) => id !== ctx.userId)
-        .map((userId) => ({
-          userId,
-          kind: "checkin.submitted_to_head",
-          message: `${row.project.code} sent its week ${isoWeek.split("-W")[1]} report for your roll-up.`,
-          link: "/dashboard?persona=executive",
-        })),
-    });
-    return updated;
+    const submittedToHeadAt = await submitToHeadTx(tx, ctx, row, now);
+    return { ...row, submittedToHeadAt };
   });
 }
 
