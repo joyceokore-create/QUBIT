@@ -17,6 +17,8 @@ import { RollupRail } from "@/components/reports/rollup-rail";
 import { RecentRollups, RollupArchive } from "@/components/reports/rollup-archive";
 import { ExecWeek } from "@/components/reports/exec-week";
 import { CustomReportBuilder } from "@/components/reports/custom-report-builder";
+import { listRecipients } from "@/server/rollup-recipients";
+import { pdfAvailable } from "@/server/pdf/render";
 
 /**
  * Milestone B (docs handoff §3) — /reports, composed by role:
@@ -54,6 +56,8 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
 
   const data = await getReportsWeek(ctx, { isoWeek: week, view, previewing });
   const rowCount = data.kind === "pm" ? data.rows.length : 0;
+  // Milestone D — exports + email: who the roll-up goes to, and whether this box can render PDFs.
+  const [recipients, canPdf] = await Promise.all([can(ctx, "reports:read") ? listRecipients(ctx) : Promise.resolve([]), pdfAvailable()]);
 
   return (
     <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-5 p-[22px_24px_90px]">
@@ -77,7 +81,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
 
       <div className="[animation:rise_.5s_cubic-bezier(.22,1,.36,1)_.1s_both]">
         {tab === "custom" ? (
-          <CustomReportBuilder allowedDatasets={allowedDatasetKeys(ctx)} />
+          <CustomReportBuilder allowedDatasets={allowedDatasetKeys(ctx)} pdfAvailable={canPdf} />
         ) : data.kind === "pm" ? (
           tab === "history" ? (
             <StatusGrid
@@ -119,7 +123,10 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
                     approvedAt: data.rollup.approvedAt?.toISOString() ?? null,
                     total: data.rollup.total,
                     ragCounts: data.rollup.ragCounts,
+                    emailedAt: data.rollup.emailedAt?.toISOString() ?? null,
+                    emailedCount: data.rollup.emailedCount,
                   }}
+                  exports={{ recipients, canEditRecipients: isHead, emailEnabled: emailEnabled(), pdfAvailable: canPdf }}
                 />
                 <RecentRollups rows={await listRollups(ctx, 6)} isoWeek={week} hrefForWeek={(w) => href({ week: w, tab: "week" })} archiveHref={href({ tab: "rollups" })} />
               </aside>
@@ -128,7 +135,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         ) : tab === "past" ? (
           <ArchiveTab ctx={ctx} isHead={false} hrefForWeek={(w) => href({ week: w, tab: "week" })} />
         ) : (
-          <ExecWeek data={data} week={data.week} subscribed={await isSubscribed(ctx)} emailEnabled={emailEnabled()} />
+          <ExecWeek data={data} week={data.week} subscribed={await isSubscribed(ctx)} emailEnabled={emailEnabled()} pdfAvailable={canPdf} />
         )}
       </div>
     </main>

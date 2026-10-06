@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Download, Mail } from "lucide-react";
+import { Check, Download, FileText, Mail } from "lucide-react";
 import { LocalTime } from "@/components/reports/local-time";
 import { CARD_GLASS as CARD, CARD_BG, SECONDARY } from "@/lib/surface";
 
 // Milestone B — what the executive opens on: the Head's signed line for the week (or the
-// honest "not signed yet"), the CSV once it exists, and their own weekly-email switch.
+// honest "not signed yet"), the PDF and CSV once it exists, and their own weekly-email switch.
 
 export function ExecTopCard({
   isoWeek,
@@ -14,12 +14,14 @@ export function ExecTopCard({
   inCount,
   subscribed: initialSubscribed,
   emailEnabled,
+  pdfAvailable,
 }: {
   isoWeek: string;
   approved: { narrative: string | null; approvedByName: string | null; approvedAt: string | null } | null;
   inCount: { in: number; total: number };
   subscribed: boolean;
   emailEnabled: boolean;
+  pdfAvailable: boolean;
 }) {
   const [subscribed, setSubscribed] = useState(initialSubscribed);
   const [busy, setBusy] = useState(false);
@@ -69,9 +71,14 @@ export function ExecTopCard({
       <div className="flex flex-col items-start gap-2">
         <div className="flex flex-wrap gap-2">
           {approved && (
-            <a href={`/api/rollup/export?week=${isoWeek}`} download className={`${SECONDARY} gap-2`}>
-              <Download className="size-3.5" aria-hidden /> CSV
-            </a>
+            <>
+              <a href={`/api/reports/export?template=digest&week=${isoWeek}${pdfAvailable ? "" : "&format=html"}`} {...(pdfAvailable ? { download: true } : { target: "_blank", rel: "noreferrer" })} className={`${SECONDARY} gap-2`}>
+                <FileText className="size-3.5" aria-hidden /> {pdfAvailable ? "PDF" : "Print view"}
+              </a>
+              <a href={`/api/rollup/export?week=${isoWeek}`} download className={`${SECONDARY} gap-2`}>
+                <Download className="size-3.5" aria-hidden /> CSV
+              </a>
+            </>
           )}
           <button type="button" aria-pressed={subscribed} onClick={() => void toggle()} disabled={busy} className={`${SECONDARY} gap-2`} title={subscribed ? "Click to stop the Friday email" : undefined}>
             {subscribed ? <Check className="size-3.5 text-[var(--ok)]" aria-hidden /> : <Mail className="size-3.5" aria-hidden />}

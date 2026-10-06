@@ -14,7 +14,7 @@ const TILE: Record<"green" | "amber" | "red", { bg: string; fg: string; label: s
   red: { bg: "var(--badbg)", fg: "var(--bad)", label: "Red" },
 };
 
-export function ExecWeek({ data, week, subscribed, emailEnabled }: { data: ExecWeekView; week: WeekMeta; subscribed: boolean; emailEnabled: boolean }) {
+export function ExecWeek({ data, week, subscribed, emailEnabled, pdfAvailable }: { data: ExecWeekView; week: WeekMeta; subscribed: boolean; emailEnabled: boolean; pdfAvailable: boolean }) {
   const computed = data.grid.reduce((n, g) => n + g.ragCounts.computed, 0);
   return (
     <div className="flex flex-col gap-5">
@@ -28,6 +28,7 @@ export function ExecWeek({ data, week, subscribed, emailEnabled }: { data: ExecW
         inCount={{ in: data.tiles.total - computed, total: data.tiles.total }}
         subscribed={subscribed}
         emailEnabled={emailEnabled}
+        pdfAvailable={pdfAvailable}
       />
       <div className="flex flex-wrap items-start gap-5">
         <div className="min-w-0 flex-[999_1_520px]">

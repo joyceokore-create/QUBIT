@@ -2,15 +2,19 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Download } from "lucide-react";
+import { Check, Download, FileText } from "lucide-react";
 import { LocalTime } from "@/components/reports/local-time";
-import { CARD_GLASS as CARD, CARD_BG, FOCUS, PRIMARY, SECONDARY, ragChipStyle, ragFill } from "@/lib/surface";
+import { ReportEmailButton } from "@/components/reports/report-email-button";
+import { RecipientsDialog, type RecipientJson } from "@/components/reports/recipients-dialog";
+import { CARD_GLASS as CARD, CARD_BG, FOCUS, PRIMARY, QUIET, SECONDARY, ragChipStyle, ragFill } from "@/lib/surface";
 
 /**
  * Milestone B — the Head's roll-up rail: the week's spread, the one line for the
  * executive, Approve (which assembles the rows live and freezes them — there is no
  * separate build step), then the CSV. The UNSENT_CHECKINS handshake is the one the old
  * RollupStrip had: a legacy confirmed-but-unsent row asks for an explicit "approve anyway".
+ * Milestone D adds the Approved footer: Email to executives (the recipients list, editable
+ * by the Head), Download PDF (the portfolio digest) and the CSV.
  */
 
 export interface RollupJson {
@@ -20,10 +24,33 @@ export interface RollupJson {
   approvedAt: string | null;
   total: number;
   ragCounts: { green: number; amber: number; red: number; computed: number };
+  emailedAt: string | null;
+  emailedCount: number;
 }
 
-export function RollupRail({ isoWeek, isCurrent, canApprove, rollup }: { isoWeek: string; isCurrent: boolean; canApprove: boolean; rollup: RollupJson }) {
+export interface RailExportProps {
+  recipients: RecipientJson[];
+  canEditRecipients: boolean;
+  emailEnabled: boolean;
+  pdfAvailable: boolean;
+}
+
+export function RollupRail({
+  isoWeek,
+  isCurrent,
+  canApprove,
+  rollup,
+  exports,
+}: {
+  isoWeek: string;
+  isCurrent: boolean;
+  canApprove: boolean;
+  rollup: RollupJson;
+  exports: RailExportProps;
+}) {
   const router = useRouter();
+  const [recipients, setRecipients] = useState(exports.recipients);
+  const [editing, setEditing] = useState(false);
   const [narrative, setNarrative] = useState(rollup.narrative ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -121,11 +148,49 @@ export function RollupRail({ isoWeek, isCurrent, canApprove, rollup }: { isoWeek
         </div>
 
         {approved ? (
-          <div className="flex flex-col gap-2">
-            <a href={`/api/rollup/export?week=${isoWeek}`} download className={`${SECONDARY} w-full justify-center gap-2`}>
-              <Download className="size-3.5" aria-hidden /> Download CSV
-            </a>
-            <p className="text-center text-[11.5px] text-[var(--ink5)]">PDF and email land with the export milestone.</p>
+          <div className="flex flex-col gap-2.5">
+            {exports.canEditRecipients && (
+              <ReportEmailButton
+                request={{ template: "digest", week: isoWeek }}
+                what={`the Week ${n} PDF`}
+                recipients={recipients.length}
+                emailEnabled={exports.emailEnabled}
+                pdfAvailable={exports.pdfAvailable}
+                initial={{ emailedAt: rollup.emailedAt, count: rollup.emailedCount }}
+                onSent={() => router.refresh()}
+              />
+            )}
+            <div className="flex flex-wrap gap-2">
+              {exports.pdfAvailable ? (
+                <a href={`/api/reports/export?template=digest&week=${isoWeek}`} download className={`${SECONDARY} flex-1 justify-center gap-2`}>
+                  <FileText className="size-3.5" aria-hidden /> Download PDF
+                </a>
+              ) : (
+                <a href={`/api/reports/export?template=digest&week=${isoWeek}&format=html`} target="_blank" rel="noreferrer" className={`${SECONDARY} flex-1 justify-center gap-2`} title="PDF rendering isn't available here — print this view instead">
+                  <FileText className="size-3.5" aria-hidden /> Print view
+                </a>
+              )}
+              <a href={`/api/rollup/export?week=${isoWeek}`} download className={`${SECONDARY} gap-2`}>
+                <Download className="size-3.5" aria-hidden /> CSV
+              </a>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <ul className="flex flex-wrap items-center gap-1.5" aria-label="Roll-up recipients">
+                {recipients.length === 0 && <li className="text-[11.5px] italic text-[var(--ink5)]">No recipients yet</li>}
+                {recipients.slice(0, 3).map((r) => (
+                  <li key={r.id} className="rounded-full bg-[var(--wash2)] px-2 py-0.5 text-[11px] font-semibold text-[var(--ink3)]" title={r.email}>
+                    {r.name ?? r.email}
+                  </li>
+                ))}
+                {recipients.length > 3 && <li className="rounded-full bg-[var(--wash2)] px-2 py-0.5 text-[11px] font-semibold text-[var(--ink4)]">+{recipients.length - 3}</li>}
+              </ul>
+              {exports.canEditRecipients && (
+                <button type="button" onClick={() => setEditing(true)} className={QUIET}>
+                  Edit recipients
+                </button>
+              )}
+            </div>
+            {exports.canEditRecipients && <RecipientsDialog open={editing} onOpenChange={setEditing} onChange={setRecipients} />}
           </div>
         ) : canApprove ? (
           <div className="flex flex-col gap-2">
@@ -138,9 +203,14 @@ export function RollupRail({ isoWeek, isCurrent, canApprove, rollup }: { isoWeek
           </div>
         ) : (
           !isCurrent && (
-            <a href={`/api/rollup/export?week=${isoWeek}`} download className={`${SECONDARY} w-full justify-center gap-2`}>
-              <Download className="size-3.5" aria-hidden /> Download CSV
-            </a>
+            <div className="flex flex-wrap gap-2">
+              <a href={`/api/reports/export?template=digest&week=${isoWeek}${exports.pdfAvailable ? "" : "&format=html"}`} {...(exports.pdfAvailable ? { download: true } : { target: "_blank", rel: "noreferrer" })} className={`${SECONDARY} flex-1 justify-center gap-2`}>
+                <FileText className="size-3.5" aria-hidden /> {exports.pdfAvailable ? "Download PDF" : "Print view"}
+              </a>
+              <a href={`/api/rollup/export?week=${isoWeek}`} download className={`${SECONDARY} gap-2`}>
+                <Download className="size-3.5" aria-hidden /> CSV
+              </a>
+            </div>
           )
         )}
         {error && (

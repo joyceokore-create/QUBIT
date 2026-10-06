@@ -5,8 +5,11 @@ import type { RollupArchiveRow } from "@/server/portfolio-reports";
 
 // Milestone B — the archive: approved weeks (and the Head's standing Draft), the shared
 // weekly snapshots, and the CSV exports — everything the old Roll-ups tab carried.
+// Milestone D: each week also downloads as the portfolio-digest PDF.
 
 const fmt = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+
+const pdfHref = (week: string) => `/api/reports/export?template=digest&week=${week}`;
 
 export function RecentRollups({ rows, isoWeek, hrefForWeek, archiveHref }: { rows: RollupArchiveRow[]; isoWeek: string; hrefForWeek: (w: string) => string; archiveHref: string }) {
   const recent = rows.filter((r) => r.isoWeek !== isoWeek).slice(0, 3);
@@ -25,6 +28,9 @@ export function RecentRollups({ rows, isoWeek, hrefForWeek, archiveHref }: { row
                 W{r.isoWeek.split("-W")[1]}
               </Link>
               <span className="min-w-0 flex-1 truncate text-[var(--ink2)]">{r.narrative ?? <span className="text-[var(--ink5)]">no narrative</span>}</span>
+              <a href={pdfHref(r.isoWeek)} download className={`rounded-[4px] text-[12px] text-[var(--ink3)] hover:text-brand ${FOCUS}`}>
+                PDF
+              </a>
               <a href={`/api/rollup/export?week=${r.isoWeek}`} download className={`rounded-[4px] text-[12px] text-[var(--ink3)] hover:text-brand ${FOCUS}`}>
                 CSV
               </a>
@@ -79,6 +85,9 @@ export function RollupArchive({
                   {r.approvedAt && ` · ${fmt(r.approvedAt)}`}
                 </span>
               )}
+              <a href={pdfHref(r.isoWeek)} download className={`flex-none rounded-[7px] border border-[var(--input)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)] ${FOCUS}`}>
+                PDF
+              </a>
               <a href={`/api/rollup/export?week=${r.isoWeek}`} download className={`flex-none rounded-[7px] border border-[var(--input)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)] ${FOCUS}`}>
                 CSV
               </a>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Clock } from "lucide-react";
+import { Clock, FileDown } from "lucide-react";
 import { EditProjectDialog } from "@/components/panels/edit-project-dialog";
 import { AskQAbout } from "@/components/q/ask-q-about";
 import { RequestToJoinButton } from "@/components/workspace/request-to-join-button";
@@ -156,6 +156,14 @@ export function WorkspaceHeader({
           <div className="flex flex-wrap items-center gap-2">
             <AskQAbout type="project" targetId={data.id} label="Ask Q about this project" />
             {!data.isMember && <RequestToJoinButton projectId={data.id} />}
+            {/* Milestone D — the one-pager; the template follows the project's tracks (handoff §5). */}
+            <a
+              href={`/api/reports/export?template=auto&project=${data.id}`}
+              download
+              className={`inline-flex items-center gap-1.5 rounded-[4px] text-[12.5px] font-semibold text-[var(--ink3)] transition-colors hover:text-brand ${FOCUS}`}
+            >
+              <FileDown className="size-3.5" aria-hidden /> Export PDF
+            </a>
           </div>
         </div>
       </div>
