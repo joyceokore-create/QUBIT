@@ -333,7 +333,7 @@ async function submitToHeadTx(
         userId,
         kind: "checkin.submitted_to_head",
         message: `${row.project.code} sent its week ${row.isoWeek.split("-W")[1]} report for your roll-up.`,
-        link: "/dashboard?persona=executive",
+        link: "/reports",
       })),
   });
   return now;

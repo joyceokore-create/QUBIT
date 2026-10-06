@@ -222,3 +222,9 @@ export function can(ctx: TenantContext, permission: string, _scope?: Scope): boo
     return grants.some((granted) => matchesPermission(granted, permission));
   });
 }
+
+/** The roll-up / reports "Head" gate used across the reporting chain: the Head of PMs,
+ * or the platform super-admin standing in. Role check only — permissions stay in can(). */
+export function isHeadOfProjects(ctx: { roles: string[] }): boolean {
+  return ctx.roles.some((r) => r === "HeadOfProjects" || r === "PlatformSuperAdmin");
+}

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { CheckCheck, Clock, Send, ShieldAlert } from "lucide-react";
 import { weekRange } from "@/lib/iso-week";
 import { lineTone, TONE_TOKEN } from "@/lib/status-lines";
-import { CARD_GLASS as CARD, CARD_BG, FOCUS, RAG_TOKEN, ragChipStyle, ragFill } from "@/lib/surface";
+import { CARD_GLASS as CARD, CARD_BG, FOCUS, PRIMARY, QUIET, RAG_TOKEN, SECONDARY, ragChipStyle, ragFill } from "@/lib/surface";
 import type { CheckInJson } from "@/components/panels/project-panel-json";
 import type { Rag } from "@/server/health";
 
@@ -18,9 +18,6 @@ import type { Rag } from "@/server/health";
  */
 
 const RAGS = ["Green", "Amber", "Red"] as const;
-const PRIMARY = `inline-flex items-center gap-2 rounded-[8px] bg-[var(--brand)] px-4 py-2 text-[13px] font-bold text-[var(--onbrand)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`;
-const SECONDARY = `inline-flex items-center rounded-[8px] border border-[var(--input)] bg-background px-3.5 py-2 text-[13px] font-semibold text-[var(--ink2)] transition-colors hover:text-[var(--qink)] disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`;
-const QUIET = `rounded-[6px] px-1.5 py-1 text-[12.5px] font-semibold text-[var(--ink3)] transition-colors hover:text-brand ${FOCUS}`;
 const LABEL = "text-[11.5px] font-semibold text-[var(--ink4)]";
 
 /** Friday 17:00 local is the weekly deadline (docs/19 M3 — the nudger escalates past it).
