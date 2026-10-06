@@ -88,6 +88,7 @@ model Tenant {
   teamTemplates           TeamTemplate[]
   projectDependencies     ProjectDependency[]
   portfolioReports        PortfolioReport[]
+  rollupRecipients        RollupRecipient[]
   ideas                   Idea[]
 
   @@map("tenant")
@@ -225,6 +226,7 @@ model User {
   resourceRequestsResolved ResourceRequest[]        @relation("ResourceRequestResolver")
   projectDependenciesMade  ProjectDependency[]      @relation("ProjectDependencyAuthor")
   rollupsApproved          PortfolioReport[]        @relation("RollupApprover")
+  rollupRecipientLinks     RollupRecipient[]        @relation("RollupRecipientUser")
   ideasSubmitted           Idea[]                   @relation("IdeaSubmitter")
   ideasTriaged             Idea[]                   @relation("IdeaTriager")
 
@@ -1328,11 +1330,36 @@ model PortfolioReport {
   approvedById String?   @map("approved_by_id")
   approvedBy   User?     @relation("RollupApprover", fields: [approvedById], references: [id])
   approvedAt   DateTime? @map("approved_at")
+  /** Milestone D — last "Email to executives" send: when, and the addresses it went to. */
+  emailedAt    DateTime? @map("emailed_at")
+  emailedTo    String[]  @default([]) @map("emailed_to")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
   @@unique([tenantId, isoWeek])
   @@map("portfolio_report")
+}
+
+/**
+ * Milestone D — the tenant's roll-up distribution list (the handoff's `rollupRecipients`
+ * setting). A row per address: a tenant user (userId set, name/email copied from the user)
+ * or a free-text address the Head added. Its own RLS'd table rather than a column on
+ * `tenant` (which carries no RLS policy).
+ */
+model RollupRecipient {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  email     String
+  name      String?
+  userId    String?  @map("user_id")
+  user      User?    @relation("RollupRecipientUser", fields: [userId], references: [id], onDelete: SetNull)
+  addedById String?  @map("added_by_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("rollup_recipient")
 }
 
 // M-P4a (docs/35 §1, docs/26 §5.4) — the front of the funnel: the one lifecycle stage

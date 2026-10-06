@@ -2586,3 +2586,34 @@ Fixed:
 snapshots + 1 portfolio snapshot**, nudger created **4 nudges** (`task_stale`),
 checkin-chase correctly found nothing (no unconfirmed check-in last week); `job_run` shows
 3 × Succeeded; and `crontab -l` contains no secret.
+
+## DM1.76 — Chromium ships in the image; PDF export lands (M9-B closed)
+
+DM1.45 deferred server PDF because shipping Chromium was "a ~400 MB image change and an
+OS-deps decision for the box". Milestone D of the Oct-2026 workspace/reports redesign makes
+that call: **Alpine's `chromium` package is installed in the runner stage** (plus
+`font-inter` / `font-noto` so the templates print in the UI face without ever fetching a
+font), and `playwright-core` — pinned to the exact version `@playwright/test` already
+resolved — drives it from `src/server/pdf/render.ts`. Rules that fall out of it:
+
+- **Data first, render after.** Every read happens under RLS through the existing readers;
+  the render runs outside any transaction (`withTenant`'s 5 s timeout would otherwise bite).
+- **Nothing external ever loads.** The page aborts every request; templates are inline
+  CSS + an inline SVG logo (`src/server/pdf/brand.ts`, a constant because `src/assets` is
+  not in the image). The HTML variant is served with `default-src 'none'`.
+- **One Chromium at a time**, launched per request and always closed — a burst queues, a
+  crash can't leak a process. `--no-sandbox` is unavoidable for uid 1001 under Docker's
+  default seccomp; it only ever renders our own strings.
+- **Honest degradation.** `pdfAvailable()` is a file check, never a launch; without a
+  browser the route answers 503 and every button becomes "Print view" (the same HTML).
+  "Email to executives" refuses with 409 when `FEATURE_EMAIL` is off rather than letting
+  the log adapter look like delivery.
+- **The templates render only what QUBIT holds.** The mock's release numbers, channel ×
+  market grid, uptime and decision approver/needed-by have no source; the pages show the
+  dimension cards from `deriveDimensions`, a Market · Status · Progress · This week table,
+  and "Needs a decision" from the exec view's blocker rule instead. A past week's one-pager
+  carries that week's signed status update with LIVE gates/register, and says so in the
+  footer.
+- **Recipients are a table, not a tenant column.** `rollup_recipient` is RLS'd like every
+  other table (the `tenant` row has no policy); users and typed addresses alike, Head-managed,
+  audited per change. `portfolio_report.emailed_at/emailed_to` record each send.

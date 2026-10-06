@@ -3,7 +3,7 @@
 // in email too), and user-supplied text is escaped, because a notification message can
 // contain anything somebody typed into a task title.
 import { describe, expect, it } from "vitest";
-import { digestEmail, nudgeEmail, weeklyReportEmail } from "@/server/mail/template";
+import { digestEmail, nudgeEmail, projectReportEmail, rollupEmail, weeklyReportEmail } from "@/server/mail/template";
 
 const base = { tenantName: "Demo Org B", brandColor: "#1B7A3E", appUrl: "https://q.example.invalid" };
 
@@ -98,5 +98,38 @@ describe("nudgeEmail", () => {
     expect(mail.html).not.toContain("<script>");
     expect(mail.html).not.toContain("<img");
     expect(mail.html).toContain("&lt;script&gt;");
+  });
+});
+
+describe("rollupEmail (Milestone D)", () => {
+  const mail = rollupEmail({
+    ...base,
+    isoWeek: "2026-W41",
+    range: "5–9 Oct",
+    narrative: "Nine of thirteen <green>",
+    counts: { green: 9, amber: 3, red: 1 },
+    total: 13,
+    preparedBy: "Head One",
+    url: "https://q.example.invalid/reports?week=2026-W41",
+  });
+
+  it("carries the Head's line, the spread and the link, in the tenant's colour, escaped", () => {
+    expect(mail.subject).toBe("Week 41 roll-up — Demo Org B");
+    expect(mail.html).toContain("Nine of thirteen &lt;green&gt;");
+    expect(mail.html).toContain("13 projects · 9 green · 3 amber · 1 red");
+    expect(mail.html).toContain(base.brandColor);
+    expect(mail.html).toContain("https://q.example.invalid/reports?week=2026-W41");
+    expect(mail.text).toContain("Prepared by Head One.");
+    expect(mail.text).toContain("attached as a PDF");
+  });
+});
+
+describe("projectReportEmail (Milestone D)", () => {
+  it("names the sender, the project and the week", () => {
+    const mail = projectReportEmail({ ...base, isoWeek: "2026-W41", projectCode: "ATLAS", projectName: "Atlas <migration>", senderName: "Head One", url: "https://q.example.invalid/projects/p1" });
+    expect(mail.subject).toBe("ATLAS status report · Week 41 — Demo Org B");
+    expect(mail.html).toContain("Atlas &lt;migration&gt;");
+    expect(mail.html).toContain("Head One shared");
+    expect(mail.text).toContain("https://q.example.invalid/projects/p1");
   });
 });

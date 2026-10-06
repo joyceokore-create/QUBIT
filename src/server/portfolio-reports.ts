@@ -58,6 +58,9 @@ export interface RollupView {
   unsent: number;
   /** Milestone B — G/A/R across the rows; `computed` = rows without a confirmed check-in. */
   ragCounts: RagTally;
+  /** Milestone D — last "Email to executives" send (Approved weeks only). */
+  emailedAt: Date | null;
+  emailedCount: number;
 }
 
 /** Assemble a week's rows from live data (active projects × check-ins). `at` is the
@@ -93,7 +96,15 @@ async function assembleRows(tx: Prisma.TransactionClient, isoWeek: string, at = 
 
 function toView(
   isoWeek: string,
-  row: { status: string; narrative: string | null; payload: unknown; approvedAt: Date | null; approvedBy?: { name: string } | null } | null,
+  row: {
+    status: string;
+    narrative: string | null;
+    payload: unknown;
+    approvedAt: Date | null;
+    approvedBy?: { name: string } | null;
+    emailedAt?: Date | null;
+    emailedTo?: string[];
+  } | null,
   liveRows: RollupRow[] | null,
 ): RollupView {
   const rows = row?.status === "Approved" ? ((row.payload as RollupRow[]) ?? []) : (liveRows ?? []);
@@ -109,6 +120,8 @@ function toView(
     total: rows.length,
     unsent: rows.filter((r) => r.checkIn === "Confirmed" && !r.submittedToHead).length,
     ragCounts: tallyRag(rows.map((r) => ({ rag: r.rag, computed: r.checkIn !== "Confirmed" }))),
+    emailedAt: row?.emailedAt ?? null,
+    emailedCount: row?.emailedTo?.length ?? 0,
   };
 }
 

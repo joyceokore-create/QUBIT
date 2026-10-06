@@ -62,9 +62,11 @@ incident survivable:
 
 Each of these is *stated on a live surface* or in a spec, so the promise is public:
 
-- [ ] **M9-B — server-rendered PDF exports.** The reports index literally says "PDF export
-      lands with M9-B; CSV is what ships today" (roll-ups tab). Also owed: XLSX/CSV on
-      every table, the Head's portfolio pack, resource-allocation export.
+- [x] **M9-B — server-rendered PDF exports.** Shipped with Milestone D (DM1.76): Chromium
+      in the image, `/api/reports/export` with the four templates (Build / In-market /
+      Build + In-market one-pagers, Portfolio digest) plus the custom data table in the
+      same print style; "Email to executives" attaches the digest. Still owed: XLSX on
+      every table, resource-allocation export.
 - [ ] **Budget, typed in Phase C.** The workspace shows `Budget: typed in Phase C`. Until
       then benefits realisation and business-case scoring stay parked.
 - [ ] **Business-case scoring / prioritisation** (docs/26 §2 Evaluating stage) — parked on
