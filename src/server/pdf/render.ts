@@ -36,16 +36,18 @@ const executable = (p: string) => access(p, constants.X_OK).then(() => true, () 
 let resolved: Promise<string | null> | undefined;
 
 async function resolveExecutable(): Promise<string | null> {
-  for (const p of [process.env.PDF_CHROMIUM_PATH, ...KNOWN_PATHS]) {
-    if (p && (await executable(p))) return p;
-  }
+  if (process.env.PDF_CHROMIUM_PATH && (await executable(process.env.PDF_CHROMIUM_PATH))) return process.env.PDF_CHROMIUM_PATH;
   try {
-    // Local dev: the browser @playwright/test installed into the ms-playwright cache.
+    // Local dev / CI: the browser @playwright/test installed into the ms-playwright cache —
+    // preferred over a system chromium, which on some hosts is a stub that never launches.
     const { chromium } = await import("playwright-core");
     const p = chromium.executablePath();
     if (p && (await executable(p))) return p;
   } catch {
-    // playwright-core missing or no browser cache → unavailable, never an error.
+    // playwright-core missing or no browser cache → fall through to the system package.
+  }
+  for (const p of KNOWN_PATHS) {
+    if (await executable(p)) return p;
   }
   return null;
 }

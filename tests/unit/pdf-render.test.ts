@@ -5,7 +5,9 @@
 import { describe, expect, it } from "vitest";
 import { pdfAvailable, renderPdf } from "@/server/pdf/render";
 
-const available = await pdfAvailable();
+// On a hosted CI runner a /usr/bin/chromium may exist and still be unusable (Ubuntu's snap
+// stub hangs at launch), so there the suite runs only when a browser is named explicitly.
+const available = (await pdfAvailable()) && !(process.env.CI && !process.env.PDF_CHROMIUM_PATH);
 
 describe.skipIf(!available)("renderPdf (needs Chromium)", () => {
   it("renders a tiny document to a Letter-landscape PDF", { timeout: 60_000 }, async () => {
