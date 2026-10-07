@@ -13,6 +13,8 @@ import { QProvider } from "@/components/q/q-provider";
 import { QDrawer } from "@/components/q/q-drawer";
 import { AmbientField } from "@/components/layout/ambient-field";
 import { ssoEnabled } from "@/lib/sso";
+import { TourProvider } from "@/components/tour/tour-provider";
+import { shouldOfferTour } from "@/server/tour";
 
 type BrandStyle = CSSProperties & { "--brand"?: string };
 
@@ -54,12 +56,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ? await prisma.appModule.findMany({ where: { status: "Active" }, select: { code: true, allowedRoles: true } })
     : [];
   const moduleAllowedRoles = Object.fromEntries(moduleRows.map((m) => [m.code, m.allowedRoles]));
+  // First-week walkthrough: offered once to people who run projects (or hold the PM role).
+  const tour = await shouldOfferTour(ctx);
 
   return (
     <div data-tenant={session.user.tenantSlug} style={brandStyle} className="app-shell relative isolate min-h-screen bg-background">
       <TenantScope slug={session.user.tenantSlug} />
       <AmbientField />
       <QProvider userId={session.user.id} roles={session.user.roles}>
+        <TourProvider offer={tour.offer} eligible={tour.eligible} firstProjectId={tour.firstProjectId}>
         <SlidePanelStateProvider>
           {isRiverbank ? (
             <div className="relative z-[1]">
@@ -91,6 +96,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <SlidePanel />
           <QDrawer canReports={canReports} />
         </SlidePanelStateProvider>
+        </TourProvider>
       </QProvider>
     </div>
   );

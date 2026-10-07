@@ -127,6 +127,7 @@ export function ProjectsClient({
           type="button"
           onClick={() => setMineOnly((m) => !m)}
           title="Projects you lead or are allocated to"
+          data-tour="mine"
           className="flex items-center gap-1.5 rounded-full border px-[13px] py-[7px] font-mono text-[10px] font-semibold tracking-[1px] transition-colors"
           style={{
             borderColor: mineOnly ? "var(--brand)" : "var(--hair)",

@@ -1,5 +1,7 @@
 "use client";
 
+import { dispatchTourEvent } from "@/components/tour/tour-events";
+
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -114,7 +116,7 @@ export function PmWeek({ isCurrent, rows: initial, canUpload = false }: { isoWee
         sub={!isCurrent ? "week closed" : toSend > 0 ? `${toSend} to send before Friday 5pm` : "all sent — the Head has this week"}
         ariaLabel="Weekly reporting progress"
       >
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2" data-tour="pm-week-actions">
           <RagTally counts={counts} />
           {canUpload && isCurrent && toSend > 0 && (
             <button type="button" onClick={() => setUploadOpen(true)} className={`${SECONDARY} gap-1.5`}>
@@ -188,6 +190,7 @@ function PmRow({
     setBusy(false);
     const d = await res.json().catch(() => null);
     if (res.ok && d?.data) {
+      dispatchTourEvent("update-sent");
       onChange({
         ...r,
         confirmed: true,

@@ -1,5 +1,7 @@
 "use client";
 
+import { dispatchTourEvent } from "@/components/tour/tour-events";
+
 import { useCallback, useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -261,6 +263,7 @@ export function IntegrationsGrid({ projectId, canEdit }: { projectId: string; ca
           onClose={() => setConnect(null)}
           onConnect={async (payload) => {
             await set(connect.provider, payload);
+            if (connect.provider === "youtrack") dispatchTourEvent("youtrack-connected");
             setConnect(null);
           }}
         />

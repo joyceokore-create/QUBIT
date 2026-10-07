@@ -24,6 +24,8 @@ export interface ProjectPanelJson {
   checkin?: CheckInJson;
   /** Milestone A — open blockers + risks + issues, for the Register tab badge. */
   registerOpenCount?: number;
+  /** First-week walkthrough — the per-project setup signals behind "Set up {code}". */
+  setup?: { gates: boolean; documents: boolean; team: boolean; youtrack: boolean | null; thisWeek: boolean; done: number; total: number };
   /** M-P4a — the idea(s) this project came from: accepted into it, or folded in. */
   ideaProvenance?: { id: string; title: string; kind: "accepted" | "merged"; submittedByName: string | null }[];
   id: string;

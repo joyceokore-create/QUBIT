@@ -21,6 +21,7 @@ import { RequirementsPanel } from "@/components/workspace/requirements-panel";
 import { StatusUpdateCard } from "@/components/workspace/status-update-card";
 import { WorkspaceHeader } from "@/components/workspace/workspace-header";
 import { useCheckIn } from "@/components/workspace/use-checkin";
+import { SetupChecklist } from "@/components/workspace/setup-checklist";
 import type { ProjectPanelJson } from "@/components/panels/project-panel-json";
 import { CARD_GLASS as CARD, CARD_BG, FOCUS, ragFill, ragToken } from "@/lib/surface";
 
@@ -112,6 +113,9 @@ export function ProjectWorkspace({
           <TabsContent value="This week" className="mt-5">
             <div className="flex flex-wrap items-start gap-5">
               <div className="flex min-w-0 flex-[999_1_520px] flex-col gap-5">
+                {canEdit && data.setup && data.setup.done < data.setup.total && (
+                  <SetupChecklist projectId={data.id} code={data.code} setup={data.setup} onGo={(t) => setTab(t)} />
+                )}
                 {ci && <StatusUpdateCard projectId={data.id} ci={ci} onChange={setCi} onGoToDelivery={() => setTab("Delivery")} />}
                 <WeekActivity projectId={data.id} canNudge={canGovern} />
                 <ReportHistory projectId={data.id} />

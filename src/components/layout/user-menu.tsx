@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Check, ChevronDown, LogOut, ShieldCheck } from "lucide-react";
+import { Check, ChevronDown, Compass, LogOut, ShieldCheck } from "lucide-react";
+import { useTour } from "@/components/tour/tour-provider";
 import { signOut } from "next-auth/react";
 import { signOutAction } from "@/lib/auth-actions";
 import {
@@ -53,6 +54,7 @@ export function UserMenu({
   currentSlug,
   variant = "avatar",
 }: UserMenuProps) {
+  const tour = useTour();
   const showSwitch = canSwitchTenant && tenants.length > 0;
 
   return (
@@ -92,6 +94,12 @@ export function UserMenu({
           <ShieldCheck />
           Two-factor authentication
         </DropdownMenuItem>
+        {tour.eligible && (
+          <DropdownMenuItem onSelect={() => tour.start()}>
+            <Compass />
+            Show me around
+          </DropdownMenuItem>
+        )}
 
         {showSwitch && (
           <>

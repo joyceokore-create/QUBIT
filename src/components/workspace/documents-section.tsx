@@ -1,5 +1,7 @@
 "use client";
 
+import { dispatchTourEvent } from "@/components/tour/tour-events";
+
 import { useCallback, useEffect, useState } from "react";
 import { Check, Download, FileText, MessageSquare, Plus, Sparkles, Trash2 } from "lucide-react";
 import { ConversationDrawer } from "@/components/conversation/conversation-drawer";
@@ -143,7 +145,7 @@ export function DocumentsSection({
             <Button type="button" variant="outline" onClick={draftBrd} disabled={drafting}>
               <Sparkles className="size-4" /> {drafting ? "Drafting…" : "Draft BRD with Q"}
             </Button>
-            <Button type="button" onClick={() => setAddOpen(true)}>
+            <Button data-tour="add-document" type="button" onClick={() => setAddOpen(true)}>
               <Plus className="size-4" /> Add document
             </Button>
           </div>
@@ -255,7 +257,7 @@ export function DocumentsSection({
         )}
       </div>
 
-      {addOpen && <AddDialog projectId={projectId} onClose={() => setAddOpen(false)} onAdded={() => { setAddOpen(false); void load(); }} />}
+      {addOpen && <AddDialog projectId={projectId} onClose={() => setAddOpen(false)} onAdded={() => { setAddOpen(false); dispatchTourEvent("document-added"); void load(); }} />}
       {view && <ViewDialog doc={view} onClose={() => setView(null)} />}
     </div>
   );

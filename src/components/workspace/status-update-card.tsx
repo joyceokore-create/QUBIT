@@ -1,5 +1,7 @@
 "use client";
 
+import { dispatchTourEvent } from "@/components/tour/tour-events";
+
 import { useEffect, useState } from "react";
 import { CheckCheck, Clock, Send, ShieldAlert } from "lucide-react";
 import { weekRange } from "@/lib/iso-week";
@@ -77,6 +79,7 @@ export function StatusUpdateCard({
       onChange(d.data as CheckInJson);
       setMode("view");
       setSavedAt(null);
+      dispatchTourEvent("update-sent");
     } else {
       setError(d?.error?.message ?? "Could not send the update — try again.");
     }

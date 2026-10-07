@@ -12,6 +12,7 @@ import { listProjectMembers } from "@/server/resources";
 import { getCurrentCheckIn } from "@/server/checkins";
 import { marketRagsForProject } from "@/server/rollout";
 import { registerOpenCount } from "@/server/project-register";
+import { getProjectSetup } from "@/server/project-setup";
 import { Forbidden } from "@/components/forbidden";
 import { ProjectWorkspace } from "@/components/workspace/project-workspace";
 import type { CheckInJson, ProjectPanelJson } from "@/components/panels/project-panel-json";
@@ -33,7 +34,7 @@ export default async function ProjectWorkspacePage({
 
   if (!(await canViewProject(ctx, id))) return <Forbidden />;
 
-  const [p, members, canContribute, canWrite, checkinView, openCount, membership, portfolios, viewerCategory] = await Promise.all([
+  const [p, members, canContribute, canWrite, checkinView, openCount, membership, portfolios, viewerCategory, setup] = await Promise.all([
     getProjectPanelData(ctx, id),
     listProjectMembers(ctx, id),
     canContributeToProject(ctx, id),
@@ -54,6 +55,8 @@ export default async function ProjectWorkspacePage({
     // DM1.43: ONE computation shared with the tasks API, so the toggles the page renders
     // and the rows the server returns can never disagree.
     viewerBoardCategory(ctx, id),
+    // First-week walkthrough — the per-project "Set up {code}" card's five signals.
+    getProjectSetup(ctx, id),
   ]);
   // M-P2c — dependency picker candidates (active projects only). DM1.73: capped — this
   // feeds a <select> in the Register's Dependencies tab, and an unbounded findMany on a
@@ -105,6 +108,7 @@ export default async function ProjectWorkspacePage({
     })),
     checkin,
     registerOpenCount: openCount,
+    setup,
     isMember: membership.isMember, // viewer leads or is allocated → hides "Request to join"
   };
 

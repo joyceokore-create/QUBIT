@@ -1,5 +1,7 @@
 "use client";
 
+import { dispatchTourEvent } from "@/components/tour/tour-events";
+
 import { useCallback, useEffect, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { AssignMembersDialog } from "@/components/panels/assign-members-dialog";
@@ -102,7 +104,10 @@ export function ProjectResourcesSection({ projectId, canEdit }: { projectId: str
           <AssignMembersDialog
             projectId={projectId}
             existingUserIds={members.map((m) => m.userId)}
-            onDone={() => void load()}
+            onDone={() => {
+              dispatchTourEvent("member-added");
+              void load();
+            }}
           />
         </div>
       )}

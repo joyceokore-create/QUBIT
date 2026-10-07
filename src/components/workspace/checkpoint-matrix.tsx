@@ -1,5 +1,7 @@
 "use client";
 
+import { dispatchTourEvent } from "@/components/tour/tour-events";
+
 import { useEffect, useState } from "react";
 import { Loader2, ShieldAlert, TriangleAlert } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -67,6 +69,7 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
       setData((prev) => (prev ? { ...prev, ...next } : prev));
       setGateBlock(null);
       setOverrideReason("");
+      if (key === "template" && body.templateId) dispatchTourEvent("template-attached");
     }
     setBusy(null);
   };
@@ -79,11 +82,12 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
           <span className="font-mono text-[9.5px] font-bold tabular-nums text-[var(--qink)]">{data.progress}%</span>
         )}
         {data.canGovern ? (
+          <span data-tour="gate-template" className="ml-auto inline-flex">
           <Select
             value={data.templateId ?? "none"}
             onValueChange={(v) => void patch({ templateId: v === "none" ? null : v }, "template")}
           >
-            <SelectTrigger className="ml-auto h-7 w-[168px] text-[11px]" aria-label="Checkpoint template">
+            <SelectTrigger className="h-7 w-[168px] text-[11px]" aria-label="Checkpoint template">
               <SelectValue placeholder="No template">{data.templateName ?? "No template"}</SelectValue>
             </SelectTrigger>
             <SelectContent>
@@ -95,6 +99,7 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
               ))}
             </SelectContent>
           </Select>
+          </span>
         ) : (
           data.templateName && (
             <span className="ml-auto font-mono text-[9px] uppercase tracking-[.8px] text-[var(--ink5)]">{data.templateName}</span>
