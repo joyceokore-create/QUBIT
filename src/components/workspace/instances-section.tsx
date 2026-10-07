@@ -43,7 +43,18 @@ export function InstancesSection({
   // docs/38 — at All every market is a column (edit any); with a market selected, that
   // market alone is edited.
   const allColumns: { orgUnitId: string | null; label: string }[] = [{ orgUnitId: null, label: "Product" }, ...markets.map((m) => ({ orgUnitId: m.orgUnitId, label: `${m.flag ? `${m.flag} ` : ""}${m.code}` }))];
-  const columns = selected.market ? allColumns.filter((c) => c.orgUnitId === selected.market) : allColumns;
+  // Joyce (2026-10-07): with a market selected only that market shows and is edited; at
+  // "All" one "All markets" column edits every market at once and the markets read-only.
+  const columns = selected.market
+    ? allColumns.filter((c) => c.orgUnitId === selected.market).map((c) => ({ ...c, editable: true, all: false }))
+    : allColumns.length > 1
+      ? [{ orgUnitId: null as string | null, label: "All markets", editable: true, all: true }, ...allColumns.filter((c) => c.orgUnitId !== null).map((c) => ({ ...c, editable: false, all: false }))]
+      : allColumns.map((c) => ({ ...c, editable: true, all: false }));
+  /** The state a row shows in the "All markets" column: the shared one, or "" when markets differ. */
+  const allState = (cells: { orgUnitId: string | null; state: string }[]) => {
+    const states = [...new Set(cells.filter((c) => c.orgUnitId !== null).map((c) => c.state))];
+    return states.length === 1 ? states[0]! : states.length === 0 ? (cells.find((c) => c.orgUnitId === null)?.state ?? "Planned") : "";
+  };
 
   const call = async (key: string, url: string, init: RequestInit) => {
     setBusy(key);
@@ -66,8 +77,8 @@ export function InstancesSection({
       setAdding(false);
     }
   };
-  const setState = (instanceId: string, orgUnitId: string | null, state: string) =>
-    call(`${instanceId}:${orgUnitId ?? "-"}`, `/api/projects/${projectId}/instances/${instanceId}/state`, { method: "PUT", body: JSON.stringify({ orgUnitId, state }) });
+  const setState = (instanceId: string, orgUnitId: string | null, state: string, allMarkets = false) =>
+    call(`${instanceId}:${orgUnitId ?? "-"}`, `/api/projects/${projectId}/instances/${instanceId}/state`, { method: "PUT", body: JSON.stringify({ orgUnitId, state, allMarkets }) });
   const remove = (instanceId: string) => call(instanceId, `/api/projects/${projectId}/instances/${instanceId}`, { method: "DELETE" });
 
   return (
@@ -132,21 +143,24 @@ export function InstancesSection({
                     </span>
                   </td>
                   {columns.map((c) => {
-                    const cell = r.cells.find((x) => x.orgUnitId === c.orgUnitId) ?? { orgUnitId: c.orgUnitId, state: "Planned", note: null, progress: 0 };
+                    const base = r.cells.find((x) => x.orgUnitId === c.orgUnitId) ?? { orgUnitId: c.orgUnitId, state: "Planned", note: null, progress: 0 };
+            const cell = c.all ? { ...base, state: allState(r.cells) } : base;
                     const on = selected.instance === r.id && selected.market === c.orgUnitId;
                     const tok = STATE_TOK[cell.state] ?? "--ink4";
+            const mixed = c.all && cell.state === "";
                     const k = `${r.id}:${c.orgUnitId ?? "-"}`;
                     return (
                       <td key={k} className="px-2 py-2 text-center">
                         <div className="inline-flex flex-col items-center gap-1">
-                          {canManage ? (
+                          {canManage && c.editable ? (
                             <select
                               value={cell.state}
-                              onChange={(e) => void setState(r.id, c.orgUnitId, e.target.value)}
+                              onChange={(e) => e.target.value && void setState(r.id, c.all ? null : c.orgUnitId, e.target.value, c.all)}
                               aria-label={`${r.name} · ${c.label} state`}
                               className={`h-6 rounded-full border px-2 text-[11px] font-semibold ${FOCUS}`}
                               style={{ color: `var(${tok})`, borderColor: `color-mix(in oklab, var(${tok}) 40%, transparent)`, background: `color-mix(in oklab, var(${tok}) 10%, transparent)` }}
                             >
+                              {mixed && <option value="">Mixed</option>}
                               {STATES.map((s) => (
                                 <option key={s} value={s}>
                                   {STATE_LABEL[s]}
@@ -155,7 +169,7 @@ export function InstancesSection({
                             </select>
                           ) : (
                             <span className="rounded-full border px-2 py-0.5 text-[11px] font-semibold" style={{ color: `var(${tok})`, borderColor: `color-mix(in oklab, var(${tok}) 40%, transparent)` }}>
-                              {STATE_LABEL[cell.state] ?? cell.state}
+                              {mixed ? "Mixed" : (STATE_LABEL[cell.state] ?? cell.state)}
                             </span>
                           )}
                           <button

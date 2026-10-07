@@ -66,7 +66,7 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
             method: "PATCH",
             headers: { "content-type": "application/json" },
             // docs/38 — at All (no market) a state change applies to every market's row too.
-            body: JSON.stringify("templateId" in body ? body : { ...body, orgUnitId, moduleId, applyToMarkets: !orgUnitId }),
+            body: JSON.stringify("templateId" in body ? body : { ...body, orgUnitId, moduleId, allMarkets: !orgUnitId }),
           });
     if (res.status === 409) {
       // Gate unmet — show the checklist and offer the override rather than failing flat.

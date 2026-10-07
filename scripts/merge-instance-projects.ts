@@ -77,9 +77,9 @@ async function main() {
 
     for (const g of GROUPS) {
       const shells = await tx.project.findMany({
-        where: { code: { startsWith: g.prefix }, status: { not: "Cancelled" } },
+        where: { code: { startsWith: g.prefix } },
         select: {
-          id: true, code: true, name: true, portfolioId: true, programmeId: true, checkpointTemplateId: true, leadUserId: true,
+          id: true, code: true, name: true, status: true, portfolioId: true, programmeId: true, checkpointTemplateId: true, leadUserId: true,
           _count: { select: { projectTasks: true, documents: true, risks: true, checkIns: true, checkpointStatuses: true, members: true } },
         },
         orderBy: { code: "asc" },
@@ -123,15 +123,17 @@ async function main() {
           console.log(`  ${s.code}: no org unit for ${mk} — left alone`);
           continue;
         }
-        console.log(`  ${s.code} → instance ${unit.code}; archive shell`);
+        console.log(`  ${s.code} → market ${unit.code}; delete the empty shell`);
         if (DRY || !product) continue;
         const existing = await tx.projectOrgStatus.findUnique({ where: { projectId_orgUnitId: { projectId: product.id, orgUnitId: unit.id } }, select: { id: true } });
         if (!existing) {
           const row = await tx.projectOrgStatus.create({ data: { tenantId: ctx.tenantId, projectId: product.id, orgUnitId: unit.id, progress: 0, status: "Planning" } });
           await audit(tx, ctx, { action: "create", entityType: "project_instance", entityId: row.id, after: { projectId: product.id, orgUnitId: unit.id, code: unit.code, mergedFrom: s.code } });
         }
-        await tx.project.update({ where: { id: s.id }, data: { status: "Cancelled", statusNote: `Merged into ${g.code} as its ${unit.code} market (docs/38).` } });
-        await audit(tx, ctx, { action: "update", entityType: "project", entityId: s.id, before: { status: "Planning" }, after: { status: "Cancelled", mergedInto: g.code, market: unit.code } });
+        // The shell is EMPTY (asserted above) — delete it rather than leave a "Cancelled"
+        // project in every list; the audit row keeps the mapping.
+        await audit(tx, ctx, { action: "delete", entityType: "project", entityId: s.id, before: { code: s.code, name: s.name, status: s.status }, after: { mergedInto: g.code, market: unit.code, reason: "docs/38 §7 — empty per-market shell" } });
+        await tx.project.delete({ where: { id: s.id } });
       }
       // Named instances with their state per market (idempotent on code).
       for (const [i, inst] of (g.instances ?? []).entries()) {

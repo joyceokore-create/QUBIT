@@ -224,10 +224,6 @@ export async function setCheckpointState(
   projectId: string,
   input: SetCheckpointStateInputT,
   scope?: GateScope,
-  /** docs/38 — at "All" (no market in scope) the change also lands on every live market's
-   * row for the same track, so editing once edits all markets; a market in scope edits
-   * that market only. */
-  options: { applyToMarkets?: boolean } = {},
 ): Promise<ProjectCheckpoints> {
   await withTenant(ctx, async (tx) => {
     if (scope?.orgUnitId) {
@@ -308,18 +304,7 @@ export async function setCheckpointState(
           },
         });
       }
-      let marketsTouched = 0;
-      if (options.applyToMarkets && !scope?.orgUnitId) {
-        const markets = await tx.projectOrgStatus.findMany({ where: { projectId, retiredAt: null }, select: { orgUnitId: true } });
-        for (const m of markets) {
-          const row = await tx.checkpointStatus.findFirst({ where: { projectId, checkpointId: input.checkpointId, orgUnitId: m.orgUnitId, moduleId: scope?.moduleId ?? null }, select: { id: true, state: true } });
-          if (row?.state === input.state) continue;
-          if (row) await tx.checkpointStatus.update({ where: { id: row.id }, data: { state: input.state, blockerId, ...overrideData } });
-          else await tx.checkpointStatus.create({ data: { tenantId: ctx.tenantId, projectId, checkpointId: input.checkpointId, orgUnitId: m.orgUnitId, moduleId: scope?.moduleId ?? null, state: input.state, blockerId, ...overrideData } });
-          marketsTouched++;
-        }
-      }
-      if (before?.state === input.state && marketsTouched === 0) return;
+      if (before?.state === input.state) continue;
 
       await audit(tx, ctx, {
         action: "update",
@@ -329,7 +314,6 @@ export async function setCheckpointState(
         after: {
           state: input.state,
           checkpoint: checkpoint.name,
-          ...(marketsTouched ? { appliedToMarkets: marketsTouched } : {}),
           ...(unitScope.orgUnitId ? { orgUnitId: unitScope.orgUnitId } : {}),
           ...(scope?.moduleId ? { moduleId: scope.moduleId } : {}),
           ...(override ? { gateOverridden: true, overrideReason: override.reason } : {}),

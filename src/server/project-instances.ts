@@ -194,6 +194,8 @@ export const SetInstanceStateInput = z.object({
   orgUnitId: z.string().uuid().nullable(),
   state: z.enum(INSTANCE_STATES),
   note: z.string().trim().max(200).nullable().optional(),
+  /** At "All": apply to the product level and every live market at once. */
+  allMarkets: z.boolean().optional(),
 });
 
 /** The state of one instance in one market (or at product level). Audited; event `instance.state_changed`. */
@@ -207,14 +209,21 @@ export async function setInstanceState(ctx: TenantContext, projectId: string, in
       const mk = await tx.projectOrgStatus.findFirst({ where: { projectId, orgUnitId: input.orgUnitId, retiredAt: null }, select: { id: true } });
       if (!mk) throw new ProjectInstanceError("That market is not on this project.", "BAD_MARKET");
     }
-    const existing = await tx.moduleInstanceStatus.findFirst({ where: { moduleId: instanceId, orgUnitId: input.orgUnitId }, select: { id: true, state: true, note: true } });
-    const data = { state: input.state, note: input.note === undefined ? undefined : input.note, updatedById: ctx.userId };
-    const row = existing
-      ? await tx.moduleInstanceStatus.update({ where: { id: existing.id }, data })
-      : await tx.moduleInstanceStatus.create({ data: { tenantId: ctx.tenantId, projectId, moduleId: instanceId, orgUnitId: input.orgUnitId, ...data, note: input.note ?? null } });
-    if (existing?.state === input.state && (input.note === undefined || input.note === existing.note)) return;
-    await audit(tx, ctx, { action: "update", entityType: "instance_state", entityId: row.id, before: { state: existing?.state ?? "Planned" }, after: { instance: inst.code, orgUnitId: input.orgUnitId, state: input.state, note: input.note ?? undefined } });
-    await emitDomainEvent(tx, ctx, { type: "instance.state_changed", entityType: "instance_state", entityId: row.id, payload: { projectId, instanceId, orgUnitId: input.orgUnitId, from: existing?.state ?? "Planned", to: input.state } });
+    // The selected market, or — at "All" — the product level plus every live market.
+    const units: (string | null)[] =
+      input.allMarkets && !input.orgUnitId
+        ? [null, ...(await tx.projectOrgStatus.findMany({ where: { projectId, retiredAt: null }, select: { orgUnitId: true } })).map((m) => m.orgUnitId)]
+        : [input.orgUnitId];
+    for (const orgUnitId of units) {
+      const existing = await tx.moduleInstanceStatus.findFirst({ where: { moduleId: instanceId, orgUnitId }, select: { id: true, state: true, note: true } });
+      const data = { state: input.state, note: input.note === undefined ? undefined : input.note, updatedById: ctx.userId };
+      const row = existing
+        ? await tx.moduleInstanceStatus.update({ where: { id: existing.id }, data })
+        : await tx.moduleInstanceStatus.create({ data: { tenantId: ctx.tenantId, projectId, moduleId: instanceId, orgUnitId, ...data, note: input.note ?? null } });
+      if (existing?.state === input.state && (input.note === undefined || input.note === existing.note)) continue;
+      await audit(tx, ctx, { action: "update", entityType: "instance_state", entityId: row.id, before: { state: existing?.state ?? "Planned" }, after: { instance: inst.code, orgUnitId, state: input.state, note: input.note ?? undefined } });
+      await emitDomainEvent(tx, ctx, { type: "instance.state_changed", entityType: "instance_state", entityId: row.id, payload: { projectId, instanceId, orgUnitId, from: existing?.state ?? "Planned", to: input.state } });
+    }
   });
   return listProjectInstances(ctx, projectId, kindSet);
 }

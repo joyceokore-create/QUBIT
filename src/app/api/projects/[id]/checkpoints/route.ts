@@ -30,7 +30,7 @@ const STATUS: Record<CheckpointError["code"], number> = {
 
 // docs/38 — ?orgUnitId= scopes the matrix to one instance's gates, ?moduleId= to one
 // module's own gates (both: that module in that instance). PATCH carries the same scope.
-const Scope = z.object({ orgUnitId: z.string().uuid().nullable().optional(), moduleId: z.string().min(1).nullable().optional(), applyToMarkets: z.boolean().optional() });
+const Scope = z.object({ orgUnitId: z.string().uuid().nullable().optional(), moduleId: z.string().min(1).nullable().optional(), allMarkets: z.boolean().optional() });
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const guard = await requirePermission("project:read");
@@ -74,7 +74,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const data =
       "templateId" in parsed.data
         ? await setProjectTemplate(ctx, id, parsed.data.templateId)
-        : await setCheckpointState(ctx, id, parsed.data, { orgUnitId: parsed.data.orgUnitId ?? null, moduleId: parsed.data.moduleId ?? null }, { applyToMarkets: parsed.data.applyToMarkets === true });
+        : await setCheckpointState(ctx, id, parsed.data, { orgUnitId: parsed.data.orgUnitId ?? null, moduleId: parsed.data.moduleId ?? null, allMarkets: parsed.data.allMarkets === true });
     return NextResponse.json(data);
   } catch (e) {
     if (e instanceof CheckpointError) {
