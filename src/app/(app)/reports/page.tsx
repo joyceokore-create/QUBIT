@@ -103,6 +103,8 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
                 isoWeek={week}
                 isCurrent={data.week.isCurrent}
                 canNudge={data.can.nudge}
+                canUpload={!previewing}
+                openUploadOnLoad={sp.upload === "1" && !previewing && data.week.isCurrent}
                 header={data.header}
                 groups={data.groups.map((g) => ({
                   portfolioName: g.portfolioName,

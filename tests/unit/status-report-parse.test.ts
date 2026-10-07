@@ -141,7 +141,7 @@ describe("helpers", () => {
     expect(matchProject("Lumi (AI Knowledge Layer)", projects)).toEqual({ projectId: "1", confidence: "exact" });
     expect(matchProject("qora", projects)).toEqual({ projectId: "3", confidence: "exact" });
     expect(matchProject("swipe-ke", projects)).toEqual({ projectId: "2", confidence: "exact" });
-    expect(matchProject("Swipe Agent Banking Kenya rollout", projects)).toEqual({ projectId: "2", confidence: "suggested" });
+    expect(matchProject("Swipe Agent Banking Kenya rollout", projects)).toEqual({ projectId: "2", confidence: "exact" });
     expect(matchProject("Totally Different", projects)).toEqual({ projectId: null, confidence: "none" });
   });
 });
@@ -151,6 +151,10 @@ describe("helpers", () => {
 // in-flight "Where we are" item as the stage, report date / PM when they are real.
 const slide = (lines: string[]) =>
   `<p:sld><p:cSld><p:spTree>${lines.map((l) => `<p:sp><p:txBody><a:p><a:r><a:t>${l}</a:t></a:r></a:p></p:txBody></p:sp>`).join("")}</p:spTree></p:cSld></p:sld>`;
+/** A positioned shape (points → EMU), one paragraph per line. */
+const shape = (x: number, y: number, w: number, h: number, ...lines: string[]) =>
+  `<p:sp><p:spPr><a:xfrm><a:off x="${x * 12700}" y="${y * 12700}"/><a:ext cx="${w * 12700}" cy="${h * 12700}"/></a:xfrm></p:spPr><p:txBody>${lines.map((l) => `<a:p><a:r><a:t>${l}</a:t></a:r></a:p>`).join("")}</p:txBody></p:sp>`;
+const laidOut = (...shapes: string[]) => `<p:sld><p:cSld><p:spTree>${shapes.join("")}</p:spTree></p:cSld></p:sld>`;
 
 describe("parsePptx", () => {
   it("reads a Keza-style one-pager and a Swipe-style deck slide", () => {
@@ -168,6 +172,59 @@ describe("parsePptx", () => {
     expect(r.rows[1]!.update).toMatch(/^5 of 6 markets/);
     expect(r.reportDate).toBe("30 Sep 2026");
     expect(r.preparedBy).toBeNull(); // "[Name]" placeholders are not people
+  });
+  it("reads a channels-by-market grid, a banner list, dimension pills and headed sections by position", () => {
+    const xml = laidOut(
+      shape(36, 21, 547, 39, "Swipe Agent Banking Solution"),
+      shape(619, 21, 304, 30, "OVERALL STATUS: AMBER"),
+      shape(50, 126, 180, 15, "REQUIREMENTS"),
+      shape(50, 141, 180, 25, "Amber"),
+      shape(36, 187, 540, 20, "DEPLOYED CHANNELS BY MARKET"),
+      shape(144, 212, 72, 23, "P20 POS"),
+      shape(220, 212, 72, 23, "USSD"),
+      shape(36, 241, 100, 24, "Kenya"),
+      shape(144, 241, 72, 23, "LIVE"),
+      shape(220, 241, 72, 23, "LIVE"),
+      shape(36, 268, 100, 24, "Rwanda"),
+      shape(144, 268, 72, 23, "UAT"),
+      shape(220, 268, 72, 23, "N/A"),
+      shape(615, 194, 293, 20, "HAL: NEWPOS DEVICE REPAIR &amp; MAINTENANCE"),
+      shape(615, 221, 82, 18, "Kenya"),
+      shape(698, 221, 210, 18, "LIVE  |  ACTIVELY MANAGING POS"),
+      shape(615, 244, 82, 18, "Rwanda"),
+      shape(698, 244, 210, 18, "NOT YET LIVE"),
+      shape(36, 439, 286, 18, "RISKS &amp; ISSUES"),
+      shape(36, 459, 286, 72, "Rwanda: all 6 channels still in UAT", "KCB and Riverbank device handling still being harmonised"),
+      shape(336, 439, 286, 18, "NEXT STEPS"),
+      shape(336, 459, 286, 72, "Complete UAT: Rwanda"),
+      shape(615, 358, 293, 36, "Focus now: the project team is learning and streamlining device handling between the teams."),
+    );
+    const r = parsePptx(zip({ "ppt/slides/slide1.xml": xml, "ppt/presentation.xml": `<p:presentation><p:sldSz cx="${960 * 12700}" cy="${540 * 12700}"/></p:presentation>` }));
+    const row = r.rows[0]!;
+    expect(row).toMatchObject({ project: "Swipe Agent Banking Solution", status: "Amber" });
+    expect(row.update).toMatch(/^Focus now:/);
+    expect(row.cells).toEqual([
+      { column: "P20 POS", row: "Kenya", stateRaw: "LIVE", note: null },
+      { column: "USSD", row: "Kenya", stateRaw: "LIVE", note: null },
+      { column: "P20 POS", row: "Rwanda", stateRaw: "UAT", note: null },
+      { column: "USSD", row: "Rwanda", stateRaw: "N/A", note: null },
+      { column: "HAL: NEWPOS DEVICE REPAIR & MAINTENANCE", row: "Kenya", stateRaw: "LIVE", note: "ACTIVELY MANAGING POS" },
+      { column: "HAL: NEWPOS DEVICE REPAIR & MAINTENANCE", row: "Rwanda", stateRaw: "NOT YET LIVE", note: null },
+    ]);
+    expect(row.dimensions).toEqual([{ name: "Requirements", value: "Amber" }]);
+    expect(row.sections).toEqual([
+      { title: "Risks & issues", lines: ["Rwanda: all 6 channels still in UAT", "KCB and Riverbank device handling still being harmonised"] },
+      { title: "Next steps", lines: ["Complete UAT: Rwanda"] },
+    ]);
+  });
+  it("lists every 'Where we are' stage with its state and note", () => {
+    const r = parsePptx(zip({ "ppt/slides/slide1.xml": slide(["Keza", "AMBER", "Where we are", "1 · COMPLETE", "User journeys", "Shared with stakeholders.", "2 · IN REVIEW", "BRD v1 (Riverbank)", "With stakeholders; BA reviewing.", "3 · ON HOLD", "Finalize build"]) }));
+    expect(r.rows[0]!.gates).toEqual([
+      { name: "User journeys", stateRaw: "COMPLETE", note: "Shared with stakeholders." },
+      { name: "BRD v1 (Riverbank)", stateRaw: "IN REVIEW", note: "With stakeholders; BA reviewing." },
+      { name: "Finalize build", stateRaw: "ON HOLD", note: "" },
+    ]);
+    expect(r.rows[0]!.stage).toBe("BRD v1 (Riverbank) · in review");
   });
   it("warns per slide without a RAG and refuses a deck without slides", () => {
     const r = parsePptx(zip({ "ppt/slides/slide1.xml": slide(["Lumi", "A short line that says enough to be a headline here."]) }));

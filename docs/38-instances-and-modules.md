@@ -116,6 +116,18 @@ render); modules still work at product level (one state column, "Product").
   `status-report-upload matchableProjects`, `tour.ts`, `access.ts canWriteProject`): when
   `pmScope = instance`, instance leads are PMs of the product too. `canWriteProject` stays
   project-wide (an instance lead can edit the product — simple, auditable; revisit if abused).
+- Status-report upload (Joyce, 2026-10-07 — "update effectively each gate and status"): a
+  PowerPoint one-pager is read by GEOMETRY (`parse.ts slideStructure`) as well as text, and
+  `lib/status-report-delivery.ts resolveDelivery` turns it into a plan against the project's
+  delivery catalog (`getDeliveryCatalog`: markets, modules, gates, current states): the "Where
+  we are" stages → gate states on the Product build track (at product level the product row
+  AND every market, the same rule as the Delivery tab's "All"; a market one-pager → that
+  market's copy); a channels-by-market grid or a per-market list under a banner ("HAL: …") →
+  module states per market; a slide titled after a market ("Swipe Rwanda") → that market's
+  check-in instead of the product's weekly update. The dialog shows every change as from → to
+  with a tick; `applyStatusReport` writes only what was ticked, through `setCheckpointState`,
+  `setInstanceState` and `saveMarketCheckIn` (audited as always). Unmapped slide items are
+  listed as "Not placed", never guessed. Catalog on demand: `GET /api/reports/status-upload/catalog`.
 - Lists: `listProjectTasks`, `listDocuments`, `listRisks`, `listIssues`, `listBlockers`,
   `listMilestones` accept `{ orgUnitId?, moduleId? }`; create/update inputs accept the tags only when
   `instanceTagging` is on (else 400 `TAGGING_OFF`). Materialising a risk and blocking a task copy the

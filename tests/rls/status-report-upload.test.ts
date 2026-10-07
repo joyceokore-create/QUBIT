@@ -7,7 +7,12 @@ import { prisma } from "@/lib/db";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { isoWeekId, shiftIsoWeek } from "@/lib/iso-week";
 import { confirmCheckIn, getCurrentCheckIn } from "@/server/checkins";
-import { applyStatusReport } from "@/server/status-report-upload";
+import { getProjectCheckpoints } from "@/server/checkpoints";
+import { addMarkets } from "@/server/markets";
+import { createProjectInstance, listProjectInstances } from "@/server/project-instances";
+import { getMarketTrack } from "@/server/rollout";
+import { applyStatusReport, getDeliveryCatalog } from "@/server/status-report-upload";
+import { resolveDelivery } from "@/lib/status-report-delivery";
 import { createUsers, cleanupFixtureUsers } from "./_users";
 
 const NOW = new Date("2026-10-07T10:00:00Z");
@@ -22,6 +27,8 @@ describe("status-report upload — apply", () => {
   let mineSent: string;
   let notMine: string;
   let foreign: string;
+  let product: string;
+  let marketA: string;
 
   beforeAll(async () => {
     const [rb, db] = await Promise.all([prisma.tenant.findUnique({ where: { slug: "riverbank" } }), prisma.tenant.findUnique({ where: { slug: "demo-b" } })]);
@@ -36,11 +43,19 @@ describe("status-report upload — apply", () => {
     [mine, mineSent, notMine] = await Promise.all([mk(pm, "SRU-A", pm.userId), mk(pm, "SRU-B", pm.userId), mk(pm, "SRU-C", other.userId)]);
     foreign = await mk({ tenantId: dbId, userId: "seed", roles: ["HeadOfProjects"] }, "SRU-X", null);
     await confirmCheckIn(pm, mineSent, { narrative: "Already sent this week." }, NOW);
+    // docs/38 — a product with a gate template, one market and one module, for the slide case.
+    await withTenant(pm, async (tx) => {
+      marketA = (await tx.orgUnit.findFirstOrThrow({ where: { kind: "Market" }, select: { id: true }, orderBy: { code: "asc" } })).id;
+      const templateId = (await tx.checkpointTemplate.findFirst({ select: { id: true } }))?.id ?? null;
+      product = (await tx.project.create({ data: { tenantId: rbId, code: "SRU-P", name: "Upload product", type: "Project", priority: "Med", status: "OnTrack", leadUserId: pm.userId, checkpointTemplateId: templateId }, select: { id: true } })).id;
+    });
+    await addMarkets(pm, product, { orgUnitIds: [marketA] });
+    await createProjectInstance(pm, product, { name: "USSD", kind: "module" });
   });
 
   afterAll(async () => {
     await withTenant(pm, async (tx) => {
-      const ids = [mine, mineSent, notMine];
+      const ids = [mine, mineSent, notMine, product];
       await tx.projectDocument.deleteMany({ where: { projectId: { in: ids } } });
       await tx.checkIn.deleteMany({ where: { projectId: { in: ids } } });
       await tx.notification.deleteMany({ where: { createdAt: { gte: new Date(Date.now() - 120_000) }, link: { contains: "/reports" } } });
@@ -112,5 +127,59 @@ describe("status-report upload — apply", () => {
     await expect(applyStatusReport(pm, { week: shiftIsoWeek(WEEK, 2), rows: [{ projectId: mine, rag: "Green", stage: "", narrative: "Future." }] }, NOW)).rejects.toThrow(/hasn't happened/);
     const foreignDocs = await withTenant({ tenantId: dbId, userId: "seed" }, (tx) => tx.projectDocument.count({ where: { projectId: foreign } }));
     expect(foreignDocs).toBe(0);
+  });
+
+  it("writes a slide's gates on every market at product level, module states per market, and a market one-pager as that market's check-in", async () => {
+    const catalog = (await getDeliveryCatalog(pm, product))!;
+    const market = catalog.markets[0]!;
+    const ussd = catalog.modules.find((m) => m.name === "USSD")!;
+    const gate = catalog.gates[0];
+    // Product slide: first gate complete, USSD live in the market.
+    const plan = resolveDelivery(
+      { project: "Upload product", gates: gate ? [{ name: gate.name, stateRaw: "COMPLETE", note: "" }] : [], cells: [{ row: market.name, column: "USSD", stateRaw: "LIVE", note: "Rolled out" }] },
+      catalog,
+    );
+    expect(plan.market).toBeNull();
+    expect(plan.modules).toHaveLength(1);
+    const [productRow] = await applyStatusReport(
+      pm,
+      {
+        rows: [
+          {
+            projectId: product,
+            rag: "Green",
+            stage: "",
+            narrative: "Product slide.",
+            target: "project",
+            gates: plan.gates.map((g) => ({ checkpointId: g.checkpointId, state: g.to })),
+            modules: plan.modules.map((m) => ({ moduleId: m.moduleId, orgUnitId: m.orgUnitId, state: m.to, note: m.note })),
+          },
+        ],
+      },
+      NOW,
+    );
+    expect(productRow).toMatchObject({ outcome: "drafted", problems: [] });
+    if (gate) {
+      // Product row AND the market's copy both moved (docs/38: at "All" the same gate everywhere).
+      expect((await getProjectCheckpoints(pm, product)).rows[0]!.state).toBe("Done");
+      expect((await getProjectCheckpoints(pm, product, { orgUnitId: market.orgUnitId })).rows[0]!.state).toBe("Done");
+      expect(productRow!.gates).toMatch(/done/);
+    }
+    const cells = (await listProjectInstances(pm, product, "module")).find((m) => m.id === ussd.id)!.cells;
+    expect(cells.find((c) => c.orgUnitId === market.orgUnitId)).toMatchObject({ state: "Live", note: "Rolled out" });
+    expect(productRow!.modules).toBe("1 state updated");
+
+    // Market one-pager ("Upload product <Market>"): the market's check-in, not the product's draft.
+    const [marketRow] = await applyStatusReport(
+      pm,
+      { rows: [{ projectId: product, rag: "Amber", stage: "", narrative: "Market focus and blockers.", target: "market", orgUnitId: market.orgUnitId, modules: [{ moduleId: ussd.id, orgUnitId: market.orgUnitId, state: "UAT" }] }] },
+      NOW,
+    );
+    expect(marketRow).toMatchObject({ outcome: "market", market: market.code, modules: "1 state updated" });
+    expect((await getMarketTrack(pm, product, market.orgUnitId, NOW))?.checkIn).toMatchObject({ narrative: "Market focus and blockers.", rag: "Amber" });
+    expect((await getCurrentCheckIn(pm, product, NOW)).narrative).toBe("Product slide."); // untouched
+    // A market row needs its market.
+    const [bad] = await applyStatusReport(pm, { rows: [{ projectId: product, rag: "Amber", stage: "", narrative: "x", target: "market", orgUnitId: null }] }, NOW);
+    expect(bad).toMatchObject({ outcome: "error" });
   });
 });
