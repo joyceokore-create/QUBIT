@@ -108,8 +108,8 @@ export default async function ProjectWorkspacePage({
     .sort((a, b) => a.code.localeCompare(b.code));
   const initialMarket = sp.market && markets.some((i) => i.orgUnitId === sp.market) ? sp.market : null;
   // docs/38 — the product's named instances with their state per market.
-  const namedInstances = await listProjectInstances(ctx, id);
-  const initialInstance = sp.instance && namedInstances.some((i) => i.id === sp.instance) ? sp.instance : null;
+  const [namedInstances, modules] = await Promise.all([listProjectInstances(ctx, id, "instance"), listProjectInstances(ctx, id, "module")]);
+  const initialInstance = sp.instance && [...namedInstances, ...modules].some((i) => i.id === sp.instance) ? sp.instance : null;
 
   const checkin: CheckInJson = {
     ...checkinView,
@@ -144,6 +144,7 @@ export default async function ProjectWorkspacePage({
     markets,
     initialMarket,
     namedInstances,
+    modules,
     initialInstance,
     registerOpenCount: openCount,
     setup,

@@ -77,9 +77,31 @@ describe("named instances (docs/38)", () => {
     expect(renamed[0]!.name).toBe("For Schools (pilot)");
   });
 
+  it("a module is state-only until its own gates are switched on; it can sit under an instance", async () => {
+    const [inst] = await listProjectInstances(pm, projectId);
+    const mods = await createProjectInstance(pm, projectId, { name: "USSD", kind: "module" });
+    expect(mods).toHaveLength(1);
+    expect(mods[0]).toMatchObject({ kind: "module", ownGates: false, parentId: null, code: "USSD" });
+    expect(await listProjectInstances(pm, projectId)).toHaveLength(2); // instances unaffected
+    const ussd = mods[0]!;
+    const st = await setInstanceState(pm, projectId, ussd.id, { orgUnitId: marketA, state: "Live" });
+    expect(st.find((m) => m.id === ussd.id)!.cells.find((c) => c.orgUnitId === marketA)!.state).toBe("Live");
+    if (templateId) {
+      const first = (await getProjectCheckpoints(pm, projectId)).rows[0]!.checkpointId;
+      await expect(setCheckpointState(pm, projectId, { checkpointId: first, state: "InProgress" }, { moduleId: ussd.id, orgUnitId: marketA })).rejects.toMatchObject({ code: "TEMPLATE_MISMATCH" });
+      await updateProjectInstance(pm, projectId, ussd.id, { ownGates: true, parentId: inst!.id });
+      await setCheckpointState(pm, projectId, { checkpointId: first, state: "InProgress" }, { moduleId: ussd.id, orgUnitId: marketA });
+      const after = (await listProjectInstances(pm, projectId, "module")).find((m) => m.id === ussd.id)!;
+      expect(after).toMatchObject({ ownGates: true, parentId: inst!.id });
+      expect(after.cells.find((c) => c.orgUnitId === marketA)!.progress).toBeGreaterThan(0);
+    }
+    await expect(createProjectInstance(pm, projectId, { name: "Bad", kind: "module", parentId: "nope" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
   it("removes only an empty instance; the other tenant sees nothing", async () => {
     const rows = await listProjectInstances(pm, projectId);
     const withGates = rows.find((r) => r.code === "SCHOOLS")!;
+    // The instance now also carries a module → still HAS_WORK; the module itself (with gate rows) too.
     const empty = rows.find((r) => r.code === "SCHOOLS2")!;
     if (templateId) await expect(removeProjectInstance(pm, projectId, withGates.id)).rejects.toMatchObject({ code: "HAS_WORK" });
     expect((await removeProjectInstance(pm, projectId, empty.id)).map((r) => r.code)).toEqual(["SCHOOLS"]);

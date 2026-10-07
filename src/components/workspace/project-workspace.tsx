@@ -26,6 +26,7 @@ import { MarketSwitch } from "@/components/workspace/market-switch";
 import { MarketsTab } from "@/components/workspace/markets-tab";
 import { InstanceSwitch } from "@/components/workspace/instance-switch";
 import { InstancesSection } from "@/components/workspace/instances-section";
+import { ModulesSection } from "@/components/workspace/modules-section";
 import { MarketCheckInCard } from "@/components/workspace/market-checkin-card";
 import type { ProjectPanelJson } from "@/components/panels/project-panel-json";
 import { CARD_GLASS as CARD, CARD_BG, FOCUS, ragFill, ragToken } from "@/lib/surface";
@@ -93,10 +94,11 @@ export function ProjectWorkspace({
   const pathname = usePathname();
   const marketsList = data.markets ?? [];
   const namedInstances = data.namedInstances ?? [];
+  const modules = data.modules ?? [];
   const [market, setMarket] = useState<string | null>(data.initialMarket ?? null);
   const [instance, setInstance] = useState<string | null>(data.initialInstance ?? null);
   const selected = marketsList.find((i) => i.orgUnitId === market) ?? null;
-  const selectedInstance = namedInstances.find((i) => i.id === instance) ?? null;
+  const selectedInstance = [...namedInstances, ...modules].find((i) => i.id === instance) ?? null;
   const writeQuery = (key: "market" | "instance", id: string | null) => {
     const q = new URLSearchParams(window.location.search);
     if (id) q.set(key, id);
@@ -239,6 +241,18 @@ export function ProjectWorkspace({
                   selected={{ instance, market }}
                   onSelect={(instanceId, orgUnitId) => {
                     pickNamed(instanceId);
+                    pickInstance(orgUnitId);
+                  }}
+                />
+                <ModulesSection
+                  projectId={data.id}
+                  initial={modules}
+                  instances={namedInstances.map((i) => ({ id: i.id, name: i.name }))}
+                  markets={marketsList.map((m) => ({ orgUnitId: m.orgUnitId, code: m.code, flag: m.flag }))}
+                  canManage={canGovern}
+                  selected={{ instance, market }}
+                  onSelect={(moduleId, orgUnitId) => {
+                    pickNamed(moduleId);
                     pickInstance(orgUnitId);
                   }}
                 />

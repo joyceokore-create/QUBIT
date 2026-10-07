@@ -60,6 +60,8 @@ export const CreateProjectWizardInput = z.object({
   instanceLeads: z.record(z.string().uuid(), z.string().uuid()).optional(),
   /** docs/38 — named instances (Schools, Marketplace …) created with the project. */
   instanceNames: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
+  /** docs/38 — modules (components / channels) created with the project, under the product. */
+  moduleNames: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
   team: z.array(TeamRow).max(20).default([]),
   /** DM1.73 (docs/30 §5) — each becomes a ResourceRequest in the create transaction.
    * `.optional()` (not `.default`) so pre-existing callers' input type is unchanged. */
@@ -221,7 +223,10 @@ async function createOnce(ctx: TenantContext, input: CreateProjectWizardInputT) 
       });
     }
     for (const [i, name] of [...new Set(input.instanceNames ?? [])].entries()) {
-      await tx.projectModule.create({ data: { tenantId: ctx.tenantId, projectId: project.id, code: instanceCode(name, i), name, orderIndex: i } });
+      await tx.projectModule.create({ data: { tenantId: ctx.tenantId, projectId: project.id, code: instanceCode(name, i), name, orderIndex: i, kind: "instance", ownGates: true } });
+    }
+    for (const [i, name] of [...new Set(input.moduleNames ?? [])].entries()) {
+      await tx.projectModule.create({ data: { tenantId: ctx.tenantId, projectId: project.id, code: instanceCode(name, 50 + i), name, orderIndex: i, kind: "module", ownGates: false } });
     }
     for (const orgUnitId of instanceIds) {
       // A market starts untouched: 0% in Planning; gates and instance states move it.
@@ -280,6 +285,7 @@ async function createOnce(ctx: TenantContext, input: CreateProjectWizardInputT) 
         ...shape,
         instanceLeads: Object.keys(instanceLeads).length,
         namedInstances: input.instanceNames ?? [],
+        modules: input.moduleNames ?? [],
         team: input.team.map((t) => ({ userId: t.userId, role: t.role, allocationPct: t.allocationPct })),
         unfilledSeats: unfilledSeats.map((s) => ({ role: s.role, allocationPct: s.allocationPct })), // DM1.73
         document: input.document ? { title: input.document.title, kind: input.document.kind } : null,

@@ -193,6 +193,8 @@ model User {
    * /**
    * /**
    * /**
+   * /**
+   * /**
    * /** Hours available in a normal week — the denominator leave is subtracted from.
    */
   capacityHoursPerWeek   Int         @default(40) @map("capacity_hours_per_week")
@@ -1164,22 +1166,33 @@ model LessonLearned {
   @@map("lesson_learned")
 }
 
-// docs/38 — a MODULE of the product (POS, USSD, Marketplace …), defined once per project.
+// docs/38 — one row is either a named INSTANCE of the product (Asset Valuation "for
+// Schools": acts like its own project, own gates per market) or a MODULE (Swipe "USSD": a
+// component tracked by state per market; its own gates only when `ownGates`). A module
+// sits under the product or under one instance (`parentId`).
 model ProjectModule {
-  id                   String   @id @default(cuid())
-  tenantId             String   @map("tenant_id")
-  tenant               Tenant   @relation(fields: [tenantId], references: [id])
-  projectId            String   @map("project_id")
-  project              Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id                   String          @id @default(cuid())
+  tenantId             String          @map("tenant_id")
+  tenant               Tenant          @relation(fields: [tenantId], references: [id])
+  projectId            String          @map("project_id")
+  project              Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   code                 String
   name                 String
-  orderIndex           Int      @default(0) @map("order_index")
+  orderIndex           Int             @default(0) @map("order_index")
+  kind                 String          @default("instance") // instance | module
+  parentId             String?         @map("parent_id")
+  parent               ProjectModule?  @relation("ModuleParent", fields: [parentId], references: [id], onDelete: Cascade)
+  children             ProjectModule[] @relation("ModuleParent")
+  /**
+   * Modules: track their own gate states (instances always do).
+   */
+  ownGates             Boolean         @default(false) @map("own_gates")
   /**
    * moduleTracking = "gates": the template this module's own gates follow (default: the project's).
    */
-  checkpointTemplateId String?  @map("checkpoint_template_id")
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
+  checkpointTemplateId String?         @map("checkpoint_template_id")
+  createdAt            DateTime        @default(now()) @map("created_at")
+  updatedAt            DateTime        @updatedAt @map("updated_at")
 
   statuses           ModuleInstanceStatus[]
   checkpointStatuses CheckpointStatus[]

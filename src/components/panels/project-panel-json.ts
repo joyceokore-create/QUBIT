@@ -36,6 +36,9 @@ export interface NamedInstanceJson {
   code: string;
   name: string;
   orderIndex: number;
+  kind: "instance" | "module";
+  parentId: string | null;
+  ownGates: boolean;
   cells: { orgUnitId: string | null; state: string; note: string | null; progress: number }[];
 }
 
@@ -47,8 +50,10 @@ export interface ProjectPanelJson {
   /** docs/38 — the product's named instances (Schools, Marketplace …), each its own project
    *  with the same gate track in every market. */
   namedInstances?: NamedInstanceJson[];
-  /** docs/38 — the named instance the page opened on (?instance=). */
+  /** docs/38 — the named instance (or module with own gates) the page opened on (?instance=). */
   initialInstance?: string | null;
+  /** docs/38 — the product's modules (channels / components), under the product or an instance. */
+  modules?: NamedInstanceJson[];
   /** M-P2c — dependency-picker candidates (id/code/name of active projects, capped at 300). */
   allProjects?: { id: string; code: string; name: string }[];
   /** M-P2b — the Delivery tab's market strip (project × subsidiary tracks). Milestone A:

@@ -223,8 +223,9 @@ export async function setCheckpointState(
       if (!track) throw new CheckpointError("That instance is not on this project.", "NOT_FOUND");
     }
     if (scope?.moduleId) {
-      const mod = await tx.projectModule.findFirst({ where: { id: scope.moduleId, projectId }, select: { id: true } });
-      if (!mod) throw new CheckpointError("That module is not on this project.", "NOT_FOUND");
+      const mod = await tx.projectModule.findFirst({ where: { id: scope.moduleId, projectId }, select: { id: true, kind: true, ownGates: true, name: true } });
+      if (!mod) throw new CheckpointError("That instance or module is not on this project.", "NOT_FOUND");
+      if (mod.kind === "module" && !mod.ownGates) throw new CheckpointError(`${mod.name} is tracked by state per market — switch on "own gates" for it first.`, "TEMPLATE_MISMATCH");
     }
     const [project, checkpoint] = await Promise.all([
       tx.project.findUnique({ where: { id: projectId }, select: { checkpointTemplateId: true } }),

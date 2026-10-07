@@ -15,6 +15,11 @@ Builds on docs/18 §3 (market tracks) rather than replacing it. Decision record:
 > calls it `project-instances.ts`, the org-unit layer `markets.ts`. Everywhere below, read
 > "instance (org unit)" as **market** and "module" as **instance**. `instanceLabel` and
 > `moduleTracking` stay as columns but are not offered in the UI (always Market / gates).
+> **Modules kept (Joyce, 2026-10-07, later the same day):** a *module* is a component or
+> channel of the product or of one instance (Swipe P20 POS, USSD, Agent Portal …), tracked
+> by a state per market; **whether a module has its own gates is an option chosen when it
+> is added** (and switchable later). Same table (`project_module.kind = module`,
+> `parent_id`, `own_gates`); engine `project-instances.ts`; Modules grid on the Delivery tab.
 
 ## 0. What exists, what is missing (read-only audit, 2026-10-07)
 

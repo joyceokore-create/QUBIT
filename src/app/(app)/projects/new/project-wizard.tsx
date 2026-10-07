@@ -98,9 +98,11 @@ interface Draft {
   instanceTagging: boolean;
   pmScope: "product" | "instance";
   instanceLeads: Record<string, string>;
-  /** docs/38 — named instances to create with the project. */
+  /** docs/38 — named instances and modules to create with the project. */
   instanceNames: string[];
   instanceDraft: string;
+  moduleNames: string[];
+  moduleDraft: string;
 }
 
 const EMPTY: Draft = {
@@ -120,6 +122,8 @@ const EMPTY: Draft = {
   instanceLeads: {},
   instanceNames: [],
   instanceDraft: "",
+  moduleNames: [],
+  moduleDraft: "",
 };
 
 /** Mirrors src/server/projects.ts projectCodeBase for the live "auto: XYZ" hint. */
@@ -281,6 +285,7 @@ export function ProjectWizard({
         moduleTracking: "gates",
         instanceTagging: d.instanceTagging,
         instanceNames: d.instanceNames,
+        moduleNames: d.moduleNames,
         pmScope: d.pmScope,
         instanceLeads: d.pmScope === "instance" ? Object.fromEntries(Object.entries(d.instanceLeads).filter(([id, u]) => effectiveMarkets.includes(id) && u)) : undefined,
         team: filledTeam.map((t) => ({
@@ -502,6 +507,31 @@ export function ProjectWizard({
             <p className="mt-2 text-[11px] text-[var(--ink4)]">A named variant of the product (Asset Valuation for Schools, for Marketplace). Each runs as its own project — its own gates, the same track in every market above.</p>
           </div>
           <div className="mt-3">
+            <span className={LABEL}>Modules (optional)</span>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {d.moduleNames.map((n, i) => (
+                <Chip key={i} on onClick={() => set({ moduleNames: d.moduleNames.filter((_, j) => j !== i) })}>
+                  {n} ×
+                </Chip>
+              ))}
+              <input
+                value={d.moduleDraft}
+                onChange={(e) => set({ moduleDraft: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && d.moduleDraft.trim()) {
+                    e.preventDefault();
+                    set({ moduleNames: [...d.moduleNames, d.moduleDraft.trim()], moduleDraft: "" });
+                  }
+                }}
+                placeholder="e.g. POS, USSD, Agent Portal — Enter to add"
+                maxLength={60}
+                aria-label="Add a module"
+                className="h-8 min-w-[260px] rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-brand"
+              />
+            </div>
+            <p className="mt-2 text-[11px] text-[var(--ink4)]">Components or channels of the product, tracked by a state per market (Live, UAT, N/A). Whether a module has its own gates is chosen per module on the Delivery tab.</p>
+          </div>
+          <div className="mt-3">
             <span className={LABEL}>Who runs it</span>
             <div className="mt-2">
               <Chip on={d.pmScope === "product"} onClick={() => set({ pmScope: "product" })}>
@@ -686,6 +716,7 @@ export function ProjectWizard({
                 ],
                 ["Markets", `${marketCodes(effectiveMarkets)} · ${d.pmScope === "instance" ? "a lead per market" : "one PM"}${d.instanceTagging ? " · tagged work" : ""}`],
                 ["Instances", d.instanceNames.length ? d.instanceNames.join(", ") : "— the product itself"],
+                ["Modules", d.moduleNames.length ? d.moduleNames.join(", ") : "—"],
                 [
                   "Team",
                   filledTeam.length || unfilledSeats.length

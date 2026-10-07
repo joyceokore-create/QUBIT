@@ -30,9 +30,9 @@ function argValue(flag: string): string | undefined {
 const DRY = process.argv.includes("--dry-run");
 
 /** Shell code prefix → the product. The market is the part after the dash (KE, UG, DRC …).
- * `instances` = the product's named instances (docs/38: each runs its own track in every
- * market) with their state per market from the 29 Sep 2026 Swipe deck; markets not listed
- * for an instance are N/A. */
+ * `instances` = the product's MODULES (channels — docs/38: a state per market, no gates of
+ * their own) with their state per market from the 29 Sep 2026 Swipe deck; markets not
+ * listed for a module are N/A. */
 type State = "Planned" | "Build" | "UAT" | "Live" | "NotApplicable";
 const GROUPS: { prefix: string; code: string; name: string; description: string; instances?: { name: string; states: Record<string, State> }[] }[] = [
   { prefix: "ZED-", code: "ZED", name: "ZED ERP", description: "ZED ERP across the group's markets — one product, one market track each." },
@@ -40,7 +40,7 @@ const GROUPS: { prefix: string; code: string; name: string; description: string;
     prefix: "SWIPE-",
     code: "SWIPE",
     name: "Swipe Agent Banking",
-    description: "Swipe Agent Banking solution — channels (instances), markets and Hal device support.",
+    description: "Swipe Agent Banking solution — channels (modules), markets and Hal device support.",
     instances: [
       { name: "P20 POS", states: { KE: "Live", RW: "UAT" } },
       { name: "P30 POS", states: { KE: "Live", RW: "UAT" } },
@@ -125,12 +125,12 @@ async function main() {
       // Named instances with their state per market (idempotent on code).
       for (const [i, inst] of (g.instances ?? []).entries()) {
         const code = instanceCode(inst.name, i);
-        console.log(`  instance ${inst.name} (${code}): ${Object.entries(inst.states).map(([m, st]) => `${m}=${st}`).join(" ")}`);
+        console.log(`  module ${inst.name} (${code}): ${Object.entries(inst.states).map(([m, st]) => `${m}=${st}`).join(" ")}`);
         if (DRY || !product) continue;
         let mod = await tx.projectModule.findUnique({ where: { projectId_code: { projectId: product.id, code } }, select: { id: true } });
         if (!mod) {
-          mod = await tx.projectModule.create({ data: { tenantId: ctx.tenantId, projectId: product.id, code, name: inst.name, orderIndex: i }, select: { id: true } });
-          await audit(tx, ctx, { action: "create", entityType: "project_instance", entityId: mod.id, after: { projectId: product.id, code, name: inst.name, reason: "docs/38 §7" } });
+          mod = await tx.projectModule.create({ data: { tenantId: ctx.tenantId, projectId: product.id, code, name: inst.name, orderIndex: i, kind: "module", ownGates: false }, select: { id: true } });
+          await audit(tx, ctx, { action: "create", entityType: "project_module", entityId: mod.id, after: { projectId: product.id, code, name: inst.name, kind: "module", reason: "docs/38 §7" } });
         }
         for (const s of marketShells) {
           const mk = s.code.slice(g.prefix.length).toUpperCase();
