@@ -2428,7 +2428,7 @@ member cannot invite at all.
 ## DM1.73 — Declutter & status-clarity pass (Waves A + B of docs/37)
 
 Joyce, 2026-08-10: "declutter, track project/portfolio status effectively, easy UI/UX,
-clean workspaces." A four-part code audit (docs/38) found the data layer sound but the
+clean workspaces." A four-part code audit (docs/37) found the data layer sound but the
 same facts rendered too many times with too many encodings, while the status answers
 were buried or computed inconsistently. This entry lands Waves A (trust) and B (declutter).
 
