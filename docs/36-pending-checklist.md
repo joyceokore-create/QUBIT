@@ -133,3 +133,17 @@ Verified on the box: **no `FEATURE_*` variables are set at all** in `.env.produc
 6. **Ops flags** (§8) — as Joyce's credentials arrive; independent of the above.
 
 M9-B exports (§5) can slot in wherever the PDF promise starts costing credibility.
+
+## 9. docs/38 — products, instances and markets (added 2026-10-07)
+
+- **I1 + named instances built on Development** (`4c32095`): markets layer (`markets.ts`, Markets tab,
+  header switch, Admin › Markets), named instances (`project-instances.ts`, Instances grid on
+  Delivery, instance × market gates), wizard Structure step, `scripts/merge-instance-projects.ts`.
+  Not yet deployed — needs backup + full rebuild (migration), then the merge script on the box.
+- **I3 (tagging)**: the `org_unit_id` / `module_id` columns exist on tasks, documents, risks, issues,
+  blockers and milestones but nothing writes or filters them yet; YouTrack field map for
+  market / instance; per-market set-up in the walkthrough.
+- **Reports**: instance × market grid in the one-pager PDF and the exec heatmap; the status-report
+  parser's "channels by market" table → instance states.
+- Columns `project.instance_label` and `project.module_tracking` are unused by the UI (always
+  Market / gates) — drop in a later migration if they stay unused.
