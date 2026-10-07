@@ -4,7 +4,8 @@ import type { Rag } from "@/server/health";
 
 /**
  * Status-report upload — turn Riverbank's weekly "Project Status Report" (Word, Excel or
- * PDF; one row per project: Project · Status · Stage · Update and Outlook) into rows the
+ * PDF; one row per project: Project · Status · Stage · Update and Outlook — or a PowerPoint
+ * one-pager per project: title, headline, overall RAG, "Where we are") into rows the
  * PM reviews. Parsing is tolerant: the table is found by its header, text split across
  * Word runs is joined, a cell's paragraphs become line breaks. Limits are the ones the
  * check-in and status-note fields enforce, applied with a warning rather than a refusal.
@@ -38,7 +39,7 @@ export class ParseError extends Error {
   }
 }
 
-export type ReportFormat = "docx" | "xlsx" | "pdf";
+export type ReportFormat = "docx" | "xlsx" | "pdf" | "pptx";
 
 export function detectFormat(fileName: string, buf: Buffer): ReportFormat {
   const ext = fileName.toLowerCase().split(".").pop() ?? "";
@@ -46,10 +47,11 @@ export function detectFormat(fileName: string, buf: Buffer): ReportFormat {
   const isPdf = buf.subarray(0, 5).toString("latin1") === "%PDF-";
   if (ext === "docx" && isZip) return "docx";
   if (ext === "xlsx" && isZip) return "xlsx";
+  if (ext === "pptx" && isZip) return "pptx";
   if (ext === "pdf" && isPdf) return "pdf";
   if (isPdf) return "pdf";
-  if (isZip) throw new ParseError("That file is a ZIP container but not a .docx or .xlsx — rename it or export it again.");
-  throw new ParseError("Upload the status report as Word (.docx), Excel (.xlsx) or PDF.");
+  if (isZip) throw new ParseError("That file is a ZIP container but not a .docx, .xlsx or .pptx — rename it or export it again.");
+  throw new ParseError("Upload the status report as Word (.docx), Excel (.xlsx), PowerPoint (.pptx) or PDF.");
 }
 
 // ── shared text helpers ──────────────────────────────────────────────────────────────
@@ -287,9 +289,95 @@ export async function parsePdf(buf: Buffer): Promise<ParsedReport> {
   return { ...metaFromText(squash(text)), rows, warnings };
 }
 
+// ── PowerPoint ───────────────────────────────────────────────────────────────────────
+/** Lines of a slide, in reading order (one per paragraph, runs joined). */
+function slideLines(xml: string): string[] {
+  return xml
+    .split(/<\/a:p>/)
+    .map((p) => squash([...p.matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)].map((m) => unescape(m[1]!)).join("")))
+    .filter(Boolean);
+}
+
+const RAG_LINE = /^(?:overall(?:\s+status)?\s*[:·-]\s*)?(green|amber|red)\b\s*$/i;
+const META_LINE = /^(report date|as at|pm:|sponsor:|prepared by|status key|project status report)/i;
+const STAGE_ITEM = /^\d+\s*[·.\-–]\s*([A-Z][A-Z /-]{2,})$/;
+const STAGE_DONE = /^(complete|completed|released|done|live)$/i;
+
+/**
+ * One project per slide: the title (the first line, or the line after "PROJECT STATUS
+ * REPORT"), the overall RAG (the first standalone GREEN/AMBER/RED or "Overall status:
+ * …"), the headline sentence as the update (plus an "Overall: …" line when present),
+ * and the first in-flight item of "Where we are" as the stage.
+ */
+export function parsePptx(buf: Buffer): ParsedReport {
+  let entries;
+  try {
+    entries = readZip(buf);
+  } catch (e) {
+    if (e instanceof ZipError) throw new ParseError(`Could not open the PowerPoint file: ${e.message}`);
+    throw e;
+  }
+  const slides = [...entries.keys()]
+    .filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n))
+    .sort((a, b) => Number(a.match(/(\d+)/)![1]) - Number(b.match(/(\d+)/)![1]));
+  if (!slides.length) throw new ParseError("Not a PowerPoint deck (no slides found).");
+  const rows: ParsedRow[] = [];
+  const warnings: string[] = [];
+  let preparedBy: string | null = null;
+  let reportDate: string | null = null;
+  slides.forEach((name, i) => {
+    const lines = slideLines(entries.get(name)!.read().toString("utf8"));
+    if (!lines.length) return;
+    let t = 0;
+    if (/^project status report$/i.test(lines[0]!)) t = 1;
+    const project = lines[t]?.replace(/\s*[|·].*$/, "").trim() ?? "";
+    if (!project) return;
+    const rest = lines.slice(t + 1);
+    const ragIdx = rest.findIndex((l) => RAG_LINE.test(l));
+    const status = ragIdx >= 0 ? normaliseStatus(rest[ragIdx]!.match(RAG_LINE)![1]!) : null;
+    // The headline: a real sentence (eight words or more, ending in a full stop, or a
+    // "Focus now: …" line) beats any other long line — a KPI tile's market list is not it.
+    const prose = (l: string, j: number) => j !== ragIdx && !META_LINE.test(l) && !RAG_LINE.test(l) && /[a-z]/.test(l) && !/\|/.test(l);
+    const headline =
+      rest.find((l, j) => prose(l, j) && l.split(/\s+/).length >= 8 && (/[.!?]$/.test(l) || /^focus now\s*:/i.test(l))) ??
+      rest.find((l, j) => prose(l, j) && l.length >= 25);
+    const overall = rest.find((l) => /^overall\s*:/i.test(l) && !RAG_LINE.test(l));
+    const w: string[] = [];
+    let update = [headline, overall].filter(Boolean).join(" ");
+    if (!update) {
+      update = rest.filter((l) => !META_LINE.test(l) && !RAG_LINE.test(l)).slice(0, 2).join(" ");
+      w.push("No headline sentence found — the first lines of the slide were used.");
+    }
+    if (update.length > NARRATIVE_MAX) {
+      update = update.slice(0, NARRATIVE_MAX - 1).trimEnd() + "…";
+      w.push(`Update shortened to ${NARRATIVE_MAX} characters.`);
+    }
+    // "Where we are": "2 · IN REVIEW" then the item's name on the next line.
+    let stage = "";
+    for (let j = 0; j < rest.length - 1; j++) {
+      const m = rest[j]!.match(STAGE_ITEM);
+      if (!m || STAGE_DONE.test(m[1]!.trim())) continue;
+      stage = `${rest[j + 1]!.replace(/\s*[|·].*$/, "").trim()} · ${m[1]!.trim().toLowerCase()}`.slice(0, STAGE_MAX);
+      break;
+    }
+    if (!status) w.push("No overall RAG found on the slide — pick one.");
+    for (const l of rest) {
+      const d = l.match(/^(?:report date|as at)\s*[:]?\s*(.+)$/i);
+      if (d && !reportDate) reportDate = d[1]!.replace(/\s*\|.*$/, "").trim();
+      const p = l.match(/^(?:prepared by|pm)\s*:\s*([^·|]+)/i);
+      if (p && !preparedBy && !/\[name\]/i.test(p[1]!)) preparedBy = p[1]!.trim();
+      const a = l.match(/\bas at\s+([0-9][^|]+)/i);
+      if (a && !reportDate) reportDate = a[1]!.trim();
+    }
+    rows.push({ line: i + 1, project, status, statusRaw: ragIdx >= 0 ? rest[ragIdx]! : "", stage, update, warnings: w });
+  });
+  if (!rows.length) warnings.push("No slide with a project title was found.");
+  return { preparedBy, reportDate, rows, warnings };
+}
+
 export async function extractStatusReport(buf: Buffer, fileName: string): Promise<ParsedReport & { format: ReportFormat }> {
   if (buf.length > FILE_MAX_BYTES) throw new ParseError("The file is larger than 5 MB.");
   const format = detectFormat(fileName, buf);
-  const report = format === "docx" ? parseDocx(buf) : format === "xlsx" ? parseXlsx(buf) : await parsePdf(buf);
+  const report = format === "docx" ? parseDocx(buf) : format === "xlsx" ? parseXlsx(buf) : format === "pptx" ? parsePptx(buf) : await parsePdf(buf);
   return { ...report, format };
 }

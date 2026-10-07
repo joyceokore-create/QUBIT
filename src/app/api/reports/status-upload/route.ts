@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-guard";
 import { ParseError, FILE_MAX_BYTES } from "@/server/status-report/parse";
-import { previewStatusReport } from "@/server/status-report-upload";
+import { previewStatusReport, UploadWeekError } from "@/server/status-report-upload";
 
 // POST /api/reports/status-upload (multipart, field `file`) — parse the weekly status
 // report and match its rows to the viewer's projects. Writes nothing; the PM reviews, then
@@ -22,10 +22,12 @@ export async function POST(req: Request) {
   }
   try {
     const buf = Buffer.from(await file.arrayBuffer());
-    const preview = await previewStatusReport(guard.ctx, buf, file.name);
+    const weekField = form?.get("week");
+    const preview = await previewStatusReport(guard.ctx, buf, file.name, typeof weekField === "string" ? weekField : null);
     return NextResponse.json({ data: { ...preview, fileName: file.name, base64: buf.toString("base64") } });
   } catch (e) {
     if (e instanceof ParseError) return NextResponse.json({ error: { code: "UNREADABLE", message: e.message } }, { status: 422 });
+    if (e instanceof UploadWeekError) return NextResponse.json({ error: { code: "BAD_WEEK", message: e.message } }, { status: 400 });
     console.error("[status-upload] parse failed", e);
     return NextResponse.json({ error: { code: "UNREADABLE", message: "The file could not be read." } }, { status: 422 });
   }

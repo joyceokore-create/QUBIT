@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-guard";
-import { ApplyInput, applyStatusReport } from "@/server/status-report-upload";
+import { ApplyInput, applyStatusReport, UploadWeekError } from "@/server/status-report-upload";
 
 // POST /api/reports/status-upload/apply — fill the chosen projects' weekly drafts from the
 // reviewed rows (narrative + RAG override + status note) and attach the file. Each row is
@@ -14,5 +14,10 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: { code: "VALIDATION", message: parsed.error.issues[0]?.message ?? "Check the rows." } }, { status: 400 });
   }
-  return NextResponse.json({ data: await applyStatusReport(guard.ctx, parsed.data) });
+  try {
+    return NextResponse.json({ data: await applyStatusReport(guard.ctx, parsed.data) });
+  } catch (e) {
+    if (e instanceof UploadWeekError) return NextResponse.json({ error: { code: "BAD_WEEK", message: e.message } }, { status: 400 });
+    throw e;
+  }
 }

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { canWriteProject } from "@/lib/access";
 import { can } from "@/lib/rbac";
 import { withTenant, type TenantContext } from "@/lib/tenant";
-import { isoWeekId } from "@/lib/iso-week";
+import { isoWeekId, isoWeekMonday, isValidIsoWeek } from "@/lib/iso-week";
 
 import { confirmCheckIn, getCurrentCheckIn, RAGS, saveCheckInDraft } from "@/server/checkins";
 import { CheckpointError, getProjectCheckpoints, setCheckpointState } from "@/server/checkpoints";
@@ -23,8 +23,29 @@ import { matchProject, matchStageGate, type MatchableProject, type RowMatch } fr
  * "replace": a week already sent is re-confirmed with the new line and RAG (= resent, the
  * Head is notified again), which is how a sent update is recalled by uploading a new file.
  * The Stage cell also moves the delivery gates when it names one ("UAT …" → UAT in
- * progress, the gates before it done).
+ * progress, the gates before it done). A report can be for a PAST week (last week, or any
+ * earlier date): its rows are then sent as reviewed in the dialog, since a closed week has
+ * no queue to confirm from — they land in that week's Head inbox and roll-up.
  */
+
+export class UploadWeekError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UploadWeekError";
+  }
+}
+
+/** The week a report is for: this week (default) or a past ISO week. Past weeks are
+ * written "as of" that week's Friday 17:00 UTC so the rows sit in the right week. */
+export function resolveReportWeek(week: string | null | undefined, now = new Date()): { isoWeek: string; at: Date; past: boolean } {
+  const current = isoWeekId(now);
+  if (!week || week === current) return { isoWeek: current, at: now, past: false };
+  if (!isValidIsoWeek(week)) throw new UploadWeekError("Pick a valid week.");
+  const monday = isoWeekMonday(week);
+  if (monday > now) throw new UploadWeekError("That week hasn't happened yet.");
+  const at = new Date(monday.getTime() + 4 * 86_400_000 + 17 * 3_600_000);
+  return { isoWeek: week, at, past: true };
+}
 
 export interface PreviewRow extends ParsedRow {
   match: RowMatch;
@@ -37,12 +58,16 @@ export interface UploadPreview {
   preparedBy: string | null;
   reportDate: string | null;
   isoWeek: string;
+  /** A past week: rows will be sent as reviewed (no queue to confirm from). */
+  past: boolean;
   rows: PreviewRow[];
   projects: MatchableProject[];
   warnings: string[];
 }
 
 export const ApplyInput = z.object({
+  /** ISO week the report is for (default: this week). */
+  week: z.string().regex(/^\d{4}-W\d{2}$/).optional(),
   preparedBy: z.string().trim().max(120).nullable().optional(),
   reportDate: z.string().trim().max(40).nullable().optional(),
   rows: z
@@ -61,7 +86,7 @@ export const ApplyInput = z.object({
   file: z
     .object({
       name: z.string().trim().min(1).max(200),
-      format: z.enum(["docx", "xlsx", "pdf"]),
+      format: z.enum(["docx", "xlsx", "pdf", "pptx"]),
       base64: z.string().min(1).max(7_200_000), // 5 MB file → ~6.8 MB of base64
     })
     .optional(),
@@ -71,7 +96,7 @@ export type ApplyInputT = z.infer<typeof ApplyInput>;
 export interface ApplyRow {
   projectId: string;
   code: string;
-  outcome: "drafted" | "resent" | "skipped" | "error";
+  outcome: "drafted" | "resent" | "sent" | "skipped" | "error";
   message?: string;
   attached: boolean;
   /** What the Stage cell did to the delivery gates, when it named one. */
@@ -122,9 +147,9 @@ async function matchableProjects(ctx: TenantContext): Promise<MatchableProject[]
   );
 }
 
-export async function previewStatusReport(ctx: TenantContext, buf: Buffer, fileName: string, now = new Date()): Promise<UploadPreview> {
+export async function previewStatusReport(ctx: TenantContext, buf: Buffer, fileName: string, week?: string | null, now = new Date()): Promise<UploadPreview> {
+  const { isoWeek, past } = resolveReportWeek(week, now);
   const [report, projects] = await Promise.all([extractStatusReport(buf, fileName), matchableProjects(ctx)]);
-  const isoWeek = isoWeekId(now);
   const sentIds = new Set(
     (
       await withTenant(ctx, (tx) =>
@@ -137,13 +162,13 @@ export async function previewStatusReport(ctx: TenantContext, buf: Buffer, fileN
     const alreadySent = Boolean(match.projectId && sentIds.has(match.projectId));
     return { ...r, match, alreadySent, warnings: alreadySent ? [...r.warnings, "This week's update was already sent — tick Replace to resend it with this row."] : r.warnings };
   });
-  return { format: report.format, preparedBy: report.preparedBy, reportDate: report.reportDate, isoWeek, rows, projects, warnings: report.warnings };
+  return { format: report.format, preparedBy: report.preparedBy, reportDate: report.reportDate, isoWeek, past, rows, projects, warnings: report.warnings };
 }
 
-export async function applyStatusReport(ctx: TenantContext, input: ApplyInputT, now = new Date()): Promise<ApplyRow[]> {
-  const isoWeek = isoWeekId(now);
+export async function applyStatusReport(ctx: TenantContext, input: ApplyInputT, realNow = new Date()): Promise<ApplyRow[]> {
+  const { isoWeek, at: now, past } = resolveReportWeek(input.week, realNow);
   const week = isoWeek.split("-W")[1];
-  const dateLabel = now.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+  const dateLabel = realNow.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
   const reason = `From the status report uploaded ${dateLabel}${input.preparedBy ? ` (prepared by ${input.preparedBy})` : ""}`.slice(0, 300);
   const codes = new Map(
     (await withTenant(ctx, (tx) => tx.project.findMany({ where: { id: { in: input.rows.map((r) => r.projectId) } }, select: { id: true, code: true } }))).map((p) => [p.id, p.code]),
@@ -162,7 +187,15 @@ export async function applyStatusReport(ctx: TenantContext, input: ApplyInputT, 
       }
       const current = await getCurrentCheckIn(ctx, row.projectId, now);
       let outcome: ApplyRow["outcome"] = "drafted";
-      if (current.status === "Confirmed") {
+      if (past) {
+        // A closed week has no queue: the dialog's review is the review, so send now.
+        if (current.status === "Confirmed" && !row.resend) {
+          out.push({ projectId: row.projectId, code, outcome: "skipped", message: `Week ${week} was already sent — tick Replace to resend it.`, attached: false });
+          continue;
+        }
+        await confirmCheckIn(ctx, row.projectId, { narrative: row.narrative, ...(row.rag !== current.computedRag ? { ragOverride: row.rag, overrideReason: reason } : {}) }, now);
+        outcome = current.status === "Confirmed" ? "resent" : "sent";
+      } else if (current.status === "Confirmed") {
         if (!row.resend) {
           out.push({ projectId: row.projectId, code, outcome: "skipped", message: "Already sent this week — tick Replace to resend it.", attached: false });
           continue;
