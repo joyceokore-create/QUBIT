@@ -230,6 +230,9 @@ export function ProjectWorkspace({
                   {selectedInstance ? `${selectedInstance.name}${selected ? ` in ${selected.code}` : ""} · gates` : selected ? `${selected.code} · gates` : "Build track"}
                 </h3>
                 <div className={`${CARD} p-4`} style={CARD_BG}>
+                  {!selected && !selectedInstance && marketsList.length > 0 && (
+                    <p className="mb-2 text-[11.5px] text-[var(--ink4)]">A gate changed here changes it in every market. Pick a market in the switch to edit that market alone.</p>
+                  )}
                   {(selected || selectedInstance) && (
                     <p className="mb-2 text-[11.5px] text-[var(--ink4)]">
                       {selectedInstance
@@ -252,6 +255,7 @@ export function ProjectWorkspace({
                 />
                 <ModulesSection
                   projectId={data.id}
+                  label={data.moduleLabel ?? "Modules"}
                   initial={modules}
                   instances={namedInstances.map((i) => ({ id: i.id, name: i.name }))}
                   markets={marketsList.map((m) => ({ orgUnitId: m.orgUnitId, code: m.code, flag: m.flag }))}
@@ -388,7 +392,7 @@ function DetailsCard({ data, canGovern }: { data: ProjectPanelJson; canGovern: b
             portfolios={data.portfolios}
             budget={data.budget}
             canGovern={canGovern}
-            shape={{ instanceTagging: data.instanceTagging ?? true, pmScope: data.pmScope ?? "product" }}
+            shape={{ instanceTagging: data.instanceTagging ?? true, pmScope: data.pmScope ?? "product", moduleLabel: data.moduleLabel ?? "Modules" }}
           />
         </div>
       )}

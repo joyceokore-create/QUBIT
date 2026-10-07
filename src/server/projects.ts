@@ -67,6 +67,7 @@ export const UpdateProjectInput = z.object({
   moduleTracking: z.enum(["state", "gates"]).optional(),
   instanceTagging: z.boolean().optional(),
   pmScope: z.enum(["product", "instance"]).optional(),
+  moduleLabel: z.string().trim().min(2).max(30).optional(),
   ...ProjectDefinitionFields,
 });
 export type UpdateProjectInput = z.infer<typeof UpdateProjectInput>;
@@ -309,6 +310,7 @@ export interface ProjectPanelData {
   moduleTracking: string;
   instanceTagging: boolean;
   pmScope: string;
+  moduleLabel: string;
 }
 
 export async function getProjectPanelData(
@@ -357,6 +359,7 @@ export async function getProjectPanelData(
       moduleTracking: project.moduleTracking,
       instanceTagging: project.instanceTagging,
       pmScope: project.pmScope,
+      moduleLabel: project.moduleLabel,
       portfolioId: project.portfolioId,
       portfolioName: project.portfolio?.name ?? null,
       programmeName: project.programme?.name ?? null,
@@ -592,6 +595,7 @@ export async function updateProject(
         moduleTracking: input.moduleTracking,
         instanceTagging: input.instanceTagging,
         pmScope: input.pmScope,
+        moduleLabel: input.moduleLabel,
         client: input.client === undefined ? undefined : input.client,
         objective: input.objective === undefined ? undefined : input.objective,
         mission: input.mission === undefined ? undefined : input.mission,
@@ -619,6 +623,7 @@ export async function updateProject(
         moduleTracking: before.moduleTracking,
         instanceTagging: before.instanceTagging,
         pmScope: before.pmScope,
+        moduleLabel: before.moduleLabel,
       },
       after: {
         name: after.name,
@@ -634,6 +639,7 @@ export async function updateProject(
         moduleTracking: after.moduleTracking,
         instanceTagging: after.instanceTagging,
         pmScope: after.pmScope,
+        moduleLabel: after.moduleLabel,
       },
     });
 

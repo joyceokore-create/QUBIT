@@ -17,10 +17,13 @@ import { CARD_GLASS as CARD, CARD_BG, FOCUS, PRIMARY, QUIET, SECONDARY } from "@
 const STATES = ["Planned", "Build", "UAT", "Live", "NotApplicable"] as const;
 const STATE_LABEL: Record<string, string> = { Planned: "Planned", Build: "Build", UAT: "UAT", Live: "Live", NotApplicable: "N/A" };
 const STATE_TOK: Record<string, string> = { Planned: "--ink4", Build: "--qinfo", UAT: "--warn", Live: "--ok", NotApplicable: "--ink5" };
+/** "Agent channels" → "agent channel"; "Modules" → "module". */
+const singular = (label: string) => label.toLowerCase().replace(/s$/, "");
 const INPUT = `h-8 rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-brand ${FOCUS}`;
 
 export function ModulesSection({
   projectId,
+  label = "Modules",
   initial,
   instances,
   markets,
@@ -29,6 +32,8 @@ export function ModulesSection({
   onSelect,
 }: {
   projectId: string;
+  /** What this product calls its modules ("Agent channels" for Swipe). */
+  label?: string;
   initial: NamedInstanceJson[];
   /** The product's named instances a module may sit under. */
   instances: { id: string; name: string }[];
@@ -43,7 +48,10 @@ export function ModulesSection({
   const [draft, setDraft] = useState({ name: "", parentId: "", ownGates: false });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const columns: { orgUnitId: string | null; label: string }[] = [{ orgUnitId: null, label: "Product" }, ...markets.map((m) => ({ orgUnitId: m.orgUnitId, label: `${m.flag ? `${m.flag} ` : ""}${m.code}` }))];
+  // docs/38 — at All every market is a column (edit any); with a market selected, that
+  // market alone is edited.
+  const allColumns: { orgUnitId: string | null; label: string }[] = [{ orgUnitId: null, label: "Product" }, ...markets.map((m) => ({ orgUnitId: m.orgUnitId, label: `${m.flag ? `${m.flag} ` : ""}${m.code}` }))];
+  const columns = selected.market ? allColumns.filter((c) => c.orgUnitId === selected.market) : allColumns;
   const groups: { parentId: string | null; label: string; rows: NamedInstanceJson[] }[] = [
     { parentId: null, label: "Product", rows: rows.filter((r) => !r.parentId) },
     ...instances.map((i) => ({ parentId: i.id, label: i.name, rows: rows.filter((r) => r.parentId === i.id) })),
@@ -78,14 +86,14 @@ export function ModulesSection({
     <section className={`${CARD} p-4`} style={CARD_BG} aria-labelledby="modules-title">
       <div className="mb-2.5 flex flex-wrap items-center gap-3">
         <h3 id="modules-title" className="text-[13px] font-semibold text-foreground">
-          Modules
+          {label}
         </h3>
         <span className="text-[11.5px] text-[var(--ink4)]">
           {rows.length === 0 ? "Components or channels of the product (POS, USSD, Agent Portal …) — a state per market; own gates per module if you want them." : "A state per market. Modules with own gates show a % — click it to open their gates for that market."}
         </span>
         {canManage && (
           <button type="button" onClick={() => setAdding((a) => !a)} className={`${SECONDARY} ml-auto gap-1.5 px-2.5 py-1 text-[12px]`}>
-            <Plus className="size-3.5" aria-hidden /> Add module
+            <Plus className="size-3.5" aria-hidden /> Add {singular(label)}
           </button>
         )}
       </div>
@@ -97,7 +105,7 @@ export function ModulesSection({
             void add();
           }}
         >
-          <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} maxLength={60} autoFocus placeholder="e.g. USSD" aria-label="Module name" className={`${INPUT} min-w-[180px]`} />
+          <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} maxLength={60} autoFocus placeholder="e.g. USSD" aria-label={`${singular(label)} name`} className={`${INPUT} min-w-[180px]`} />
           {instances.length > 0 && (
             <select value={draft.parentId} onChange={(e) => setDraft({ ...draft, parentId: e.target.value })} aria-label="Under" className={INPUT}>
               <option value="">Under the product</option>
@@ -130,7 +138,7 @@ export function ModulesSection({
           <table className="w-full min-w-[460px] border-collapse text-left text-[12px]">
             <thead>
               <tr className="font-mono text-[9px] font-bold uppercase tracking-[1px] text-[var(--ink4)]">
-                <th className="py-1.5 pr-3">Module</th>
+                <th className="py-1.5 pr-3">{singular(label)}</th>
                 {columns.map((c) => (
                   <th key={c.orgUnitId ?? "product"} className="px-2 py-1.5 text-center">
                     {c.label}

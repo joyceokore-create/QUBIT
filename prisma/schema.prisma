@@ -198,6 +198,7 @@ model User {
    * /**
    * /**
    * /**
+   * /**
    * /** Hours available in a normal week — the denominator leave is subtracted from.
    */
   capacityHoursPerWeek   Int         @default(40) @map("capacity_hours_per_week")
@@ -1014,6 +1015,10 @@ model Project {
   moduleTracking  String     @default("state") @map("module_tracking")
   instanceTagging Boolean    @default(true) @map("instance_tagging")
   pmScope         String     @default("product") @map("pm_scope")
+  /**
+   * docs/38 — what this product calls its modules ("Modules", "Agent channels" …).
+   */
+  moduleLabel     String     @default("Modules") @map("module_label")
   dueDate         DateTime?  @map("due_date")
   budget          String?
   // Legacy free-text summary (kept for back-compat). Real per-person assignment now
@@ -1128,6 +1133,10 @@ model CheckpointTemplate {
   description String?
   checkpoints Checkpoint[]
   projects    Project[]
+  /**
+   * docs/38 — retired templates stay on the projects that use them but leave the picker.
+   */
+  retiredAt   DateTime?       @map("retired_at")
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
   modules     ProjectModule[] @relation("ModuleTemplate")

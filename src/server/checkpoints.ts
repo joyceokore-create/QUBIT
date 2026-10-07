@@ -58,6 +58,9 @@ export interface ProjectCheckpoints {
 export interface GateScope {
   orgUnitId?: string | null;
   moduleId?: string | null;
+  /** Joyce (2026-10-07): at "All" a change applies to the product AND every live market
+   * (the same track everywhere); with a market selected, to that market only. */
+  allMarkets?: boolean;
 }
 const scopeWhere = (scope?: GateScope) => ({ orgUnitId: scope?.orgUnitId ?? null, moduleId: scope?.moduleId ?? null });
 const scopeKey = (projectId: string, checkpointId: string, scope?: GateScope) =>
@@ -221,6 +224,10 @@ export async function setCheckpointState(
   projectId: string,
   input: SetCheckpointStateInputT,
   scope?: GateScope,
+  /** docs/38 — at "All" (no market in scope) the change also lands on every live market's
+   * row for the same track, so editing once edits all markets; a market in scope edits
+   * that market only. */
+  options: { applyToMarkets?: boolean } = {},
 ): Promise<ProjectCheckpoints> {
   await withTenant(ctx, async (tx) => {
     if (scope?.orgUnitId) {
@@ -269,60 +276,81 @@ export async function setCheckpointState(
       }
     }
 
-    const before = await tx.checkpointStatus.findFirst({
-      where: { projectId, checkpointId: input.checkpointId, ...scopeWhere(scope) },
-      select: { id: true, state: true },
-    });
-    const blockerId = input.state === "Blocked" ? (input.blockerId ?? null) : null;
-    const overrideData = {
-      overrideReason: override?.reason ?? null,
-      overriddenById: override?.byId ?? null,
-      overriddenAt: override?.at ?? null,
-    };
-
-    if (before) {
-      await tx.checkpointStatus.update({
-        where: { id: before.id },
-        data: { state: input.state, blockerId, ...overrideData },
+    // The markets this change lands on: the selected one, or — at "All" — the product's
+    // own row plus every live market, so one dropdown moves the same gate everywhere.
+    const units: (string | null)[] =
+      scope?.allMarkets && !scope.orgUnitId
+        ? [null, ...(await tx.projectOrgStatus.findMany({ where: { projectId, retiredAt: null }, select: { orgUnitId: true } })).map((m) => m.orgUnitId)]
+        : [scope?.orgUnitId ?? null];
+    for (const unit of units) {
+      const unitScope: GateScope = { orgUnitId: unit, moduleId: scope?.moduleId ?? null };
+      const before = await tx.checkpointStatus.findFirst({
+        where: { projectId, checkpointId: input.checkpointId, ...scopeWhere(unitScope) },
+        select: { id: true, state: true },
       });
-    } else {
-      await tx.checkpointStatus.create({
-        data: {
-          tenantId: ctx.tenantId, projectId, checkpointId: input.checkpointId, ...scopeWhere(scope),
-          state: input.state, blockerId, ...overrideData,
+      const blockerId = input.state === "Blocked" ? (input.blockerId ?? null) : null;
+      const overrideData = {
+        overrideReason: override?.reason ?? null,
+        overriddenById: override?.byId ?? null,
+        overriddenAt: override?.at ?? null,
+      };
+
+      if (before) {
+        await tx.checkpointStatus.update({
+          where: { id: before.id },
+          data: { state: input.state, blockerId, ...overrideData },
+        });
+      } else {
+        await tx.checkpointStatus.create({
+          data: {
+            tenantId: ctx.tenantId, projectId, checkpointId: input.checkpointId, ...scopeWhere(unitScope),
+            state: input.state, blockerId, ...overrideData,
+          },
+        });
+      }
+      let marketsTouched = 0;
+      if (options.applyToMarkets && !scope?.orgUnitId) {
+        const markets = await tx.projectOrgStatus.findMany({ where: { projectId, retiredAt: null }, select: { orgUnitId: true } });
+        for (const m of markets) {
+          const row = await tx.checkpointStatus.findFirst({ where: { projectId, checkpointId: input.checkpointId, orgUnitId: m.orgUnitId, moduleId: scope?.moduleId ?? null }, select: { id: true, state: true } });
+          if (row?.state === input.state) continue;
+          if (row) await tx.checkpointStatus.update({ where: { id: row.id }, data: { state: input.state, blockerId, ...overrideData } });
+          else await tx.checkpointStatus.create({ data: { tenantId: ctx.tenantId, projectId, checkpointId: input.checkpointId, orgUnitId: m.orgUnitId, moduleId: scope?.moduleId ?? null, state: input.state, blockerId, ...overrideData } });
+          marketsTouched++;
+        }
+      }
+      if (before?.state === input.state && marketsTouched === 0) return;
+
+      await audit(tx, ctx, {
+        action: "update",
+        entityType: "checkpoint_status",
+        entityId: scopeKey(projectId, input.checkpointId, unitScope),
+        before: { state: before?.state ?? "NotStarted" },
+        after: {
+          state: input.state,
+          checkpoint: checkpoint.name,
+          ...(marketsTouched ? { appliedToMarkets: marketsTouched } : {}),
+          ...(unitScope.orgUnitId ? { orgUnitId: unitScope.orgUnitId } : {}),
+          ...(scope?.moduleId ? { moduleId: scope.moduleId } : {}),
+          ...(override ? { gateOverridden: true, overrideReason: override.reason } : {}),
+        },
+      });
+      // The exec delta feed narrates gate movement like any other tracked change.
+      await emitDomainEvent(tx, ctx, {
+        type: "checkpoint.state_changed",
+        entityType: "checkpoint_status",
+        entityId: scopeKey(projectId, input.checkpointId, unitScope),
+        payload: {
+          projectId,
+          orgUnitId: unitScope.orgUnitId ?? null,
+          moduleId: scope?.moduleId ?? null,
+          checkpoint: checkpoint.name,
+          from: before?.state ?? "NotStarted",
+          to: input.state,
+          gateOverridden: !!override,
         },
       });
     }
-    if (before?.state === input.state) return;
-
-    await audit(tx, ctx, {
-      action: "update",
-      entityType: "checkpoint_status",
-      entityId: scopeKey(projectId, input.checkpointId, scope),
-      before: { state: before?.state ?? "NotStarted" },
-      after: {
-        state: input.state,
-        checkpoint: checkpoint.name,
-        ...(scope?.orgUnitId ? { orgUnitId: scope.orgUnitId } : {}),
-        ...(scope?.moduleId ? { moduleId: scope.moduleId } : {}),
-        ...(override ? { gateOverridden: true, overrideReason: override.reason } : {}),
-      },
-    });
-    // The exec delta feed narrates gate movement like any other tracked change.
-    await emitDomainEvent(tx, ctx, {
-      type: "checkpoint.state_changed",
-      entityType: "checkpoint_status",
-      entityId: scopeKey(projectId, input.checkpointId, scope),
-      payload: {
-        projectId,
-        orgUnitId: scope?.orgUnitId ?? null,
-        moduleId: scope?.moduleId ?? null,
-        checkpoint: checkpoint.name,
-        from: before?.state ?? "NotStarted",
-        to: input.state,
-        gateOverridden: !!override,
-      },
-    });
   });
   return getProjectCheckpoints(ctx, projectId, scope);
 }
@@ -365,7 +393,9 @@ export interface TemplateOption {
 
 export async function listCheckpointTemplates(ctx: TenantContext): Promise<TemplateOption[]> {
   return withTenant(ctx, async (tx) => {
+    // docs/38 — retired templates leave the picker; projects already on one keep it.
     const rows = await tx.checkpointTemplate.findMany({
+      where: { retiredAt: null },
       select: { id: true, name: true, _count: { select: { checkpoints: true } } },
       orderBy: { name: "asc" },
     });

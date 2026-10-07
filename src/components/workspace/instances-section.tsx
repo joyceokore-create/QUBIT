@@ -40,7 +40,10 @@ export function InstancesSection({
   const [name, setName] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const columns: { orgUnitId: string | null; label: string }[] = [{ orgUnitId: null, label: "Product" }, ...markets.map((m) => ({ orgUnitId: m.orgUnitId, label: `${m.flag ? `${m.flag} ` : ""}${m.code}` }))];
+  // docs/38 — at All every market is a column (edit any); with a market selected, that
+  // market alone is edited.
+  const allColumns: { orgUnitId: string | null; label: string }[] = [{ orgUnitId: null, label: "Product" }, ...markets.map((m) => ({ orgUnitId: m.orgUnitId, label: `${m.flag ? `${m.flag} ` : ""}${m.code}` }))];
+  const columns = selected.market ? allColumns.filter((c) => c.orgUnitId === selected.market) : allColumns;
 
   const call = async (key: string, url: string, init: RequestInit) => {
     setBusy(key);

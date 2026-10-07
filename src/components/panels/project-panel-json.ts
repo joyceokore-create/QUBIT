@@ -85,6 +85,7 @@ export interface ProjectPanelJson {
   moduleTracking?: string;
   instanceTagging?: boolean;
   pmScope?: string;
+  moduleLabel?: string;
   /** docs/18 §7 — may edit stage/priority/status note/portfolio (PM/lead, heads, execs). */
   canGovern?: boolean;
   portfolioId: string | null;

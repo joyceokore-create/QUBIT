@@ -36,14 +36,18 @@ const DRY = process.argv.includes("--dry-run");
 type State = "Planned" | "Build" | "UAT" | "Live" | "NotApplicable";
 /** `template` = the product's gate track by name (one track for all markets; Swipe's old
  * "Agent banking channels" template modelled the channels as gates — those are modules now). */
-const GROUPS: { prefix: string; code: string; name: string; description: string; template?: string; instances?: { name: string; states: Record<string, State> }[] }[] = [
-  { prefix: "ZED-", code: "ZED", name: "ZED ERP", description: "ZED ERP across the group's markets — one product, one market track each." },
+/** Joyce (2026-10-07): only "Product build" stays a gate template — these two are retired
+ * (kept on whatever still uses them, gone from the picker). */
+const RETIRE_TEMPLATES = ["Agent banking channels", "Market rollout"];
+const GROUPS: { prefix: string; code: string; name: string; description: string; template?: string; moduleLabel?: string; instances?: { name: string; states: Record<string, State> }[] }[] = [
+  { prefix: "ZED-", code: "ZED", name: "ZED ERP", description: "ZED ERP across the group's markets — one product, one market track each.", template: "Product build" },
   {
     prefix: "SWIPE-",
     code: "SWIPE",
     name: "Swipe Agent Banking",
     description: "Swipe Agent Banking solution — channels (modules), markets and Hal device support.",
-    template: "Market rollout",
+    template: "Product build",
+    moduleLabel: "Agent channels",
     instances: [
       { name: "P20 POS", states: { KE: "Live", RW: "UAT" } },
       { name: "P30 POS", states: { KE: "Live", RW: "UAT" } },
@@ -82,8 +86,10 @@ async function main() {
       });
       // The product itself may already carry the prefix (e.g. "ZED-SAFIRI" is NOT a market shell).
       const marketShells = shells.filter((s) => unitByCode.has(s.code.slice(g.prefix.length).toUpperCase()) || MARKET_ALIAS[s.code.slice(g.prefix.length).toUpperCase()]);
-      if (!marketShells.length) {
-        console.log(`${g.code}: no market shells found — skipped.`);
+      const template = g.template ? await tx.checkpointTemplate.findFirst({ where: { name: g.template }, select: { id: true } }) : null;
+      let product = await tx.project.findFirst({ where: { code: g.code }, select: { id: true, code: true } });
+      if (!marketShells.length && !product) {
+        console.log(`${g.code}: no market shells and no product — skipped.`);
         continue;
       }
       const busy = marketShells.filter((s) => s.leadUserId || Object.values(s._count).some((n) => n > 0));
@@ -91,17 +97,15 @@ async function main() {
         console.log(`${g.code}: ${busy.map((b) => b.code).join(", ")} carry work — merge those by hand first. Nothing done for this group.`);
         continue;
       }
-      const portfolioId = marketShells[0]!.portfolioId;
-      const template = g.template ? await tx.checkpointTemplate.findFirst({ where: { name: g.template }, select: { id: true } }) : null;
-      let product = await tx.project.findFirst({ where: { code: g.code }, select: { id: true, code: true } });
+      const portfolioId = marketShells[0]?.portfolioId ?? null;
       if (!product) {
         console.log(`${g.code}: create "${g.name}" in portfolio ${portfolioId} with ${marketShells.length} instances`);
         if (!DRY) {
           product = await tx.project.create({
             data: {
               tenantId: ctx.tenantId, code: g.code, name: g.name, description: g.description, type: "Project", priority: "High", status: "Planning",
-              portfolioId, programmeId: marketShells[0]!.programmeId, checkpointTemplateId: template?.id ?? marketShells.find((s) => s.checkpointTemplateId)?.checkpointTemplateId ?? null,
-              instanceLabel: "Market", moduleTracking: "state", instanceTagging: true, pmScope: "product",
+              portfolioId, programmeId: marketShells[0]?.programmeId ?? null, checkpointTemplateId: template?.id ?? marketShells.find((s) => s.checkpointTemplateId)?.checkpointTemplateId ?? null,
+              instanceLabel: "Market", moduleTracking: "state", instanceTagging: true, pmScope: "product", moduleLabel: g.moduleLabel ?? "Modules",
             },
             select: { id: true, code: true },
           });
@@ -109,7 +113,7 @@ async function main() {
         }
       } else {
         console.log(`${g.code}: product exists (${product.id}) — reusing${template ? `; track → ${g.template}` : ""}`);
-        if (!DRY && template) await tx.project.update({ where: { id: product.id }, data: { checkpointTemplateId: template.id } });
+        if (!DRY && template) await tx.project.update({ where: { id: product.id }, data: { checkpointTemplateId: template.id, ...(g.moduleLabel ? { moduleLabel: g.moduleLabel } : {}) } });
       }
 
       for (const s of marketShells) {
@@ -149,6 +153,15 @@ async function main() {
           await tx.moduleInstanceStatus.create({ data: { tenantId: ctx.tenantId, projectId: product.id, moduleId: mod.id, orgUnitId: unit.id, state, updatedById: ctx.userId } });
         }
       }
+    }
+    // Retire the templates the switcher and the modules now cover.
+    for (const name of RETIRE_TEMPLATES) {
+      const t = await tx.checkpointTemplate.findFirst({ where: { name, retiredAt: null }, select: { id: true } });
+      if (!t) continue;
+      console.log(`retire template "${name}"`);
+      if (DRY) continue;
+      await tx.checkpointTemplate.update({ where: { id: t.id }, data: { retiredAt: new Date() } });
+      await audit(tx, ctx, { action: "update", entityType: "checkpoint_template", entityId: t.id, after: { name, retired: true, reason: "docs/38 — covered by modules / the market switch" } });
     }
   });
   console.log(DRY ? "dry-run complete — nothing written." : "done.");

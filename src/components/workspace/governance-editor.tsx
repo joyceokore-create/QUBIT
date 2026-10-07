@@ -26,7 +26,7 @@ export function GovernanceEditor({
   shape,
 }: {
   /** docs/38 — the product's shape; edits go through the same PATCH. */
-  shape?: { instanceTagging: boolean; pmScope: string };
+  shape?: { instanceTagging: boolean; pmScope: string; moduleLabel: string };
   projectId: string;
   pipelineStage: string;
   priority: string;
@@ -185,6 +185,16 @@ export function GovernanceEditor({
           <label className="flex items-center gap-1.5 text-[11px] text-[var(--ink3)]">
             <input type="checkbox" checked={shape.instanceTagging} onChange={(e) => void patch({ instanceTagging: e.target.checked })} className="size-3.5 accent-[var(--brand)]" />
             Tag work by market and instance
+          </label>
+          <label className="flex items-center gap-1.5 text-[11px] text-[var(--ink3)]">
+            Modules are called
+            <input
+              defaultValue={shape.moduleLabel}
+              maxLength={30}
+              aria-label="What this product calls its modules"
+              onBlur={(e) => e.target.value.trim().length >= 2 && e.target.value.trim() !== shape.moduleLabel && void patch({ moduleLabel: e.target.value.trim() })}
+              className="h-7 w-[140px] rounded-[7px] border border-[var(--input)] bg-background px-2 text-[11px] text-foreground focus:border-brand"
+            />
           </label>
         </div>
       )}

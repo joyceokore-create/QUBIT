@@ -65,7 +65,8 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
         : await fetch(`/api/projects/${projectId}/checkpoints`, {
             method: "PATCH",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify("templateId" in body ? body : { ...body, orgUnitId, moduleId }),
+            // docs/38 — at All (no market) a state change applies to every market's row too.
+            body: JSON.stringify("templateId" in body ? body : { ...body, orgUnitId, moduleId, applyToMarkets: !orgUnitId }),
           });
     if (res.status === 409) {
       // Gate unmet — show the checklist and offer the override rather than failing flat.
@@ -96,7 +97,7 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
         {data.templateId && (
           <span className="font-mono text-[9.5px] font-bold tabular-nums text-[var(--qink)]">{data.progress}%</span>
         )}
-        {data.canGovern ? (
+        {data.canGovern && !orgUnitId ? (
           <span data-tour="gate-template" className="ml-auto inline-flex">
           <Select
             value={data.templateId ?? "none"}
