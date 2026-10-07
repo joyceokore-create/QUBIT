@@ -20,12 +20,17 @@ RUN corepack enable && pnpm prisma generate && pnpm build
 
 # ── 3. Runner ────────────────────────────────────────────────────────────────--
 FROM node:22-alpine AS runner
-RUN apk add --no-cache openssl
+# Chromium drives the PDF export (src/server/pdf/render.ts, Milestone D / M9-B). Alpine's
+# package installs /usr/bin/chromium and /usr/bin/chromium-browser; font-inter is the UI
+# face the templates print in, font-noto the glyph fallback. No fonts are ever fetched at
+# render time. Expect the image to grow by ~300 MB.
+RUN apk add --no-cache openssl chromium nss freetype harfbuzz ca-certificates ttf-freefont font-noto font-inter
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
-    HOSTNAME=0.0.0.0
+    HOSTNAME=0.0.0.0 \
+    PDF_CHROMIUM_PATH=/usr/bin/chromium
 
 # Run as an unprivileged user.
 RUN addgroup -g 1001 nodejs && adduser -u 1001 -G nodejs -S nextjs

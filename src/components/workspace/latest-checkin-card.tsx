@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ragChipStyle } from "@/lib/surface";
 
 // DM1.73 (docs/25 §3.1) — Overview must carry the "latest PM summary report": the most
-// recent CONFIRMED check-in, read-only. Authoring stays in the Reports tab. The GET
+// recent CONFIRMED check-in, read-only. Authoring stays in the This week tab. The GET
 // /api/projects/[id]/checkin route returns THIS week's view (draft when unconfirmed), so
 // when the current week is still a draft we fall back to /checkin/history for the newest
 // confirmed report — Overview never shows an unconfirmed draft as the project's word.
@@ -21,7 +21,7 @@ export function LatestCheckinCard({
   onOpenReports,
 }: {
   projectId: string;
-  /** Jumps to the workspace Reports tab (tab state lives in the workspace). */
+  /** Jumps to the workspace This week tab (tab state lives in the workspace). */
   onOpenReports: () => void;
 }) {
   const [latest, setLatest] = useState<Latest | null>(null);
@@ -81,7 +81,7 @@ export function LatestCheckinCard({
         <p className="text-xs text-ink-3">
           No confirmed check-in yet —{" "}
           <button type="button" onClick={onOpenReports} className="font-semibold text-brand underline-offset-2 hover:underline">
-            the weekly loop lives in Reports
+            the weekly loop lives in This week
           </button>
           .
         </p>

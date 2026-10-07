@@ -6,8 +6,18 @@ import { ChevronRight, Plus, Search } from "lucide-react";
 import { usePanel } from "@/components/panels/panel-context";
 import { ExportButton } from "@/components/export-button";
 import { Button } from "@/components/ui/button";
-import { projectRank, statusBarTok, statusMeta } from "@/lib/project-view";
 import { RAG_TOKEN } from "@/lib/surface";
+
+// docs/38 milestone 2 — a project's STATUS is its confirmed weekly check-in, not the
+// typed lifecycle field. No confirmed report this week reads "No report" (neutral),
+// never a misleading Green. Lifecycle (Planning/Completed) stays a filter concern only.
+const WEEKLY: Record<string, { label: string; tok: string }> = {
+  Green: { label: "On track", tok: "--ok" },
+  Amber: { label: "At risk", tok: "--warn" },
+  Red: { label: "Off track", tok: "--bad" },
+  None: { label: "No report", tok: "--ink4" },
+};
+const WEEKLY_ORDER: string[] = ["Red", "Amber", "Green", "None"];
 
 interface ProjectRow {
   id: string;
@@ -42,12 +52,15 @@ export function ProjectsClient({
   const [status, setStatus] = useState("all");
   const [mineOnly, setMineOnly] = useState(false);
 
-  // Filter chips: All + each status present in the data, worst-status first, with counts.
+  // A row's weekly status: the CONFIRMED check-in's RAG, else "None" (no report yet).
+  const weeklyBucket = (p: ProjectRow) => (p.checkin?.confirmed ? p.checkin.rag : "None");
+
+  // Filter chips by weekly status — worst first — so "show me what's off track" is one click.
   const chips = useMemo(() => {
-    const present = Array.from(new Set(projects.map((p) => p.status))).sort((a, b) => projectRank(b) - projectRank(a));
+    const present = WEEKLY_ORDER.filter((k) => projects.some((p) => weeklyBucket(p) === k));
     return [
       { key: "all", label: "ALL", count: projects.length },
-      ...present.map((s) => ({ key: s, label: statusMeta(s).label, count: projects.filter((p) => p.status === s).length })),
+      ...present.map((k) => ({ key: k, label: WEEKLY[k].label, count: projects.filter((p) => weeklyBucket(p) === k).length })),
     ];
   }, [projects]);
   const mineCount = useMemo(() => projects.filter((p) => p.isMine).length, [projects]);
@@ -57,11 +70,11 @@ export function ProjectsClient({
       projects
         .filter(
           (p) =>
-            (status === "all" || p.status === status) &&
+            (status === "all" || weeklyBucket(p) === status) &&
             (!mineOnly || p.isMine) &&
             (q === "" || p.name.toLowerCase().includes(q.toLowerCase()) || p.code.toLowerCase().includes(q.toLowerCase())),
         )
-        .sort((a, b) => projectRank(b.status) - projectRank(a.status) || a.name.localeCompare(b.name)),
+        .sort((a, b) => WEEKLY_ORDER.indexOf(weeklyBucket(a)) - WEEKLY_ORDER.indexOf(weeklyBucket(b)) || a.name.localeCompare(b.name)),
     [projects, q, status, mineOnly],
   );
 
@@ -143,7 +156,8 @@ export function ProjectsClient({
           <span />
         </div>
         {filtered.map((p) => {
-          const m = statusMeta(p.status);
+          const w = weeklyBucket(p);
+          const wm = WEEKLY[w];
           return (
             <button
               key={p.id}
@@ -158,15 +172,16 @@ export function ProjectsClient({
               </span>
               <span className="flex items-center gap-2">
                 <span className="h-[3px] flex-1 overflow-hidden rounded-full bg-[var(--wash2)]">
-                  <span className="block h-full rounded-full" style={{ width: `${p.avgProgress}%`, background: `var(${statusBarTok(p.status)})` }} />
+                  <span className="block h-full rounded-full" style={{ width: `${p.avgProgress}%`, background: `var(${w === "None" ? "--brand" : wm.tok})` }} />
                 </span>
                 <span className="w-[30px] text-right font-mono text-[10.5px] tabular-nums text-[var(--ink3)]">{p.avgProgress}%</span>
               </span>
               <span
                 className="justify-self-start rounded-[5px] p-[3px_7px] font-mono text-[9px] font-semibold tracking-[1px]"
-                style={{ color: `var(${m.tok})`, border: `1px solid color-mix(in oklab, var(${m.tok}) 35%, transparent)`, background: `color-mix(in oklab, var(${m.tok}) 9%, transparent)` }}
+                style={{ color: `var(${wm.tok})`, border: `1px solid color-mix(in oklab, var(${wm.tok}) 35%, transparent)`, background: `color-mix(in oklab, var(${wm.tok}) 9%, transparent)` }}
+                title={w === "None" ? "No confirmed weekly report yet" : "This week's confirmed status"}
               >
-                {m.label}
+                {wm.label}
               </span>
               {/* DM1.73 (Wave C, C4): this week's check-in — RAG dot + confirmation state. */}
               {p.checkin ? (

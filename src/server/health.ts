@@ -97,3 +97,22 @@ export function ragCounts(items: { status: string }[]) {
     done: items.filter((i) => i.status === "Completed" || i.status === "Cancelled").length,
   };
 }
+
+// ── Milestone B: a RAG tally over check-in-aware rows (distinct from ragCounts, which
+// counts typed project statuses). `computed` = rows whose RAG is derived, not confirmed.
+export interface RagTally {
+  green: number;
+  amber: number;
+  red: number;
+  computed: number;
+}
+export function tallyRag(items: { rag: Rag; computed: boolean }[]): RagTally {
+  const t: RagTally = { green: 0, amber: 0, red: 0, computed: 0 };
+  for (const i of items) {
+    if (i.rag === "Green") t.green++;
+    else if (i.rag === "Amber") t.amber++;
+    else t.red++;
+    if (i.computed) t.computed++;
+  }
+  return t;
+}

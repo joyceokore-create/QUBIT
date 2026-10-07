@@ -154,3 +154,144 @@ export function inviteEmail(opts: {
     text,
   };
 }
+
+/**
+ * Milestone A — a PM's nudge to the assignee of a blocked task. Developers and QA may
+ * not live in QUBIT, so the primary CTA is the YouTrack issue when the task is mirrored;
+ * the QUBIT board link is the secondary door. Says how long it has been blocked and why.
+ */
+export function nudgeEmail(opts: {
+  tenantName: string;
+  brandColor: string;
+  appUrl: string;
+  recipientFirstName: string;
+  nudgerName: string;
+  projectCode: string;
+  projectName: string;
+  taskKey: string | null;
+  taskTitle: string;
+  externalKey: string | null;
+  externalUrl: string | null;
+  blockedDays: number;
+  blockerDescription: string;
+  /** App-relative board link, e.g. "/projects/<id>?tab=Board&task=<taskId>". */
+  taskLink: string;
+}): BrandedEmail {
+  const key = opts.externalKey ?? opts.taskKey ?? "task";
+  const days = `${opts.blockedDays} day${opts.blockedDays === 1 ? "" : "s"}`;
+  const subject = `QUBIT: ${opts.projectCode} · ${key} blocked ${days} — ${opts.nudgerName} needs a word`;
+  const qubitUrl = `${opts.appUrl}${opts.taskLink}`;
+  const primaryUrl = opts.externalUrl ?? qubitUrl;
+  const primaryLabel = opts.externalUrl ? "Open in YouTrack" : "Open in QUBIT";
+  const button = (href: string, label: string) =>
+    `<a href="${escapeHtml(href)}" style="display:inline-block;background:${escapeHtml(opts.brandColor)};color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:11px 20px;border-radius:8px">${escapeHtml(label)}</a>`;
+
+  const body = [
+    `<p style="font-size:14px;line-height:1.6;margin:0 0 16px">Hi ${escapeHtml(opts.recipientFirstName || "there")},</p>`,
+    `<p style="font-size:14px;line-height:1.6;margin:0 0 8px">${escapeHtml(opts.nudgerName)} is asking about <strong>${escapeHtml(key)}</strong> — ${escapeHtml(opts.taskTitle)} on ${escapeHtml(opts.projectCode)} · ${escapeHtml(opts.projectName)}.</p>`,
+    `<p style="font-size:14px;line-height:1.6;margin:0 0 20px;padding:10px 12px;background:#f8fafc;border-radius:8px"><strong>Blocked for ${escapeHtml(days)}:</strong> ${escapeHtml(opts.blockerDescription)}</p>`,
+    `<p style="margin:0 0 12px">${button(primaryUrl, primaryLabel)}</p>`,
+    opts.externalUrl
+      ? `<p style="font-size:12px;line-height:1.6;margin:0 0 16px"><a href="${escapeHtml(qubitUrl)}" style="color:${escapeHtml(opts.brandColor)}">Open in QUBIT</a></p>`
+      : "",
+  ].join("");
+
+  const text = [
+    `Hi ${opts.recipientFirstName || "there"},`,
+    "",
+    `${opts.nudgerName} is asking about ${key} — ${opts.taskTitle} on ${opts.projectCode} · ${opts.projectName}.`,
+    `Blocked for ${days}: ${opts.blockerDescription}`,
+    "",
+    `${primaryLabel}: ${primaryUrl}`,
+    ...(opts.externalUrl ? [`Open in QUBIT: ${qubitUrl}`] : []),
+    "",
+    "Your project manager pressed Nudge. Change how you receive nudges under Notifications in QUBIT.",
+  ].join("\n");
+
+  return {
+    subject,
+    html: shell({
+      tenantName: opts.tenantName,
+      brandColor: opts.brandColor,
+      title: `${key} is blocked — ${opts.projectCode}`,
+      body,
+      footer: "Your project manager pressed Nudge. Change how you receive nudges under Notifications in QUBIT.",
+    }),
+    text,
+  };
+}
+
+/**
+ * Milestone D — the roll-up sent to the executives' distribution list: the Head's line,
+ * the week's spread, a button into /reports, and the digest PDF attached (docs handoff
+ * §3 "Email to executives").
+ */
+export function rollupEmail(opts: {
+  tenantName: string;
+  brandColor: string;
+  isoWeek: string;
+  range: string;
+  narrative: string | null;
+  counts: { green: number; amber: number; red: number };
+  total: number;
+  preparedBy: string;
+  url: string;
+}): BrandedEmail {
+  const n = opts.isoWeek.split("-W")[1];
+  const spread = `${opts.total} ${opts.total === 1 ? "project" : "projects"} · ${opts.counts.green} green · ${opts.counts.amber} amber · ${opts.counts.red} red`;
+  const subject = `Week ${n} roll-up — ${opts.tenantName}`;
+  const body = [
+    opts.narrative
+      ? `<blockquote style="margin:0 0 16px;padding-left:12px;border-left:3px solid ${escapeHtml(opts.brandColor)};font-size:15px;line-height:1.5">“${escapeHtml(opts.narrative)}”</blockquote>`
+      : "",
+    `<p style="font-size:14px;line-height:1.6;margin:0 0 6px">${escapeHtml(spread)}.</p>`,
+    `<p style="font-size:12px;color:#6b6b6b;margin:0 0 16px">Week ${escapeHtml(n ?? "")} · ${escapeHtml(opts.range)} · prepared by ${escapeHtml(opts.preparedBy)}</p>`,
+    `<a href="${escapeHtml(opts.url)}" style="display:inline-block;background:${escapeHtml(opts.brandColor)};color:#fff;padding:10px 18px;border-radius:8px;font-weight:700;font-size:14px;text-decoration:none">Open in QUBIT</a>`,
+  ].join("");
+  const html = shell({
+    tenantName: opts.tenantName,
+    brandColor: opts.brandColor,
+    title: `Project status report · Week ${n}`,
+    body,
+    footer: "The portfolio digest is attached as a PDF. Internal and confidential.",
+  });
+  const text = [
+    `${opts.tenantName} · QUBIT — Week ${n} roll-up (${opts.range})`,
+    "",
+    ...(opts.narrative ? [`"${opts.narrative}"`, ""] : []),
+    `${spread}.`,
+    `Prepared by ${opts.preparedBy}.`,
+    `Open in QUBIT: ${opts.url}`,
+    "",
+    "The portfolio digest is attached as a PDF. Internal and confidential.",
+  ].join("\n");
+  return { subject, html, text };
+}
+
+/** Milestone D — a project one-pager sent from Custom reports to the same list. */
+export function projectReportEmail(opts: {
+  tenantName: string;
+  brandColor: string;
+  isoWeek: string;
+  projectCode: string;
+  projectName: string;
+  senderName: string;
+  url: string;
+}): BrandedEmail {
+  const n = opts.isoWeek.split("-W")[1];
+  const subject = `${opts.projectCode} status report · Week ${n} — ${opts.tenantName}`;
+  const body = [
+    `<p style="font-size:14px;line-height:1.6;margin:0 0 16px">${escapeHtml(opts.senderName)} shared the Week ${escapeHtml(n ?? "")} status report for <b>${escapeHtml(opts.projectName)}</b> (${escapeHtml(opts.projectCode)}). It is attached as a PDF.</p>`,
+    `<a href="${escapeHtml(opts.url)}" style="display:inline-block;background:${escapeHtml(opts.brandColor)};color:#fff;padding:10px 18px;border-radius:8px;font-weight:700;font-size:14px;text-decoration:none">Open the project in QUBIT</a>`,
+  ].join("");
+  const html = shell({ tenantName: opts.tenantName, brandColor: opts.brandColor, title: `${opts.projectName} · Week ${n}`, body, footer: "Internal and confidential." });
+  const text = [
+    `${opts.tenantName} · QUBIT — ${opts.projectCode} status report, Week ${n}`,
+    "",
+    `${opts.senderName} shared the Week ${n} status report for ${opts.projectName} (${opts.projectCode}). It is attached as a PDF.`,
+    `Open the project in QUBIT: ${opts.url}`,
+    "",
+    "Internal and confidential.",
+  ].join("\n");
+  return { subject, html, text };
+}

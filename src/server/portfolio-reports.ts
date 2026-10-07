@@ -4,10 +4,10 @@
 // payload — what the Head signed never mutates underneath the exec.
 import type { Prisma } from "@prisma/client";
 import { audit } from "@/lib/audit";
-import { isoWeekId } from "@/lib/iso-week";
+import { isoWeekId, isoWeekMonday, weekWindow } from "@/lib/iso-week";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { effectiveRag } from "@/server/checkins";
-import { projectRag, type Rag } from "@/server/health";
+import { projectRag, tallyRag, type Rag, type RagTally } from "@/server/health";
 import { emitDomainEvent } from "@/server/events";
 
 export class RollupError extends Error {
@@ -29,10 +29,18 @@ export interface RollupRow {
   code: string;
   name: string;
   pmName: string | null;
+  /** Milestone B — for the grouped inbox. Optional: frozen payloads from before B lack it
+   *  (read it through portfolioOf()). */
+  portfolioName?: string | null;
   rag: Rag;
   checkIn: "Confirmed" | "Draft" | "None";
   submittedToHead: boolean;
   narrative: string | null;
+}
+
+/** The portfolio a row belongs to, "Unassigned" when none (or when the row predates B). */
+export function portfolioOf(r: Pick<RollupRow, "portfolioName">): string {
+  return r.portfolioName ?? "Unassigned";
 }
 
 export interface RollupView {
@@ -48,20 +56,26 @@ export interface RollupView {
   total: number;
   /** DM1.73 (T7): confirmed check-ins the PM never pressed "Send to the Head" on. */
   unsent: number;
+  /** Milestone B — G/A/R across the rows; `computed` = rows without a confirmed check-in. */
+  ragCounts: RagTally;
+  /** Milestone D — last "Email to executives" send (Approved weeks only). */
+  emailedAt: Date | null;
+  emailedCount: number;
 }
 
-/** Assemble this week's rows from live data (active projects × check-ins). */
-async function assembleRows(tx: Prisma.TransactionClient, isoWeek: string): Promise<RollupRow[]> {
+/** Assemble a week's rows from live data (active projects × check-ins). `at` is the
+ * instant RAG overrides are evaluated at — now for the current week, that week's end for
+ * a closed one, so a signed override still reads as signed. */
+async function assembleRows(tx: Prisma.TransactionClient, isoWeek: string, at = new Date()): Promise<RollupRow[]> {
   const [projects, checkIns] = await Promise.all([
     tx.project.findMany({
       where: { status: { notIn: ["Completed", "Cancelled"] } },
-      select: { id: true, code: true, name: true, status: true, lead: { select: { name: true } } },
+      select: { id: true, code: true, name: true, status: true, lead: { select: { name: true } }, portfolio: { select: { name: true } } },
       orderBy: { name: "asc" },
     }),
     tx.checkIn.findMany({ where: { isoWeek } }),
   ]);
   const ciByProject = new Map(checkIns.map((c) => [c.projectId, c]));
-  const now = new Date();
   return projects.map((p) => {
     const ci = ciByProject.get(p.id);
     return {
@@ -69,9 +83,10 @@ async function assembleRows(tx: Prisma.TransactionClient, isoWeek: string): Prom
       code: p.code,
       name: p.name,
       pmName: p.lead?.name ?? null,
+      portfolioName: p.portfolio?.name ?? null,
       // The check-in's effective RAG when one exists (override-aware); the health
       // engine's project RAG otherwise — one vocabulary everywhere.
-      rag: ci ? effectiveRag(ci, now) : projectRag(p.status),
+      rag: ci ? effectiveRag(ci, at) : projectRag(p.status),
       checkIn: ci?.status === "Confirmed" ? "Confirmed" : ci ? "Draft" : "None",
       submittedToHead: Boolean(ci?.submittedToHeadAt),
       narrative: ci?.status === "Confirmed" ? ci.narrative : null,
@@ -81,7 +96,15 @@ async function assembleRows(tx: Prisma.TransactionClient, isoWeek: string): Prom
 
 function toView(
   isoWeek: string,
-  row: { status: string; narrative: string | null; payload: unknown; approvedAt: Date | null; approvedBy?: { name: string } | null } | null,
+  row: {
+    status: string;
+    narrative: string | null;
+    payload: unknown;
+    approvedAt: Date | null;
+    approvedBy?: { name: string } | null;
+    emailedAt?: Date | null;
+    emailedTo?: string[];
+  } | null,
   liveRows: RollupRow[] | null,
 ): RollupView {
   const rows = row?.status === "Approved" ? ((row.payload as RollupRow[]) ?? []) : (liveRows ?? []);
@@ -96,20 +119,37 @@ function toView(
     submitted: rows.filter((r) => r.submittedToHead).length,
     total: rows.length,
     unsent: rows.filter((r) => r.checkIn === "Confirmed" && !r.submittedToHead).length,
+    ragCounts: tallyRag(rows.map((r) => ({ rag: r.rag, computed: r.checkIn !== "Confirmed" }))),
+    emailedAt: row?.emailedAt ?? null,
+    emailedCount: row?.emailedTo?.length ?? 0,
   };
 }
 
-/** The current week's roll-up: frozen rows when Approved, live rows otherwise. */
-export async function getRollup(ctx: TenantContext, now = new Date()): Promise<RollupView> {
+/**
+ * Milestone B — any week's roll-up for the Head's rail: frozen rows when Approved; the
+ * current week's Draft/None assembled LIVE; a closed, never-approved week shows its last
+ * built Draft payload if one exists, else live rows evaluated at that week's end. (Not to
+ * be confused with getRollupWeek below, the visibility-gated archive/export read.)
+ */
+export async function getRollupForWeek(ctx: TenantContext, isoWeek: string, now = new Date()): Promise<RollupView> {
   return withTenant(ctx, async (tx) => {
-    const isoWeek = isoWeekId(now);
     const row = await tx.portfolioReport.findUnique({
       where: { tenantId_isoWeek: { tenantId: ctx.tenantId, isoWeek } },
       include: { approvedBy: { select: { name: true } } },
     });
-    const live = row?.status === "Approved" ? null : await assembleRows(tx, isoWeek);
-    return toView(isoWeek, row, live);
+    if (row?.status === "Approved") return toView(isoWeek, row, null);
+    const isCurrent = isoWeek === isoWeekId(now);
+    if (!isCurrent && row && Array.isArray(row.payload) && row.payload.length > 0) {
+      return toView(isoWeek, row, row.payload as unknown as RollupRow[]);
+    }
+    const at = isCurrent ? now : weekWindow(isoWeekMonday(isoWeek)).end;
+    return toView(isoWeek, row, await assembleRows(tx, isoWeek, at));
   });
+}
+
+/** The current week's roll-up: frozen rows when Approved, live rows otherwise. */
+export async function getRollup(ctx: TenantContext, now = new Date()): Promise<RollupView> {
+  return getRollupForWeek(ctx, isoWeekId(now), now);
 }
 
 /** Head-only: (re)build this week's DRAFT from live check-ins. Approved is immutable. */
@@ -212,18 +252,14 @@ export async function approveRollup(
           userId,
           kind: "rollup.approved",
           message: `The week ${isoWeek.split("-W")[1]} delivery roll-up is approved: ${text.slice(0, 120)}`,
-          link: "/dashboard?persona=executive",
+          link: "/reports",
         })),
     });
     return toView(isoWeek, row, null);
   });
 }
 
-/** The approved roll-up for the exec hero (null until the Head signs). */
-export async function getApprovedRollup(
-  ctx: TenantContext,
-  now = new Date(),
-): Promise<{
+export interface ApprovedRollup {
   isoWeek: string;
   narrative: string | null;
   approvedByName: string | null;
@@ -231,10 +267,15 @@ export async function getApprovedRollup(
   /** DM1.73 (T7): the exec reads a signed line WITH its denominator, not a bare sentence. */
   confirmed: number;
   total: number;
-} | null> {
+  /** Milestone B — the signed week's G/A/R. */
+  ragCounts: RagTally;
+}
+
+/** Milestone B — the approved roll-up for any week (null until the Head signs it). */
+export async function getApprovedRollupForWeek(ctx: TenantContext, isoWeek: string): Promise<ApprovedRollup | null> {
   return withTenant(ctx, async (tx) => {
     const row = await tx.portfolioReport.findUnique({
-      where: { tenantId_isoWeek: { tenantId: ctx.tenantId, isoWeek: isoWeekId(now) } },
+      where: { tenantId_isoWeek: { tenantId: ctx.tenantId, isoWeek } },
       include: { approvedBy: { select: { name: true } } },
     });
     if (!row || row.status !== "Approved") return null;
@@ -246,8 +287,14 @@ export async function getApprovedRollup(
       approvedAt: row.approvedAt,
       confirmed: rows.filter((r) => r.checkIn === "Confirmed").length,
       total: rows.length,
+      ragCounts: tallyRag(rows.map((r) => ({ rag: r.rag, computed: r.checkIn !== "Confirmed" }))),
     };
   });
+}
+
+/** The approved roll-up for the exec hero (null until the Head signs). */
+export async function getApprovedRollup(ctx: TenantContext, now = new Date()): Promise<ApprovedRollup | null> {
+  return getApprovedRollupForWeek(ctx, isoWeekId(now));
 }
 
 export interface RollupArchiveRow {

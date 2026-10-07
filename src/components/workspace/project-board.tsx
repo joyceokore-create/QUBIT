@@ -226,10 +226,10 @@ export function ProjectBoard({
         </span>
         {badge.kind === "off" && canEdit && (
           <Link
-            href={`/projects/${projectId}?tab=Integrations`}
+            href={`/projects/${projectId}?tab=Team#integrations`}
             className="text-[11px] font-semibold text-[var(--brand)] underline-offset-2 hover:underline"
           >
-            Connect in Integrations →
+            Connect under Team →
           </Link>
         )}
         <span className="rounded-full border border-[var(--hair)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.8px] text-[var(--ink4)]">

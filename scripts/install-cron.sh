@@ -36,6 +36,7 @@ cat >> /tmp/qubit-jobs <<'CRON'
 30 7 * * 1-5 cd $DEST && ./scripts/run-cron-job.sh nudger  # qubit-job
 30 17 * * 5 cd $DEST && ./scripts/run-cron-job.sh nudger  # qubit-job friday-deadline sweep
 0 10 * * 1 cd $DEST && ./scripts/run-cron-job.sh checkin-chase  # qubit-job
+*/30 7-19 * * 1-5 cd $DEST && ./scripts/run-cron-job.sh youtrack-sync  # qubit-job board mirror
 CRON
 crontab /tmp/qubit-jobs
 rm -f /tmp/qubit-jobs
@@ -45,7 +46,7 @@ EOF
 
 if [ "$RUN_NOW" = "1" ]; then
   echo "→ running each job once"
-  for job in nightly-snapshot nudger checkin-chase; do
+  for job in nightly-snapshot nudger checkin-chase youtrack-sync; do
     printf '   %-18s ' "$job"
     $SSH "$BOX" "cd $DEST && ./scripts/run-cron-job.sh $job >/dev/null 2>&1 && tail -1 cron.log" || echo "FAILED (see $DEST/cron.log)"
   done
@@ -56,6 +57,8 @@ cat <<'NOTE'
 Schedule installed:
   23:55 daily     nightly-snapshot   — the history every WoW delta and sparkline reads
   07:30 Mon–Fri   nudger             — the working week's chasers
+  every 30 min    youtrack-sync      — 07:00–19:30 Mon–Fri: mirrors connected YouTrack projects
+                                       onto their boards (skips itself while FEATURE_YOUTRACK is off)
   17:30 Friday    nudger             — the deadline sweep: catches a check-in confirmed
                                        during Friday afternoon but never sent to the Head,
                                        which the morning-only schedule could not (the gap

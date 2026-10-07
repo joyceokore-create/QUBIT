@@ -10,6 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Markdown } from "@/components/q/markdown";
 
+// Uploaded files kept as base64 (PDF since M8; the weekly status report arrives as Word/Excel too).
+const FILE_MIME: Record<string, string> = {
+  pdf: "application/pdf",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+};
+
 interface Approval {
   approverId: string;
   approverName: string;
@@ -342,13 +349,13 @@ function ViewDialog({ doc, onClose }: { doc: DocDetail; onClose: () => void }) {
           <DialogTitle>{doc.title}</DialogTitle>
           <DialogDescription>{doc.kind} · {doc.status === "PendingReview" ? "Pending review" : doc.status}</DialogDescription>
         </DialogHeader>
-        {doc.format === "pdf" && doc.fileData ? (
+        {FILE_MIME[doc.format] && doc.fileData ? (
           <a
-            href={`data:application/pdf;base64,${doc.fileData}`}
-            download={`${doc.title}.pdf`}
+            href={`data:${FILE_MIME[doc.format]};base64,${doc.fileData}`}
+            download={`${doc.title}.${doc.format}`}
             className="flex w-fit items-center gap-2 rounded-[10px] bg-[var(--brand)] px-4 py-2.5 text-[13px] font-bold text-[var(--onbrand)]"
           >
-            <Download className="size-4" /> Download PDF
+            <Download className="size-4" /> Download {doc.format.toUpperCase()}
           </a>
         ) : doc.content ? (
           <div className="max-h-[60vh] overflow-y-auto rounded-[10px] border border-[var(--w07)] bg-[var(--qcard)] p-4">

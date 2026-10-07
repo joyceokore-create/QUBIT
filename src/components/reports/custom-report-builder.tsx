@@ -16,6 +16,8 @@ import { CARD } from "@/lib/surface";
 // links the same URL with format=csv and only appears once a preview is on screen, so
 // what gets downloaded is always something the user has looked at first (the
 // export-button rule: no client-side data path that could drift from the screen).
+// Milestone D: the same preview also exports as a PDF in the report print style
+// (/api/reports/export?template=table) — or opens as a print view where no PDF engine exists.
 
 const STORAGE_KEY = "qubit.reports.custom.v1";
 const PREVIEW_ROWS = 20;
@@ -51,7 +53,7 @@ function formatCell(value: string | number | boolean | null, type: string): stri
   return String(value);
 }
 
-export function CustomReportBuilder({ allowedDatasets }: { allowedDatasets: ReportDatasetKey[] }) {
+export function CustomReportBuilder({ allowedDatasets, pdfAvailable = false }: { allowedDatasets: ReportDatasetKey[]; pdfAvailable?: boolean }) {
   const datasets = useMemo(
     () => REPORT_DATASETS.filter((d) => allowedDatasets.includes(d.key)),
     [allowedDatasets],
@@ -140,6 +142,9 @@ export function CustomReportBuilder({ allowedDatasets }: { allowedDatasets: Repo
   // re-ticking boxes after a preview can never make the file differ from the screen.
   const csvHref = result
     ? `/api/reports/custom?dataset=${dataset}&columns=${result.columns.map((c) => c.key).join(",")}&format=csv`
+    : "";
+  const pdfHref = result
+    ? `/api/reports/export?template=table&dataset=${dataset}&columns=${result.columns.map((c) => c.key).join(",")}`
     : "";
   const previewRows = result ? (showAll ? result.rows : result.rows.slice(0, PREVIEW_ROWS)) : [];
   const hiddenRows = result ? result.rowCount - previewRows.length : 0;
@@ -230,7 +235,20 @@ export function CustomReportBuilder({ allowedDatasets }: { allowedDatasets: Repo
                 Column selection changed — preview again to refresh; the export matches this preview.
               </span>
             )}
-            <span className="ml-auto">
+            <span className="ml-auto flex flex-wrap items-center gap-2">
+              {pdfAvailable ? (
+                <ExportButton href={pdfHref} label="Export PDF" />
+              ) : (
+                <a
+                  href={`${pdfHref}&format=html`}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="PDF rendering isn't available here — print this view instead"
+                  className="rounded-[7px] border border-[var(--w07)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)]"
+                >
+                  Print view
+                </a>
+              )}
               <ExportButton href={csvHref} label={`Export CSV (${result.rowCount} rows)`} />
             </span>
           </div>

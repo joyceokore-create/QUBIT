@@ -49,8 +49,16 @@ export function AssignMembersDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [bench, setBench] = useState<BenchRow[]>([]);
+  // Oct 2026 — the list's states are told apart: loading, failed (with the server's reason
+  // and a retry), nobody active yet, everyone already assigned. "Everyone is already on
+  // this project" used to be the message for a failed request too.
+  const [benchState, setBenchState] = useState<"loading" | "ready" | "error">("loading");
+  const [benchError, setBenchError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [role, setRole] = useState<string>("Developer");
+  // Projects are run by their project managers — the PM hat is the default.
+  const [role, setRole] = useState<string>("Project Manager");
   const [alloc, setAlloc] = useState(50);
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
@@ -63,16 +71,36 @@ export function AssignMembersDialog({
     const qs = new URLSearchParams();
     if (start) qs.set("start", new Date(start).toISOString());
     if (end) qs.set("end", new Date(end).toISOString());
+    let live = true;
+    setBenchState("loading");
+    setBenchError(null);
     fetch(`/api/staffing/bench?${qs}`)
-      .then((r) => r.json())
-      .then((d) => setBench((d.data ?? []) as BenchRow[]))
-      .catch(() => setBench([]));
-  }, [open, start, end]);
+      .then(async (r) => {
+        const d = await r.json().catch(() => null);
+        if (!live) return;
+        if (!r.ok) throw new Error(d?.error?.message ?? `Could not load people (HTTP ${r.status}).`);
+        setBench((d?.data ?? []) as BenchRow[]);
+        setBenchState("ready");
+      })
+      .catch((e: unknown) => {
+        if (!live) return;
+        setBench([]);
+        setBenchError(e instanceof Error ? e.message : "Could not load people.");
+        setBenchState("error");
+      });
+    return () => {
+      live = false;
+    };
+  }, [open, start, end, reloadKey]);
 
   const candidates = useMemo(
     () => bench.filter((b) => !existingUserIds.includes(b.userId)),
     [bench, existingUserIds],
   );
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q ? candidates.filter((c) => c.name.toLowerCase().includes(q)) : candidates;
+  }, [candidates, query]);
 
   /** Effective values for one person: their overrides, falling back to the defaults. */
   const rowValues = (userId: string) => {
@@ -158,11 +186,33 @@ export function AssignMembersDialog({
       }
     >
       <div className="flex max-h-[62vh] flex-col gap-3 overflow-y-auto pr-0.5">
+        {bench.length > 6 && (
+          <Input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a person…" aria-label="Find a person" className="h-8" />
+        )}
         <div className="max-h-[180px] flex-none overflow-auto rounded-[10px] border border-[var(--w08)]">
-          {candidates.length === 0 ? (
+          {benchState === "loading" ? (
+            <p className="p-3 text-[12px] text-[var(--ink4)]">Loading people…</p>
+          ) : benchState === "error" ? (
+            <p role="alert" className="flex flex-wrap items-center gap-2 p-3 text-[12px] text-[var(--bad)]">
+              {benchError}
+              <button type="button" onClick={() => setReloadKey((k) => k + 1)} className="rounded-[6px] border border-[var(--w07)] px-2 py-0.5 text-[11px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)]">
+                Retry
+              </button>
+            </p>
+          ) : bench.length === 0 ? (
+            <p className="p-3 text-[12px] text-[var(--ink4)]">
+              No active people to add yet —{" "}
+              <Link href="/admin/users" className="font-semibold text-[var(--ink3)] underline-offset-2 hover:underline">
+                invite them under Admin → Users
+              </Link>
+              .
+            </p>
+          ) : candidates.length === 0 ? (
             <p className="p-3 text-[12px] text-[var(--ink4)]">Everyone is already on this project.</p>
+          ) : shown.length === 0 ? (
+            <p className="p-3 text-[12px] text-[var(--ink4)]">Nobody matches “{query}”.</p>
           ) : (
-            candidates.map((c) => {
+            shown.map((c) => {
               const on = picked.has(c.userId);
               return (
                 <button

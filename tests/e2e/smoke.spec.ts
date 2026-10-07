@@ -24,7 +24,7 @@ test.describe("golden path (Demo Org B fixture super-admin)", () => {
 
   test("dashboard renders the RBAC-level cockpit", async ({ page }) => {
     // A super admin lands on the Superadmin cockpit (Executive view + slim platform-admin row).
-    await expect(page.getByRole("heading", { name: "Decisions & group actions" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Decisions waiting on the Group" })).toBeVisible();
     await expect(page.getByText("Demo Org B", { exact: false }).first()).toBeVisible();
   });
 
@@ -40,7 +40,9 @@ test.describe("golden path (Demo Org B fixture super-admin)", () => {
     await page.goto("/projects");
     // Open the first project in the list (seeded P001).
     await page.getByText("CBS Phase 1", { exact: false }).first().click();
-    await page.getByRole("button", { name: "Board" }).click();
+    // Milestone A: the workspace tabs are real tabs (role="tab"); exact, so "Dashboard"
+    // and the lens buttons can never collide with it under strict mode.
+    await page.getByRole("tab", { name: "Board", exact: true }).click();
     for (const lens of ["All work", "Dev board", "QA board", "Implementor board"]) {
       await expect(page.getByRole("button", { name: new RegExp(lens) })).toBeVisible();
     }

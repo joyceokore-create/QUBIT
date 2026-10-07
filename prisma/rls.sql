@@ -99,6 +99,7 @@ BEGIN
     'project_dependency',
     -- M-P3b (docs/34) — the Head of PMs' weekly roll-up.
     'portfolio_report',
+    'rollup_recipient',
     -- M-P4a (docs/35) — idea intake & triage, the front of the funnel.
     'idea',
     -- Custom roles (tuma-style permission bundles) — admin-created, deactivate-only.

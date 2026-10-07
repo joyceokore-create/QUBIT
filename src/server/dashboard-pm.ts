@@ -159,7 +159,7 @@ export async function getPmDashboard(ctx: TenantContext, now = new Date()): Prom
       title: `${r.name} sent their weekly report`,
       project: r.projectName,
       meta: r.submittedAt ? `${ageDays(r.submittedAt)}d waiting` : "acknowledge it",
-      href: "/reports?tab=team",
+      href: "/reports",
     })),
     ...myJoins.map((j) => ({
       kind: "join" as const,

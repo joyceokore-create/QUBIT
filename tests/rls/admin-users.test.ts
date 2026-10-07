@@ -1,6 +1,6 @@
 // Admin/IAM v1 lifecycle: create, role grant/revoke, suspend, soft-delete — and that RLS
 // still holds across tenants for admin-managed data. Requires a migrated, seeded DB.
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import {
@@ -66,6 +66,57 @@ describe("Admin/IAM user lifecycle", () => {
     const listed = await listUsers(adminCtx);
     const found = listed.find((u) => u.id === user.id);
     expect(found?.roles.sort()).toEqual(["Member", "ProjectManager"]);
+  });
+
+  it("non-SSO invite: INVITED, no password, must-change gate, and a token is minted", async () => {
+    // Default env (vitest strips AZURE_AD_*) → the credentials/invite path.
+    const { user: user, sso, emailed } = await createUser(adminCtx, {
+      name: "Test Lifecycle User",
+      email: TEST_EMAIL,
+      roles: ["Member"],
+    });
+    expect(sso).toBe(false);
+    const [row, tokens] = await withTenant(adminCtx, (tx) =>
+      Promise.all([
+        tx.user.findUniqueOrThrow({ where: { id: user.id }, select: { status: true, passwordHash: true, mustChangePassword: true } }),
+        tx.inviteToken.count({ where: { userId: user.id } }),
+      ]),
+    );
+    expect(row.status).toBe("INVITED");
+    expect(row.passwordHash).toBeNull();
+    expect(row.mustChangePassword).toBe(true);
+    expect(tokens).toBeGreaterThanOrEqual(1); // a set-password link was minted
+    void emailed;
+  });
+
+  it("SSO invite: provisions ACTIVE with no password, no gate, and no token", async () => {
+    // docs/38 — under Entra SSO the invite just provisions; the person signs in with
+    // Microsoft. No password onboarding, no set-password token.
+    vi.stubEnv("AZURE_AD_CLIENT_ID", "cid");
+    vi.stubEnv("AZURE_AD_CLIENT_SECRET", "secret");
+    vi.stubEnv("AZURE_AD_TENANT_ID", "tid");
+    try {
+      const { user: user, sso, emailed, acceptUrl } = await createUser(adminCtx, {
+        name: "Test Lifecycle User",
+        email: TEST_EMAIL,
+        roles: ["Member"],
+      });
+      expect(sso).toBe(true);
+      expect(emailed).toBe(false);
+      expect(acceptUrl).toBeUndefined();
+      const [row, tokens] = await withTenant(adminCtx, (tx) =>
+        Promise.all([
+          tx.user.findUniqueOrThrow({ where: { id: user.id }, select: { status: true, passwordHash: true, mustChangePassword: true } }),
+          tx.inviteToken.count({ where: { userId: user.id } }),
+        ]),
+      );
+      expect(row.status).toBe("ACTIVE");
+      expect(row.passwordHash).toBeNull();
+      expect(row.mustChangePassword).toBe(false);
+      expect(tokens).toBe(0); // no set-password link under SSO
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("diffs role changes and audits grants/revokes separately", async () => {
