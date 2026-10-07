@@ -229,7 +229,7 @@
 }
 
 /* ── LIGHT theme (default `:root` scope) ────────────────────────────────
-   Dark is the design's default *appearance* (next-themes defaultTheme=dark),
+   Light is the default *appearance* (next-themes defaultTheme=light; dark on request),
    but light lives on :root as the token fallback per the handoff. Values are
    the canonical palette from `QUBIT Command Center.dc.html` → applyTheme(). */
 :root {
@@ -633,6 +633,22 @@
   to {
     opacity: 1;
     transform: none;
+  }
+}
+/* First-week setup nudge: drops into the header with a little overshoot — the one thing
+   that bounces, so it reads as "this needs you" without a modal. */
+@keyframes nudgeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-28px) scale(0.92);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(6px) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 @keyframes arcIn {

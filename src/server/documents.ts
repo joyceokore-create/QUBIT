@@ -158,7 +158,7 @@ export const CreateDocumentInput = z
   .object({
     title: z.string().min(1),
     kind: z.enum(DOC_KINDS).optional(),
-    format: z.enum(["text", "markdown", "pdf", "docx", "xlsx"]).optional(),
+    format: z.enum(["text", "markdown", "pdf", "docx", "xlsx", "pptx"]).optional(),
     content: z.string().nullable().optional(),
     fileData: z.string().nullable().optional(),
     status: z.enum(DOC_STATUSES).optional(),

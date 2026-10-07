@@ -35,6 +35,8 @@ export interface V3QueueItem {
   act: string;
   projectId: string;
   projectName: string;
+  /** When set, the action opens this page instead of the project drawer. */
+  href?: string;
 }
 
 export interface V3Risk { sev: "R" | "A"; t: string; meta: string; projectName: string; projectId: string }
@@ -48,6 +50,8 @@ export interface PmV3Props {
   ragCounts: { R: number; A: number; G: number; N: number };
   stats: { overdueMilestones: number; gatesSoon: number; nextUp: string; disputes: number; openRisks: number; allocPct: number | null };
   queue: V3QueueItem[];
+  /** Copy for an empty queue (e.g. a Head previewing with no projects of their own). */
+  queueEmpty?: string;
   risks: V3Risk[];
   collisions: string[];
   market: { projectName: string; rows: V3Market[]; gateLabels: string[] } | null;
@@ -126,7 +130,7 @@ export function Gate({ g }: { g: string }) {
   return <span className={`gate ${v.cls}`} title={v.title}>{v.ch}</span>;
 }
 
-export function PmV3({ viewer, briefLines, generatedAt, projects, ragCounts, stats, queue, risks, collisions, market }: PmV3Props) {
+export function PmV3({ viewer, briefLines, generatedAt, projects, ragCounts, stats, queue, queueEmpty, risks, collisions, market }: PmV3Props) {
   const [wqFilter, setWqFilter] = useState("");
   const [search, setSearch] = useState("");
 
@@ -207,9 +211,9 @@ export function PmV3({ viewer, briefLines, generatedAt, projects, ragCounts, sta
                     {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
-                <div className="sub" style={{ margin: "-6px 0 12px" }}>{visibleQueue.length} items · merged across projects</div>
+                <div className="sub" style={{ margin: "-6px 0 12px" }}>{visibleQueue.length} items · the projects you run</div>
                 <div className="queue queue-pm">
-                  {visibleQueue.length === 0 && <span className="hint">No items for this filter</span>}
+                  {visibleQueue.length === 0 && <span className="hint">{queueEmpty ?? (wqFilter ? "No items for this filter" : "Nothing needs you right now.")}</span>}
                   {visibleQueue.map((item, i) => (
                     <div className="qi" key={i}>
                       <div className="b">
@@ -220,7 +224,13 @@ export function PmV3({ viewer, briefLines, generatedAt, projects, ragCounts, sta
                         <b className="qi-title">{item.t}</b>
                         <span className="qi-desc">{item.d}</span>
                       </div>
-                      <div className="m"><button type="button" className="act-btn dark" data-open={item.projectId}>{item.act}</button></div>
+                      <div className="m">
+                        {item.href ? (
+                          <a className="act-btn dark" href={item.href}>{item.act}</a>
+                        ) : (
+                          <button type="button" className="act-btn dark" data-open={item.projectId}>{item.act}</button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

@@ -1,6 +1,7 @@
 import type { CockpitData, CockpitProject, GateKey } from "@/server/dashboard-cockpit";
 import { CALC_ORDER, GATE_KEYS, GATE_LABELS } from "@/server/dashboard-cockpit";
 import { briefLines } from "./ask-q-brief";
+import type { ProjectSetup } from "@/server/project-setup";
 import { PmV3, type PmV3Props, type V3Project, type V3QueueItem, type V3Risk } from "./pm-v3";
 
 // Server wrapper for the PM Delivery Cockpit: maps real tenant data (CockpitProject[]) into
@@ -34,15 +35,22 @@ export function PmCockpit({
   viewerName,
   allocationPct,
   now,
+  allowPreviewAll = true,
+  setups = {},
 }: {
   data: CockpitData;
   viewerId: string;
   viewerName?: string;
   allocationPct?: number | null;
   now: Date;
+  /** A Head/admin looking at the PM view with no projects of their own sees everyone's;
+   *  a real PM with none sees an empty board, never the whole estate. */
+  allowPreviewAll?: boolean;
+  /** Per-project setup signals for the projects the viewer runs (the queue's first items). */
+  setups?: Record<string, ProjectSetup>;
 }) {
-  const owned = data.projects.filter((p) => p.pmId === viewerId && !["Completed", "Cancelled"].includes(p.status));
-  const previewingAll = owned.length === 0;
+  const owned = data.projects.filter((p) => p.pmIds.includes(viewerId) && !["Completed", "Cancelled"].includes(p.status));
+  const previewingAll = owned.length === 0 && allowPreviewAll;
   const mine = (previewingAll ? data.projects.filter((p) => !["Completed", "Cancelled"].includes(p.status)) : owned)
     .slice()
     .sort(
@@ -72,9 +80,23 @@ export function PmCockpit({
     };
   });
 
-  // Work queue — the artifact's exact item set and action labels.
+  // Work queue — per person: only the projects the viewer runs (never the preview set).
+  // Set-up left to do comes first, then this week's update, then the artifact's items.
   const queue: V3QueueItem[] = [];
-  for (const p of mine) {
+  const SETUP_LABEL: Record<string, string> = { gates: "delivery gates", documents: "documents", team: "team", youtrack: "YouTrack", thisWeek: "this week's update" };
+  for (const p of owned) {
+    const s = setups[p.id];
+    if (!s) continue;
+    const left = (["gates", "documents", "team", "youtrack"] as const).filter((k) => s[k] === false);
+    if (left.length > 0) {
+      queue.push({ k: "flag", t: `Set up ${p.code} · ${left.length} to go`, d: `Still to do: ${left.map((k) => SETUP_LABEL[k]).join(", ")}. The checklist on the project's This week tab walks you through it.`, when: "Set up", act: "Set up", projectId: p.id, projectName: p.name, href: `/projects/${p.id}?tab=This%20week` });
+    }
+    if (!s.thisWeek) {
+      const fri = (5 - now.getDay() + 7) % 7;
+      queue.push({ k: fri === 0 ? "due" : "soon", t: "This week's update not sent", d: "One line for leadership, one RAG, Confirm & send — it lands in the Head's roll-up.", when: fri === 0 ? "Due today" : `Due Friday · ${fri}d`, act: "Send update", projectId: p.id, projectName: p.name, href: `/projects/${p.id}?tab=This%20week` });
+    }
+  }
+  for (const p of owned) {
     const { stage } = stageOf(p);
     const ms = p.nextMilestone;
     if (ms?.dueDate) {
@@ -90,12 +112,15 @@ export function PmCockpit({
     for (const r of p.risks.filter((r) => r.severity === "R")) {
       queue.push({ k: "due", t: `${r.id} · ${r.title}`, d: `Owner: ${r.owner}. No acknowledgement recorded.`, when: "Unacknowledged", act: "Escalate", projectId: p.id, projectName: p.name });
     }
-    if (p.freshnessDays >= 5 && p.freshnessDays < 900) {
+    if (!setups[p.id] && p.freshnessDays >= 5 && p.freshnessDays < 900) {
       queue.push({ k: "info", t: "Weekly status update due", d: `Last update ${p.freshnessDays} days ago.`, when: "This week", act: "Update", projectId: p.id, projectName: p.name });
     }
   }
+  // Stable: set-up and update items keep their place at the top; the rest by urgency.
   const order = { due: 0, soon: 1, flag: 2, info: 3 };
-  queue.sort((a, b) => order[a.k] - order[b.k]);
+  const head = queue.filter((q) => q.href);
+  const rest = queue.filter((q) => !q.href).sort((a, b) => order[a.k] - order[b.k]);
+  queue.splice(0, queue.length, ...head, ...rest);
 
   // Collisions — projects with gate dates in the same week (artifact logic).
   const collisions: string[] = [];
@@ -162,6 +187,7 @@ export function PmCockpit({
         allocPct: allocationPct ?? null,
       }}
       queue={queue}
+      queueEmpty={previewingAll ? "The work queue is per project manager — you don't run a project yet." : undefined}
       risks={risks}
       collisions={collisions}
       market={market}

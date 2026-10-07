@@ -12,6 +12,8 @@ import { listProjectMembers } from "@/server/resources";
 import { getCurrentCheckIn } from "@/server/checkins";
 import { marketRagsForProject } from "@/server/rollout";
 import { registerOpenCount } from "@/server/project-register";
+import { getProjectSetup } from "@/server/project-setup";
+import { listProjectInstances } from "@/server/project-instances";
 import { Forbidden } from "@/components/forbidden";
 import { ProjectWorkspace } from "@/components/workspace/project-workspace";
 import type { CheckInJson, ProjectPanelJson } from "@/components/panels/project-panel-json";
@@ -23,7 +25,7 @@ export default async function ProjectWorkspacePage({
   params: Promise<{ id: string }>;
   // Deep links (work-cycle UX): ?tab=Board&task=<id> jumps to a highlighted card;
   // ?lens=qa|dev|all picks the board lens. My Tasks rows and notifications use these.
-  searchParams: Promise<{ tab?: string; task?: string; lens?: string }>;
+  searchParams: Promise<{ tab?: string; task?: string; lens?: string; market?: string; instance?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) return null;
@@ -33,7 +35,7 @@ export default async function ProjectWorkspacePage({
 
   if (!(await canViewProject(ctx, id))) return <Forbidden />;
 
-  const [p, members, canContribute, canWrite, checkinView, openCount, membership, portfolios, viewerCategory] = await Promise.all([
+  const [p, members, canContribute, canWrite, checkinView, openCount, membership, portfolios, viewerCategory, setup] = await Promise.all([
     getProjectPanelData(ctx, id),
     listProjectMembers(ctx, id),
     canContributeToProject(ctx, id),
@@ -47,13 +49,15 @@ export default async function ProjectWorkspacePage({
         tx.project.findFirst({ where: { id, leadUserId: ctx.userId }, select: { id: true } }),
         tx.projectMember.findFirst({ where: { projectId: id, userId: ctx.userId }, select: { id: true, role: true } }),
       ]);
-      return { isMember: Boolean(lead || m), isLead: Boolean(lead) };
+      return { isMember: Boolean(lead || m), isLead: Boolean(lead), isPm: Boolean(lead) || m?.role === "Project Manager" };
     }),
     // Portfolio choices for the governance editor's move control (docs/18 §0.5).
     withTenant(ctx, (tx) => tx.portfolio.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } })),
     // DM1.43: ONE computation shared with the tasks API, so the toggles the page renders
     // and the rows the server returns can never disagree.
     viewerBoardCategory(ctx, id),
+    // First-week walkthrough — the per-project "Set up {code}" card's five signals.
+    getProjectSetup(ctx, id),
   ]);
   // M-P2c — dependency picker candidates (active projects only). DM1.73: capped — this
   // feeds a <select> in the Register's Dependencies tab, and an unbounded findMany on a
@@ -71,8 +75,41 @@ export default async function ProjectWorkspacePage({
   // M-P2b — the Delivery tab's market tracks (docs/25 §3 tab 4). Milestone A: through the
   // rollout cell rule, so each track carries this week's RAG (header chip, status card,
   // Markets aside all read the same value).
-  const marketTracks = await withTenant(ctx, (tx) => marketRagsForProject(tx, id, isoWeekId(new Date())));
+  const isoWeek = isoWeekId(new Date());
+  const [marketTracks, instanceRows, instanceCheckIns] = await withTenant(ctx, (tx) =>
+    Promise.all([
+      marketRagsForProject(tx, id, isoWeek),
+      // docs/38 — the markets the product ships to (any org-unit kind) with lead and note.
+      tx.projectOrgStatus.findMany({
+        where: { projectId: id, retiredAt: null },
+        select: { orgUnitId: true, status: true, leadUserId: true, note: true, lead: { select: { name: true } }, orgUnit: { select: { code: true, name: true, flag: true, kind: true } } },
+      }),
+      tx.marketCheckIn.findMany({ where: { projectId: id, isoWeek }, select: { orgUnitId: true, narrative: true, rag: true, isoWeek: true } }),
+    ]),
+  );
   if (!p) notFound();
+  const checkInByUnit = new Map(instanceCheckIns.map((c) => [c.orgUnitId, c]));
+  const trackByUnit = new Map(marketTracks.map((m) => [m.orgUnitId, m]));
+  const markets = instanceRows
+    .map((r) => ({
+      orgUnitId: r.orgUnitId,
+      code: r.orgUnit.code,
+      name: r.orgUnit.name,
+      flag: r.orgUnit.flag,
+      kind: r.orgUnit.kind,
+      status: r.status,
+      progress: trackByUnit.get(r.orgUnitId)?.progress ?? 0,
+      leadUserId: r.leadUserId,
+      leadName: r.lead?.name ?? null,
+      note: r.note,
+      rag: trackByUnit.get(r.orgUnitId)?.rag ?? ("Green" as const),
+      checkIn: checkInByUnit.get(r.orgUnitId) ?? null,
+    }))
+    .sort((a, b) => a.code.localeCompare(b.code));
+  const initialMarket = sp.market && markets.some((i) => i.orgUnitId === sp.market) ? sp.market : null;
+  // docs/38 — the product's named instances with their state per market.
+  const [namedInstances, modules] = await Promise.all([listProjectInstances(ctx, id, "instance"), listProjectInstances(ctx, id, "module")]);
+  const initialInstance = sp.instance && [...namedInstances, ...modules].some((i) => i.id === sp.instance) ? sp.instance : null;
 
   const checkin: CheckInJson = {
     ...checkinView,
@@ -104,7 +141,16 @@ export default async function ProjectWorkspacePage({
       rag: m.rag,
     })),
     checkin,
+    markets,
+    initialMarket,
+    namedInstances,
+    modules,
+    initialInstance,
     registerOpenCount: openCount,
+    setup,
+    // Setting a project up is its PM's job: the checklist renders only for the lead or a
+    // "Project Manager" member; Heads and admins see the progress chip in the header.
+    canSetUp: membership.isPm,
     isMember: membership.isMember, // viewer leads or is allocated → hides "Request to join"
   };
 

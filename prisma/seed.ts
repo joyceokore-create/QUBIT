@@ -1219,6 +1219,8 @@ async function seedTenant(seed: TenantSeed) {
     for (const u of seed.users) {
       const created = await tx.user.create({
         data: {
+          // Seeded accounts never get the first-week walk (the e2e smoke signs in as them).
+          tourCompletedAt: new Date(),
           tenantId: tenant.id,
           email: u.email,
           name: u.name,
@@ -1461,6 +1463,8 @@ async function seedTenant(seed: TenantSeed) {
       const domain = seed.domains.find((d) => d.endsWith(".invalid")) ?? seed.domains[0];
       const qaUser = await tx.user.create({
         data: {
+          // Seeded accounts never get the first-week walk (the e2e smoke signs in as them).
+          tourCompletedAt: new Date(),
           tenantId: tenant.id,
           email: `qa.demo@${domain}`,
           name: "QA Demo",
@@ -1476,6 +1480,8 @@ async function seedTenant(seed: TenantSeed) {
       });
       const implUser = await tx.user.create({
         data: {
+          // Seeded accounts never get the first-week walk (the e2e smoke signs in as them).
+          tourCompletedAt: new Date(),
           tenantId: tenant.id,
           email: `impl.demo@${domain}`,
           name: "Implementor Demo",

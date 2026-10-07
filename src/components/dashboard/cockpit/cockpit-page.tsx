@@ -3,6 +3,7 @@ import type { DashboardLevel } from "@/lib/dashboard-level";
 import { allowedLevels } from "@/lib/dashboard-level";
 import { getCockpitData, PERIOD_WEEKS } from "@/server/dashboard-cockpit";
 import { listWorkload } from "@/server/resources";
+import { getProjectSetup, type ProjectSetup } from "@/server/project-setup";
 import { CockpitInteractive } from "./cockpit-interactive";
 import { PmCockpit } from "./pm";
 import { HeadCockpit } from "./head";
@@ -46,6 +47,14 @@ export async function CockpitPage({
   const projects = activeScope === "all" ? full.projects : full.projects.filter((p) => p.portfolioName === activeScope);
   const data = { ...full, projects, pms: full.pms.filter((pm) => projects.some((p) => p.pmId === pm.id)) };
 
+  // The PM work queue is per person: set-up left to do and this week's update for the
+  // projects the viewer runs (lead or Project Manager member), before anything else.
+  const setups: Record<string, ProjectSetup> = {};
+  if (level === "pm") {
+    const owned = full.projects.filter((p) => p.pmIds.includes(viewerId) && !["Completed", "Cancelled"].includes(p.status)).slice(0, 20);
+    await Promise.all(owned.map(async (p) => void (setups[p.id] = await getProjectSetup(ctx, p.id, now))));
+  }
+
   return (
     <main className="mx-auto flex w-full max-w-[1280px] flex-col gap-5 p-[24px_24px_72px]">
       <CockpitInteractive level={level} allowed={allowed} projects={data.projects} portfolios={portfolios} scope={activeScope} period={activePeriod}>
@@ -54,7 +63,7 @@ export async function CockpitPage({
         ) : level === "head" ? (
           <HeadCockpit data={data} />
         ) : level === "pm" ? (
-          <PmCockpit data={data} viewerId={viewerId} viewerName={viewerName} allocationPct={allocationPct} now={now} />
+          <PmCockpit data={data} viewerId={viewerId} viewerName={viewerName} allocationPct={allocationPct} now={now} allowPreviewAll={!roles.includes("ProjectManager")} setups={setups} />
         ) : (
           <UserCockpit data={data} viewerId={viewerId} />
         )}

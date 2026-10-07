@@ -5,7 +5,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { withTenant, type TenantContext } from "@/lib/tenant";
-import { isoWeekId } from "@/lib/iso-week";
+import { isoWeekId, shiftIsoWeek } from "@/lib/iso-week";
 import { confirmCheckIn, getCurrentCheckIn } from "@/server/checkins";
 import { applyStatusReport } from "@/server/status-report-upload";
 import { createUsers, cleanupFixtureUsers } from "./_users";
@@ -92,6 +92,24 @@ describe("status-report upload — apply", () => {
 
     // The already-sent project was left exactly as sent; the foreign tenant has nothing.
     expect((await getCurrentCheckIn(pm, mineSent, NOW)).narrative).toBe("Already sent this week.");
+
+    // Recall by upload: a row marked "resend" replaces the sent week and sends it again.
+    const again = await applyStatusReport(pm, { rows: [{ projectId: mineSent, rag: "Red", stage: "", narrative: "Replaced from the new report.", resend: true }] }, NOW);
+    expect(again).toMatchObject([{ projectId: mineSent, code: "SRU-B", outcome: "resent" }]);
+    const resent = await getCurrentCheckIn(pm, mineSent, NOW);
+    expect(resent).toMatchObject({ status: "Confirmed", narrative: "Replaced from the new report.", ragOverride: "Red" });
+    expect(resent.submittedToHeadAt).toBeTruthy();
+
+    // A past week's report: rows are sent as reviewed (no queue for a closed week), in that week.
+    const lastWeek = shiftIsoWeek(WEEK, -1);
+    const past = await applyStatusReport(pm, { week: lastWeek, rows: [{ projectId: mine, rag: "Green", stage: "", narrative: "Last week, filed late." }] }, NOW);
+    expect(past).toMatchObject([{ projectId: mine, code: "SRU-A", outcome: "sent" }]);
+    const lastRow = await withTenant(pm, (tx) => tx.checkIn.findFirst({ where: { projectId: mine, isoWeek: lastWeek }, select: { status: true, narrative: true, submittedToHeadAt: true } }));
+    expect(lastRow).toMatchObject({ status: "Confirmed", narrative: "Last week, filed late." });
+    expect(lastRow?.submittedToHeadAt).toBeTruthy();
+    // This week's draft is untouched by the past-week upload.
+    expect((await getCurrentCheckIn(pm, mine, NOW)).narrative).toBe("All stages up to UAT complete; VAPT report due Thursday.");
+    await expect(applyStatusReport(pm, { week: shiftIsoWeek(WEEK, 2), rows: [{ projectId: mine, rag: "Green", stage: "", narrative: "Future." }] }, NOW)).rejects.toThrow(/hasn't happened/);
     const foreignDocs = await withTenant({ tenantId: dbId, userId: "seed" }, (tx) => tx.projectDocument.count({ where: { projectId: foreign } }));
     expect(foreignDocs).toBe(0);
   });

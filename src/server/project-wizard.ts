@@ -7,6 +7,8 @@
 import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { flagEnabled } from "@/lib/flags";
+import { marketKinds } from "@/server/markets";
+import { instanceCode } from "@/server/project-instances";
 import { PROJECT_ROLES } from "@/lib/roles";
 import { encryptSecret } from "@/lib/secret-box";
 import { withTenant, type TenantContext } from "@/lib/tenant";
@@ -46,7 +48,20 @@ export const CreateProjectWizardInput = z.object({
   // CheckpointTemplate ids are CUIDs (M-D-A models default cuid(), not uuid()) — the
   // real integrity check is the RLS-scoped findUniqueOrThrow in the engine.
   checkpointTemplateId: z.string().min(1).max(40).nullable().optional(),
-  marketIds: z.array(z.string().uuid()).max(20).default([]),
+  /** docs/38 — the product's instances (markets or subsidiaries per instanceLabel).
+   * `marketIds` is the pre-I1 name and still accepted. */
+  marketIds: z.array(z.string().uuid()).max(30).default([]),
+  instanceIds: z.array(z.string().uuid()).max(30).optional(),
+  instanceLabel: z.enum(["Market", "Subsidiary", "Instance"]).optional(),
+  moduleTracking: z.enum(["state", "gates"]).optional(),
+  instanceTagging: z.boolean().optional(),
+  pmScope: z.enum(["product", "instance"]).optional(),
+  /** pmScope = "instance": a lead per market (orgUnitId → userId). */
+  instanceLeads: z.record(z.string().uuid(), z.string().uuid()).optional(),
+  /** docs/38 — named instances (Schools, Marketplace …) created with the project. */
+  instanceNames: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
+  /** docs/38 — modules (components / channels) created with the project, under the product. */
+  moduleNames: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
   team: z.array(TeamRow).max(20).default([]),
   /** DM1.73 (docs/30 §5) — each becomes a ResourceRequest in the create transaction.
    * `.optional()` (not `.default`) so pre-existing callers' input type is unchanged. */
@@ -120,11 +135,24 @@ async function createOnce(ctx: TenantContext, input: CreateProjectWizardInputT) 
         throw new ProjectError("Checkpoint template not found.", "TEMPLATE_NOT_FOUND");
       });
     }
-    if (input.marketIds.length) {
-      const found = await tx.orgUnit.count({ where: { id: { in: input.marketIds }, kind: "Market" } });
-      if (found !== input.marketIds.length) {
-        throw new ProjectError("One or more markets are not valid market org units.", "BAD_MARKET");
+    const instanceIds = [...new Set(input.instanceIds ?? input.marketIds)];
+    const shape = {
+      instanceLabel: input.instanceLabel ?? "Market",
+      moduleTracking: input.moduleTracking ?? "state",
+      instanceTagging: input.instanceTagging ?? instanceIds.length > 0,
+      pmScope: input.pmScope ?? "product",
+    };
+    if (instanceIds.length) {
+      const found = await tx.orgUnit.count({ where: { id: { in: instanceIds }, kind: { in: marketKinds(shape.instanceLabel) } } });
+      if (found !== instanceIds.length) {
+        throw new ProjectError(`One or more instances are not valid ${shape.instanceLabel.toLowerCase()} org units.`, "BAD_MARKET");
       }
+    }
+    const instanceLeads = shape.pmScope === "instance" ? (input.instanceLeads ?? {}) : {};
+    const leadIds = [...new Set(Object.values(instanceLeads))];
+    if (leadIds.length) {
+      const found = await tx.user.count({ where: { id: { in: leadIds }, status: { not: "DELETED" } } });
+      if (found !== leadIds.length) throw new ProjectError("Unknown instance lead.", "MEMBER_NOT_FOUND");
     }
     const userIds = [...new Set(input.team.map((t) => t.userId))];
     if (userIds.length !== input.team.length) {
@@ -148,6 +176,7 @@ async function createOnce(ctx: TenantContext, input: CreateProjectWizardInputT) 
 
     const project = await tx.project.create({
       data: {
+        ...shape,
         tenantId: ctx.tenantId,
         code,
         name: input.name,
@@ -193,10 +222,16 @@ async function createOnce(ctx: TenantContext, input: CreateProjectWizardInputT) 
         note: `Unfilled seat from the project wizard for ${project.code}.`,
       });
     }
-    for (const orgUnitId of input.marketIds) {
-      // A market track starts untouched: 0% in Planning; the rollout flow moves it.
+    for (const [i, name] of [...new Set(input.instanceNames ?? [])].entries()) {
+      await tx.projectModule.create({ data: { tenantId: ctx.tenantId, projectId: project.id, code: instanceCode(name, i), name, orderIndex: i, kind: "instance", ownGates: true } });
+    }
+    for (const [i, name] of [...new Set(input.moduleNames ?? [])].entries()) {
+      await tx.projectModule.create({ data: { tenantId: ctx.tenantId, projectId: project.id, code: instanceCode(name, 50 + i), name, orderIndex: i, kind: "module", ownGates: false } });
+    }
+    for (const orgUnitId of instanceIds) {
+      // A market starts untouched: 0% in Planning; gates and instance states move it.
       await tx.projectOrgStatus.create({
-        data: { tenantId: ctx.tenantId, projectId: project.id, orgUnitId, progress: 0, status: "Planning" },
+        data: { tenantId: ctx.tenantId, projectId: project.id, orgUnitId, progress: 0, status: "Planning", leadUserId: instanceLeads[orgUnitId] ?? null },
       });
     }
     if (input.document) {
@@ -246,7 +281,11 @@ async function createOnce(ctx: TenantContext, input: CreateProjectWizardInputT) 
         portfolioId: input.portfolioId,
         programmeId: input.programmeId ?? null,
         checkpointTemplateId: input.checkpointTemplateId ?? null,
-        markets: input.marketIds.length,
+        instances: instanceIds.length,
+        ...shape,
+        instanceLeads: Object.keys(instanceLeads).length,
+        namedInstances: input.instanceNames ?? [],
+        modules: input.moduleNames ?? [],
         team: input.team.map((t) => ({ userId: t.userId, role: t.role, allocationPct: t.allocationPct })),
         unfilledSeats: unfilledSeats.map((s) => ({ role: s.role, allocationPct: s.allocationPct })), // DM1.73
         document: input.document ? { title: input.document.title, kind: input.document.kind } : null,

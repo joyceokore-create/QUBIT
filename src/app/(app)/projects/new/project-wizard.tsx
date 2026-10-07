@@ -29,6 +29,7 @@ import { draftKey, nextStep, prevStep, type WizardStep } from "@/lib/wizard";
 
 const STEPS: WizardStep[] = [
   { key: "basics", label: "Basics" },
+  { key: "structure", label: "Structure" },
   { key: "team", label: "Team" },
   { key: "review", label: "Review" },
 ];
@@ -61,6 +62,7 @@ interface Market {
   code: string;
   name: string;
   flag: string | null;
+  kind: string;
 }
 interface Person {
   userId: string;
@@ -92,6 +94,15 @@ interface Draft {
   marketIds: string[];
   marketsTouched: boolean;
   team: TeamRow[];
+  /** docs/38 — the product's shape. */
+  instanceTagging: boolean;
+  pmScope: "product" | "instance";
+  instanceLeads: Record<string, string>;
+  /** docs/38 — named instances and modules to create with the project. */
+  instanceNames: string[];
+  instanceDraft: string;
+  moduleNames: string[];
+  moduleDraft: string;
 }
 
 const EMPTY: Draft = {
@@ -106,6 +117,13 @@ const EMPTY: Draft = {
   marketIds: [],
   marketsTouched: false,
   team: [],
+  instanceTagging: true,
+  pmScope: "product",
+  instanceLeads: {},
+  instanceNames: [],
+  instanceDraft: "",
+  moduleNames: [],
+  moduleDraft: "",
 };
 
 /** Mirrors src/server/projects.ts projectCodeBase for the live "auto: XYZ" hint. */
@@ -192,6 +210,8 @@ export function ProjectWizard({
   const personById = useMemo(() => new Map(people.map((p) => [p.userId, p])), [people]);
   // Markets pre-fill from the portfolio until the user touches the chips (docs/26 §5.3).
   const effectiveMarkets = d.marketsTouched ? d.marketIds : (portfolio?.defaultMarkets ?? []);
+  // docs/38 — the org units the chosen label allows (Market → markets, Subsidiary → internal, Either → both).
+  const units = markets;
 
   // DM1.73 — rows without a person are not an error: they become resource requests.
   const filledTeam = d.team.filter((t) => t.userId);
@@ -261,6 +281,13 @@ export function ProjectWizard({
         checkpointTemplateId: d.checkpointTemplateId || undefined,
         pipelineStage: d.pipelineStage,
         marketIds: effectiveMarkets,
+        instanceLabel: "Market",
+        moduleTracking: "gates",
+        instanceTagging: d.instanceTagging,
+        instanceNames: d.instanceNames,
+        moduleNames: d.moduleNames,
+        pmScope: d.pmScope,
+        instanceLeads: d.pmScope === "instance" ? Object.fromEntries(Object.entries(d.instanceLeads).filter(([id, u]) => effectiveMarkets.includes(id) && u)) : undefined,
         team: filledTeam.map((t) => ({
           userId: t.userId,
           role: t.role,
@@ -412,41 +439,145 @@ export function ProjectWizard({
             </div>
           </div>
 
-          {/* DM1.73 — Markets folded in (was its own step); portfolio prefill kept. */}
-          {markets.length > 0 && (
-            <div className="mt-3">
-              <span className={LABEL}>Markets</span>
-              <div className="mt-2">
-                {markets.map((m) => {
-                  const on = effectiveMarkets.includes(m.id);
-                  return (
-                    <Chip
-                      key={m.id}
-                      on={on}
-                      onClick={() =>
-                        set({
-                          marketsTouched: true,
-                          marketIds: on ? effectiveMarkets.filter((x) => x !== m.id) : [...effectiveMarkets, m.id],
-                        })
-                      }
-                    >
-                      {m.flag ? `${m.flag} ` : ""}
-                      {m.code}
-                    </Chip>
-                  );
-                })}
-                <p className="mt-2 text-[11px] text-[var(--ink4)]">
-                  {portfolio && !d.marketsTouched && (portfolio.defaultMarkets.length ?? 0) > 0
-                    ? `Pre-filled from ${portfolio.name} — trim or extend per project.`
-                    : "Pick the subsidiaries this project targets."}
-                </p>
-              </div>
-            </div>
-          )}
           <p className="mt-3 text-[11.5px] text-[var(--ink4)]">
             The template decides the Delivery tab&apos;s gates; % is always derived from gate states, never typed.
             Documents and integrations connect later from the workspace.
           </p>
+        </WizardCard>
+      )}
+
+      {cur === "structure" && (
+        <WizardCard title="Where does it ship, and how is it run?">
+          {/* docs/38 — markets (= subsidiaries), named instances, who runs it, tagging. A
+              project with no markets and no instances behaves exactly as before. */}
+          <div>
+            <span className={LABEL}>Markets</span>
+            <div className="mt-2">
+              {units.map((m) => {
+                const on = effectiveMarkets.includes(m.id);
+                return (
+                  <Chip
+                    key={m.id}
+                    on={on}
+                    onClick={() =>
+                      set({
+                        marketsTouched: true,
+                        marketIds: on ? effectiveMarkets.filter((x) => x !== m.id) : [...effectiveMarkets, m.id],
+                      })
+                    }
+                  >
+                    {m.flag ? `${m.flag} ` : ""}
+                    {m.code}
+                  </Chip>
+                );
+              })}
+              {units.length === 0 && <p className="text-[11.5px] text-[var(--ink4)]">None defined yet — an admin adds them under Admin › Markets.</p>}
+              <p className="mt-2 text-[11px] text-[var(--ink4)]">
+                {portfolio && !d.marketsTouched && (portfolio.defaultMarkets.length ?? 0) > 0
+                  ? `Pre-filled from ${portfolio.name} — trim or extend per project.`
+                  : effectiveMarkets.length === 0
+                    ? "Leave empty for a single-market product. Each market gets its own gates, weekly check-in and set-up checklist."
+                    : `${effectiveMarkets.length} selected — each gets its own gates, weekly check-in and set-up checklist.`}
+              </p>
+            </div>
+          </div>
+          <div className="mt-3">
+            <span className={LABEL}>Instances (optional)</span>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {d.instanceNames.map((n, i) => (
+                <Chip key={i} on onClick={() => set({ instanceNames: d.instanceNames.filter((_, j) => j !== i) })}>
+                  {n} ×
+                </Chip>
+              ))}
+              <input
+                value={d.instanceDraft}
+                onChange={(e) => set({ instanceDraft: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && d.instanceDraft.trim()) {
+                    e.preventDefault();
+                    set({ instanceNames: [...d.instanceNames, d.instanceDraft.trim()], instanceDraft: "" });
+                  }
+                }}
+                placeholder="e.g. For Schools, For Marketplace — Enter to add"
+                maxLength={60}
+                aria-label="Add an instance"
+                className="h-8 min-w-[260px] rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-brand"
+              />
+            </div>
+            <p className="mt-2 text-[11px] text-[var(--ink4)]">A named variant of the product (Asset Valuation for Schools, for Marketplace). Each runs as its own project — its own gates, the same track in every market above.</p>
+          </div>
+          <div className="mt-3">
+            <span className={LABEL}>Modules (optional)</span>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {d.moduleNames.map((n, i) => (
+                <Chip key={i} on onClick={() => set({ moduleNames: d.moduleNames.filter((_, j) => j !== i) })}>
+                  {n} ×
+                </Chip>
+              ))}
+              <input
+                value={d.moduleDraft}
+                onChange={(e) => set({ moduleDraft: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && d.moduleDraft.trim()) {
+                    e.preventDefault();
+                    set({ moduleNames: [...d.moduleNames, d.moduleDraft.trim()], moduleDraft: "" });
+                  }
+                }}
+                placeholder="e.g. POS, USSD, Agent Portal — Enter to add"
+                maxLength={60}
+                aria-label="Add a module"
+                className="h-8 min-w-[260px] rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-brand"
+              />
+            </div>
+            <p className="mt-2 text-[11px] text-[var(--ink4)]">Components or channels of the product, tracked by a state per market (Live, UAT, N/A). Whether a module has its own gates is chosen per module on the Delivery tab.</p>
+          </div>
+          <div className="mt-3">
+            <span className={LABEL}>Who runs it</span>
+            <div className="mt-2">
+              <Chip on={d.pmScope === "product"} onClick={() => set({ pmScope: "product" })}>
+                One PM for the product
+              </Chip>
+              <Chip on={d.pmScope === "instance"} onClick={() => set({ pmScope: "instance" })}>
+                A lead per market
+              </Chip>
+            </div>
+            {d.pmScope === "instance" && effectiveMarkets.length > 0 && (
+              <div className="mt-2 flex flex-col gap-1.5">
+                {effectiveMarkets.map((id) => {
+                  const u = units.find((x) => x.id === id);
+                  if (!u) return null;
+                  return (
+                    <label key={id} className="flex items-center gap-2 text-[12px] text-[var(--ink3)]">
+                      <span className="w-[72px] font-mono text-[11px] font-semibold text-[var(--qink)]">
+                        {u.flag ? `${u.flag} ` : ""}
+                        {u.code}
+                      </span>
+                      <select
+                        value={d.instanceLeads[id] ?? ""}
+                        onChange={(e) => set({ instanceLeads: { ...d.instanceLeads, [id]: e.target.value } })}
+                        className="h-7 rounded-[7px] border border-[var(--input)] bg-background px-2 text-[11.5px] text-foreground"
+                        aria-label={`${u.code} lead`}
+                      >
+                        <option value="">Lead later</option>
+                        {people.map((p) => (
+                          <option key={p.userId} value={p.userId}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  );
+                })}
+                <p className="text-[11px] text-[var(--ink4)]">Market leads count as PMs of the product: it appears under their My projects and in their Reports queue.</p>
+              </div>
+            )}
+          </div>
+          <div className="mt-3">
+            <label className="flex items-center gap-2 text-[12px] text-[var(--ink3)]">
+              <input type="checkbox" checked={d.instanceTagging} onChange={(e) => set({ instanceTagging: e.target.checked })} className="size-3.5 accent-[var(--brand)]" />
+              Tag tasks, documents and risks by market and instance (the workspace switches then filter them)
+            </label>
+          </div>
         </WizardCard>
       )}
 
@@ -583,7 +714,9 @@ export function ProjectWizard({
                   "Delivery",
                   `${d.checkpointTemplateId ? templates.find((t) => t.id === d.checkpointTemplateId)?.name : "no template"} · stage ${d.pipelineStage}`,
                 ],
-                ["Markets", marketCodes(effectiveMarkets)],
+                ["Markets", `${marketCodes(effectiveMarkets)} · ${d.pmScope === "instance" ? "a lead per market" : "one PM"}${d.instanceTagging ? " · tagged work" : ""}`],
+                ["Instances", d.instanceNames.length ? d.instanceNames.join(", ") : "— the product itself"],
+                ["Modules", d.moduleNames.length ? d.moduleNames.join(", ") : "—"],
                 [
                   "Team",
                   filledTeam.length || unfilledSeats.length

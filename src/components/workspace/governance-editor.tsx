@@ -23,7 +23,10 @@ export function GovernanceEditor({
   portfolios = [],
   budget = null,
   canGovern,
+  shape,
 }: {
+  /** docs/38 — the product's shape; edits go through the same PATCH. */
+  shape?: { instanceTagging: boolean; pmScope: string };
   projectId: string;
   pipelineStage: string;
   priority: string;
@@ -168,6 +171,22 @@ export function GovernanceEditor({
           {note ? `“${note}”` : "Add a one-line status note…"}
           <Pencil className="size-2.5 opacity-0 transition-opacity group-hover:opacity-100" />
         </button>
+      )}
+      {shape && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-[var(--hair2)] pt-2">
+          <span className="text-[10.5px] font-semibold uppercase tracking-[.8px] text-[var(--ink5)]">Shape</span>
+          <Select value={shape.pmScope} onValueChange={(v) => v && void patch({ pmScope: v })}>
+            <SelectTrigger className="h-7 w-[150px] text-[11px]" aria-label="PM scope"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="product">One PM for the product</SelectItem>
+              <SelectItem value="instance">A lead per market</SelectItem>
+            </SelectContent>
+          </Select>
+          <label className="flex items-center gap-1.5 text-[11px] text-[var(--ink3)]">
+            <input type="checkbox" checked={shape.instanceTagging} onChange={(e) => void patch({ instanceTagging: e.target.checked })} className="size-3.5 accent-[var(--brand)]" />
+            Tag work by market and instance
+          </label>
+        </div>
       )}
       {error && <p className="text-[11px] text-[var(--bad)]">{error}</p>}
     </div>

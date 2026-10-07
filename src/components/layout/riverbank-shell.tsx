@@ -26,6 +26,7 @@ import { getInitials } from "@/lib/format";
 import { jumpToSection, useCockpitSections } from "@/components/dashboard/cockpit/section-nav";
 import { activeNavHref, visibleNavItems } from "./nav-items";
 import { UserMenu } from "./user-menu";
+import { SetupNudge } from "@/components/tour/setup-nudge";
 import { AskQButton } from "./ask-q-button";
 import { NotificationBell } from "./notification-bell";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
@@ -318,6 +319,7 @@ export function RiverbankShell({
             {tenantName}
           </h1>
           <div className="flex items-center gap-1.5">
+            <SetupNudge />
             <NotificationBell />
             <ThemeToggle />
             <UserMenu

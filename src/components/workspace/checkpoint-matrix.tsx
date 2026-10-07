@@ -1,5 +1,7 @@
 "use client";
 
+import { dispatchTourEvent } from "@/components/tour/tour-events";
+
 import { useEffect, useState } from "react";
 import { Loader2, ShieldAlert, TriangleAlert } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -18,7 +20,9 @@ interface Payload extends ProjectCheckpoints {
   canGovern: boolean;
 }
 
-export function CheckpointMatrix({ projectId }: { projectId: string }) {
+/** docs/38 — `orgUnitId` scopes the matrix to one market's gates, `moduleId` to one named
+ * instance's own gates (both: that instance in that market); null = the product's own. */
+export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null }: { projectId: string; orgUnitId?: string | null; moduleId?: string | null }) {
   const [data, setData] = useState<Payload | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -30,14 +34,17 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const res = await fetch(`/api/projects/${projectId}/checkpoints`);
+      const q = new URLSearchParams();
+      if (orgUnitId) q.set("orgUnitId", orgUnitId);
+      if (moduleId) q.set("moduleId", moduleId);
+      const res = await fetch(`/api/projects/${projectId}/checkpoints${q.toString() ? `?${q}` : ""}`);
       if (!res.ok || cancelled) return;
       setData(await res.json());
     })();
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, orgUnitId, moduleId]);
 
   if (!data) {
     return (
@@ -53,7 +60,7 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
     const res = await fetch(`/api/projects/${projectId}/checkpoints`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify("templateId" in body ? body : { ...body, orgUnitId, moduleId }),
     });
     if (res.status === 409) {
       // Gate unmet — show the checklist and offer the override rather than failing flat.
@@ -67,6 +74,7 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
       setData((prev) => (prev ? { ...prev, ...next } : prev));
       setGateBlock(null);
       setOverrideReason("");
+      if (key === "template" && body.templateId) dispatchTourEvent("template-attached");
     }
     setBusy(null);
   };
@@ -79,11 +87,12 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
           <span className="font-mono text-[9.5px] font-bold tabular-nums text-[var(--qink)]">{data.progress}%</span>
         )}
         {data.canGovern ? (
+          <span data-tour="gate-template" className="ml-auto inline-flex">
           <Select
             value={data.templateId ?? "none"}
             onValueChange={(v) => void patch({ templateId: v === "none" ? null : v }, "template")}
           >
-            <SelectTrigger className="ml-auto h-7 w-[168px] text-[11px]" aria-label="Checkpoint template">
+            <SelectTrigger className="h-7 w-[168px] text-[11px]" aria-label="Checkpoint template">
               <SelectValue placeholder="No template">{data.templateName ?? "No template"}</SelectValue>
             </SelectTrigger>
             <SelectContent>
@@ -95,6 +104,7 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
               ))}
             </SelectContent>
           </Select>
+          </span>
         ) : (
           data.templateName && (
             <span className="ml-auto font-mono text-[9px] uppercase tracking-[.8px] text-[var(--ink5)]">{data.templateName}</span>

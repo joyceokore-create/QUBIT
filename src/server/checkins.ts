@@ -116,7 +116,7 @@ export async function computeCheckInDraft(
       }),
       // DM1.73 (Wave C, T4) — the live signals the computed RAG now derives from.
       tx.blocker.count({ where: { projectId, status: "Open" } }),
-      tx.checkpointStatus.count({ where: { projectId, orgUnitId: null, state: "Blocked" } }),
+      tx.checkpointStatus.count({ where: { projectId, orgUnitId: null, moduleId: null, state: "Blocked" } }),
     ]);
 
   // DM1.73 (T3): % is checkpoint-derived when the project has a gate template — the
@@ -583,7 +583,7 @@ export async function getCheckInProvenance(
         where: { isoWeek, status: { in: ["Submitted", "Acknowledged"] } },
         select: { userId: true, draft: true, acks: { select: { projectId: true } } },
       }),
-      tx.checkpointStatus.findMany({ where: { projectId, orgUnitId: null }, select: { state: true } }),
+      tx.checkpointStatus.findMany({ where: { projectId, orgUnitId: null, moduleId: null }, select: { state: true } }),
       tx.blocker.count({ where: { projectId, status: "Open" } }),
       tx.risk.count({ where: { projectId, status: { not: "Closed" } } }),
       tx.portfolioReport.findUnique({

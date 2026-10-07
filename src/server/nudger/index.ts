@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
+import { PM_SELECT, pmIdsOf } from "@/lib/ownership";
 import { audit } from "@/lib/audit";
 import { isHeadOfProjects } from "@/lib/rbac";
 import { isoWeekId } from "@/lib/iso-week";
@@ -68,11 +69,7 @@ interface PmSets {
 async function resolveRecipients(tx: Prisma.TransactionClient): Promise<PmSets> {
   const [projects, heads] = await Promise.all([
     tx.project.findMany({
-      select: {
-        id: true,
-        leadUserId: true,
-        members: { where: { role: "Project Manager" }, select: { userId: true } },
-      },
+      select: { id: true, ...PM_SELECT },
     }),
     tx.roleAssignment.findMany({
       where: { role: { in: ["HeadOfProjects", "HeadOfQA"] } },
@@ -80,11 +77,7 @@ async function resolveRecipients(tx: Prisma.TransactionClient): Promise<PmSets> 
     }),
   ]);
   const pmByProject = new Map<string, string[]>();
-  for (const p of projects) {
-    const set = new Set<string>(p.members.map((m) => m.userId));
-    if (p.leadUserId) set.add(p.leadUserId);
-    pmByProject.set(p.id, [...set]);
-  }
+  for (const p of projects) pmByProject.set(p.id, pmIdsOf(p));
   return {
     pmByProject,
     headsOfProjects: heads.filter((h) => h.role === "HeadOfProjects").map((h) => h.userId),

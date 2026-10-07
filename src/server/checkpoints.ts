@@ -52,9 +52,21 @@ export interface ProjectCheckpoints {
 
 /** The project's own checkpoint track (orgUnitId null). Rows exist for every checkpoint
  * in the template, whether or not a status row has been written yet. */
+/** docs/38 — which gate track: the product's own (both null), one instance's
+ * (orgUnitId), or one module's own gates (moduleId; with orgUnitId = that module in that
+ * instance). */
+export interface GateScope {
+  orgUnitId?: string | null;
+  moduleId?: string | null;
+}
+const scopeWhere = (scope?: GateScope) => ({ orgUnitId: scope?.orgUnitId ?? null, moduleId: scope?.moduleId ?? null });
+const scopeKey = (projectId: string, checkpointId: string, scope?: GateScope) =>
+  `${projectId}:${checkpointId}${scope?.orgUnitId ? `:${scope.orgUnitId}` : ""}${scope?.moduleId ? `:m:${scope.moduleId}` : ""}`;
+
 export async function getProjectCheckpoints(
   ctx: TenantContext,
   projectId: string,
+  scope?: GateScope,
 ): Promise<ProjectCheckpoints> {
   return withTenant(ctx, async (tx) => {
     const project = await tx.project.findUnique({
@@ -70,7 +82,7 @@ export async function getProjectCheckpoints(
       return { templateId: null, templateName: null, rows: [], progress: 0 };
     }
     const statuses = await tx.checkpointStatus.findMany({
-      where: { projectId, orgUnitId: null },
+      where: { projectId, ...scopeWhere(scope) },
       select: {
         checkpointId: true, state: true, blockerId: true, overrideReason: true,
         blocker: { select: { description: true } },
@@ -120,7 +132,7 @@ export async function checkpointProgressByProject(
       select: { id: true, checkpointTemplate: { select: { _count: { select: { checkpoints: true } } } } },
     }),
     tx.checkpointStatus.findMany({
-      where: { projectId: { in: projectIds }, orgUnitId: null },
+      where: { projectId: { in: projectIds }, orgUnitId: null, moduleId: null },
       select: { projectId: true, state: true },
     }),
   ]);
@@ -161,7 +173,7 @@ export async function gateTicksByProject(
   if (!projects.length) return new Map();
 
   const statuses = await tx.checkpointStatus.findMany({
-    where: { projectId: { in: projects.map((p) => p.id) }, orgUnitId: null },
+    where: { projectId: { in: projects.map((p) => p.id) }, orgUnitId: null, moduleId: null },
     select: { projectId: true, checkpointId: true, state: true },
   });
   const stateFor = new Map(statuses.map((s) => [`${s.projectId}:${s.checkpointId}`, s.state as CheckpointState]));
@@ -203,8 +215,18 @@ export async function setCheckpointState(
   ctx: TenantContext,
   projectId: string,
   input: SetCheckpointStateInputT,
+  scope?: GateScope,
 ): Promise<ProjectCheckpoints> {
   await withTenant(ctx, async (tx) => {
+    if (scope?.orgUnitId) {
+      const track = await tx.projectOrgStatus.findFirst({ where: { projectId, orgUnitId: scope.orgUnitId }, select: { id: true } });
+      if (!track) throw new CheckpointError("That instance is not on this project.", "NOT_FOUND");
+    }
+    if (scope?.moduleId) {
+      const mod = await tx.projectModule.findFirst({ where: { id: scope.moduleId, projectId }, select: { id: true, kind: true, ownGates: true, name: true } });
+      if (!mod) throw new CheckpointError("That instance or module is not on this project.", "NOT_FOUND");
+      if (mod.kind === "module" && !mod.ownGates) throw new CheckpointError(`${mod.name} is tracked by state per market — switch on "own gates" for it first.`, "TEMPLATE_MISMATCH");
+    }
     const [project, checkpoint] = await Promise.all([
       tx.project.findUnique({ where: { id: projectId }, select: { checkpointTemplateId: true } }),
       tx.checkpoint.findUnique({ where: { id: input.checkpointId }, select: { id: true, name: true, templateId: true } }),
@@ -243,7 +265,7 @@ export async function setCheckpointState(
     }
 
     const before = await tx.checkpointStatus.findFirst({
-      where: { projectId, checkpointId: input.checkpointId, orgUnitId: null },
+      where: { projectId, checkpointId: input.checkpointId, ...scopeWhere(scope) },
       select: { id: true, state: true },
     });
     const blockerId = input.state === "Blocked" ? (input.blockerId ?? null) : null;
@@ -261,7 +283,7 @@ export async function setCheckpointState(
     } else {
       await tx.checkpointStatus.create({
         data: {
-          tenantId: ctx.tenantId, projectId, checkpointId: input.checkpointId, orgUnitId: null,
+          tenantId: ctx.tenantId, projectId, checkpointId: input.checkpointId, ...scopeWhere(scope),
           state: input.state, blockerId, ...overrideData,
         },
       });
@@ -271,11 +293,13 @@ export async function setCheckpointState(
     await audit(tx, ctx, {
       action: "update",
       entityType: "checkpoint_status",
-      entityId: `${projectId}:${input.checkpointId}`,
+      entityId: scopeKey(projectId, input.checkpointId, scope),
       before: { state: before?.state ?? "NotStarted" },
       after: {
         state: input.state,
         checkpoint: checkpoint.name,
+        ...(scope?.orgUnitId ? { orgUnitId: scope.orgUnitId } : {}),
+        ...(scope?.moduleId ? { moduleId: scope.moduleId } : {}),
         ...(override ? { gateOverridden: true, overrideReason: override.reason } : {}),
       },
     });
@@ -283,9 +307,11 @@ export async function setCheckpointState(
     await emitDomainEvent(tx, ctx, {
       type: "checkpoint.state_changed",
       entityType: "checkpoint_status",
-      entityId: `${projectId}:${input.checkpointId}`,
+      entityId: scopeKey(projectId, input.checkpointId, scope),
       payload: {
         projectId,
+        orgUnitId: scope?.orgUnitId ?? null,
+        moduleId: scope?.moduleId ?? null,
         checkpoint: checkpoint.name,
         from: before?.state ?? "NotStarted",
         to: input.state,
@@ -293,7 +319,7 @@ export async function setCheckpointState(
       },
     });
   });
-  return getProjectCheckpoints(ctx, projectId);
+  return getProjectCheckpoints(ctx, projectId, scope);
 }
 
 export const SetTemplateInput = z.object({ templateId: z.string().min(1).nullable() });

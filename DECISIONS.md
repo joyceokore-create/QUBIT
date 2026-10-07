@@ -2617,3 +2617,24 @@ resolved — drives it from `src/server/pdf/render.ts`. Rules that fall out of i
 - **Recipients are a table, not a tenant column.** `rollup_recipient` is RLS'd like every
   other table (the `tenant` row has no policy); users and typed addresses alike, Head-managed,
   audited per change. `portfolio_report.emailed_at/emailed_to` record each send.
+
+## DM1.77 — One project per product; instances and modules are configurable per project (docs/38)
+
+Prod had been populated against the docs/18 §3 shape: "ZED ERP — Kenya", "Swipe Agent Banking —
+Uganda" … as fourteen separate projects (all empty shells), while the schema already carried
+market tracks (`ProjectOrgStatus` + per-market `CheckpointStatus` + `MarketCheckIn`) that nothing
+could edit. Joyce's call (2026-10-07): **one project per product**, with **instances** (markets
+or subsidiaries) switched from the workspace header, and **modules** (POS, USSD, Marketplace …)
+tracked per instance — and "let it all be configurable to give options". Rules:
+
+- Four settings on `Project` decide the shape — `instanceLabel` (Market / Subsidiary / Instance),
+  `moduleTracking` (state per instance, or its own gates too), `instanceTagging` (work items carry
+  an instance/module tag and the switch filters them), `pmScope` (product-level PM, or a lead per
+  instance who counts as a PM of the product). A project with no instances behaves as today.
+- Instances REUSE `ProjectOrgStatus` (generalised to any org unit kind; gains a lead and a note);
+  modules are two new RLS'd tables (`project_module`, `module_instance_status`); module gates reuse
+  `CheckpointStatus` via a nullable `moduleId`. No parallel track model (same reasoning as DM1.9).
+- The fourteen shells are archived (`Cancelled` + note), not deleted; ZED and Swipe become single
+  products with their instances; Swipe's modules are seeded from the 29 Sep deck.
+- Delivered as three deployable steps (I1 instances, I2 modules, I3 tagging + YouTrack mapping),
+  each reviewed by Joyce before the next.

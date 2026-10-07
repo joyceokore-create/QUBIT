@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { readZip } from "@/lib/zip-read";
 import { matchProject } from "@/server/status-report/match";
 import { detectFormat, normaliseStatus, parseDocx, parseXlsx, tableFromPdfItems } from "@/server/status-report/parse";
+import { parsePptx } from "@/server/status-report/parse";
 
 /** Minimal ZIP writer (local headers + central directory) — enough for the reader to open. */
 function zip(files: Record<string, string>, stored = false): Buffer {
@@ -142,5 +143,36 @@ describe("helpers", () => {
     expect(matchProject("swipe-ke", projects)).toEqual({ projectId: "2", confidence: "exact" });
     expect(matchProject("Swipe Agent Banking Kenya rollout", projects)).toEqual({ projectId: "2", confidence: "suggested" });
     expect(matchProject("Totally Different", projects)).toEqual({ projectId: null, confidence: "none" });
+  });
+});
+
+
+// PowerPoint one-pagers: one project per slide — title, headline, overall RAG, the first
+// in-flight "Where we are" item as the stage, report date / PM when they are real.
+const slide = (lines: string[]) =>
+  `<p:sld><p:cSld><p:spTree>${lines.map((l) => `<p:sp><p:txBody><a:p><a:r><a:t>${l}</a:t></a:r></a:p></p:txBody></p:sp>`).join("")}</p:spTree></p:cSld></p:sld>`;
+
+describe("parsePptx", () => {
+  it("reads a Keza-style one-pager and a Swipe-style deck slide", () => {
+    const keza = slide([
+      "PROJECT STATUS REPORT", "Keza", "Signed BRD approval is the gate to finalizing the build.", "AMBER", "Overall: on track, decision needed",
+      "Report date: 30 Sep 2026", "PM: [Name]   Sponsor: [Name]", "Where we are", "1 · COMPLETE", "User journeys", "Shared with stakeholders.",
+      "2 · IN REVIEW", "BRD v1 (Riverbank)", "With stakeholders; BA reviewing.", "Done", "✓  MVP1 released",
+    ]);
+    const swipe = slide(["Swipe Agent Banking Solution", "Project Status Report  |  Channels  |  As at 29 September 2026", "OVERALL STATUS: AMBER", "Scope", "5 of 6 markets in production, nine channel deployments in UAT."]);
+    const r = parsePptx(zip({ "ppt/slides/slide2.xml": swipe, "ppt/slides/slide1.xml": keza, "ppt/presentation.xml": "<p/>" }));
+    expect(r.rows).toHaveLength(2);
+    expect(r.rows[0]).toMatchObject({ line: 1, project: "Keza", status: "Amber", stage: "BRD v1 (Riverbank) · in review" });
+    expect(r.rows[0]!.update).toBe("Signed BRD approval is the gate to finalizing the build. Overall: on track, decision needed");
+    expect(r.rows[1]).toMatchObject({ line: 2, project: "Swipe Agent Banking Solution", status: "Amber", stage: "" });
+    expect(r.rows[1]!.update).toMatch(/^5 of 6 markets/);
+    expect(r.reportDate).toBe("30 Sep 2026");
+    expect(r.preparedBy).toBeNull(); // "[Name]" placeholders are not people
+  });
+  it("warns per slide without a RAG and refuses a deck without slides", () => {
+    const r = parsePptx(zip({ "ppt/slides/slide1.xml": slide(["Lumi", "A short line that says enough to be a headline here."]) }));
+    expect(r.rows[0]).toMatchObject({ project: "Lumi", status: null });
+    expect(r.rows[0]!.warnings[0]).toMatch(/No overall RAG/);
+    expect(() => parsePptx(zip({ "docProps/app.xml": "<x/>" }))).toThrow(/no slides/);
   });
 });

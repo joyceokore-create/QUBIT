@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
+import { pmIdsOf, runsProjectWhere } from "@/lib/ownership";
 import { can, isHeadOfProjects } from "@/lib/rbac";
 import { isoWeekId, isoWeekMonday, isValidIsoWeek, shiftIsoWeek, weekRange, weekWindow } from "@/lib/iso-week";
 import { effectiveRag, getCurrentCheckIn, type CheckInDraft } from "@/server/checkins";
@@ -42,6 +43,7 @@ const CHECKIN_SELECT = {
   status: true,
   computedRag: true,
   ragOverride: true,
+  overrideReason: true,
   overrideExpiresAt: true,
   narrative: true,
   draft: true,
@@ -60,6 +62,8 @@ const projectSelect = (weeks: string[]) =>
     lead: { select: { name: true } },
     portfolio: { select: { id: true, name: true } },
     members: { where: { role: "Project Manager" }, select: { userId: true } },
+    pmScope: true,
+    orgStatuses: { where: { retiredAt: null, leadUserId: { not: null } }, select: { leadUserId: true } },
     checkIns: { where: { isoWeek: { in: weeks } }, select: CHECKIN_SELECT },
   }) satisfies Prisma.ProjectSelect;
 type ProjectRow = Prisma.ProjectGetPayload<{ select: ReturnType<typeof projectSelect> }>;
@@ -84,6 +88,10 @@ export interface PmWeekRow {
   computedRag: Rag;
   effectiveRag: Rag;
   narrative: string | null;
+  /** The draft's RAG override (e.g. from an uploaded status report) and its reason —
+   *  shown and sent as such; effectiveRag ignores overrides until confirmed. */
+  ragOverride: Rag | null;
+  overrideReason: string | null;
   draftLines: string[];
   confirmed: boolean;
   sentToHead: boolean;
@@ -299,7 +307,7 @@ export async function getReportsWeek(
       tx.project.findMany({
         where: {
           status: ACTIVE,
-          OR: [{ leadUserId: ctx.userId }, { members: { some: { userId: ctx.userId, role: "Project Manager" } } }],
+          ...runsProjectWhere(ctx.userId),
         },
         select: projectSelect(weeks),
         orderBy: { name: "asc" },
@@ -318,6 +326,8 @@ export async function getReportsWeek(
           computedRag: ci.computedRag as Rag,
           effectiveRag: effectiveRag(ci, at),
           narrative: ci.narrative,
+          ragOverride: (ci.ragOverride as Rag | null) ?? null,
+          overrideReason: ci.overrideReason ?? null,
           draftLines: (ci.draft as unknown as CheckInDraft | null)?.lines ?? [],
           confirmed: ci.status === "Confirmed",
           sentToHead: Boolean(ci.submittedToHeadAt),
@@ -332,6 +342,8 @@ export async function getReportsWeek(
           computedRag: v.computedRag,
           effectiveRag: v.effectiveRag,
           narrative: v.narrative,
+          ragOverride: (v.ragOverride as Rag | null) ?? null,
+          overrideReason: v.overrideReason,
           draftLines: v.lines,
           confirmed: v.status === "Confirmed",
           sentToHead: Boolean(v.submittedToHeadAt),
@@ -339,7 +351,7 @@ export async function getReportsWeek(
         });
       } else {
         const rag = projectRag(p.status);
-        rows.push({ ...base, status: "None", computedRag: rag, effectiveRag: rag, narrative: null, draftLines: [], confirmed: false, sentToHead: false, sentAt: null });
+        rows.push({ ...base, status: "None", computedRag: rag, effectiveRag: rag, narrative: null, ragOverride: null, overrideReason: null, draftLines: [], confirmed: false, sentToHead: false, sentAt: null });
       }
     }
     // Unconfirmed first (they need action), then not-yet-sent, then done; worst RAG first.
@@ -378,7 +390,7 @@ export async function getReportsWeek(
         computed: ci?.status !== "Confirmed",
         line: ci?.status === "Confirmed" ? ci.narrative : null,
         sentAt: ci?.submittedToHeadAt ?? null,
-        nudgeable: Boolean(p.leadUserId) || p.members.length > 0,
+        nudgeable: pmIdsOf(p).length > 0,
       };
       all.push(row);
       const name = p.portfolio?.name ?? "Unassigned";

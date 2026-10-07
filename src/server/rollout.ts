@@ -76,9 +76,14 @@ export async function getRolloutMatrix(
     const portfolio = await tx.portfolio.findUnique({ where: { id: portfolioId }, select: { id: true, name: true } });
     if (!portfolio) return null;
 
+    // Columns: every Market unit (the heatmap shows where a product does NOT ship yet as an
+    // honest "—"), plus — docs/38 — any other org unit the portfolio's projects use as an
+    // instance (a subsidiary), so no instance is ever hidden from the exec.
     const [markets, projects] = await Promise.all([
       tx.orgUnit.findMany({
-        where: { kind: "Market" },
+        where: {
+          OR: [{ kind: "Market" }, { projectOrgStatuses: { some: { project: { portfolioId, status: { notIn: ["Completed", "Cancelled"] } }, retiredAt: null } } }],
+        },
         select: { id: true, code: true, name: true, flag: true },
         orderBy: { createdAt: "asc" },
       }),
@@ -102,7 +107,7 @@ export async function getRolloutMatrix(
     const [statuses, checkIns, orgStatuses, weekAgoSnaps, blockers] = await Promise.all([
       // Market tracks only: orgUnitId NOT null (the project's own track is the pipeline lens).
       tx.checkpointStatus.findMany({
-        where: { projectId: { in: projectIds }, orgUnitId: { not: null } },
+        where: { projectId: { in: projectIds }, orgUnitId: { not: null }, moduleId: null },
         select: { projectId: true, orgUnitId: true, state: true },
       }),
       tx.marketCheckIn.findMany({
@@ -112,7 +117,7 @@ export async function getRolloutMatrix(
       // A track EXISTS when there is a ProjectOrgStatus row for that project × market —
       // that is the market-track model (§3.1), reused rather than duplicated.
       tx.projectOrgStatus.findMany({
-        where: { projectId: { in: projectIds } },
+        where: { projectId: { in: projectIds }, retiredAt: null },
         select: { projectId: true, orgUnitId: true, status: true, progress: true },
       }),
       tx.projectSnapshot.findMany({
@@ -282,8 +287,11 @@ export interface MarketTrackRag {
   flag: string | null;
   /** ProjectOrgStatus.status — the Delivery tab's market cards still read it. */
   status: string;
-  /** Stored track progress (what the workspace shows today; gate-derived % is the matrix's job). */
+  /** Gate-derived % of the instance's own track (falls back to the stored value without gate rows). */
   progress: number;
+  name: string;
+  leadUserId: string | null;
+  leadName: string | null;
   rag: Rag;
   /** True when this week's MarketCheckIn exists — the RAG is a human's word, not a derivation. */
   checkedIn: boolean;
@@ -301,23 +309,36 @@ export async function marketRagsForProject(
   projectId: string,
   isoWeek: string,
 ): Promise<MarketTrackRag[]> {
-  const [tracks, checkIns] = await Promise.all([
+  // docs/38 — an instance is any live ProjectOrgStatus row, whatever the org unit's kind.
+  const [tracks, checkIns, gates, template] = await Promise.all([
     tx.projectOrgStatus.findMany({
-      where: { projectId, orgUnit: { kind: "Market" } },
-      select: { orgUnitId: true, status: true, progress: true, orgUnit: { select: { code: true, flag: true } } },
+      where: { projectId, retiredAt: null },
+      select: { orgUnitId: true, status: true, progress: true, leadUserId: true, lead: { select: { name: true } }, orgUnit: { select: { code: true, name: true, flag: true } } },
       orderBy: { orgUnit: { code: "asc" } },
     }),
     tx.marketCheckIn.findMany({ where: { projectId, isoWeek }, select: { orgUnitId: true, rag: true } }),
+    tx.checkpointStatus.findMany({ where: { projectId, orgUnitId: { not: null }, moduleId: null }, select: { orgUnitId: true, state: true } }),
+    tx.project.findUnique({ where: { id: projectId }, select: { checkpointTemplate: { select: { _count: { select: { checkpoints: true } } } } } }),
   ]);
   const checkInByMarket = new Map(checkIns.map((c) => [c.orgUnitId, c.rag as Rag]));
+  const total = template?.checkpointTemplate?._count.checkpoints ?? 0;
+  const statesByUnit = new Map<string, CheckpointState[]>();
+  for (const g of gates) statesByUnit.set(g.orgUnitId!, [...(statesByUnit.get(g.orgUnitId!) ?? []), g.state as CheckpointState]);
   return tracks.map((t) => {
     const checkIn = checkInByMarket.get(t.orgUnitId);
+    const states = statesByUnit.get(t.orgUnitId);
+    // With a template the % is always gate-derived (no rows = 0%); the stored value only
+    // serves projects without a template.
+    const progress = total > 0 ? derivedProgress([...(states ?? []), ...Array<CheckpointState>(Math.max(0, total - (states?.length ?? 0))).fill("NotStarted")]) : t.progress;
     return {
       orgUnitId: t.orgUnitId,
       code: t.orgUnit.code,
+      name: t.orgUnit.name,
       flag: t.orgUnit.flag,
       status: t.status,
-      progress: t.progress,
+      progress,
+      leadUserId: t.leadUserId,
+      leadName: t.lead?.name ?? null,
       rag: checkIn ?? projectRag(t.status),
       checkedIn: checkIn !== undefined,
     };
@@ -351,13 +372,13 @@ export async function getMarketTrack(
           checkpointTemplate: { select: { checkpoints: { select: { id: true, name: true }, orderBy: { orderIndex: "asc" } } } },
         },
       }),
-      tx.orgUnit.findFirst({ where: { id: orgUnitId, kind: "Market" }, select: { id: true, code: true, name: true, flag: true } }),
+      tx.orgUnit.findFirst({ where: { id: orgUnitId, projectOrgStatuses: { some: { projectId } } }, select: { id: true, code: true, name: true, flag: true } }),
     ]);
     if (!project || !market) return null;
 
     const [statuses, checkIn] = await Promise.all([
       tx.checkpointStatus.findMany({
-        where: { projectId, orgUnitId },
+        where: { projectId, orgUnitId, moduleId: null },
         select: { checkpointId: true, state: true },
       }),
       tx.marketCheckIn.findUnique({
@@ -399,8 +420,8 @@ export async function saveMarketCheckIn(
 ): Promise<void> {
   const isoWeek = isoWeekId(now);
   await withTenant(ctx, async (tx) => {
-    const market = await tx.orgUnit.findFirst({ where: { id: orgUnitId, kind: "Market" }, select: { id: true, code: true } });
-    if (!market) throw new Error("Market not found.");
+    const market = await tx.orgUnit.findFirst({ where: { id: orgUnitId, projectOrgStatuses: { some: { projectId, retiredAt: null } } }, select: { id: true, code: true } });
+    if (!market) throw new Error("That instance is not on this project.");
 
     const data = { narrative: input.narrative, rag: input.rag, authorId: ctx.userId };
     const row = await tx.marketCheckIn.upsert({

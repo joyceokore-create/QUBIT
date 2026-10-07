@@ -50,3 +50,20 @@ export function matchProject(rowName: string, projects: MatchableProject[]): Row
   if (best && best.score >= 0.6 && best.score > second) return { projectId: best.id, confidence: "suggested" };
   return { projectId: null, confidence: "none" };
 }
+
+
+/**
+ * Which delivery gate a report's Stage cell names ("UAT / Pilot Readiness (VAPT in
+ * progress)" → the UAT gate). Case-insensitive, whole-word, the longest gate name wins;
+ * null when no gate is named — the stage then only becomes the status note.
+ */
+export function matchStageGate<T extends { name: string }>(stage: string, gates: T[]): T | null {
+  const text = ` ${stage.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+  if (!text.trim()) return null;
+  let best: T | null = null;
+  for (const g of gates) {
+    const name = ` ${g.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+    if (name.trim() && text.includes(name) && (!best || name.length > best.name.length + 2)) best = g;
+  }
+  return best;
+}

@@ -180,7 +180,7 @@ export function AssignMembersDialog({
       onSubmit={submit}
       className="sm:max-w-[640px]"
       trigger={
-        <DialogTrigger render={<Button size="sm" />}>
+        <DialogTrigger render={<Button size="sm" data-tour="add-member" />}>
           <Plus /> Add member
         </DialogTrigger>
       }
