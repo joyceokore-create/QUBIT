@@ -45,10 +45,10 @@ const stage = (r: PmRowJson) => (!r.confirmed ? 0 : !r.sentToHead ? 1 : 2);
 const sortRows = (rows: PmRowJson[]) =>
   [...rows].sort((a, b) => stage(a) - stage(b) || RANK[a.effectiveRag] - RANK[b.effectiveRag] || a.name.localeCompare(b.name));
 
-export function PmWeek({ isCurrent, rows: initial, canUpload = false }: { isoWeek: string; isCurrent: boolean; rows: PmRowJson[]; canUpload?: boolean }) {
+export function PmWeek({ isCurrent, rows: initial, canUpload = false, openUploadOnLoad = false }: { isoWeek: string; isCurrent: boolean; rows: PmRowJson[]; canUpload?: boolean; /** ?upload=1 — the walkthrough's "set up all at once" door. */ openUploadOnLoad?: boolean }) {
   const router = useRouter();
   const [rows, setRows] = useState<PmRowJson[]>(initial);
-  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(openUploadOnLoad && canUpload);
   const [sendingAll, setSendingAll] = useState<{ done: number; total: number } | null>(null);
   const [sendAllErrors, setSendAllErrors] = useState<string[]>([]);
   const [openId, setOpenId] = useState<string | null>(() => initial.find((r) => !r.confirmed && r.canConfirm)?.projectId ?? null);

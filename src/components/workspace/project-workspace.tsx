@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -178,7 +179,16 @@ export function ProjectWorkspace({
                     <MarketCheckInCard key={selected.orgUnitId} projectId={data.id} orgUnitId={selected.orgUnitId} initial={selected.checkIn} canGovern={canGovern} />
                   </section>
                 ) : (
-                  ci && <StatusUpdateCard projectId={data.id} ci={ci} onChange={setCi} onGoToDelivery={() => setTab("Delivery")} />
+                  ci && (
+                    <>
+                      <StatusUpdateCard projectId={data.id} ci={ci} onChange={setCi} onGoToDelivery={() => setTab("Delivery")} />
+                      {data.canSetUp && (
+                        <Link href="/reports" className={`-mt-2 inline-flex items-center gap-1 self-start rounded-[4px] text-[12.5px] font-semibold text-[var(--brand)] underline-offset-2 hover:underline ${FOCUS}`}>
+                          Update all my projects <ArrowRight className="size-3.5" aria-hidden />
+                        </Link>
+                      )}
+                    </>
+                  )
                 )}
                 <WeekActivity projectId={data.id} canNudge={canGovern} />
                 <ReportHistory projectId={data.id} />

@@ -168,6 +168,13 @@ export function TourProvider({
     [state, eligible, projects, appDone, firstProjectId, reportsQuery, dashboardQuery, choose],
   );
 
+  // "Set up all your projects at once": stamp the walk as seen and open the upload on the queue.
+  const uploadAll = useCallback(() => {
+    stamp();
+    dispatch({ type: "exit" });
+    router.push(`/reports${reportsQuery}${reportsQuery ? "&" : "?"}upload=1`);
+  }, [stamp, reportsQuery, router]);
+
   const act = useCallback(
     (type: "next" | "back" | "skip" | "exit") => {
       const atEnd = state.step === "setup-done" || state.step === "app-done";
@@ -192,6 +199,7 @@ export function TourProvider({
           appDone={appDone}
           onRoute={onRoute}
           onChoose={choose}
+          onUploadAll={uploadAll}
           onNext={() => act("next")}
           onBack={() => act("back")}
           onSkip={() => act("skip")}

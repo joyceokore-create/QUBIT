@@ -39,7 +39,7 @@ const SUBTITLE: Record<ReportsView, (n: number) => string> = {
   exec: () => "The approved weekly roll-up — status, trend and the blockers that need you.",
 };
 
-export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ week?: string; as?: string; tab?: string }> }) {
+export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ week?: string; as?: string; tab?: string; upload?: string }> }) {
   const session = await auth();
   if (!session?.user) return null;
   const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
@@ -92,7 +92,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
               emptyCopy="No confirmed status updates yet — this week's will be the first."
             />
           ) : (
-            <PmWeek isoWeek={week} isCurrent={data.week.isCurrent} canUpload={!previewing} rows={data.rows.map((r) => ({ ...r, sentAt: r.sentAt?.toISOString() ?? null }))} />
+            <PmWeek isoWeek={week} isCurrent={data.week.isCurrent} canUpload={!previewing} openUploadOnLoad={sp.upload === "1" && !previewing && data.week.isCurrent} rows={data.rows.map((r) => ({ ...r, sentAt: r.sentAt?.toISOString() ?? null }))} />
           )
         ) : data.kind === "head" ? (
           tab === "rollups" ? (

@@ -42,6 +42,7 @@ export function TourOverlay({
   appDone,
   onRoute,
   onChoose,
+  onUploadAll,
   onNext,
   onBack,
   onSkip,
@@ -53,6 +54,9 @@ export function TourOverlay({
   appDone: boolean;
   onRoute: boolean;
   onChoose: (track: TourTrack, projectId: string | null) => void;
+  /** Joyce (2026-10-07): "set up all your projects at once" — leave the walk and open the
+   *  status-report upload on Reports › This week, which fills every project's update. */
+  onUploadAll: () => void;
   onNext: () => void;
   onBack: () => void;
   onSkip: () => void;
@@ -222,6 +226,16 @@ export function TourOverlay({
                 </li>
               ))}
             </ul>
+          )}
+          {step.id === "welcome" && projects.length > 0 && (
+            <div className="flex flex-wrap items-center gap-3 rounded-[12px] p-3" style={{ background: "color-mix(in oklab, var(--brand) 8%, transparent)" }}>
+              <p className="min-w-0 flex-1 text-[13px] leading-[1.45] text-[var(--qink)]">
+                <b>Want to set up all your projects at once?</b> Upload your latest status report — every project&apos;s update, status and RAG is filled for you to check and send.
+              </p>
+              <button type="button" onClick={onUploadAll} className={`${PRIMARY} h-9 whitespace-nowrap px-4 text-[13px]`}>
+                Upload my latest update
+              </button>
+            </div>
           )}
           <div className="flex flex-wrap items-center gap-3">
             {step.id === "welcome" && pending.length > 0 && (

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Compass, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { Compass, Sparkles, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useTour } from "@/components/tour/tour-provider";
@@ -64,6 +65,12 @@ export function SetupNudge() {
             </DialogTitle>
             <DialogDescription>Gates, documents, team, YouTrack and this week&apos;s update — each project&apos;s This week tab walks you through its own.</DialogDescription>
           </DialogHeader>
+          <Link href="/reports?upload=1" onClick={() => setOpen(false)} className={`flex items-center gap-3 rounded-[12px] p-3 text-[12.5px] text-[var(--qink)] transition-colors hover:bg-[color-mix(in_oklab,var(--brand)_12%,transparent)] ${FOCUS}`} style={{ background: "color-mix(in oklab, var(--brand) 8%, transparent)" }}>
+            <Upload className="size-4 flex-none text-[var(--brand)]" aria-hidden />
+            <span>
+              <b>All at once:</b> upload your latest status report — every project&apos;s update, status and RAG filled for you to check and send.
+            </span>
+          </Link>
           <ol className="flex flex-col">
             {tour.projects.map((p) => {
               const done = p.done >= p.total;
