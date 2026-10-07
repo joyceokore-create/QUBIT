@@ -92,7 +92,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
               emptyCopy="No confirmed status updates yet — this week's will be the first."
             />
           ) : (
-            <PmWeek isoWeek={week} isCurrent={data.week.isCurrent} rows={data.rows.map((r) => ({ ...r, sentAt: r.sentAt?.toISOString() ?? null }))} />
+            <PmWeek isoWeek={week} isCurrent={data.week.isCurrent} canUpload={!previewing} rows={data.rows.map((r) => ({ ...r, sentAt: r.sentAt?.toISOString() ?? null }))} />
           )
         ) : data.kind === "head" ? (
           tab === "rollups" ? (

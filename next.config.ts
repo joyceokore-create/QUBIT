@@ -8,7 +8,8 @@ const nextConfig: NextConfig = {
   // stay a runtime require (dynamic requires, browsers.json read via path.join, child
   // processes); it is already on Next's built-in external list, this pins the intent. The
   // runner image copies the full node_modules, which is what makes it resolvable there.
-  serverExternalPackages: ["playwright-core"],
+  // pdfjs-dist (status-report upload) is an ESM bundle with worker/canvas probing — kept external too.
+  serverExternalPackages: ["playwright-core", "pdfjs-dist"],
   // The dev-tools indicator defaults to the bottom-left, where it overlaps the
   // Riverbank sidebar's account avatar and swallows its clicks in dev. Move it to
   // the bottom-right (clear area) so every control is clickable while developing.

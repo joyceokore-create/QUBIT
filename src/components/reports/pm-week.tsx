@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { CheckCheck, Send, ShieldAlert } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { CheckCheck, Send, ShieldAlert, Upload } from "lucide-react";
+import { StatusUploadDialog } from "@/components/reports/status-upload-dialog";
 import { RagTally, WeekMeter } from "@/components/reports/week-meter";
 import { LocalTime } from "@/components/reports/local-time";
 import { lineTone, TONE_TOKEN } from "@/lib/status-lines";
@@ -12,7 +14,9 @@ import type { Rag } from "@/server/health";
 /**
  * Milestone B — the PM's week on /reports (the My week queue, re-homed): every project
  * you run, the draft to confirm against, one line, the RAG, one button. Confirming IS
- * sending (Milestone A). Sent rows sink to the bottom as the queue drains.
+ * sending (Milestone A). Sent rows sink to the bottom as the queue drains. Oct 2026: the
+ * weekly status report (Word/Excel/PDF) can be uploaded to fill every draft at once, and
+ * "Confirm & send all" sends the filled drafts in one go.
  */
 
 export interface PmRowJson {
@@ -37,8 +41,12 @@ const stage = (r: PmRowJson) => (!r.confirmed ? 0 : !r.sentToHead ? 1 : 2);
 const sortRows = (rows: PmRowJson[]) =>
   [...rows].sort((a, b) => stage(a) - stage(b) || RANK[a.effectiveRag] - RANK[b.effectiveRag] || a.name.localeCompare(b.name));
 
-export function PmWeek({ isCurrent, rows: initial }: { isoWeek: string; isCurrent: boolean; rows: PmRowJson[] }) {
+export function PmWeek({ isCurrent, rows: initial, canUpload = false }: { isoWeek: string; isCurrent: boolean; rows: PmRowJson[]; canUpload?: boolean }) {
+  const router = useRouter();
   const [rows, setRows] = useState<PmRowJson[]>(initial);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [sendingAll, setSendingAll] = useState<{ done: number; total: number } | null>(null);
+  const [sendAllErrors, setSendAllErrors] = useState<string[]>([]);
   const [openId, setOpenId] = useState<string | null>(() => initial.find((r) => !r.confirmed && r.canConfirm)?.projectId ?? null);
 
   const onChange = (next: PmRowJson) => {
@@ -66,6 +74,34 @@ export function PmWeek({ isCurrent, rows: initial }: { isoWeek: string; isCurren
     else counts.red++;
   }
 
+  // Rows a bulk send can take as they are: drafted narrative, confirmable, not yet sent.
+  const sendable = rows.filter((r) => isCurrent && r.canConfirm && !r.confirmed && (r.narrative ?? "").trim());
+
+  const sendAll = async () => {
+    setSendingAll({ done: 0, total: sendable.length });
+    setSendAllErrors([]);
+    const errors: string[] = [];
+    let done = 0;
+    for (const r of sendable) {
+      // The saved draft already holds any override + reason; the queue's one action re-sends them.
+      const res = await fetch(`/api/projects/${r.projectId}/checkin`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ narrative: (r.narrative ?? "").trim(), ...(r.effectiveRag !== r.computedRag ? { ragOverride: r.effectiveRag, overrideReason: "From the uploaded status report" } : {}) }),
+      });
+      const d = await res.json().catch(() => null);
+      if (res.ok && d?.data) {
+        onChange({ ...r, confirmed: true, status: "Confirmed", sentToHead: Boolean(d.data.submittedToHeadAt), sentAt: d.data.submittedToHeadAt ?? null, narrative: d.data.narrative ?? r.narrative, effectiveRag: d.data.effectiveRag ?? r.effectiveRag });
+      } else {
+        errors.push(`${r.code}: ${d?.error?.message ?? "could not send"}`);
+      }
+      done++;
+      setSendingAll({ done, total: sendable.length });
+    }
+    setSendAllErrors(errors);
+    setSendingAll(null);
+  };
+
   return (
     <section className={`${CARD} overflow-hidden`} style={CARD_BG} aria-labelledby="pm-week">
       <h2 id="pm-week" className="sr-only">
@@ -78,8 +114,32 @@ export function PmWeek({ isCurrent, rows: initial }: { isoWeek: string; isCurren
         sub={!isCurrent ? "week closed" : toSend > 0 ? `${toSend} to send before Friday 5pm` : "all sent — the Head has this week"}
         ariaLabel="Weekly reporting progress"
       >
-        <RagTally counts={counts} />
+        <div className="flex flex-wrap items-center gap-2">
+          <RagTally counts={counts} />
+          {canUpload && isCurrent && toSend > 0 && (
+            <button type="button" onClick={() => setUploadOpen(true)} className={`${SECONDARY} gap-1.5`}>
+              <Upload className="size-3.5" aria-hidden /> Upload status report
+            </button>
+          )}
+          {sendable.length >= 2 && (
+            <button type="button" onClick={() => void sendAll()} disabled={sendingAll !== null} className={`${PRIMARY} gap-1.5`}>
+              <Send className="size-3.5" aria-hidden /> {sendingAll ? `Sending ${sendingAll.done + 1} of ${sendingAll.total}…` : `Confirm & send all ${sendable.length}`}
+            </button>
+          )}
+        </div>
       </WeekMeter>
+      {sendAllErrors.length > 0 && (
+        <p role="alert" className="px-[18px] py-2 text-[12px] text-[var(--bad)]">
+          {sendAllErrors.join(" · ")}
+        </p>
+      )}
+      {canUpload && (
+        <StatusUploadDialog
+          open={uploadOpen}
+          onOpenChange={setUploadOpen}
+          onApplied={() => router.refresh()}
+        />
+      )}
       <ul>
         {rows.map((r) => (
           <PmRow key={r.projectId} row={r} open={openId === r.projectId} isCurrent={isCurrent} onOpen={() => setOpenId(r.projectId)} onChange={onChange} />
