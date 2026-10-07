@@ -123,6 +123,11 @@ export function WorkspaceHeader({
             <span>
               Priority <b className="text-[var(--qink)]">{data.priority}</b>
             </span>
+            {data.setup && data.setup.done < data.setup.total && (
+              <span title="Delivery gates, documents, team, YouTrack, this week's update — the PM sets these up">
+                Setup <b className="text-[var(--qink)]">{data.setup.done} of {data.setup.total}</b>
+              </span>
+            )}
           </div>
         </div>
 

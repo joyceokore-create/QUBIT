@@ -67,8 +67,9 @@ describe("first-week walkthrough", () => {
   });
 
   it("per-project setup counts only what exists, and YouTrack only while the flag is on", async () => {
+    // The fixture has a lead (= the PM is on the team) and no gate states yet, even if a template were attached.
     const setup = await getProjectSetup(pm, projectId);
-    expect(setup).toMatchObject({ gates: false, documents: false, team: false, thisWeek: false, done: 0 });
+    expect(setup).toMatchObject({ gates: false, documents: false, team: true, thisWeek: false, done: 1 });
     expect(setup.total).toBe(setup.youtrack === null ? 4 : 5);
   });
 });

@@ -4,9 +4,11 @@ import { withTenant, type TenantContext } from "@/lib/tenant";
 import { isoWeekId } from "@/lib/iso-week";
 
 /**
- * Per-project setup — the five things a PM does once so the week can run itself: a
- * delivery-gate template, a document, a team, YouTrack (only while the feature is on) and
- * this week's status update. Counts only; the workspace's "Set up {code}" card reads it.
+ * Per-project setup — the five things a PM does once so the week can run itself: the
+ * delivery gates worked (a template is attached to every project by the wizard, so the
+ * signal is the first gate state the PM records), a document, a team (a lead counts — the
+ * PM is on the team), YouTrack (only while the feature is on) and this week's status
+ * update. Counts only; the workspace's "Set up {code}" card reads it.
  */
 
 export interface ProjectSetup {
@@ -23,9 +25,10 @@ export interface ProjectSetup {
 export async function getProjectSetup(ctx: TenantContext, projectId: string, now = new Date()): Promise<ProjectSetup> {
   const isoWeek = isoWeekId(now);
   const ytOn = flagEnabled("youtrack");
-  const [project, documents, team, youtrack, checkIn] = await withTenant(ctx, (tx) =>
+  const [project, gateStates, documents, team, youtrack, checkIn] = await withTenant(ctx, (tx) =>
     Promise.all([
-      tx.project.findUnique({ where: { id: projectId }, select: { checkpointTemplateId: true } }),
+      tx.project.findUnique({ where: { id: projectId }, select: { checkpointTemplateId: true, leadUserId: true } }),
+      tx.checkpointStatus.count({ where: { projectId, orgUnitId: null } }),
       tx.projectDocument.count({ where: { projectId } }),
       tx.projectMember.count({ where: { projectId } }),
       ytOn ? tx.projectIntegration.findFirst({ where: { projectId, provider: "youtrack", connected: true }, select: { id: true } }) : Promise.resolve(null),
@@ -33,9 +36,9 @@ export async function getProjectSetup(ctx: TenantContext, projectId: string, now
     ]),
   );
   const items = {
-    gates: Boolean(project?.checkpointTemplateId),
+    gates: Boolean(project?.checkpointTemplateId) && gateStates > 0,
     documents: documents > 0,
-    team: team > 0,
+    team: team > 0 || Boolean(project?.leadUserId),
     youtrack: ytOn ? Boolean(youtrack) : null,
     thisWeek: Boolean(checkIn?.submittedToHeadAt),
   };

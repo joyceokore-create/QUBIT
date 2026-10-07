@@ -48,7 +48,7 @@ export default async function ProjectWorkspacePage({
         tx.project.findFirst({ where: { id, leadUserId: ctx.userId }, select: { id: true } }),
         tx.projectMember.findFirst({ where: { projectId: id, userId: ctx.userId }, select: { id: true, role: true } }),
       ]);
-      return { isMember: Boolean(lead || m), isLead: Boolean(lead) };
+      return { isMember: Boolean(lead || m), isLead: Boolean(lead), isPm: Boolean(lead) || m?.role === "Project Manager" };
     }),
     // Portfolio choices for the governance editor's move control (docs/18 §0.5).
     withTenant(ctx, (tx) => tx.portfolio.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } })),
@@ -109,6 +109,9 @@ export default async function ProjectWorkspacePage({
     checkin,
     registerOpenCount: openCount,
     setup,
+    // Setting a project up is its PM's job: the checklist renders only for the lead or a
+    // "Project Manager" member; Heads and admins see the progress chip in the header.
+    canSetUp: membership.isPm,
     isMember: membership.isMember, // viewer leads or is allocated → hides "Request to join"
   };
 

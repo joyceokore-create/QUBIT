@@ -113,7 +113,7 @@ export function ProjectWorkspace({
           <TabsContent value="This week" className="mt-5">
             <div className="flex flex-wrap items-start gap-5">
               <div className="flex min-w-0 flex-[999_1_520px] flex-col gap-5">
-                {canEdit && data.setup && data.setup.done < data.setup.total && (
+                {data.canSetUp && data.setup && data.setup.done < data.setup.total && (
                   <SetupChecklist projectId={data.id} code={data.code} setup={data.setup} onGo={(t) => setTab(t)} />
                 )}
                 {ci && <StatusUpdateCard projectId={data.id} ci={ci} onChange={setCi} onGoToDelivery={() => setTab("Delivery")} />}
