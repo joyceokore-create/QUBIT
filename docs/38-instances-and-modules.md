@@ -5,6 +5,17 @@ per-market project shells (ZED ERP — Kenya …, Swipe Agent Banking — Kenya 
 product that carries **instances** (markets or subsidiaries) and **modules** (POS, USSD, Marketplace…).
 Builds on docs/18 §3 (market tracks) rather than replacing it. Decision record: DM1.77.
 
+> **Vocabulary fixed by Joyce (2026-10-07, after I1 was built):** *markets* and *subsidiaries*
+> are the same thing — the org units a product ships to (Kenya, Uganda …); there is no
+> "ships to markets / subsidiaries / either" choice. An **instance** is a NAMED variant of
+> the product (Asset Valuation *for Schools*, *for Marketplace*; Swipe *POS*, *USSD*) that
+> acts like a single project: its own gate states, recorded with the same track in every
+> market the product ships to, and a state per market. In the schema that is
+> `project_module` + `module_instance_status` (+ `checkpoint_status.module_id`); the code
+> calls it `project-instances.ts`, the org-unit layer `markets.ts`. Everywhere below, read
+> "instance (org unit)" as **market** and "module" as **instance**. `instanceLabel` and
+> `moduleTracking` stay as columns but are not offered in the UI (always Market / gates).
+
 ## 0. What exists, what is missing (read-only audit, 2026-10-07)
 
 - A project already has **market tracks**: `ProjectOrgStatus` (project × `OrgUnit` kind=Market), gate

@@ -2,7 +2,7 @@
 // the leads of its live instances; which org-unit kinds an instance label allows.
 import { describe, expect, it } from "vitest";
 import { pmIdsOf, runsProjectWhere } from "@/lib/ownership";
-import { instanceKinds } from "@/server/instances";
+import { marketKinds } from "@/server/markets";
 
 describe("ownership", () => {
   it("pmIdsOf de-duplicates and only counts instance leads under pmScope = instance", () => {
@@ -16,9 +16,9 @@ describe("ownership", () => {
     expect(w.OR).toHaveLength(3);
     expect(w.OR?.[2]).toMatchObject({ pmScope: "instance", orgStatuses: { some: { leadUserId: "u9", retiredAt: null } } });
   });
-  it("instanceKinds follows the label", () => {
-    expect(instanceKinds("Market")).toEqual(["Market"]);
-    expect(instanceKinds("Subsidiary")).toEqual(["Internal"]);
-    expect(instanceKinds("Instance")).toEqual(["Market", "Internal"]);
+  it("marketKinds follows the label", () => {
+    expect(marketKinds("Market")).toEqual(["Market", "Internal"]); // markets = subsidiaries
+    expect(marketKinds("Subsidiary")).toEqual(["Internal"]);
+    expect(marketKinds("Instance")).toEqual(["Market", "Internal"]);
   });
 });

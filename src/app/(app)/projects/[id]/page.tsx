@@ -13,6 +13,7 @@ import { getCurrentCheckIn } from "@/server/checkins";
 import { marketRagsForProject } from "@/server/rollout";
 import { registerOpenCount } from "@/server/project-register";
 import { getProjectSetup } from "@/server/project-setup";
+import { listProjectInstances } from "@/server/project-instances";
 import { Forbidden } from "@/components/forbidden";
 import { ProjectWorkspace } from "@/components/workspace/project-workspace";
 import type { CheckInJson, ProjectPanelJson } from "@/components/panels/project-panel-json";
@@ -24,7 +25,7 @@ export default async function ProjectWorkspacePage({
   params: Promise<{ id: string }>;
   // Deep links (work-cycle UX): ?tab=Board&task=<id> jumps to a highlighted card;
   // ?lens=qa|dev|all picks the board lens. My Tasks rows and notifications use these.
-  searchParams: Promise<{ tab?: string; task?: string; lens?: string; instance?: string }>;
+  searchParams: Promise<{ tab?: string; task?: string; lens?: string; market?: string; instance?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) return null;
@@ -78,7 +79,7 @@ export default async function ProjectWorkspacePage({
   const [marketTracks, instanceRows, instanceCheckIns] = await withTenant(ctx, (tx) =>
     Promise.all([
       marketRagsForProject(tx, id, isoWeek),
-      // docs/38 — the product's instances (any org-unit kind) with lead and note.
+      // docs/38 — the markets the product ships to (any org-unit kind) with lead and note.
       tx.projectOrgStatus.findMany({
         where: { projectId: id, retiredAt: null },
         select: { orgUnitId: true, status: true, leadUserId: true, note: true, lead: { select: { name: true } }, orgUnit: { select: { code: true, name: true, flag: true, kind: true } } },
@@ -89,7 +90,7 @@ export default async function ProjectWorkspacePage({
   if (!p) notFound();
   const checkInByUnit = new Map(instanceCheckIns.map((c) => [c.orgUnitId, c]));
   const trackByUnit = new Map(marketTracks.map((m) => [m.orgUnitId, m]));
-  const instances = instanceRows
+  const markets = instanceRows
     .map((r) => ({
       orgUnitId: r.orgUnitId,
       code: r.orgUnit.code,
@@ -105,7 +106,10 @@ export default async function ProjectWorkspacePage({
       checkIn: checkInByUnit.get(r.orgUnitId) ?? null,
     }))
     .sort((a, b) => a.code.localeCompare(b.code));
-  const initialInstance = sp.instance && instances.some((i) => i.orgUnitId === sp.instance) ? sp.instance : null;
+  const initialMarket = sp.market && markets.some((i) => i.orgUnitId === sp.market) ? sp.market : null;
+  // docs/38 — the product's named instances with their state per market.
+  const namedInstances = await listProjectInstances(ctx, id);
+  const initialInstance = sp.instance && namedInstances.some((i) => i.id === sp.instance) ? sp.instance : null;
 
   const checkin: CheckInJson = {
     ...checkinView,
@@ -137,7 +141,9 @@ export default async function ProjectWorkspacePage({
       rag: m.rag,
     })),
     checkin,
-    instances,
+    markets,
+    initialMarket,
+    namedInstances,
     initialInstance,
     registerOpenCount: openCount,
     setup,

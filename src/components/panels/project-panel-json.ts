@@ -13,8 +13,8 @@ export type CheckInJson = Omit<CheckInView, "overrideExpiresAt" | "confirmedAt" 
   canConfirm: boolean;
 };
 
-/** docs/38 — one instance of the product as the workspace sees it. */
-export interface InstanceJson {
+/** docs/38 — one market the product ships to, as the workspace sees it. */
+export interface MarketJson {
   orgUnitId: string;
   code: string;
   name: string;
@@ -30,10 +30,24 @@ export interface InstanceJson {
   checkIn: { narrative: string; rag: string; isoWeek: string } | null;
 }
 
+/** docs/38 — a named instance with its state per market (null market = the product level). */
+export interface NamedInstanceJson {
+  id: string;
+  code: string;
+  name: string;
+  orderIndex: number;
+  cells: { orgUnitId: string | null; state: string; note: string | null; progress: number }[];
+}
+
 export interface ProjectPanelJson {
-  /** docs/38 — the product's instances (markets / subsidiaries) with this week's RAG. */
-  instances?: InstanceJson[];
-  /** docs/38 — the instance the page opened on (?instance=), when it is one of the project's. */
+  /** docs/38 — the markets the product ships to, with this week's RAG. */
+  markets?: MarketJson[];
+  /** docs/38 — the market the page opened on (?market=), when it is one of the project's. */
+  initialMarket?: string | null;
+  /** docs/38 — the product's named instances (Schools, Marketplace …), each its own project
+   *  with the same gate track in every market. */
+  namedInstances?: NamedInstanceJson[];
+  /** docs/38 — the named instance the page opened on (?instance=). */
   initialInstance?: string | null;
   /** M-P2c — dependency-picker candidates (id/code/name of active projects, capped at 300). */
   allProjects?: { id: string; code: string; name: string }[];

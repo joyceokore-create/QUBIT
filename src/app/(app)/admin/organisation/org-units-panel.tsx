@@ -5,10 +5,9 @@ import { Plus } from "lucide-react";
 import { CARD_GLASS as CARD, CARD_BG, FOCUS, PRIMARY, QUIET, SECONDARY } from "@/lib/surface";
 
 /**
- * docs/38 — org units: code (immutable — projects, reports and the status-report matcher
- * key on it), name, flag, kind (Market = a geography a product ships into; Internal = a
- * subsidiary of this tenant). Never deleted: instances, gate states and check-ins hang
- * off them. Rename, re-flag or change the kind inline.
+ * docs/38 — markets (= subsidiaries): code (immutable — projects, reports and the
+ * status-report matcher key on it), name, flag. Never deleted: market tracks, gate states
+ * and check-ins hang off them. Rename or re-flag inline.
  */
 
 interface Unit {
@@ -56,11 +55,11 @@ export function OrgUnitsPanel({ initial }: { initial: Unit[] }) {
     <section className={`${CARD} overflow-hidden`} style={CARD_BG} aria-labelledby="org-units-title">
       <div className="flex flex-wrap items-center gap-3 p-[12px_16px]">
         <h2 id="org-units-title" className="text-[13.5px] font-semibold text-[var(--qink)]">
-          Org units
+          Markets
         </h2>
-        <span className="text-[12px] text-[var(--ink4)]">Markets a product ships into, and internal subsidiaries. Projects pick them as instances.</span>
+        <span className="text-[12px] text-[var(--ink4)]">Where a product can ship — Kenya, Uganda, a subsidiary. Projects pick them on their Markets tab.</span>
         <button type="button" onClick={() => setAdding((a) => !a)} className={`${SECONDARY} ml-auto gap-1.5`}>
-          <Plus className="size-3.5" aria-hidden /> New org unit
+          <Plus className="size-3.5" aria-hidden /> New market
         </button>
       </div>
       {adding && (
@@ -83,13 +82,6 @@ export function OrgUnitsPanel({ initial }: { initial: Unit[] }) {
             Flag
             <input value={draft.flag} onChange={(e) => setDraft({ ...draft, flag: e.target.value })} maxLength={8} placeholder="🇨🇩" className={`${INPUT} w-[64px]`} />
           </label>
-          <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--ink4)]">
-            Kind
-            <select value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })} className={INPUT}>
-              <option value="Market">Market</option>
-              <option value="Internal">Internal subsidiary</option>
-            </select>
-          </label>
           <button type="submit" disabled={busy !== null} className={PRIMARY}>
             {busy === "new" ? "Adding…" : "Add"}
           </button>
@@ -109,7 +101,6 @@ export function OrgUnitsPanel({ initial }: { initial: Unit[] }) {
             <th className="px-4 py-2">Code</th>
             <th className="px-4 py-2">Name</th>
             <th className="px-4 py-2">Flag</th>
-            <th className="px-4 py-2">Kind</th>
             <th className="px-4 py-2 text-right">Projects</th>
           </tr>
         </thead>
@@ -122,12 +113,6 @@ export function OrgUnitsPanel({ initial }: { initial: Unit[] }) {
               </td>
               <td className="px-4 py-2">
                 <input defaultValue={u.flag ?? ""} maxLength={8} aria-label={`${u.code} flag`} onBlur={(e) => e.target.value.trim() !== (u.flag ?? "") && void patch(u.id, { flag: e.target.value.trim() || null })} className={`${INPUT} h-7 w-[64px]`} />
-              </td>
-              <td className="px-4 py-2">
-                <select value={u.kind} onChange={(e) => void patch(u.id, { kind: e.target.value })} aria-label={`${u.code} kind`} className={`${INPUT} h-7`}>
-                  <option value="Market">Market</option>
-                  <option value="Internal">Internal subsidiary</option>
-                </select>
               </td>
               <td className="px-4 py-2 text-right tabular-nums text-[var(--ink3)]">{u.projects}</td>
             </tr>

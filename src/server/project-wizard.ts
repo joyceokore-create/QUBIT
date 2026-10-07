@@ -7,7 +7,8 @@
 import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { flagEnabled } from "@/lib/flags";
-import { instanceKinds } from "@/server/instances";
+import { marketKinds } from "@/server/markets";
+import { instanceCode } from "@/server/project-instances";
 import { PROJECT_ROLES } from "@/lib/roles";
 import { encryptSecret } from "@/lib/secret-box";
 import { withTenant, type TenantContext } from "@/lib/tenant";
@@ -55,8 +56,10 @@ export const CreateProjectWizardInput = z.object({
   moduleTracking: z.enum(["state", "gates"]).optional(),
   instanceTagging: z.boolean().optional(),
   pmScope: z.enum(["product", "instance"]).optional(),
-  /** pmScope = "instance": a lead per instance (orgUnitId → userId). */
+  /** pmScope = "instance": a lead per market (orgUnitId → userId). */
   instanceLeads: z.record(z.string().uuid(), z.string().uuid()).optional(),
+  /** docs/38 — named instances (Schools, Marketplace …) created with the project. */
+  instanceNames: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
   team: z.array(TeamRow).max(20).default([]),
   /** DM1.73 (docs/30 §5) — each becomes a ResourceRequest in the create transaction.
    * `.optional()` (not `.default`) so pre-existing callers' input type is unchanged. */
@@ -138,7 +141,7 @@ async function createOnce(ctx: TenantContext, input: CreateProjectWizardInputT) 
       pmScope: input.pmScope ?? "product",
     };
     if (instanceIds.length) {
-      const found = await tx.orgUnit.count({ where: { id: { in: instanceIds }, kind: { in: instanceKinds(shape.instanceLabel) } } });
+      const found = await tx.orgUnit.count({ where: { id: { in: instanceIds }, kind: { in: marketKinds(shape.instanceLabel) } } });
       if (found !== instanceIds.length) {
         throw new ProjectError(`One or more instances are not valid ${shape.instanceLabel.toLowerCase()} org units.`, "BAD_MARKET");
       }
@@ -217,8 +220,11 @@ async function createOnce(ctx: TenantContext, input: CreateProjectWizardInputT) 
         note: `Unfilled seat from the project wizard for ${project.code}.`,
       });
     }
+    for (const [i, name] of [...new Set(input.instanceNames ?? [])].entries()) {
+      await tx.projectModule.create({ data: { tenantId: ctx.tenantId, projectId: project.id, code: instanceCode(name, i), name, orderIndex: i } });
+    }
     for (const orgUnitId of instanceIds) {
-      // An instance starts untouched: 0% in Planning; gates and module states move it.
+      // A market starts untouched: 0% in Planning; gates and instance states move it.
       await tx.projectOrgStatus.create({
         data: { tenantId: ctx.tenantId, projectId: project.id, orgUnitId, progress: 0, status: "Planning", leadUserId: instanceLeads[orgUnitId] ?? null },
       });
@@ -273,6 +279,7 @@ async function createOnce(ctx: TenantContext, input: CreateProjectWizardInputT) 
         instances: instanceIds.length,
         ...shape,
         instanceLeads: Object.keys(instanceLeads).length,
+        namedInstances: input.instanceNames ?? [],
         team: input.team.map((t) => ({ userId: t.userId, role: t.role, allocationPct: t.allocationPct })),
         unfilledSeats: unfilledSeats.map((s) => ({ role: s.role, allocationPct: s.allocationPct })), // DM1.73
         document: input.document ? { title: input.document.title, kind: input.document.kind } : null,

@@ -7,14 +7,13 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { CARD_GLASS as CARD, CARD_BG, FOCUS, PRIMARY, QUIET, SECONDARY, ragFill } from "@/lib/surface";
 
 /**
- * docs/38 — the Instances tab: where the product ships (markets / subsidiaries), each with
- * its lead (when the project's pmScope is "instance"), status, derived progress, a note
- * and its own set-up checklist. Add from the org units the project's label allows; retire
- * (never delete) when an instance is wound down. Managing is a governance act (the PM or
- * project:stage) — everyone else reads.
+ * docs/38 — the Markets tab: where the product ships (Kenya, Uganda …), each with its lead
+ * (when the project's pmScope is "instance" = a lead per market), status, derived progress,
+ * a note and its own set-up checklist. Retire (never delete) when a market is wound down.
+ * Managing is a governance act (the PM or project:stage) — everyone else reads.
  */
 
-interface Instance {
+interface Market {
   orgUnitId: string;
   code: string;
   name: string;
@@ -51,7 +50,7 @@ const STATUSES = ["Planning", "InProgress", "UAT", "Live", "OnHold"] as const;
 const STATUS_LABEL: Record<string, string> = { Planning: "Planning", InProgress: "In progress", UAT: "UAT", Live: "Live", OnHold: "On hold", Retired: "Retired" };
 const INPUT = `h-8 rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-brand ${FOCUS}`;
 
-export function InstancesTab({
+export function MarketsTab({
   projectId,
   label,
   pmScope,
@@ -61,12 +60,12 @@ export function InstancesTab({
   projectId: string;
   label: string;
   pmScope: string;
-  initial: Instance[];
+  initial: Market[];
   /** Jump the workspace to this instance (the header switch). */
   onSelect: (orgUnitId: string) => void;
 }) {
   const router = useRouter();
-  const [rows, setRows] = useState<Instance[]>(initial);
+  const [rows, setRows] = useState<Market[]>(initial);
   const [addable, setAddable] = useState<Unit[]>([]);
   const [canManage, setCanManage] = useState(false);
   const [people, setPeople] = useState<Person[]>([]);
@@ -78,10 +77,10 @@ export function InstancesTab({
   const plural = `${label.toLowerCase()}s`;
 
   const load = async () => {
-    const res = await fetch(`/api/projects/${projectId}/instances`);
+    const res = await fetch(`/api/projects/${projectId}/markets`);
     const d = await res.json().catch(() => null);
     if (!res.ok || !d?.data) return;
-    setRows(d.data.instances);
+    setRows(d.data.markets);
     setAddable(d.data.addable);
     setCanManage(d.data.canManage);
   };
@@ -99,7 +98,7 @@ export function InstancesTab({
   useEffect(() => {
     for (const r of rows) {
       if (setups[r.orgUnitId]) continue;
-      void fetch(`/api/projects/${projectId}/instances/${r.orgUnitId}`)
+      void fetch(`/api/projects/${projectId}/markets/${r.orgUnitId}`)
         .then((res) => (res.ok ? res.json() : null))
         .then((d) => d?.data?.setup && setSetups((s) => ({ ...s, [r.orgUnitId]: d.data.setup })))
         .catch(() => {});
@@ -125,25 +124,25 @@ export function InstancesTab({
 
   const add = async () => {
     if (!picked.length) return;
-    if (await call("add", `/api/projects/${projectId}/instances`, { method: "POST", body: JSON.stringify({ orgUnitIds: picked }) })) {
+    if (await call("add", `/api/projects/${projectId}/markets`, { method: "POST", body: JSON.stringify({ orgUnitIds: picked }) })) {
       setPicked([]);
       setAddOpen(false);
     }
   };
-  const patch = (orgUnitId: string, body: Record<string, unknown>) => call(orgUnitId, `/api/projects/${projectId}/instances/${orgUnitId}`, { method: "PATCH", body: JSON.stringify(body) });
-  const retire = (orgUnitId: string) => call(orgUnitId, `/api/projects/${projectId}/instances/${orgUnitId}`, { method: "DELETE" });
+  const patch = (orgUnitId: string, body: Record<string, unknown>) => call(orgUnitId, `/api/projects/${projectId}/markets/${orgUnitId}`, { method: "PATCH", body: JSON.stringify(body) });
+  const retire = (orgUnitId: string) => call(orgUnitId, `/api/projects/${projectId}/markets/${orgUnitId}`, { method: "DELETE" });
 
   return (
-    <section className={`${CARD} overflow-hidden`} style={CARD_BG} aria-labelledby="instances-title">
+    <section className={`${CARD} overflow-hidden`} style={CARD_BG} aria-labelledby="markets-title">
       <div className="flex flex-wrap items-center gap-3 p-[12px_16px]">
-        <h2 id="instances-title" className="text-[13.5px] font-semibold text-[var(--qink)]">
+        <h2 id="markets-title" className="text-[13.5px] font-semibold text-[var(--qink)]">
           {label === "Instance" ? "Instances" : `${label}s`}
         </h2>
         <span className="text-[12px] text-[var(--ink4)]">
           {rows.length === 0 ? `This product ships to no ${plural} yet.` : `${rows.length} · gates, the weekly check-in and the set-up checklist run per ${label.toLowerCase()}`}
         </span>
         {canManage && (
-          <button type="button" onClick={() => setAddOpen(true)} className={`${SECONDARY} ml-auto gap-1.5`} disabled={addable.length === 0} title={addable.length === 0 ? `Every ${label.toLowerCase()} is already on this project — add more under Admin › Organisation` : undefined}>
+          <button type="button" onClick={() => setAddOpen(true)} className={`${SECONDARY} ml-auto gap-1.5`} disabled={addable.length === 0} title={addable.length === 0 ? `Every ${label.toLowerCase()} is already on this project — add more under Admin › Markets` : undefined}>
             <Plus className="size-3.5" aria-hidden /> Add {label.toLowerCase()}
           </button>
         )}
@@ -249,7 +248,7 @@ export function InstancesTab({
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
             <DialogTitle>Add {plural}</DialogTitle>
-            <DialogDescription>Each one gets its own gates, weekly check-in and set-up checklist. Missing one? Admin › Organisation holds the list.</DialogDescription>
+            <DialogDescription>Each one gets its own gates, weekly check-in and set-up checklist. Missing one? Admin › Markets holds the list.</DialogDescription>
           </DialogHeader>
           <div className="flex flex-wrap gap-1.5">
             {addable.map((u) => {

@@ -20,8 +20,9 @@ interface Payload extends ProjectCheckpoints {
   canGovern: boolean;
 }
 
-/** docs/38 — `orgUnitId` scopes the matrix to one instance's gates (null = the product's own). */
-export function CheckpointMatrix({ projectId, orgUnitId = null }: { projectId: string; orgUnitId?: string | null }) {
+/** docs/38 — `orgUnitId` scopes the matrix to one market's gates, `moduleId` to one named
+ * instance's own gates (both: that instance in that market); null = the product's own. */
+export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null }: { projectId: string; orgUnitId?: string | null; moduleId?: string | null }) {
   const [data, setData] = useState<Payload | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,14 +34,17 @@ export function CheckpointMatrix({ projectId, orgUnitId = null }: { projectId: s
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const res = await fetch(`/api/projects/${projectId}/checkpoints${orgUnitId ? `?orgUnitId=${orgUnitId}` : ""}`);
+      const q = new URLSearchParams();
+      if (orgUnitId) q.set("orgUnitId", orgUnitId);
+      if (moduleId) q.set("moduleId", moduleId);
+      const res = await fetch(`/api/projects/${projectId}/checkpoints${q.toString() ? `?${q}` : ""}`);
       if (!res.ok || cancelled) return;
       setData(await res.json());
     })();
     return () => {
       cancelled = true;
     };
-  }, [projectId, orgUnitId]);
+  }, [projectId, orgUnitId, moduleId]);
 
   if (!data) {
     return (
@@ -56,7 +60,7 @@ export function CheckpointMatrix({ projectId, orgUnitId = null }: { projectId: s
     const res = await fetch(`/api/projects/${projectId}/checkpoints`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify("templateId" in body ? body : { ...body, orgUnitId }),
+      body: JSON.stringify("templateId" in body ? body : { ...body, orgUnitId, moduleId }),
     });
     if (res.status === 409) {
       // Gate unmet — show the checklist and offer the override rather than failing flat.
