@@ -76,11 +76,14 @@ export async function getRolloutMatrix(
     const portfolio = await tx.portfolio.findUnique({ where: { id: portfolioId }, select: { id: true, name: true } });
     if (!portfolio) return null;
 
-    // docs/38 — columns are the union of the portfolio's instances (any org-unit kind),
-    // not every Market unit in the tenant.
+    // Columns: every Market unit (the heatmap shows where a product does NOT ship yet as an
+    // honest "—"), plus — docs/38 — any other org unit the portfolio's projects use as an
+    // instance (a subsidiary), so no instance is ever hidden from the exec.
     const [markets, projects] = await Promise.all([
       tx.orgUnit.findMany({
-        where: { projectOrgStatuses: { some: { project: { portfolioId, status: { notIn: ["Completed", "Cancelled"] } }, retiredAt: null } } },
+        where: {
+          OR: [{ kind: "Market" }, { projectOrgStatuses: { some: { project: { portfolioId, status: { notIn: ["Completed", "Cancelled"] } }, retiredAt: null } } }],
+        },
         select: { id: true, code: true, name: true, flag: true },
         orderBy: { createdAt: "asc" },
       }),
