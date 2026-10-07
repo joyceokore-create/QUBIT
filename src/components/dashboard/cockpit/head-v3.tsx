@@ -122,7 +122,6 @@ export function HeadV3(props: HeadV3Props) {
     { id: "disputes", icon: "warn", label: "Exceptions" },
     { id: "head-tracker", icon: "calcheck", label: "Tracker" },
     { id: "head-insights", icon: "compare", label: "Insights" },
-    { id: "custom-reports", icon: "report", label: "Custom Reports", href: "/reports?tab=custom" },
   ]);
 
   const ragOrder: Record<string, number> = { R: 0, A: 1, G: 2, N: 3 };

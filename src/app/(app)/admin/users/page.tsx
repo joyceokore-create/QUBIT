@@ -23,6 +23,7 @@ function buildInsights(
     lastLoginAt: Date | null;
     mfaEnabled: boolean;
   }[],
+  sso: boolean,
 ): AdminInsight[] {
   const out: AdminInsight[] = [];
   const active = users.filter((u) => u.status === "ACTIVE");
@@ -35,9 +36,14 @@ function buildInsights(
   if (pending.length)
     out.push({
       color: "amber",
-      text: `${pending.length} invited ${pending.length === 1 ? "user hasn’t" : "users haven’t"} signed in yet — resend their temporary credentials.`,
+      // Under SSO there are no invites or temporary credentials — sign-in is via Microsoft.
+      text: sso
+        ? `${pending.length} ${pending.length === 1 ? "user hasn’t" : "users haven’t"} signed in with Microsoft yet.`
+        : `${pending.length} invited ${pending.length === 1 ? "user hasn’t" : "users haven’t"} signed in yet — resend their temporary credentials.`,
     });
-  if (noMfaAdmins.length)
+  // App-level TOTP only applies without SSO; with SSO, MFA is enforced at the identity
+  // provider (Entra), which the app can't see — so this insight would always misfire.
+  if (!sso && noMfaAdmins.length)
     out.push({
       color: "red",
       text: `${noMfaAdmins.length} admin ${noMfaAdmins.length === 1 ? "account has" : "accounts have"} no MFA — enforce TOTP for privileged roles.`,
@@ -55,7 +61,12 @@ function buildInsights(
   if (admins.length <= 1)
     out.push({ color: "amber", text: `Only ${admins.length} active system admin — add a second to avoid a single point of failure.` });
   if (out.length === 0)
-    out.push({ color: "green", text: "Everyone has signed in, with MFA, an org unit and a role — nothing needs attention." });
+    out.push({
+      color: "green",
+      text: sso
+        ? "Everyone has signed in, with an org unit and a role — nothing needs attention."
+        : "Everyone has signed in, with MFA, an org unit and a role — nothing needs attention.",
+    });
   return out;
 }
 
@@ -78,7 +89,8 @@ export default async function AdminUsersPage() {
   ]);
   // Custom roles only — the dialog already knows the built-ins.
   const customRoles = assignableRoles.filter((r) => !(CANONICAL_ROLES as readonly string[]).includes(r));
-  const insights = buildInsights(users);
+  const sso = ssoEnabled();
+  const insights = buildInsights(users, sso);
 
   return (
     <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
@@ -91,12 +103,12 @@ export default async function AdminUsersPage() {
               teams={teams.map((t) => ({ id: t.id, name: t.name }))}
               projects={projects.map((p) => ({ id: p.id, code: p.code, name: p.name }))}
               canGrantSuperAdmin={canGrantSuperAdmin}
-              sso={ssoEnabled()}
+              sso={sso}
             />
           ) : undefined
         }
       />
-      <UsersClient users={users} departments={departments} currentUserId={session.user.id} insights={insights} canManage={canManageUsers} canGrantSuperAdmin={canGrantSuperAdmin} canResetPassword={canResetPassword} customRoles={customRoles} />
+      <UsersClient users={users} departments={departments} currentUserId={session.user.id} insights={insights} canManage={canManageUsers} canGrantSuperAdmin={canGrantSuperAdmin} canResetPassword={canResetPassword} customRoles={customRoles} sso={sso} />
     </main>
   );
 }

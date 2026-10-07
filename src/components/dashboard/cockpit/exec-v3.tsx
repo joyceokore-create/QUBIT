@@ -74,7 +74,6 @@ export function ExecV3(props: ExecV3Props) {
     { id: "exec-insights", icon: "list", label: "Insights" },
     { id: "decisions", icon: "warn", label: "Decisions" },
     { id: "exec-glc", icon: "shield", label: "GLC" },
-    { id: "custom-reports", icon: "report", label: "Custom Reports", href: "/reports?tab=custom" },
   ]);
 
   return (

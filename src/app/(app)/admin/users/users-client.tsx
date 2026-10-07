@@ -17,8 +17,10 @@ function initials(name: string): string {
   return name.split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("");
 }
 
-// Onboarding is "complete" when a user has signed in, enabled MFA, and been placed on a
-// team or project. Each step is a dot in the directory + a filter in the overview strip.
+// Onboarding is "complete" when a user has signed in and been placed on a team or project —
+// plus, WITHOUT SSO, enrolled app-level TOTP. With SSO, MFA is enforced at the identity
+// provider (which the app can't observe), so the MFA signal is dropped. Each remaining step
+// is a dot in the directory + a filter in the overview strip.
 function steps(u: AdminUserSummary) {
   return {
     signedIn: u.lastLoginAt !== null,
@@ -39,6 +41,7 @@ export function UsersClient({
   canGrantSuperAdmin = false,
   canResetPassword = false,
   customRoles = [],
+  sso = false,
 }: {
   users: AdminUserSummary[];
   departments: DepartmentSummary[];
@@ -53,6 +56,9 @@ export function UsersClient({
   canResetPassword?: boolean;
   /** ACTIVE custom role names — offered in the edit-roles dialog. */
   customRoles?: string[];
+  /** SSO configured — MFA is enforced at the identity provider, not app-level TOTP, so the
+   *  onboarding widget drops the MFA signal (see docs/17 / the SSO create-user change). */
+  sso?: boolean;
 }) {
   const [seg, setSeg] = useState<Segment>("all");
 
@@ -64,9 +70,10 @@ export function UsersClient({
       nomfa: active.filter((u) => !u.mfaEnabled).length,
       unassigned: active.filter((u) => u.teamCount + u.projectCount === 0).length,
       suspended: users.filter((u) => u.status === "SUSPENDED").length,
-      onboarded: active.filter((u) => u.lastLoginAt && u.mfaEnabled && u.teamCount + u.projectCount > 0).length,
+      // Under SSO the MFA step is dropped: onboarded = signed in + placed.
+      onboarded: active.filter((u) => u.lastLoginAt && (sso || u.mfaEnabled) && u.teamCount + u.projectCount > 0).length,
     };
-  }, [users]);
+  }, [users, sso]);
 
   const rows = useMemo(() => {
     const active = (u: AdminUserSummary) => u.status === "ACTIVE";
@@ -82,7 +89,8 @@ export function UsersClient({
   const tiles: { key: Segment; label: string; value: number; token: string }[] = [
     { key: "all", label: "All users", value: counts.all, token: "--qink" },
     { key: "invited", label: "Never signed in", value: counts.invited, token: "--warn" },
-    { key: "nomfa", label: "No MFA", value: counts.nomfa, token: "--bad" },
+    // App-level MFA doesn't apply under SSO (enforced at the identity provider), so hide it.
+    ...(sso ? [] : [{ key: "nomfa" as const, label: "No MFA", value: counts.nomfa, token: "--bad" }]),
     { key: "unassigned", label: "Unassigned", value: counts.unassigned, token: "--qinfo" },
     { key: "suspended", label: "Suspended", value: counts.suspended, token: "--ink4" },
   ];
@@ -124,7 +132,7 @@ export function UsersClient({
             </span>
             <span className="flex-1" />
             {seg === "all" ? (
-              <span className="hidden font-mono rv:font-sans text-[9px] rv:text-overline tracking-[.8px] text-[var(--ink4)] sm:inline">ONBOARDING = SIGNED IN · MFA · PLACED</span>
+              <span className="hidden font-mono rv:font-sans text-[9px] rv:text-overline tracking-[.8px] text-[var(--ink4)] sm:inline">{sso ? "ONBOARDING = SIGNED IN · PLACED" : "ONBOARDING = SIGNED IN · MFA · PLACED"}</span>
             ) : (
               <button type="button" onClick={() => setSeg("all")} className="text-[11px] font-semibold text-brand hover:underline">Clear filter</button>
             )}
@@ -137,7 +145,9 @@ export function UsersClient({
               </div>
               {rows.map((u) => {
                 const s = steps(u);
-                const okCount = [s.signedIn, s.mfa, s.placed].filter(Boolean).length;
+                // SSO drops the MFA step from the checklist (enforced at the IdP).
+                const stepFlags = sso ? [s.signedIn, s.placed] : [s.signedIn, s.mfa, s.placed];
+                const okCount = stepFlags.filter(Boolean).length;
                 return (
                   <div key={u.id} className={`${ROW_GRID} border-b border-[var(--hair2)] p-[11px_18px] transition-colors last:border-0 hover:bg-[var(--wash)]`}>
                     <span className="flex min-w-0 items-center gap-2.5">
@@ -160,9 +170,9 @@ export function UsersClient({
                     </span>
                     <span className="flex items-center gap-1.5">
                       <Dot on={s.signedIn} label="Signed in" />
-                      <Dot on={s.mfa} label="MFA enabled" />
+                      {!sso && <Dot on={s.mfa} label="MFA enabled" />}
                       <Dot on={s.placed} label="Placed on a team/project" />
-                      <span className="ml-1 font-mono rv:font-data text-[9px] rv:text-data-sm text-[var(--ink5)]">{okCount}/3</span>
+                      <span className="ml-1 font-mono rv:font-data text-[9px] rv:text-data-sm text-[var(--ink5)]">{okCount}/{sso ? 2 : 3}</span>
                     </span>
                     <span className="font-mono rv:font-data text-[10px] rv:text-data-sm text-[var(--ink4)]">
                       {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : <span className="font-semibold text-[var(--warn)]">Never</span>}
@@ -192,8 +202,9 @@ export function UsersClient({
             </div>
           </div>
           <div className="rounded-[14px] border border-dashed border-[var(--hair)] p-[14px_16px] text-[11.5px] rv:text-body-xs leading-[1.55] text-[var(--ink4)]">
-            A user is ready once they&apos;ve signed in, enabled MFA, and joined a team or project. Use the tiles above to
-            find who&apos;s stuck, and &ldquo;New user&rdquo; to invite someone placed on day one.
+            {sso
+              ? "A user is ready once they’ve signed in with Microsoft and joined a team or project. MFA is enforced by your identity provider. Use the tiles above to find who’s stuck, and “Create a user” to add someone."
+              : "A user is ready once they’ve signed in, enabled MFA, and joined a team or project. Use the tiles above to find who’s stuck, and “Create a user” to add someone."}
           </div>
         </aside>
       </div>

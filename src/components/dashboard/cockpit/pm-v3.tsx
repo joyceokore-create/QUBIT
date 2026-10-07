@@ -137,7 +137,6 @@ export function PmV3({ viewer, briefLines, generatedAt, projects, ragCounts, sta
     { id: "pm-queue", icon: "list", label: "Work Queue" },
     { id: "pm-risks", icon: "warn", label: "Risks & Collisions" },
     ...(market ? [{ id: "pm-market", icon: "globe", label: "Market Rollout" }] : []),
-    { id: "custom-reports", icon: "report", label: "Custom Reports", href: "/reports?tab=custom" },
   ]);
 
   const q = search.trim().toLowerCase();
