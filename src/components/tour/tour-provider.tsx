@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { INITIAL_TOUR, stepById, stepRoute, tourReducer, type TourEvent, type TourState } from "@/lib/tour";
+import type { TourProjectSetup } from "@/server/tour";
 import { TOUR_EVENT } from "@/components/tour/tour-events";
 import { TourOverlay } from "@/components/tour/tour-overlay";
 
@@ -19,6 +20,8 @@ const STORAGE_KEY = "qubit.tour.v1";
 interface TourApi {
   state: TourState;
   eligible: boolean;
+  /** The projects the viewer runs, with setup progress (welcome takeover + header nudge). */
+  projects: TourProjectSetup[];
   start: () => void;
 }
 
@@ -38,12 +41,14 @@ export function TourProvider({
   eligible,
   firstProjectId,
   reportsQuery = "",
+  projects = [],
   children,
 }: {
   offer: boolean;
   eligible: boolean;
   firstProjectId: string | null;
   reportsQuery?: string;
+  projects?: TourProjectSetup[];
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -120,13 +125,14 @@ export function TourProvider({
     () => ({
       state: effective,
       eligible,
+      projects,
       start: () => {
         stampedRef.current = false;
         setResumed(null);
         dispatch({ type: "start", projectId: firstProjectId, reportsQuery });
       },
     }),
-    [effective, eligible, firstProjectId, reportsQuery],
+    [effective, eligible, firstProjectId, reportsQuery, projects],
   );
 
   const act = useCallback(
@@ -144,7 +150,9 @@ export function TourProvider({
   return (
     <TourContext.Provider value={api}>
       {children}
-      {hydrated && effective.active && <TourOverlay step={step} state={effective} onRoute={onRoute} onNext={() => act("next")} onBack={() => act("back")} onSkip={() => act("skip")} onExit={() => act("exit")} />}
+      {hydrated && effective.active && (
+        <TourOverlay step={step} state={effective} projects={projects} onRoute={onRoute} onNext={() => act("next")} onBack={() => act("back")} onSkip={() => act("skip")} onExit={() => act("exit")} />
+      )}
     </TourContext.Provider>
   );
 }

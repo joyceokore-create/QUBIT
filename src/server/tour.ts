@@ -2,15 +2,24 @@ import "server-only";
 import { audit } from "@/lib/audit";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { ownView } from "@/lib/reports-view";
+import { getProjectSetup } from "@/server/project-setup";
 
 /**
  * First-week walkthrough — who gets it offered, and the one flag that stops it coming
  * back. The tour is for people who RUN projects (lead or "Project Manager" member) or hold
  * the ProjectManager role; executives and plain members are never interrupted by it.
  * Finishing or exiting stamps `tourCompletedAt`; "Show me around" replays without
- * touching the stamp. Super admins are eligible to replay but never auto-interrupted —
- * they are not the PM audience, and the e2e smoke signs in as one.
+ * touching the stamp. Super admins who run a project are offered it too (the seeded
+ * admins the e2e smoke signs in as are stamped by the seed, so they are never interrupted).
  */
+
+export interface TourProjectSetup {
+  id: string;
+  code: string;
+  name: string;
+  done: number;
+  total: number;
+}
 
 export interface TourOffer {
   offer: boolean;
@@ -18,11 +27,14 @@ export interface TourOffer {
   eligible: boolean;
   firstProjectId: string | null;
   projectCount: number;
+  /** The projects the viewer runs, with their setup progress — the welcome takeover and
+   *  the header nudge read this. Capped at 12. */
+  projects: TourProjectSetup[];
   /** The /reports the walk ends on: a PM's own queue, or the PM preview for Heads/admins. */
   reportsQuery: string;
 }
 
-export async function shouldOfferTour(ctx: TenantContext): Promise<TourOffer> {
+export async function shouldOfferTour(ctx: TenantContext, now = new Date()): Promise<TourOffer> {
   return withTenant(ctx, async (tx) => {
     const [user, projects] = await Promise.all([
       tx.user.findUnique({ where: { id: ctx.userId }, select: { tourCompletedAt: true } }),
@@ -31,11 +43,12 @@ export async function shouldOfferTour(ctx: TenantContext): Promise<TourOffer> {
           status: { notIn: ["Completed", "Cancelled"] },
           OR: [{ leadUserId: ctx.userId }, { members: { some: { userId: ctx.userId, role: "Project Manager" } } }],
         },
-        select: { id: true },
+        select: { id: true, code: true, name: true },
         orderBy: { createdAt: "asc" },
         take: 50,
       }),
     ]);
+    const setups = await Promise.all(projects.slice(0, 12).map(async (p) => ({ id: p.id, code: p.code, name: p.name, ...(await getProjectSetup(ctx, p.id, now).then((s) => ({ done: s.done, total: s.total }))) })));
     const superAdmin = ctx.roles.includes("PlatformSuperAdmin");
     const head = ctx.roles.includes("HeadOfProjects");
     // Runs projects / is a PM → offered once. Super admins and Heads can always replay the
@@ -47,10 +60,12 @@ export async function shouldOfferTour(ctx: TenantContext): Promise<TourOffer> {
       firstProjectId = any?.id ?? null;
     }
     return {
-      offer: (projects.length > 0 || ctx.roles.includes("ProjectManager")) && !superAdmin && !user?.tourCompletedAt,
+      // Offered once to PMs, and to anyone (admins included) who actually runs a project.
+      offer: (projects.length > 0 || ctx.roles.includes("ProjectManager")) && !user?.tourCompletedAt,
       eligible,
       firstProjectId,
       projectCount: projects.length,
+      projects: setups,
       reportsQuery: ownView(ctx.roles) === "pm" ? "" : "?as=pm",
     };
   });

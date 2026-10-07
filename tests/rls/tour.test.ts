@@ -45,7 +45,8 @@ describe("first-week walkthrough", () => {
   });
 
   it("offers the walk once to someone who runs a project, with that project; stamps on completion", async () => {
-    expect(await shouldOfferTour(pm)).toEqual({ offer: true, eligible: true, firstProjectId: projectId, projectCount: 1, reportsQuery: "" });
+    expect(await shouldOfferTour(pm)).toMatchObject({ offer: true, eligible: true, firstProjectId: projectId, projectCount: 1, reportsQuery: "" });
+    expect((await shouldOfferTour(pm)).projects).toMatchObject([{ id: projectId, code: "TOUR-A", done: 1 }]);
     await completeTour(pm);
     expect(await shouldOfferTour(pm)).toMatchObject({ offer: false, eligible: true, firstProjectId: projectId });
     const audits = await withTenant(pm, (tx) => tx.auditLog.count({ where: { entityType: "user", entityId: pm.userId, actorId: pm.userId } }));
@@ -54,12 +55,12 @@ describe("first-week walkthrough", () => {
     expect((await shouldOfferTour(pm)).offer).toBe(true);
   });
 
-  it("never interrupts an executive, a plain member, or a super admin (who may still replay)", async () => {
-    expect(await shouldOfferTour(exec)).toMatchObject({ offer: false, eligible: false, projectCount: 0 });
+  it("never interrupts an executive or a plain member; an admin is offered it only when they run a project", async () => {
+    expect(await shouldOfferTour(exec)).toMatchObject({ offer: false, eligible: false, projectCount: 0, projects: [] });
     expect(await shouldOfferTour(member)).toMatchObject({ offer: false, eligible: false });
     const admin: TenantContext = { tenantId: rbId, userId: pm.userId, roles: ["PlatformSuperAdmin"] };
-    expect(await shouldOfferTour(admin)).toMatchObject({ offer: false, eligible: true, firstProjectId: projectId, reportsQuery: "?as=pm" });
-    // A super admin who runs nothing can still replay — on some active project.
+    expect(await shouldOfferTour(admin)).toMatchObject({ offer: true, eligible: true, firstProjectId: projectId, reportsQuery: "?as=pm" });
+    // A super admin who runs nothing is not interrupted but can still replay — on some active project.
     const adminNoProjects: TenantContext = { tenantId: rbId, userId: member.userId, roles: ["PlatformSuperAdmin"] };
     const r = await shouldOfferTour(adminNoProjects);
     expect(r).toMatchObject({ offer: false, eligible: true, projectCount: 0 });
