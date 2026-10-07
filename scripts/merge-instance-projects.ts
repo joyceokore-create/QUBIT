@@ -92,7 +92,9 @@ async function main() {
         console.log(`${g.code}: no market shells and no product — skipped.`);
         continue;
       }
-      const busy = marketShells.filter((s) => s.leadUserId || Object.values(s._count).some((n) => n > 0));
+      // A lead or PM members are carried over to the product; anything else (tasks, documents,
+      // risks, check-ins, gate states) means the shell is a real project — merge by hand.
+      const busy = marketShells.filter((s) => (["projectTasks", "documents", "risks", "checkIns", "checkpointStatuses"] as const).some((k) => s._count[k] > 0));
       if (busy.length) {
         console.log(`${g.code}: ${busy.map((b) => b.code).join(", ")} carry work — merge those by hand first. Nothing done for this group.`);
         continue;
@@ -123,15 +125,27 @@ async function main() {
           console.log(`  ${s.code}: no org unit for ${mk} — left alone`);
           continue;
         }
-        console.log(`  ${s.code} → market ${unit.code}; delete the empty shell`);
+        console.log(`  ${s.code} → market ${unit.code}; carry lead/members (${s._count.members} member${s._count.members === 1 ? "" : "s"}${s.leadUserId ? ", lead" : ""}); delete the shell`);
         if (DRY || !product) continue;
         const existing = await tx.projectOrgStatus.findUnique({ where: { projectId_orgUnitId: { projectId: product.id, orgUnitId: unit.id } }, select: { id: true } });
         if (!existing) {
           const row = await tx.projectOrgStatus.create({ data: { tenantId: ctx.tenantId, projectId: product.id, orgUnitId: unit.id, progress: 0, status: "Planning" } });
           await audit(tx, ctx, { action: "create", entityType: "project_instance", entityId: row.id, after: { projectId: product.id, orgUnitId: unit.id, code: unit.code, mergedFrom: s.code } });
         }
-        // The shell is EMPTY (asserted above) — delete it rather than leave a "Cancelled"
-        // project in every list; the audit row keeps the mapping.
+        // Carry the shell's lead and members onto the product (first lead wins; the
+        // market row remembers its lead too), then delete the shell — nothing else is on
+        // it (asserted above); the audit row keeps the mapping.
+        const members = await tx.projectMember.findMany({ where: { projectId: s.id }, select: { userId: true, role: true, allocationPct: true, startDate: true, endDate: true } });
+        for (const m of members) {
+          const have = await tx.projectMember.findFirst({ where: { projectId: product.id, userId: m.userId }, select: { id: true } });
+          if (!have) await tx.projectMember.create({ data: { tenantId: ctx.tenantId, projectId: product.id, userId: m.userId, role: m.role, allocationPct: m.allocationPct, startDate: m.startDate, endDate: m.endDate } });
+        }
+        if (s.leadUserId) {
+          const prod = await tx.project.findUnique({ where: { id: product.id }, select: { leadUserId: true } });
+          if (!prod?.leadUserId) await tx.project.update({ where: { id: product.id }, data: { leadUserId: s.leadUserId } });
+          await tx.projectOrgStatus.updateMany({ where: { projectId: product.id, orgUnitId: unit.id, leadUserId: null }, data: { leadUserId: s.leadUserId } });
+        }
+        await tx.projectMember.deleteMany({ where: { projectId: s.id } });
         await audit(tx, ctx, { action: "delete", entityType: "project", entityId: s.id, before: { code: s.code, name: s.name, status: s.status }, after: { mergedInto: g.code, market: unit.code, reason: "docs/38 §7 — empty per-market shell" } });
         await tx.project.delete({ where: { id: s.id } });
       }
