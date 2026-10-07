@@ -6,6 +6,10 @@ import { stepIndex, TOUR_STEPS, type TourState, type TourStep } from "@/lib/tour
 import type { TourProjectSetup } from "@/server/tour";
 import { CARD_GLASS, CARD_BG, FOCUS, PRIMARY, QUIET, ragFill } from "@/lib/surface";
 
+/** Layers a hands-on step opens; while one is in the DOM the walk steps aside. */
+const OPEN_LAYERS = '[data-slot="dialog-content"], [data-slot="select-content"], [data-slot="dropdown-menu-content"], [role="listbox"], [role="menu"]';
+const CONTROL = 'button, [role="combobox"], a[href], input, select, textarea';
+
 /**
  * The spotlight: the page dims, a rounded cut-out frames the real control (brand ring,
  * pulseGlow), and one card speaks a sentence and an action. The card sits beside the
@@ -58,6 +62,10 @@ export function TourOverlay({
 }) {
   const [rect, setRect] = useState<Rect | null>(null);
   const [missing, setMissing] = useState(false);
+  // A hands-on step opens something real — the template picker, the Add-document or
+  // Add-member dialog. Those live below this layer, so while one is open the walk steps
+  // aside entirely and comes back when it closes (or moves on when the event fires).
+  const [busy, setBusy] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const [vw, setVw] = useState(0);
   const [vh, setVh] = useState(0);
@@ -112,10 +120,37 @@ export function TourOverlay({
     setVh(window.innerHeight);
   }, []);
 
+  useEffect(() => {
+    setBusy(false);
+    if (!step.waitFor) return;
+    const check = () => setBusy(Boolean(document.querySelector(OPEN_LAYERS)));
+    const mo = new MutationObserver(check);
+    mo.observe(document.body, { childList: true, subtree: true });
+    check();
+    return () => mo.disconnect();
+  }, [step.id, step.waitFor]);
+
+  // The step's own action: open the framed control for them (the hole is clickable too).
+  const doIt = () => {
+    if (!step.target) return;
+    const host = document.querySelector(step.target);
+    if (!host) return;
+    const ctl = (host.matches(CONTROL) ? host : host.querySelector(CONTROL)) as HTMLElement | null;
+    if (!ctl) return;
+    ctl.scrollIntoView({ block: "center" });
+    ctl.focus();
+    ctl.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, pointerType: "mouse", button: 0 }));
+    ctl.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+    ctl.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, pointerType: "mouse", button: 0 }));
+    ctl.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, button: 0 }));
+    ctl.click();
+  };
+
   // Keyboard: Esc exits, arrows move, focus goes to the card.
   useEffect(() => {
     cardRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
+      if (document.querySelector(OPEN_LAYERS)) return; // a dialog or picker owns the keys
       if (e.key === "Escape") onExit();
       else if (e.key === "ArrowRight" && !step.waitFor) onNext();
       else if (e.key === "ArrowLeft") onBack();
@@ -131,6 +166,8 @@ export function TourOverlay({
   const waiting = Boolean(step.waitFor);
   const takeover = step.id === "welcome" || step.id === "done";
   const pending = projects.filter((p) => p.done < p.total);
+
+  if (busy && waiting) return null;
 
   // The first and last cards are a takeover, not a tooltip: the whole screen is the moment.
   if (takeover) {
@@ -304,9 +341,15 @@ export function TourOverlay({
           )}
           <span className="flex-1" />
           {waiting ? (
-            <button type="button" onClick={onSkip} className={`${QUIET} ${FOCUS}`}>
-              Skip this step
-            </button>
+            <>
+              <button type="button" onClick={onSkip} className={`${QUIET} ${FOCUS}`}>
+                Skip this step
+              </button>
+              <button type="button" onClick={doIt} className={`${PRIMARY} inline-flex items-center gap-1.5`} disabled={missing}>
+                {step.action}
+                <ArrowRight className="size-3.5" aria-hidden />
+              </button>
+            </>
           ) : (
             <button type="button" onClick={onNext} className={`${PRIMARY} inline-flex items-center gap-1.5`}>
               {step.id === "done" ? <Check className="size-3.5" aria-hidden /> : null}
