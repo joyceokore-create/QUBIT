@@ -29,7 +29,7 @@ import { InstancesSection } from "@/components/workspace/instances-section";
 import { ModulesSection } from "@/components/workspace/modules-section";
 import { MarketCheckInCard } from "@/components/workspace/market-checkin-card";
 import type { ProjectPanelJson } from "@/components/panels/project-panel-json";
-import { CARD_GLASS as CARD, CARD_BG, FOCUS, ragFill, ragToken } from "@/lib/surface";
+import { CARD_GLASS as CARD, CARD_BG, FOCUS, ragFill } from "@/lib/surface";
 
 // Milestone A (docs handoff §2) — the workspace, rearranged around the weekly act: a
 // plain header, seven underline tabs, and a "This week" home that reads top to bottom as
@@ -258,49 +258,6 @@ export function ProjectWorkspace({
                 />
                 <div className={`${CARD} p-4`} style={CARD_BG}>
                   <ProjectMilestonesSection projectId={data.id} canEdit={canEdit} />
-                </div>
-              </div>
-              <div className="flex flex-col gap-3.5">
-                <h3 className="text-[13px] font-semibold text-foreground">Markets</h3>
-                <div className={`${CARD} p-4`} style={CARD_BG}>
-                  <div className="mb-2.5 flex items-center justify-between">
-                    <span className="text-[13px] font-semibold text-foreground">Rollout</span>
-                    <button type="button" onClick={() => setTab("Markets")} className={`text-[10.5px] font-semibold text-[var(--ink4)] hover:text-brand ${FOCUS}`}>
-                      Manage markets →
-                    </button>
-                  </div>
-                  {markets.length === 0 ? (
-                    <p className="text-xs text-ink-3">
-                      This product ships to no markets yet — add them under the Markets tab, or pick them when creating a project.
-                    </p>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                      {markets.map((m) => {
-                        const tok = ragToken(m.rag);
-                        return (
-                          <button
-                            key={m.orgUnitId}
-                            type="button"
-                            onClick={() => pickInstance(m.orgUnitId)}
-                            aria-pressed={market === m.orgUnitId}
-                            className={`flex flex-col gap-1 rounded-[10px] border border-[var(--w07)] p-2.5 text-left transition-colors hover:border-[var(--brand)] aria-pressed:border-[var(--brand)] ${FOCUS}`}
-                          >
-                            <span className="flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
-                              <span className="size-1.5 rounded-full" style={{ background: `var(${tok})` }} aria-hidden />
-                              {m.flag ? `${m.flag} ` : ""}
-                              {m.code}
-                            </span>
-                            <div className="h-1.5 overflow-hidden rounded-full bg-[var(--wash2)]">
-                              <div className="h-full rounded-full" style={{ width: `${m.progress}%`, background: `var(${tok})` }} />
-                            </div>
-                            <span className="text-[10.5px] text-ink-3">
-                              {m.progress}% · {m.rag}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
                 </div>
               </div>
             </div>

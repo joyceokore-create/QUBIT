@@ -34,13 +34,16 @@ const DRY = process.argv.includes("--dry-run");
  * their own) with their state per market from the 29 Sep 2026 Swipe deck; markets not
  * listed for a module are N/A. */
 type State = "Planned" | "Build" | "UAT" | "Live" | "NotApplicable";
-const GROUPS: { prefix: string; code: string; name: string; description: string; instances?: { name: string; states: Record<string, State> }[] }[] = [
+/** `template` = the product's gate track by name (one track for all markets; Swipe's old
+ * "Agent banking channels" template modelled the channels as gates — those are modules now). */
+const GROUPS: { prefix: string; code: string; name: string; description: string; template?: string; instances?: { name: string; states: Record<string, State> }[] }[] = [
   { prefix: "ZED-", code: "ZED", name: "ZED ERP", description: "ZED ERP across the group's markets — one product, one market track each." },
   {
     prefix: "SWIPE-",
     code: "SWIPE",
     name: "Swipe Agent Banking",
     description: "Swipe Agent Banking solution — channels (modules), markets and Hal device support.",
+    template: "Market rollout",
     instances: [
       { name: "P20 POS", states: { KE: "Live", RW: "UAT" } },
       { name: "P30 POS", states: { KE: "Live", RW: "UAT" } },
@@ -89,6 +92,7 @@ async function main() {
         continue;
       }
       const portfolioId = marketShells[0]!.portfolioId;
+      const template = g.template ? await tx.checkpointTemplate.findFirst({ where: { name: g.template }, select: { id: true } }) : null;
       let product = await tx.project.findFirst({ where: { code: g.code }, select: { id: true, code: true } });
       if (!product) {
         console.log(`${g.code}: create "${g.name}" in portfolio ${portfolioId} with ${marketShells.length} instances`);
@@ -96,14 +100,17 @@ async function main() {
           product = await tx.project.create({
             data: {
               tenantId: ctx.tenantId, code: g.code, name: g.name, description: g.description, type: "Project", priority: "High", status: "Planning",
-              portfolioId, programmeId: marketShells[0]!.programmeId, checkpointTemplateId: marketShells.find((s) => s.checkpointTemplateId)?.checkpointTemplateId ?? null,
+              portfolioId, programmeId: marketShells[0]!.programmeId, checkpointTemplateId: template?.id ?? marketShells.find((s) => s.checkpointTemplateId)?.checkpointTemplateId ?? null,
               instanceLabel: "Market", moduleTracking: "state", instanceTagging: true, pmScope: "product",
             },
             select: { id: true, code: true },
           });
           await audit(tx, ctx, { action: "create", entityType: "project", entityId: product.id, after: { code: g.code, name: g.name, mergedFrom: marketShells.map((s) => s.code), reason: "docs/38 §7" } });
         }
-      } else console.log(`${g.code}: product exists (${product.id}) — reusing`);
+      } else {
+        console.log(`${g.code}: product exists (${product.id}) — reusing${template ? `; track → ${g.template}` : ""}`);
+        if (!DRY && template) await tx.project.update({ where: { id: product.id }, data: { checkpointTemplateId: template.id } });
+      }
 
       for (const s of marketShells) {
         const mk = s.code.slice(g.prefix.length).toUpperCase();
