@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { Compass, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -79,11 +78,18 @@ export function SetupNudge() {
                     {p.done}/{p.total}
                   </span>
                   {done ? (
-                    <span className="w-[52px] flex-none text-right text-[11.5px] font-semibold text-[var(--ok)]">Ready</span>
+                    <span className="w-[60px] flex-none text-right text-[11.5px] font-semibold text-[var(--ok)]">Ready</span>
                   ) : (
-                    <Link href={`/projects/${p.id}?tab=This%20week`} onClick={() => setOpen(false)} className={`${QUIET} w-[52px] flex-none whitespace-nowrap px-0 text-right`}>
-                      Go →
-                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpen(false);
+                        tour.startSetup(p.id);
+                      }}
+                      className={`${QUIET} w-[60px] flex-none whitespace-nowrap px-0 text-right`}
+                    >
+                      Set up →
+                    </button>
                   )}
                 </li>
               );

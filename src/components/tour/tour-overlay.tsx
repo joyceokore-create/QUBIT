@@ -2,13 +2,12 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, ClipboardCheck, Compass, Send, X } from "lucide-react";
-import { stepIndex, TOUR_STEPS, type TourState, type TourStep } from "@/lib/tour";
+import { stepById, stepProgress, type TourState, type TourStep, type TourTrack } from "@/lib/tour";
 import type { TourProjectSetup } from "@/server/tour";
-import { CARD_GLASS, CARD_BG, FOCUS, PRIMARY, QUIET, ragFill } from "@/lib/surface";
+import { CARD_GLASS, CARD_BG, FOCUS, PRIMARY, QUIET, SECONDARY, ragFill } from "@/lib/surface";
 
 /** Layers a hands-on step opens; while one is in the DOM the walk steps aside. */
 const OPEN_LAYERS = '[data-slot="dialog-content"], [data-slot="select-content"], [data-slot="dropdown-menu-content"], [role="listbox"], [role="menu"]';
-const CONTROL = 'button, [role="combobox"], a[href], input, select, textarea';
 
 /**
  * The spotlight: the page dims, a rounded cut-out frames the real control (brand ring,
@@ -35,17 +34,14 @@ function panelsAround(cut: { x: number; y: number; w: number; h: number }, vw: n
   ];
 }
 
-const PLACES: { key: TourStep["place"]; label: string }[] = [
-  { key: "projects", label: "Projects" },
-  { key: "workspace", label: "Workspace" },
-  { key: "reports", label: "Reports" },
-];
 
 export function TourOverlay({
   step,
   state,
   projects,
+  appDone,
   onRoute,
+  onChoose,
   onNext,
   onBack,
   onSkip,
@@ -54,7 +50,9 @@ export function TourOverlay({
   step: TourStep;
   state: TourState;
   projects: TourProjectSetup[];
+  appDone: boolean;
   onRoute: boolean;
+  onChoose: (track: TourTrack, projectId: string | null) => void;
   onNext: () => void;
   onBack: () => void;
   onSkip: () => void;
@@ -130,21 +128,6 @@ export function TourOverlay({
     return () => mo.disconnect();
   }, [step.id, step.waitFor]);
 
-  // The step's own action: open the framed control for them (the hole is clickable too).
-  const doIt = () => {
-    if (!step.target) return;
-    const host = document.querySelector(step.target);
-    if (!host) return;
-    const ctl = (host.matches(CONTROL) ? host : host.querySelector(CONTROL)) as HTMLElement | null;
-    if (!ctl) return;
-    ctl.scrollIntoView({ block: "center" });
-    ctl.focus();
-    ctl.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, pointerType: "mouse", button: 0 }));
-    ctl.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
-    ctl.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, pointerType: "mouse", button: 0 }));
-    ctl.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, button: 0 }));
-    ctl.click();
-  };
 
   // Keyboard: Esc exits, arrows move, focus goes to the card.
   useEffect(() => {
@@ -161,11 +144,16 @@ export function TourOverlay({
 
   const centred = !step.target || missing || !onRoute || !rect;
   const phone = vw > 0 && vw < 640;
-  const n = stepIndex(step.id);
-  const total = TOUR_STEPS.length;
+  const prog = stepProgress(state);
+  // Hands-on steps never block the page: the control is framed, everything stays
+  // clickable, and the card sits in a corner until the real thing has happened.
   const waiting = Boolean(step.waitFor);
-  const takeover = step.id === "welcome" || step.id === "done";
+  const satisfied = waiting && Boolean(state.done);
+  const takeover = step.id === "welcome" || step.id === "setup-done" || step.id === "app-done";
   const pending = projects.filter((p) => p.done < p.total);
+  const current = projects.find((p) => p.id === state.projectId);
+  const nextPending = pending.find((p) => p.id !== state.projectId) ?? null;
+  const appProject = state.projectId ?? projects[0]?.id ?? null;
 
   if (busy && waiting) return null;
 
@@ -188,14 +176,16 @@ export function TourOverlay({
           </button>
           <div>
             <h2 id="tour-title" className="font-heading text-[28px] font-bold leading-[1.1] tracking-[-.6px] text-[var(--qink)] [text-wrap:balance]">
-              {step.id === "welcome" ? "Your week in QUBIT" : "You're set"}
+              {step.id === "welcome" ? "Your week in QUBIT" : step.id === "setup-done" ? `That's ${current?.code ?? "this project"}` : "You're set"}
             </h2>
             <p className="mt-2 max-w-[46ch] text-[14.5px] leading-[1.55] text-[var(--ink3)] [text-wrap:pretty]">
               {step.id === "welcome"
                 ? projects.length > 0
                   ? `You run ${projects.length} ${projects.length === 1 ? "project" : "projects"} here — ${projects.map((p) => p.code).slice(0, 6).join(", ")}${projects.length > 6 ? "…" : ""}. ${pending.length === 0 ? (projects.length === 1 ? "It is set up." : "They are all set up.") : projects.length === 1 ? "It still needs setting up." : `${pending.length} of them still ${pending.length === 1 ? "needs" : "need"} setting up.`}`
                   : "No project is yours yet — once one is, this is how the week runs."
-                : "The workspace's This week card and Reports › This week are the two places the week happens. Replay this walk any time from your menu."}
+                : step.id === "setup-done"
+                  ? "Anything skipped stays on the project's This week tab as a checklist, and the Set up chip in the header counts what's left — nothing is lost."
+                  : "The workspace's This week card and Reports › This week are the two places the week happens. Replay either walk any time from your menu."}
             </p>
           </div>
           {step.id === "welcome" && (
@@ -217,9 +207,9 @@ export function TourOverlay({
               ))}
             </ol>
           )}
-          {step.id === "done" && pending.length > 0 && (
+          {step.id !== "welcome" && pending.filter((p) => p.id !== state.projectId).length > 0 && (
             <ul className="flex flex-col" aria-label="Projects still to set up">
-              {pending.slice(0, 6).map((p) => (
+              {pending.filter((p) => p.id !== state.projectId).slice(0, 6).map((p) => (
                 <li key={p.id} className="flex items-center gap-3 border-t border-[var(--hair2)] py-2 first:border-0 text-[13px]">
                   <span className="w-[64px] flex-none font-mono text-[10.5px] font-semibold text-[var(--ink4)]">{p.code}</span>
                   <span className="min-w-0 flex-1 truncate text-[var(--qink)]">{p.name}</span>
@@ -234,10 +224,42 @@ export function TourOverlay({
             </ul>
           )}
           <div className="flex flex-wrap items-center gap-3">
-            <button type="button" onClick={onNext} className={`${PRIMARY} h-11 px-5 text-[14px]`}>
-              {step.id === "welcome" ? "Show me — 6 steps" : "Done"}
-              {step.id === "welcome" ? <ArrowRight className="size-4" aria-hidden /> : <Check className="size-4" aria-hidden />}
-            </button>
+            {step.id === "welcome" && pending.length > 0 && (
+              <button type="button" onClick={() => onChoose("setup", pending[0]!.id)} className={`${PRIMARY} h-11 px-5 text-[14px]`}>
+                <ClipboardCheck className="size-4" aria-hidden />
+                Set up my {pending.length === 1 ? "project" : "projects"} · {pending.length} to go
+              </button>
+            )}
+            {step.id === "welcome" && (
+              <button type="button" onClick={() => onChoose("app", appProject)} className={`${pending.length > 0 ? SECONDARY : PRIMARY} h-11 px-5 text-[14px]`}>
+                <Compass className="size-4" aria-hidden />
+                Show me around · 5 steps
+              </button>
+            )}
+            {step.id === "setup-done" && nextPending && (
+              <button type="button" onClick={() => onChoose("setup", nextPending.id)} className={`${PRIMARY} h-11 px-5 text-[14px]`}>
+                Set up {nextPending.code} next
+                <ArrowRight className="size-4" aria-hidden />
+              </button>
+            )}
+            {step.id === "setup-done" && !appDone && (
+              <button type="button" onClick={() => onChoose("app", appProject)} className={`${nextPending ? SECONDARY : PRIMARY} h-11 px-5 text-[14px]`}>
+                <Compass className="size-4" aria-hidden />
+                Show me around the app
+              </button>
+            )}
+            {step.id === "app-done" && pending.length > 0 && (
+              <button type="button" onClick={() => onChoose("setup", pending[0]!.id)} className={`${PRIMARY} h-11 px-5 text-[14px]`}>
+                <ClipboardCheck className="size-4" aria-hidden />
+                Set up my {pending.length === 1 ? "project" : "projects"} · {pending.length} to go
+              </button>
+            )}
+            {step.id !== "welcome" && (
+              <button type="button" onClick={onNext} className={`${step.id === "app-done" && pending.length === 0 ? PRIMARY + " h-11 px-5 text-[14px]" : QUIET} inline-flex items-center gap-1.5`}>
+                <Check className="size-4" aria-hidden />
+                Done
+              </button>
+            )}
             {step.id === "welcome" && (
               <button type="button" onClick={onExit} className={QUIET}>
                 I&apos;ll explore on my own
@@ -258,8 +280,28 @@ export function TourOverlay({
   // window) leaves no side to sit on — dock the card like a phone does.
   const huge = Boolean(rect && !centred && rect.height > vh * 0.6);
   let cardStyle: React.CSSProperties;
-  if (phone) cardStyle = { left: 12, right: 12, bottom: 12, width: "auto" };
-  else if (huge) cardStyle = { right: 12, bottom: 12, width: CARD_W, maxHeight: vh - 24, overflowY: "auto" };
+  // Docked cards clear the floating Q button in the bottom-right corner.
+  const DOCK = 76;
+  if (phone) cardStyle = { left: 12, right: 12, bottom: DOCK, width: "auto" };
+  else if (waiting) {
+    // Docked in whichever corner covers the least of the framed control (a status card
+    // can span the whole width — then the card goes to a top corner, under the header).
+    const corners: React.CSSProperties[] = [
+      { right: 12, bottom: DOCK, width: CARD_W },
+      { left: 12, bottom: DOCK, width: CARD_W },
+      { right: 12, top: 72, width: CARD_W },
+      { left: 12, top: 72, width: CARD_W },
+    ];
+    const overlap = (c: React.CSSProperties) => {
+      if (!rect) return 0;
+      const x0 = "left" in c ? 12 : vw - 12 - CARD_W;
+      const y0 = "top" in c ? 72 : vh - DOCK - CARD_H;
+      const w = Math.max(0, Math.min(x0 + CARD_W, rect.left + rect.width) - Math.max(x0, rect.left));
+      const h = Math.max(0, Math.min(y0 + CARD_H, rect.top + rect.height) - Math.max(y0, rect.top));
+      return w * h;
+    };
+    cardStyle = corners.reduce((best, c) => (overlap(c) < overlap(best) ? c : best), corners[0]!);
+  } else if (huge) cardStyle = { right: 12, bottom: DOCK, width: CARD_W, maxHeight: vh - DOCK - 12, overflowY: "auto" };
   else if (centred) cardStyle = { left: "50%", top: "50%", transform: "translate(-50%, -50%)", width: CARD_W };
   else {
     const r = rect!;
@@ -277,13 +319,14 @@ export function TourOverlay({
   const cut = rect && !centred ? { x: rect.left - PAD, y: rect.top - PAD, w: rect.width + PAD * 2, h: rect.height + PAD * 2 } : null;
 
   return (
-    <div className="fixed inset-0 z-[70]" role="presentation">
-      {/* Scrim as four panels around the cut-out: the hole is real, so the framed control
-          takes clicks and the hands-on steps work; everything else is covered. */}
-      {(cut ? panelsAround(cut, vw, vh) : [{ left: 0, top: 0, width: "100%", height: "100%" }]).map((p, i) => (
-        <div key={i} aria-hidden className="absolute" style={{ ...p, background: "color-mix(in oklab, var(--qink) 58%, transparent)", pointerEvents: "auto" }} />
-      ))}
-      {cut && (
+    <div className={`fixed inset-0 z-[70] ${waiting ? "pointer-events-none" : ""}`} role="presentation">
+      {/* Look-here steps: a scrim as four panels around the cut-out, so the framed control
+          takes clicks and everything else is covered. Hands-on steps have no scrim at all. */}
+      {!waiting &&
+        (cut ? panelsAround(cut, vw, vh) : [{ left: 0, top: 0, width: "100%", height: "100%" }]).map((p, i) => (
+          <div key={i} aria-hidden className="absolute" style={{ ...p, background: "color-mix(in oklab, var(--qink) 58%, transparent)", pointerEvents: "auto" }} />
+        ))}
+      {cut && !satisfied && (
         <div
           aria-hidden
           className="pointer-events-none absolute rounded-[12px] ring-2 ring-[var(--brand)] motion-safe:[animation:pulseGlow_2.2s_ease-in-out_infinite]"
@@ -295,66 +338,60 @@ export function TourOverlay({
         ref={cardRef}
         tabIndex={-1}
         role="dialog"
-        aria-modal="true"
+        aria-modal={waiting ? undefined : "true"}
         aria-labelledby="tour-title"
-        className={`${CARD_GLASS} absolute flex flex-col gap-3 p-[16px_18px] outline-none motion-safe:[animation:rise_.45s_cubic-bezier(.22,1,.36,1)_both]`}
+        className={`${CARD_GLASS} pointer-events-auto absolute flex flex-col gap-3 p-[16px_18px] outline-none motion-safe:[animation:rise_.45s_cubic-bezier(.22,1,.36,1)_both]`}
         style={{ ...cardStyle, ...CARD_BG }}
       >
         <div className="flex items-center gap-3">
-          <ol className="flex items-center gap-2" aria-label="Where you are">
-            {PLACES.map((p) => {
-              const on = step.place === p.key;
+          <ol className="flex flex-wrap items-center gap-x-2 gap-y-1" aria-label={`${state.track === "setup" ? "Set up" : "Walkthrough"} progress`}>
+            {prog.shown.map((id, i) => {
+              const on = id === step.id;
+              const past = i < prog.n - 1;
               return (
-                <li key={p.label} className="flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: on ? "var(--brand)" : "var(--ink5)" }}>
-                  <span className="block size-[7px] rounded-full" style={{ background: on ? "var(--brand)" : "var(--input)" }} aria-hidden />
-                  {p.label}
+                <li key={id} className="flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: on ? "var(--brand)" : past ? "var(--ink3)" : "var(--ink5)" }} aria-current={on ? "step" : undefined}>
+                  <span className="block size-[7px] rounded-full" style={{ background: on ? "var(--brand)" : past ? "var(--ink3)" : "var(--input)" }} aria-hidden />
+                  {stepById(id).short}
                 </li>
               );
             })}
           </ol>
           <span className="ml-auto text-[11px] tabular-nums text-[var(--ink5)]">
-            {n + 1}/{total}
+            {prog.n}/{prog.total}
           </span>
           <button type="button" onClick={onExit} aria-label="Exit tour" className={`${QUIET} -mr-1.5 px-1`}>
             <X className="size-3.5" aria-hidden />
           </button>
         </div>
         <div>
-          <h2 id="tour-title" className="text-[15px] font-bold tracking-[-.2px] text-[var(--qink)] [text-wrap:balance]">
-            {step.title}
+          <h2 id="tour-title" className="flex items-center gap-1.5 text-[15px] font-bold tracking-[-.2px] text-[var(--qink)] [text-wrap:balance]">
+            {satisfied && (
+              <span className="flex size-5 flex-none items-center justify-center rounded-full" style={{ background: "var(--okbg)", color: "var(--ok)" }} aria-hidden>
+                <Check className="size-3" />
+              </span>
+            )}
+            {satisfied ? step.doneTitle ?? step.title : step.title}
           </h2>
-          <p className="mt-1 text-[13px] leading-[1.5] text-[var(--ink3)] [text-wrap:pretty]">{step.line}</p>
+          <p className="mt-1 text-[13px] leading-[1.5] text-[var(--ink3)] [text-wrap:pretty]">
+            {satisfied ? "Carry on here for as long as you like — the walk picks up again when you continue." : step.line}
+          </p>
           {missing && <p className="mt-1.5 text-[11.5px] text-[var(--warn)]">Couldn&apos;t find that control on this page — look for it where the line says, or move on.</p>}
           {!state.projectId && step.id === "projects" && <p className="mt-1.5 text-[11.5px] text-[var(--warn)]">You don&apos;t run a project yet — once one is yours, the workspace steps unlock. We&apos;ll go straight to Reports.</p>}
         </div>
-        {waiting && <p className="text-[11.5px] font-semibold text-[var(--ink4)]">{step.waitingLabel}</p>}
+        {waiting && !satisfied && <p className="text-[11.5px] font-semibold text-[var(--ink4)]">{step.waitingLabel}</p>}
         <div className="flex flex-wrap items-center gap-2">
-          {step.id !== "welcome" && step.id !== "done" && (
-            <button type="button" onClick={onBack} className={`${QUIET} inline-flex items-center gap-1`}>
-              <ArrowLeft className="size-3.5" aria-hidden /> Back
-            </button>
-          )}
-          {step.id === "welcome" && (
-            <button type="button" onClick={onExit} className={QUIET}>
-              I&apos;ll explore
-            </button>
-          )}
+          <button type="button" onClick={onBack} className={`${QUIET} inline-flex items-center gap-1`}>
+            <ArrowLeft className="size-3.5" aria-hidden /> Back
+          </button>
           <span className="flex-1" />
-          {waiting ? (
-            <>
-              <button type="button" onClick={onSkip} className={`${QUIET} ${FOCUS}`}>
-                Skip this step
-              </button>
-              <button type="button" onClick={doIt} className={`${PRIMARY} inline-flex items-center gap-1.5`} disabled={missing}>
-                {step.action}
-                <ArrowRight className="size-3.5" aria-hidden />
-              </button>
-            </>
+          {waiting && !satisfied ? (
+            <button type="button" onClick={onSkip} className={`${QUIET} ${FOCUS}`}>
+              Skip this step
+            </button>
           ) : (
             <button type="button" onClick={onNext} className={`${PRIMARY} inline-flex items-center gap-1.5`}>
-              {step.id === "done" ? <Check className="size-3.5" aria-hidden /> : null}
               {step.action}
-              {step.id !== "done" && <ArrowRight className="size-3.5" aria-hidden />}
+              <ArrowRight className="size-3.5" aria-hidden />
             </button>
           )}
         </div>

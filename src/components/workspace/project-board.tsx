@@ -204,7 +204,7 @@ export function ProjectBoard({
   const badge = syncBadge(sync);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4" data-tour="board">
       <ConversationDrawer
         open={!!discussTask}
         onOpenChange={(o) => !o && setDiscussTask(null)}

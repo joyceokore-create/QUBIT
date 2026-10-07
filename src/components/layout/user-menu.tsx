@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Check, ChevronDown, Compass, LogOut, ShieldCheck } from "lucide-react";
+import { Check, ChevronDown, Compass, LogOut, ShieldCheck, ClipboardCheck } from "lucide-react";
 import { useTour } from "@/components/tour/tour-provider";
 import { signOut } from "next-auth/react";
 import { signOutAction } from "@/lib/auth-actions";
@@ -95,9 +95,15 @@ export function UserMenu({
           Two-factor authentication
         </DropdownMenuItem>
         {tour.eligible && (
-          <DropdownMenuItem onClick={() => tour.start()}>
+          <DropdownMenuItem onClick={() => tour.startApp()}>
             <Compass />
             Show me around
+          </DropdownMenuItem>
+        )}
+        {tour.eligible && tour.projects.some((p) => p.done < p.total) && (
+          <DropdownMenuItem onClick={() => tour.startSetup()}>
+            <ClipboardCheck />
+            Set up my projects
           </DropdownMenuItem>
         )}
 

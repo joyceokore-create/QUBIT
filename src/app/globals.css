@@ -229,7 +229,7 @@
 }
 
 /* ── LIGHT theme (default `:root` scope) ────────────────────────────────
-   Dark is the design's default *appearance* (next-themes defaultTheme=dark),
+   Light is the default *appearance* (next-themes defaultTheme=light; dark on request),
    but light lives on :root as the token fallback per the handoff. Values are
    the canonical palette from `QUBIT Command Center.dc.html` → applyTheme(). */
 :root {

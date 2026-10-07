@@ -19,6 +19,8 @@ export interface TourProjectSetup {
   name: string;
   done: number;
   total: number;
+  /** The set-up walk skips what is already done; youtrack null = feature off (skipped too). */
+  items: { gates: boolean; documents: boolean; team: boolean; youtrack: boolean | null; thisWeek: boolean };
 }
 
 export interface TourOffer {
@@ -32,6 +34,10 @@ export interface TourOffer {
   projects: TourProjectSetup[];
   /** The /reports the walk ends on: a PM's own queue, or the PM preview for Heads/admins. */
   reportsQuery: string;
+  /** The /dashboard the app walk starts on: a PM's own cockpit, or the PM preview for Heads/admins. */
+  dashboardQuery: string;
+  /** The app walk has been finished or dismissed before (the server stamp). */
+  appDone: boolean;
 }
 
 export async function shouldOfferTour(ctx: TenantContext, now = new Date()): Promise<TourOffer> {
@@ -48,7 +54,12 @@ export async function shouldOfferTour(ctx: TenantContext, now = new Date()): Pro
         take: 50,
       }),
     ]);
-    const setups = await Promise.all(projects.slice(0, 12).map(async (p) => ({ id: p.id, code: p.code, name: p.name, ...(await getProjectSetup(ctx, p.id, now).then((s) => ({ done: s.done, total: s.total }))) })));
+    const setups = await Promise.all(
+      projects.slice(0, 12).map(async (p) => {
+        const s = await getProjectSetup(ctx, p.id, now);
+        return { id: p.id, code: p.code, name: p.name, done: s.done, total: s.total, items: { gates: s.gates, documents: s.documents, team: s.team, youtrack: s.youtrack, thisWeek: s.thisWeek } };
+      }),
+    );
     const superAdmin = ctx.roles.includes("PlatformSuperAdmin");
     const head = ctx.roles.includes("HeadOfProjects");
     // Runs projects / is a PM → offered once. Super admins and Heads can always replay the
@@ -67,6 +78,8 @@ export async function shouldOfferTour(ctx: TenantContext, now = new Date()): Pro
       projectCount: projects.length,
       projects: setups,
       reportsQuery: ownView(ctx.roles) === "pm" ? "" : "?as=pm",
+      dashboardQuery: ownView(ctx.roles) === "pm" ? "" : "?level=pm",
+      appDone: Boolean(user?.tourCompletedAt),
     };
   });
 }

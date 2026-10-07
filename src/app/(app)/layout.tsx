@@ -64,7 +64,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <TenantScope slug={session.user.tenantSlug} />
       <AmbientField />
       <QProvider userId={session.user.id} roles={session.user.roles}>
-        <TourProvider offer={tour.offer} eligible={tour.eligible} firstProjectId={tour.firstProjectId} reportsQuery={tour.reportsQuery} projects={tour.projects}>
+        <TourProvider offer={tour.offer} eligible={tour.eligible} firstProjectId={tour.firstProjectId} reportsQuery={tour.reportsQuery} dashboardQuery={tour.dashboardQuery} appDone={tour.appDone} projects={tour.projects}>
         <SlidePanelStateProvider>
           {isRiverbank ? (
             <div className="relative z-[1]">

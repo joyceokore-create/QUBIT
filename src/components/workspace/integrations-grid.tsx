@@ -172,7 +172,7 @@ export function IntegrationsGrid({ projectId, canEdit }: { projectId: string; ca
       )}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
       {cards.map((c) => (
-        <div key={c.provider} className="flex flex-col gap-3 rounded-[16px] border border-[var(--w07)] bg-[var(--qcard)] p-[18px]">
+        <div key={c.provider} data-tour={c.provider === YOUTRACK ? "youtrack" : undefined} className="flex flex-col gap-3 rounded-[16px] border border-[var(--w07)] bg-[var(--qcard)] p-[18px]">
           <div className="flex items-center gap-2.5">
             <span className="flex size-9 flex-none items-center justify-center rounded-[10px] bg-[var(--w06)] text-[11px] font-bold text-[var(--ink2)]">
               {c.monogram}

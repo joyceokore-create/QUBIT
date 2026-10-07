@@ -1,46 +1,71 @@
-// First-week walkthrough — the step machine. What matters: the order; a hands-on step moves
-// only on ITS event (or an explicit skip); without a project the workspace steps are
-// skipped both ways; hrefs carry the walked project; exit is always available.
+// The walkthrough's two tracks as a pure machine: the welcome chooses a track; the set-up
+// track skips what the project already has and only ticks a hands-on step on ITS event
+// (then waits for Continue); the app track skips the workspace steps without a project;
+// each track's last card ends the walk.
 import { describe, expect, it } from "vitest";
-import { INITIAL_TOUR, nextStepId, prevStepId, stepById, stepHref, stepRoute, TOUR_STEPS, tourReducer, type TourState } from "@/lib/tour";
+import { INITIAL_TOUR, stepById, stepHref, stepProgress, stepRoute, TOUR_STEPS, tourReducer, trackSteps, type TourState } from "@/lib/tour";
 
 const run = (actions: Parameters<typeof tourReducer>[1][], from: TourState = INITIAL_TOUR) => actions.reduce(tourReducer, from);
+const started = run([{ type: "start", projectId: "p1", reportsQuery: "?as=pm", dashboardQuery: "?level=pm" }]);
 
 describe("tour steps", () => {
-  it("walk the three places in order, six steps between welcome and done", () => {
-    expect(TOUR_STEPS.map((s) => s.id)).toEqual(["welcome", "projects", "gates", "documents", "team", "thisweek", "reports", "done"]);
-    expect(TOUR_STEPS.filter((s) => s.place === "workspace").every((s) => s.href?.includes("{id}"))).toBe(true);
-    expect(stepHref(stepById("thisweek"), "p1")).toBe("/projects/p1?tab=This%20week");
-    expect(stepRoute(stepById("gates"), "p1")).toEqual({ pathname: "/projects/p1", search: "?tab=Delivery" });
-    expect(stepRoute(stepById("welcome"), "p1")).toBeNull();
-    expect(stepHref(stepById("reports"), "p1")).toBe("/reports");
-    expect(stepHref(stepById("reports"), "p1", "?as=pm")).toBe("/reports?as=pm");
+  it("every step is reachable from exactly one track or the welcome, with a route token that resolves", () => {
+    const ids = TOUR_STEPS.map((s) => s.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect([...trackSteps("setup"), ...trackSteps("app")].map((s) => s.id).concat("welcome").sort()).toEqual([...ids].sort());
+    const state = { projectId: "p1", reportsQuery: "?as=pm", dashboardQuery: "?level=pm" };
+    expect(stepHref(stepById("gates"), state)).toBe("/projects/p1?tab=Delivery");
+    expect(stepHref(stepById("update"), state)).toBe("/projects/p1?tab=This%20week");
+    expect(stepHref(stepById("reports"), state)).toBe("/reports?as=pm");
+    expect(stepHref(stepById("queue"), state)).toBe("/dashboard?level=pm");
+    expect(stepHref(stepById("queue"), { ...state, dashboardQuery: "" })).toBe("/dashboard");
+    expect(stepRoute(stepById("update"), state)).toEqual({ pathname: "/projects/p1", search: "?tab=This%20week" });
+    expect(stepHref(stepById("welcome"), state)).toBeNull();
   });
 
-  it("hands-on steps advance on their own event only, or on skip", () => {
-    const atGates = run([{ type: "start", projectId: "p1" }, { type: "next" }, { type: "next" }]);
+  it("the welcome chooses a track; set-up skips what the project already has", () => {
+    expect(started).toMatchObject({ active: true, track: null, step: "welcome", projectId: "p1" });
+    const setup = tourReducer(started, { type: "choose", track: "setup", projectId: "p1", completed: ["gates", "youtrack"] });
+    expect(setup).toMatchObject({ track: "setup", step: "documents", completed: ["gates", "youtrack"] });
+    expect(stepProgress(setup)).toMatchObject({ n: 1, total: 3, shown: ["documents", "team", "update"] });
+    const team = tourReducer(setup, { type: "skip" });
+    expect(team.step).toBe("team");
+    expect(tourReducer(team, { type: "next" }).step).toBe("update"); // youtrack skipped
+    expect(tourReducer(tourReducer(team, { type: "next" }), { type: "next" }).step).toBe("setup-done");
+    // Back from the first shown step returns to the welcome.
+    expect(tourReducer(setup, { type: "back" })).toMatchObject({ track: null, step: "welcome" });
+    expect(tourReducer(team, { type: "back" }).step).toBe("documents");
+  });
+
+  it("a hands-on step ticks on its own event only, then waits for Continue", () => {
+    const atGates = tourReducer(started, { type: "choose", track: "setup", projectId: "p1" });
     expect(atGates.step).toBe("gates");
-    expect(tourReducer(atGates, { type: "next" }).step).toBe("documents"); // Next is still allowed by the machine; the card hides it while waiting
-    expect(tourReducer(atGates, { type: "event", event: "document-added" }).step).toBe("gates");
-    expect(tourReducer(atGates, { type: "event", event: "template-attached" }).step).toBe("documents");
+    expect(tourReducer(atGates, { type: "event", event: "document-added" })).toMatchObject({ step: "gates", done: false });
+    const satisfied = tourReducer(atGates, { type: "event", event: "template-attached" });
+    expect(satisfied).toMatchObject({ step: "gates", done: true });
+    expect(tourReducer(satisfied, { type: "next" })).toMatchObject({ step: "documents", done: false });
     expect(tourReducer(atGates, { type: "skip" }).step).toBe("documents");
-    expect(tourReducer(atGates, { type: "back" }).step).toBe("projects");
   });
 
-  it("without a project the workspace steps are skipped in both directions", () => {
-    expect(nextStepId("projects", null)).toBe("reports");
-    expect(prevStepId("reports", null)).toBe("projects");
-    expect(nextStepId("projects", "p1")).toBe("gates");
-    const s = run([{ type: "start", projectId: null }, { type: "next" }, { type: "next" }]);
+  it("the app walk skips the workspace steps without a project and ends on its done card", () => {
+    const app = tourReducer(started, { type: "choose", track: "app", projectId: null });
+    expect(app.step).toBe("queue");
+    const s = run([{ type: "next" }, { type: "next" }], app);
     expect(s.step).toBe("reports");
+    expect(stepProgress(app).shown).toEqual(["queue", "projects", "reports"]);
+    const withProject = tourReducer(started, { type: "choose", track: "app", projectId: "p1" });
+    expect(stepProgress(withProject).shown).toEqual(["queue", "projects", "workspace", "board", "reports"]);
+    const done = run([{ type: "next" }, { type: "next" }, { type: "next" }], app);
+    expect(done.step).toBe("app-done");
+    expect(tourReducer(done, { type: "next" }).active).toBe(false);
   });
 
-  it("done → next ends the walk; exit ends it from anywhere; start restarts", () => {
-    const done = run([{ type: "start", projectId: null }, { type: "next" }, { type: "next" }, { type: "next" }]);
-    expect(done.step).toBe("done");
-    expect(tourReducer(done, { type: "next" }).active).toBe(false);
-    expect(tourReducer(run([{ type: "start", projectId: "p1" }, { type: "next" }]), { type: "exit" }).active).toBe(false);
-    expect(tourReducer(done, { type: "start", projectId: "p9", reportsQuery: "?as=pm" })).toEqual({ active: true, step: "welcome", projectId: "p9", reportsQuery: "?as=pm" });
+  it("exit ends it from anywhere; resume restores a saved walk; start restarts", () => {
+    const mid = run([{ type: "choose", track: "setup", projectId: "p1" }, { type: "next" }], started);
+    expect(tourReducer(mid, { type: "exit" }).active).toBe(false);
+    expect(tourReducer(INITIAL_TOUR, { type: "resume", state: mid })).toEqual(mid);
+    expect(tourReducer(INITIAL_TOUR, { type: "resume", state: { ...mid, step: "nope" as TourState["step"] } })).toEqual(INITIAL_TOUR);
+    expect(tourReducer(mid, { type: "start", projectId: "p9" })).toMatchObject({ active: true, track: null, step: "welcome", projectId: "p9", completed: [] });
     expect(tourReducer(INITIAL_TOUR, { type: "next" })).toEqual(INITIAL_TOUR);
   });
 });
