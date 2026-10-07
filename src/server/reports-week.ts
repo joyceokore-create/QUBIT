@@ -42,6 +42,7 @@ const CHECKIN_SELECT = {
   status: true,
   computedRag: true,
   ragOverride: true,
+  overrideReason: true,
   overrideExpiresAt: true,
   narrative: true,
   draft: true,
@@ -84,6 +85,10 @@ export interface PmWeekRow {
   computedRag: Rag;
   effectiveRag: Rag;
   narrative: string | null;
+  /** The draft's RAG override (e.g. from an uploaded status report) and its reason —
+   *  shown and sent as such; effectiveRag ignores overrides until confirmed. */
+  ragOverride: Rag | null;
+  overrideReason: string | null;
   draftLines: string[];
   confirmed: boolean;
   sentToHead: boolean;
@@ -318,6 +323,8 @@ export async function getReportsWeek(
           computedRag: ci.computedRag as Rag,
           effectiveRag: effectiveRag(ci, at),
           narrative: ci.narrative,
+          ragOverride: (ci.ragOverride as Rag | null) ?? null,
+          overrideReason: ci.overrideReason ?? null,
           draftLines: (ci.draft as unknown as CheckInDraft | null)?.lines ?? [],
           confirmed: ci.status === "Confirmed",
           sentToHead: Boolean(ci.submittedToHeadAt),
@@ -332,6 +339,8 @@ export async function getReportsWeek(
           computedRag: v.computedRag,
           effectiveRag: v.effectiveRag,
           narrative: v.narrative,
+          ragOverride: (v.ragOverride as Rag | null) ?? null,
+          overrideReason: v.overrideReason,
           draftLines: v.lines,
           confirmed: v.status === "Confirmed",
           sentToHead: Boolean(v.submittedToHeadAt),
@@ -339,7 +348,7 @@ export async function getReportsWeek(
         });
       } else {
         const rag = projectRag(p.status);
-        rows.push({ ...base, status: "None", computedRag: rag, effectiveRag: rag, narrative: null, draftLines: [], confirmed: false, sentToHead: false, sentAt: null });
+        rows.push({ ...base, status: "None", computedRag: rag, effectiveRag: rag, narrative: null, ragOverride: null, overrideReason: null, draftLines: [], confirmed: false, sentToHead: false, sentAt: null });
       }
     }
     // Unconfirmed first (they need action), then not-yet-sent, then done; worst RAG first.

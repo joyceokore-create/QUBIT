@@ -2,7 +2,7 @@
 
 import { dispatchTourEvent } from "@/components/tour/tour-events";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CheckCheck, Send, ShieldAlert, Upload } from "lucide-react";
@@ -30,6 +30,8 @@ export interface PmRowJson {
   computedRag: Rag;
   effectiveRag: Rag;
   narrative: string | null;
+  ragOverride: Rag | null;
+  overrideReason: string | null;
   draftLines: string[];
   confirmed: boolean;
   sentToHead: boolean;
@@ -50,6 +52,12 @@ export function PmWeek({ isCurrent, rows: initial, canUpload = false }: { isoWee
   const [sendingAll, setSendingAll] = useState<{ done: number; total: number } | null>(null);
   const [sendAllErrors, setSendAllErrors] = useState<string[]>([]);
   const [openId, setOpenId] = useState<string | null>(() => initial.find((r) => !r.confirmed && r.canConfirm)?.projectId ?? null);
+
+  // The server re-renders after an upload fills the drafts (router.refresh) — the queue
+  // must follow, or the filled lines never show without a hard reload.
+  useEffect(() => {
+    setRows(sortRows(initial));
+  }, [initial]);
 
   const onChange = (next: PmRowJson) => {
     setRows((prev) => sortRows(prev.map((p) => (p.projectId === next.projectId ? next : p))));
@@ -89,7 +97,10 @@ export function PmWeek({ isCurrent, rows: initial, canUpload = false }: { isoWee
       const res = await fetch(`/api/projects/${r.projectId}/checkin`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ narrative: (r.narrative ?? "").trim(), ...(r.effectiveRag !== r.computedRag ? { ragOverride: r.effectiveRag, overrideReason: "From the uploaded status report" } : {}) }),
+        body: JSON.stringify({
+          narrative: (r.narrative ?? "").trim(),
+          ...(r.ragOverride && r.ragOverride !== r.computedRag ? { ragOverride: r.ragOverride, overrideReason: r.overrideReason ?? "From the uploaded status report" } : {}),
+        }),
       });
       const d = await res.json().catch(() => null);
       if (res.ok && d?.data) {
@@ -118,7 +129,7 @@ export function PmWeek({ isCurrent, rows: initial, canUpload = false }: { isoWee
       >
         <div className="flex flex-wrap items-center gap-2" data-tour="pm-week-actions">
           <RagTally counts={counts} />
-          {canUpload && isCurrent && toSend > 0 && (
+          {canUpload && isCurrent && (
             <button type="button" onClick={() => setUploadOpen(true)} className={`${SECONDARY} gap-1.5`}>
               <Upload className="size-3.5" aria-hidden /> Upload status report
             </button>
@@ -144,7 +155,15 @@ export function PmWeek({ isCurrent, rows: initial, canUpload = false }: { isoWee
       )}
       <ul>
         {rows.map((r) => (
-          <PmRow key={r.projectId} row={r} open={openId === r.projectId} isCurrent={isCurrent} onOpen={() => setOpenId(r.projectId)} onChange={onChange} />
+          <PmRow
+            // Re-seed the editor when the server hands us a different draft (an upload filled it).
+            key={`${r.projectId}:${r.status}:${r.narrative ?? ""}:${r.ragOverride ?? ""}`}
+            row={r}
+            open={openId === r.projectId}
+            isCurrent={isCurrent}
+            onOpen={() => setOpenId(r.projectId)}
+            onChange={onChange}
+          />
         ))}
       </ul>
     </section>
@@ -169,8 +188,8 @@ function PmRow({
   onChange: (r: PmRowJson) => void;
 }) {
   const [narrative, setNarrative] = useState(r.narrative ?? r.draftLines[0] ?? "");
-  const [rag, setRag] = useState<Rag>(r.effectiveRag);
-  const [reason, setReason] = useState("");
+  const [rag, setRag] = useState<Rag>(r.ragOverride ?? r.effectiveRag);
+  const [reason, setReason] = useState(r.overrideReason ?? "");
   const [reasonTouched, setReasonTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -215,12 +234,13 @@ function PmRow({
     else setError(d?.error?.message ?? "Could not send — try again.");
   };
 
-  const editing = open && !r.confirmed && r.canConfirm && isCurrent;
+  // A sent week can be edited and resent (re-confirming IS resending — the Head is notified again).
+  const editing = open && r.canConfirm && isCurrent && !legacyUnsent;
 
   return (
     <li className="flex flex-col gap-2.5 border-b border-[var(--hair2)] p-[12px_18px] last:border-0">
       <div className="flex flex-wrap items-center gap-2.5">
-        <RagDot rag={r.effectiveRag} />
+        <RagDot rag={r.confirmed ? r.effectiveRag : (r.ragOverride ?? r.effectiveRag)} />
         <Link href={workspace} className={`rounded-[4px] text-[14px] font-semibold text-[var(--qink)] transition-colors hover:text-brand ${FOCUS}`}>
           {r.name}
         </Link>
@@ -237,12 +257,25 @@ function PmRow({
             Review &amp; send
           </button>
         )}
+        {r.sentToHead && r.canConfirm && isCurrent && !open && (
+          <button type="button" aria-expanded={false} onClick={onOpen} className={`${QUIET} px-2 text-[12px]`}>
+            Edit &amp; resend
+          </button>
+        )}
       </div>
 
-      {r.confirmed && r.narrative && <blockquote className="ml-[19px] text-[13px] leading-[1.5] text-[var(--ink3)]">“{r.narrative}”</blockquote>}
+      {r.confirmed && r.narrative && !editing && <blockquote className="ml-[19px] text-[13px] leading-[1.5] text-[var(--ink3)]">“{r.narrative}”</blockquote>}
       {!r.confirmed && !editing && (
         <p className="ml-[19px] text-[12.5px] text-[var(--ink4)]">
-          {isCurrent && r.canConfirm ? `Draft: ${r.draftLines[0] ?? "No activity drafted yet"}` : <span className="italic text-[var(--ink5)]">Not sent</span>}
+          {r.narrative ? (
+            <>
+              Draft{r.ragOverride ? ` · ${r.ragOverride}` : ""}: <span className="text-[var(--ink3)]">“{r.narrative}”</span>
+            </>
+          ) : isCurrent && r.canConfirm ? (
+            `Draft: ${r.draftLines[0] ?? "No activity drafted yet"}`
+          ) : (
+            <span className="italic text-[var(--ink5)]">Not sent</span>
+          )}
         </p>
       )}
       {!r.canConfirm && isCurrent && !r.confirmed && <p className="ml-[19px] text-[11px] text-[var(--ink4)]">Read-only — you don&apos;t run this project.</p>}
@@ -288,7 +321,7 @@ function PmRow({
             )}
             <div className="flex flex-wrap items-center gap-2">
               <button type="button" onClick={() => void send()} disabled={busy || !narrative.trim() || !reasonOk} className={`${PRIMARY} w-full sm:w-auto`}>
-                <Send className="size-3.5" aria-hidden /> {busy ? "Sending…" : "Confirm & send"}
+                <Send className="size-3.5" aria-hidden /> {busy ? "Sending…" : r.confirmed ? "Resend" : "Confirm & send"}
               </button>
               <Link href={workspace} className={QUIET}>
                 Open workspace
@@ -326,7 +359,7 @@ function PmRow({
           <span className="text-[11px] text-[var(--ink4)]">Confirmed before the one-step change — send it on.</span>
         </div>
       )}
-      {r.sentToHead && (
+      {r.sentToHead && !editing && (
         <Link href={workspace} className={`ml-[19px] self-start ${QUIET}`}>
           Open workspace
         </Link>

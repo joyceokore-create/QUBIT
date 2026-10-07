@@ -35,15 +35,18 @@ interface Preview {
 interface ApplyRow {
   projectId: string;
   code: string;
-  outcome: "drafted" | "skipped" | "error";
+  outcome: "drafted" | "resent" | "skipped" | "error";
   message?: string;
   attached: boolean;
+  gates?: string | null;
 }
 interface Draft {
   projectId: string | null;
   rag: Rag;
   stage: string;
   narrative: string;
+  /** Already sent this week → replace it and resend. */
+  resend: boolean;
 }
 
 const RAGS: Rag[] = ["Green", "Amber", "Red"];
@@ -83,12 +86,13 @@ export function StatusUploadDialog({ open, onOpenChange, onApplied }: { open: bo
     setPreview(p);
     setDrafts(
       Object.fromEntries(
-        p.rows.map((r) => [r.line, { projectId: r.alreadySent ? null : r.match.projectId, rag: r.status ?? "Amber", stage: r.stage, narrative: r.update }]),
+        p.rows.map((r) => [r.line, { projectId: r.match.projectId, rag: r.status ?? "Amber", stage: r.stage, narrative: r.update, resend: r.alreadySent }]),
       ),
     );
   }
 
-  const chosen = preview ? preview.rows.filter((r) => drafts[r.line]?.projectId && drafts[r.line]!.narrative.trim()) : [];
+  const chosen = preview ? preview.rows.filter((r) => drafts[r.line]?.projectId && drafts[r.line]!.narrative.trim() && (!r.alreadySent || drafts[r.line]!.resend)) : [];
+  const resending = chosen.filter((r) => r.alreadySent).length;
   const dupes = new Set(chosen.map((r) => drafts[r.line]!.projectId).filter((id, i, arr) => arr.indexOf(id) !== i));
 
   async function apply() {
@@ -103,7 +107,7 @@ export function StatusUploadDialog({ open, onOpenChange, onApplied }: { open: bo
         reportDate: preview.reportDate,
         rows: chosen.map((r) => {
           const d = drafts[r.line]!;
-          return { projectId: d.projectId, rag: d.rag, stage: d.stage.trim(), narrative: d.narrative.trim() };
+          return { projectId: d.projectId, rag: d.rag, stage: d.stage.trim(), narrative: d.narrative.trim(), resend: r.alreadySent && d.resend };
         }),
         ...(attach ? { file: { name: preview.fileName, format: preview.format, base64: preview.base64 } } : {}),
       }),
@@ -192,6 +196,12 @@ export function StatusUploadDialog({ open, onOpenChange, onApplied }: { open: bo
                               </p>
                             ))}
                             {dupe && <p className="mt-1 text-[11px] text-[var(--bad)]">Two rows point at the same project.</p>}
+                            {r.alreadySent && (
+                              <label className="mt-1 flex items-center gap-1.5 text-[11.5px] font-semibold text-[var(--qink)]">
+                                <input type="checkbox" checked={d.resend} onChange={(e) => setDrafts((all) => ({ ...all, [r.line]: { ...d, resend: e.target.checked } }))} className="size-3.5 accent-[var(--brand)]" />
+                                Replace the sent update &amp; resend
+                              </label>
+                            )}
                           </td>
                           <td className="px-3 py-2">
                             <select value={d.projectId ?? ""} onChange={(e) => setDrafts((all) => ({ ...all, [r.line]: { ...d, projectId: e.target.value || null } }))} aria-label={`Project for ${r.project}`} className={`${INPUT} w-[200px]`}>
@@ -233,7 +243,11 @@ export function StatusUploadDialog({ open, onOpenChange, onApplied }: { open: bo
                 Attach the file to each project&apos;s Documents
               </label>
               <button type="button" onClick={() => void apply()} disabled={busy !== null || chosen.length === 0 || dupes.size > 0} className={`${PRIMARY} ml-auto`}>
-                {busy === "apply" ? "Filling…" : `Fill ${chosen.length} ${chosen.length === 1 ? "draft" : "drafts"}`}
+                {busy === "apply"
+                  ? "Filling…"
+                  : resending > 0
+                    ? `Fill ${chosen.length - resending} ${chosen.length - resending === 1 ? "draft" : "drafts"} · resend ${resending}`
+                    : `Fill ${chosen.length} ${chosen.length === 1 ? "draft" : "drafts"}`}
               </button>
             </div>
             {error && (
@@ -250,13 +264,15 @@ export function StatusUploadDialog({ open, onOpenChange, onApplied }: { open: bo
               {results.map((r) => (
                 <li key={r.projectId} className="flex flex-wrap items-center gap-2 border-t border-[var(--hair2)] py-1.5 text-[12.5px] first:border-0">
                   <span className="font-mono text-[11px] font-semibold text-[var(--ink3)]">{r.code}</span>
-                  <span style={{ color: r.outcome === "drafted" ? "var(--ok)" : r.outcome === "skipped" ? "var(--warn)" : "var(--bad)" }}>
-                    {r.outcome === "drafted" ? `Draft filled${r.attached ? " · report attached" : ""}` : r.message}
+                  <span style={{ color: r.outcome === "drafted" || r.outcome === "resent" ? "var(--ok)" : r.outcome === "skipped" ? "var(--warn)" : "var(--bad)" }}>
+                    {r.outcome === "drafted" ? "Draft filled" : r.outcome === "resent" ? "Replaced & resent to the Head" : r.message}
+                    {(r.outcome === "drafted" || r.outcome === "resent") && r.attached ? " · report attached" : ""}
+                    {r.gates ? ` · gates: ${r.gates}` : ""}
                   </span>
                 </li>
               ))}
             </ul>
-            <p className="text-[12.5px] text-[var(--ink3)]">Now check each line in the queue and press Confirm &amp; send — or Confirm &amp; send all.</p>
+            <p className="text-[12.5px] text-[var(--ink3)]">Each filled line now sits in the queue with its RAG from the report — check it and press Confirm &amp; send, or Confirm &amp; send all. Resent rows are already with the Head.</p>
             <div>
               <button type="button" onClick={() => onOpenChange(false)} className={SECONDARY}>
                 Back to the queue

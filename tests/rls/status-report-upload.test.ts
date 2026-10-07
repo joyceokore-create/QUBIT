@@ -92,6 +92,13 @@ describe("status-report upload — apply", () => {
 
     // The already-sent project was left exactly as sent; the foreign tenant has nothing.
     expect((await getCurrentCheckIn(pm, mineSent, NOW)).narrative).toBe("Already sent this week.");
+
+    // Recall by upload: a row marked "resend" replaces the sent week and sends it again.
+    const again = await applyStatusReport(pm, { rows: [{ projectId: mineSent, rag: "Red", stage: "", narrative: "Replaced from the new report.", resend: true }] }, NOW);
+    expect(again).toMatchObject([{ projectId: mineSent, code: "SRU-B", outcome: "resent" }]);
+    const resent = await getCurrentCheckIn(pm, mineSent, NOW);
+    expect(resent).toMatchObject({ status: "Confirmed", narrative: "Replaced from the new report.", ragOverride: "Red" });
+    expect(resent.submittedToHeadAt).toBeTruthy();
     const foreignDocs = await withTenant({ tenantId: dbId, userId: "seed" }, (tx) => tx.projectDocument.count({ where: { projectId: foreign } }));
     expect(foreignDocs).toBe(0);
   });
