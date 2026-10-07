@@ -95,7 +95,7 @@ export function UserMenu({
           Two-factor authentication
         </DropdownMenuItem>
         {tour.eligible && (
-          <DropdownMenuItem onSelect={() => tour.start()}>
+          <DropdownMenuItem onClick={() => tour.start()}>
             <Compass />
             Show me around
           </DropdownMenuItem>

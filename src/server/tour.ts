@@ -1,6 +1,7 @@
 import "server-only";
 import { audit } from "@/lib/audit";
 import { withTenant, type TenantContext } from "@/lib/tenant";
+import { ownView } from "@/lib/reports-view";
 
 /**
  * First-week walkthrough — who gets it offered, and the one flag that stops it coming
@@ -17,6 +18,8 @@ export interface TourOffer {
   eligible: boolean;
   firstProjectId: string | null;
   projectCount: number;
+  /** The /reports the walk ends on: a PM's own queue, or the PM preview for Heads/admins. */
+  reportsQuery: string;
 }
 
 export async function shouldOfferTour(ctx: TenantContext): Promise<TourOffer> {
@@ -33,13 +36,22 @@ export async function shouldOfferTour(ctx: TenantContext): Promise<TourOffer> {
         take: 50,
       }),
     ]);
-    const eligible = projects.length > 0 || ctx.roles.includes("ProjectManager");
     const superAdmin = ctx.roles.includes("PlatformSuperAdmin");
+    const head = ctx.roles.includes("HeadOfProjects");
+    // Runs projects / is a PM → offered once. Super admins and Heads can always replay the
+    // walk (to see what their PMs see), on the first active project when they run none.
+    const eligible = projects.length > 0 || ctx.roles.includes("ProjectManager") || superAdmin || head;
+    let firstProjectId: string | null = projects[0]?.id ?? null;
+    if (!firstProjectId && (superAdmin || head)) {
+      const any = await tx.project.findFirst({ where: { status: { notIn: ["Completed", "Cancelled"] } }, select: { id: true }, orderBy: { createdAt: "asc" } });
+      firstProjectId = any?.id ?? null;
+    }
     return {
-      offer: eligible && !superAdmin && !user?.tourCompletedAt,
+      offer: (projects.length > 0 || ctx.roles.includes("ProjectManager")) && !superAdmin && !user?.tourCompletedAt,
       eligible,
-      firstProjectId: projects[0]?.id ?? null,
+      firstProjectId,
       projectCount: projects.length,
+      reportsQuery: ownView(ctx.roles) === "pm" ? "" : "?as=pm",
     };
   });
 }

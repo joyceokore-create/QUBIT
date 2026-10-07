@@ -37,11 +37,13 @@ export function TourProvider({
   offer,
   eligible,
   firstProjectId,
+  reportsQuery = "",
   children,
 }: {
   offer: boolean;
   eligible: boolean;
   firstProjectId: string | null;
+  reportsQuery?: string;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -55,11 +57,11 @@ export function TourProvider({
   useEffect(() => {
     const saved = readSaved();
     if (saved?.active) {
-      dispatch({ type: "start", projectId: saved.projectId });
+      dispatch({ type: "start", projectId: saved.projectId, reportsQuery: saved.reportsQuery ?? reportsQuery });
       // Jump straight to the saved step by replaying "next" is lossy; set the step directly.
       queueMicrotask(() => dispatch({ type: "event", event: "__resume__" as TourEvent }));
     } else if (offer) {
-      dispatch({ type: "start", projectId: firstProjectId });
+      dispatch({ type: "start", projectId: firstProjectId, reportsQuery });
     }
     setHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -102,10 +104,13 @@ export function TourProvider({
 
   // Navigate to the step's route when it differs from where we are.
   const step = stepById(effective.step);
-  const route = stepRoute(step, effective.projectId);
-  const here = `${pathname}${search.toString() ? `?${search.toString()}` : ""}`;
+  const route = stepRoute(step, effective.projectId, effective.reportsQuery);
   const wanted = route ? `${route.pathname}${route.search}` : null;
-  const onRoute = !wanted || here === wanted || (route !== null && pathname === route.pathname && (!route.search || here.includes(route.search.slice(1))));
+  // Same page = same pathname and every query key the step names matches (decoded —
+  // useSearchParams serialises a space as "+", the step href as "%20").
+  const onRoute =
+    !route ||
+    (pathname === route.pathname && [...new URLSearchParams(route.search).entries()].every(([k, v]) => search.get(k) === v));
   useEffect(() => {
     if (!effective.active || !wanted || onRoute) return;
     router.push(wanted);
@@ -118,10 +123,10 @@ export function TourProvider({
       start: () => {
         stampedRef.current = false;
         setResumed(null);
-        dispatch({ type: "start", projectId: firstProjectId });
+        dispatch({ type: "start", projectId: firstProjectId, reportsQuery });
       },
     }),
-    [effective, eligible, firstProjectId],
+    [effective, eligible, firstProjectId, reportsQuery],
   );
 
   const act = useCallback(

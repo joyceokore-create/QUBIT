@@ -84,7 +84,7 @@ export const TOUR_STEPS: TourStep[] = [
     id: "thisweek",
     place: "workspace",
     href: "/projects/{id}?tab=This%20week",
-    target: "#status-update",
+    target: '[data-tour="status-update"]',
     title: "Every Friday, from here",
     line: "One line for leadership, one RAG, Confirm & send — it lands in the Head's roll-up in one step. The bullets are drafted from the board for you.",
     action: "Next",
@@ -92,8 +92,8 @@ export const TOUR_STEPS: TourStep[] = [
   {
     id: "reports",
     place: "reports",
-    href: "/reports",
-    target: '[data-tour="pm-week-actions"]',
+    href: "/reports{reports}",
+    target: '[data-tour="pm-week"]',
     title: "All your projects, one queue",
     line: "Reports › This week lists every project you run. Send each line here, or upload your status report and send them all at once.",
     action: "Finish",
@@ -113,10 +113,12 @@ export interface TourState {
   active: boolean;
   step: TourStepId;
   projectId: string | null;
+  /** "" for a PM; "?as=pm" for a Head / admin, whose own /reports is the inbox. */
+  reportsQuery: string;
 }
 
 export type TourAction =
-  | { type: "start"; projectId: string | null }
+  | { type: "start"; projectId: string | null; reportsQuery?: string }
   | { type: "next" }
   | { type: "back" }
   | { type: "skip" }
@@ -142,17 +144,17 @@ export function prevStepId(from: TourStepId, projectId: string | null): TourStep
   return ORDER[Math.max(i, 0)]!;
 }
 
-export function stepHref(step: TourStep, projectId: string | null): string | null {
+export function stepHref(step: TourStep, projectId: string | null, reportsQuery = ""): string | null {
   if (!step.href) return null;
-  return step.href.replace("{id}", projectId ?? "");
+  return step.href.replace("{id}", projectId ?? "").replace("{reports}", reportsQuery);
 }
 
-export const INITIAL_TOUR: TourState = { active: false, step: "welcome", projectId: null };
+export const INITIAL_TOUR: TourState = { active: false, step: "welcome", projectId: null, reportsQuery: "" };
 
 export function tourReducer(state: TourState, action: TourAction): TourState {
   switch (action.type) {
     case "start":
-      return { active: true, step: "welcome", projectId: action.projectId };
+      return { active: true, step: "welcome", projectId: action.projectId, reportsQuery: action.reportsQuery ?? "" };
     case "next":
     case "skip":
       if (!state.active) return state;
@@ -172,8 +174,8 @@ export function tourReducer(state: TourState, action: TourAction): TourState {
 }
 
 /** Route (path + query, no hash) the step wants, for matching against the current URL. */
-export function stepRoute(step: TourStep, projectId: string | null): { pathname: string; search: string } | null {
-  const href = stepHref(step, projectId);
+export function stepRoute(step: TourStep, projectId: string | null, reportsQuery = ""): { pathname: string; search: string } | null {
+  const href = stepHref(step, projectId, reportsQuery);
   if (!href) return null;
   const [path, query = ""] = href.split("?");
   return { pathname: path!, search: query ? `?${query}` : "" };

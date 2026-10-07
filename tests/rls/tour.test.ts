@@ -45,7 +45,7 @@ describe("first-week walkthrough", () => {
   });
 
   it("offers the walk once to someone who runs a project, with that project; stamps on completion", async () => {
-    expect(await shouldOfferTour(pm)).toEqual({ offer: true, eligible: true, firstProjectId: projectId, projectCount: 1 });
+    expect(await shouldOfferTour(pm)).toEqual({ offer: true, eligible: true, firstProjectId: projectId, projectCount: 1, reportsQuery: "" });
     await completeTour(pm);
     expect(await shouldOfferTour(pm)).toMatchObject({ offer: false, eligible: true, firstProjectId: projectId });
     const audits = await withTenant(pm, (tx) => tx.auditLog.count({ where: { entityType: "user", entityId: pm.userId, actorId: pm.userId } }));
@@ -58,7 +58,12 @@ describe("first-week walkthrough", () => {
     expect(await shouldOfferTour(exec)).toMatchObject({ offer: false, eligible: false, projectCount: 0 });
     expect(await shouldOfferTour(member)).toMatchObject({ offer: false, eligible: false });
     const admin: TenantContext = { tenantId: rbId, userId: pm.userId, roles: ["PlatformSuperAdmin"] };
-    expect(await shouldOfferTour(admin)).toMatchObject({ offer: false, eligible: true, firstProjectId: projectId });
+    expect(await shouldOfferTour(admin)).toMatchObject({ offer: false, eligible: true, firstProjectId: projectId, reportsQuery: "?as=pm" });
+    // A super admin who runs nothing can still replay — on some active project.
+    const adminNoProjects: TenantContext = { tenantId: rbId, userId: member.userId, roles: ["PlatformSuperAdmin"] };
+    const r = await shouldOfferTour(adminNoProjects);
+    expect(r).toMatchObject({ offer: false, eligible: true, projectCount: 0 });
+    expect(r.firstProjectId).toBeTruthy();
   });
 
   it("per-project setup counts only what exists, and YouTrack only while the flag is on", async () => {

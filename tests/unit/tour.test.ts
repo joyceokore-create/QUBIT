@@ -13,6 +13,8 @@ describe("tour steps", () => {
     expect(stepHref(stepById("thisweek"), "p1")).toBe("/projects/p1?tab=This%20week");
     expect(stepRoute(stepById("gates"), "p1")).toEqual({ pathname: "/projects/p1", search: "?tab=Delivery" });
     expect(stepRoute(stepById("welcome"), "p1")).toBeNull();
+    expect(stepHref(stepById("reports"), "p1")).toBe("/reports");
+    expect(stepHref(stepById("reports"), "p1", "?as=pm")).toBe("/reports?as=pm");
   });
 
   it("hands-on steps advance on their own event only, or on skip", () => {
@@ -38,7 +40,7 @@ describe("tour steps", () => {
     expect(done.step).toBe("done");
     expect(tourReducer(done, { type: "next" }).active).toBe(false);
     expect(tourReducer(run([{ type: "start", projectId: "p1" }, { type: "next" }]), { type: "exit" }).active).toBe(false);
-    expect(tourReducer(done, { type: "start", projectId: "p9" })).toEqual({ active: true, step: "welcome", projectId: "p9" });
+    expect(tourReducer(done, { type: "start", projectId: "p9", reportsQuery: "?as=pm" })).toEqual({ active: true, step: "welcome", projectId: "p9", reportsQuery: "?as=pm" });
     expect(tourReducer(INITIAL_TOUR, { type: "next" })).toEqual(INITIAL_TOUR);
   });
 });

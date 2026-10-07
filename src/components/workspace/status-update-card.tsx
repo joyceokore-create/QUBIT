@@ -126,7 +126,7 @@ export function StatusUpdateCard({
   const editing = mode === "edit" && ci.canConfirm;
 
   return (
-    <section className={`${CARD} overflow-hidden`} style={CARD_BG} aria-labelledby="status-update">
+    <section className={`${CARD} overflow-hidden`} style={CARD_BG} aria-labelledby="status-update" data-tour="status-update">
       {/* Header */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-[var(--hair2)] p-[12px_16px]">
         <h2 id="status-update" className="font-heading text-[14px] rv:text-heading-xs font-bold text-[var(--qink)]">

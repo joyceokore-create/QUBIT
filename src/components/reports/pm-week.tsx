@@ -58,7 +58,7 @@ export function PmWeek({ isCurrent, rows: initial, canUpload = false }: { isoWee
 
   if (rows.length === 0) {
     return (
-      <div className={`${CARD} p-8 text-center`} style={CARD_BG}>
+      <div className={`${CARD} p-8 text-center`} style={CARD_BG} data-tour="pm-week">
         <p className="text-[13px] font-semibold text-[var(--qink)]">You don&apos;t lead any projects this week — your work is reported from the board.</p>
         <Link href="/board" className={`mt-2 inline-block ${QUIET}`}>
           Open My Board →
@@ -105,7 +105,7 @@ export function PmWeek({ isCurrent, rows: initial, canUpload = false }: { isoWee
   };
 
   return (
-    <section className={`${CARD} overflow-hidden`} style={CARD_BG} aria-labelledby="pm-week">
+    <section data-tour="pm-week" className={`${CARD} overflow-hidden`} style={CARD_BG} aria-labelledby="pm-week">
       <h2 id="pm-week" className="sr-only">
         This week&apos;s updates
       </h2>

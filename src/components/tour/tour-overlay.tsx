@@ -127,18 +127,28 @@ export function TourOverlay({
   const total = TOUR_STEPS.length;
   const waiting = Boolean(step.waitFor);
 
-  // Card placement: below the target if room, else above, else to the right; phone docks.
+  // Card placement — never over the framed control: below it when there is room, else
+  // above, else beside it (only when that truly clears the hole), else below anyway,
+  // clamped to the viewport. A phone docks the card to the bottom.
+  const CARD_H = 200;
+  // A framed control taller than most of the viewport (the whole status card on a short
+  // window) leaves no side to sit on — dock the card like a phone does.
+  const huge = Boolean(rect && !centred && rect.height > vh * 0.6);
   let cardStyle: React.CSSProperties;
   if (phone) cardStyle = { left: 12, right: 12, bottom: 12, width: "auto" };
+  else if (huge) cardStyle = { right: 12, bottom: 12, width: CARD_W, maxHeight: vh - 24, overflowY: "auto" };
   else if (centred) cardStyle = { left: "50%", top: "50%", transform: "translate(-50%, -50%)", width: CARD_W };
   else {
     const r = rect!;
-    const below = r.top + r.height + PAD + GAP;
-    const spaceBelow = vh - below;
+    const holeBottom = r.top + r.height + PAD;
+    const holeTop = r.top - PAD;
+    const holeRight = r.left + r.width + PAD;
     const left = Math.min(Math.max(12, r.left), Math.max(12, vw - CARD_W - 12));
-    if (spaceBelow > 240) cardStyle = { left, top: below, width: CARD_W };
-    else if (r.top - PAD - GAP > 240) cardStyle = { left, bottom: vh - (r.top - PAD - GAP), width: CARD_W };
-    else cardStyle = { left: Math.min(r.left + r.width + PAD + GAP, vw - CARD_W - 12), top: Math.max(12, r.top), width: CARD_W };
+    if (vh - holeBottom - GAP >= CARD_H) cardStyle = { left, top: holeBottom + GAP, width: CARD_W };
+    else if (holeTop - GAP >= CARD_H) cardStyle = { left, bottom: vh - (holeTop - GAP), width: CARD_W };
+    else if (holeRight + GAP + CARD_W <= vw - 12) cardStyle = { left: holeRight + GAP, top: Math.min(Math.max(12, r.top), vh - CARD_H - 12), width: CARD_W };
+    else if (vh - holeBottom - GAP >= 120) cardStyle = { left, top: holeBottom + GAP, width: CARD_W, maxHeight: vh - holeBottom - GAP - 12, overflowY: "auto" };
+    else cardStyle = { left, bottom: vh - (holeTop - GAP), width: CARD_W, maxHeight: Math.max(120, holeTop - GAP - 12), overflowY: "auto" };
   }
 
   const cut = rect && !centred ? { x: rect.left - PAD, y: rect.top - PAD, w: rect.width + PAD * 2, h: rect.height + PAD * 2 } : null;
@@ -194,6 +204,7 @@ export function TourOverlay({
           {missing && <p className="mt-1.5 text-[11.5px] text-[var(--warn)]">Couldn&apos;t find that control on this page — look for it where the line says, or move on.</p>}
           {!state.projectId && step.id === "projects" && <p className="mt-1.5 text-[11.5px] text-[var(--warn)]">You don&apos;t run a project yet — once one is yours, the workspace steps unlock. We&apos;ll go straight to Reports.</p>}
         </div>
+        {waiting && <p className="text-[11.5px] font-semibold text-[var(--ink4)]">{step.waitingLabel}</p>}
         <div className="flex flex-wrap items-center gap-2">
           {step.id !== "welcome" && step.id !== "done" && (
             <button type="button" onClick={onBack} className={`${QUIET} inline-flex items-center gap-1`}>
@@ -207,12 +218,9 @@ export function TourOverlay({
           )}
           <span className="flex-1" />
           {waiting ? (
-            <>
-              <span className="text-[11.5px] text-[var(--ink4)]">{step.waitingLabel}</span>
-              <button type="button" onClick={onSkip} className={`${QUIET} ${FOCUS}`}>
-                Skip this step
-              </button>
-            </>
+            <button type="button" onClick={onSkip} className={`${QUIET} ${FOCUS}`}>
+              Skip this step
+            </button>
           ) : (
             <button type="button" onClick={onNext} className={`${PRIMARY} inline-flex items-center gap-1.5`}>
               {step.id === "done" ? <Check className="size-3.5" aria-hidden /> : null}
