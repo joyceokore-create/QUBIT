@@ -60,7 +60,8 @@ describe("named instances (docs/38)", () => {
     if (!templateId) return;
     const [inst] = await listProjectInstances(pm, projectId);
     const first = (await getProjectCheckpoints(pm, projectId)).rows[0]!.checkpointId;
-    await setCheckpointState(pm, projectId, { checkpointId: first, state: "Done" }, { moduleId: inst!.id, orgUnitId: marketA });
+    // InProgress, not Done: closing a gate runs its checklist (approved BRD, a lead), which is not what this test is about.
+    await setCheckpointState(pm, projectId, { checkpointId: first, state: "InProgress" }, { moduleId: inst!.id, orgUnitId: marketA });
     const after = await listProjectInstances(pm, projectId);
     const cellA = after[0]!.cells.find((c) => c.orgUnitId === marketA)!;
     const cellProduct = after[0]!.cells.find((c) => c.orgUnitId === null)!;
