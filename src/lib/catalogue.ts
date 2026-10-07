@@ -61,6 +61,7 @@ export const CATALOGUE_PERMISSIONS: readonly CataloguePermissionDef[] = [
   { code: "project:update", actionName: "Update project (legacy write)", module: "PROJECTS" },
   { code: "project:stage", actionName: "Edit governance fields (stage/priority)", module: "PROJECTS" },
   { code: "project:join:request", actionName: "Request to join a project", module: "PROJECTS" },
+  { code: "integrations:manage", actionName: "Manage integrations (connect YouTrack, map projects)", module: "PROJECTS" },
   { code: "milestone:read", actionName: "View milestones", module: "PROJECTS" },
   { code: "milestone:write", actionName: "Edit milestones", module: "PROJECTS" },
   { code: "task:read", actionName: "View tasks", module: "PROJECTS" },

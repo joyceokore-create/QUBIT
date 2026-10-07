@@ -105,6 +105,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     "programme:create",
     "staffing:manage", // docs/26 §4.3 — fill/decline resource requests, see the bench
     "idea:triage", // M-P4a (docs/35 §1) — accept / park / merge the intake board
+    "integrations:manage", // Configs › Integrations — connect YouTrack, map projects, status/sync
     "project:create",
     "project:write", // may edit any project (governance)
     "project:update", // transitional coarse write key for existing routes (see file header)
@@ -128,6 +129,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     "teams:manage:all",
     "app_modules:read",
     "permissions:read",
+    "integrations:manage", // Configs › Integrations — connect YouTrack, map projects, status/sync
     "project:create",
     "project:stage", // docs/18 §7 — governance fields, not delivery scope
     "budget:read",

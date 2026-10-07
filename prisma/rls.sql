@@ -45,6 +45,7 @@ BEGIN
     'project_document',
     'notification',
     'project_integration',
+    'tenant_integration',
     'project_milestone',
     'project_status_update',
     'shared_report',

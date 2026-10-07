@@ -52,6 +52,7 @@ model Tenant {
   statusUpdates       ProjectStatusUpdate[]
   notifications       Notification[]
   projectIntegrations ProjectIntegration[]
+  tenantIntegrations  TenantIntegration[]
   projectMilestones   ProjectMilestone[]
   sharedReports       SharedReport[]
   rolePermissions     RolePermission[]
@@ -616,6 +617,38 @@ model ProjectIntegration {
   @@unique([projectId, provider])
   @@index([tenantId, projectId])
   @@map("project_integration")
+}
+
+/**
+ * Tenant-level integration credential — "one instance, one token per tenant" (the Configs ›
+ * Integrations redesign). For YouTrack: one base URL + one encrypted permanent token for the
+ * whole tenant; projects are mapped to it per-project in ProjectIntegration (resource = the
+ * YouTrack project key). `connectedUser`/`tokenLast4` are shown in the connected summary so an
+ * admin can see which account the token belongs to; the token itself never leaves the server.
+ * `config` holds non-secret settings: the YouTrack-state → QUBIT-status map and sync options.
+ */
+model TenantIntegration {
+  id            String    @id @default(uuid())
+  tenantId      String    @map("tenant_id")
+  tenant        Tenant    @relation(fields: [tenantId], references: [id])
+  provider      String // "youtrack"
+  baseUrl       String    @map("base_url")
+  secret        String // encrypted token (src/lib/secret-box.ts) — never plaintext
+  connectedUser String?   @map("connected_user") // the token owner's login, from /users/me
+  connectedName String?   @map("connected_name")
+  tokenLast4    String?   @map("token_last4")
+  status        String    @default("connected") // connected | error
+  lastCheckedAt DateTime? @map("last_checked_at")
+  lastError     String?   @map("last_error")
+  /** Non-secret settings: { stateMap: {<youtrackState>: <qubitStatus>}, syncIntervalMinutes,
+   *  firstImportSince, archiveRemoved }. Never put a token here. */
+  config        Json?     @db.JsonB
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@unique([tenantId, provider])
+  @@index([tenantId])
+  @@map("tenant_integration")
 }
 
 // PRD Module 8 — project milestones (schedule checkpoints). Powers the workspace Deadlines

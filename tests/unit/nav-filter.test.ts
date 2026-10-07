@@ -56,6 +56,7 @@ describe("visibleNavItems", () => {
       "People",
       "Reports",
       "Admin",
+      "Configs", // Configs sits below Admin and is gated the same way (admin:access)
     ]);
   });
 });

@@ -15,7 +15,6 @@ const TABS = [
   { label: "Teams", href: "/admin/teams" },
   { label: "Roles", href: "/admin/roles" },
   { label: "Departments", href: "/admin/departments" },
-  { label: "Integrations", href: "/admin/integrations" },
   { label: "Audit", href: "/admin/audit", iamOnly: true },
   { label: "Access requests", href: "/admin/access-requests", iamOnly: true },
 ];

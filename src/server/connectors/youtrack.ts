@@ -423,6 +423,78 @@ export async function fetchIssues(opts: FetchIssuesOptions): Promise<FetchIssues
   return { issues, truncated: true };
 }
 
+// ── Connection test + project discovery (Configs › Integrations) ─────────────────────
+
+const ytHeaders = (token: string) => ({
+  Authorization: `Bearer ${token}`,
+  Accept: "application/json",
+  "User-Agent": "qubit-app",
+});
+
+export interface YoutrackAccount {
+  login: string;
+  fullName: string | null;
+  email: string | null;
+}
+export interface YoutrackProjectRef {
+  id: string;
+  name: string;
+  shortName: string;
+}
+export interface YoutrackTestResult {
+  user: YoutrackAccount;
+  projects: YoutrackProjectRef[];
+}
+
+/** Heuristic for the connect screen's "this token belongs to a person" warning: a login with
+ *  no service-account marker reads as a person. Presentation only — never a gate. */
+export function looksLikeServiceUser(login: string): boolean {
+  return /(^|[-_.])(svc|service|bot|integration|readonly|read-only|automation|system)([-_.]|$)/i.test(login);
+}
+
+/** Who the token belongs to — proves the token is valid and names the account (the summary). */
+export async function getCurrentUser(baseUrl: string, token: string, signal?: AbortSignal): Promise<YoutrackAccount> {
+  const url = await assertSafeBaseUrl(baseUrl);
+  const base = `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+  let res: Response;
+  try {
+    res = await fetch(`${base}/api/users/me?fields=login,fullName,email`, { headers: ytHeaders(token), redirect: "error", signal });
+  } catch {
+    throw new YoutrackError("Could not reach YouTrack.", "UNAVAILABLE");
+  }
+  if (res.status === 401 || res.status === 403) throw new YoutrackError("YouTrack rejected the token.", "AUTH");
+  if (!res.ok) throw new YoutrackError(`YouTrack returned ${res.status}.`, "UNAVAILABLE");
+  const j = (await res.json().catch(() => null)) as { login?: string; fullName?: string; email?: string } | null;
+  if (!j || !j.login) throw new YoutrackError("YouTrack returned an unexpected payload.", "UNAVAILABLE");
+  return { login: j.login, fullName: j.fullName ?? null, email: j.email ?? null };
+}
+
+/** The projects this token can read — the mapping dropdown's options (no key-typing). */
+export async function listProjects(baseUrl: string, token: string, signal?: AbortSignal): Promise<YoutrackProjectRef[]> {
+  const url = await assertSafeBaseUrl(baseUrl);
+  const base = `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+  let res: Response;
+  try {
+    res = await fetch(`${base}/api/admin/projects?fields=id,name,shortName&$top=1000`, { headers: ytHeaders(token), redirect: "error", signal });
+  } catch {
+    throw new YoutrackError("Could not reach YouTrack.", "UNAVAILABLE");
+  }
+  if (res.status === 401 || res.status === 403) throw new YoutrackError("YouTrack rejected the token.", "AUTH");
+  if (!res.ok) throw new YoutrackError(`YouTrack returned ${res.status}.`, "UNAVAILABLE");
+  const arr = (await res.json().catch(() => null)) as Array<{ id?: string; name?: string; shortName?: string }> | null;
+  if (!Array.isArray(arr)) throw new YoutrackError("YouTrack returned an unexpected payload.", "UNAVAILABLE");
+  return arr
+    .filter((p): p is { id?: string; name?: string; shortName: string } => typeof p.shortName === "string" && p.shortName.length > 0)
+    .map((p) => ({ id: p.id ?? "", name: p.name ?? p.shortName, shortName: p.shortName }));
+}
+
+/** Reachable + token valid + projects visible, in one call — the connect screen's proof. */
+export async function testConnection(baseUrl: string, token: string, signal?: AbortSignal): Promise<YoutrackTestResult> {
+  const user = await getCurrentUser(baseUrl, token, signal);
+  const projects = await listProjects(baseUrl, token, signal);
+  return { user, projects };
+}
+
 /** Live summary for the integrations card; null on any failure so the workspace degrades. */
 export async function fetchYoutrackSummary(
   token: string,
