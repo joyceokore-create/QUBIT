@@ -24,6 +24,7 @@ import { useCheckIn } from "@/components/workspace/use-checkin";
 import { SetupChecklist } from "@/components/workspace/setup-checklist";
 import { MarketSwitch } from "@/components/workspace/market-switch";
 import { MarketsTab } from "@/components/workspace/markets-tab";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { InstanceSwitch } from "@/components/workspace/instance-switch";
 import { InstancesSection } from "@/components/workspace/instances-section";
 import { ModulesSection } from "@/components/workspace/modules-section";
@@ -36,7 +37,7 @@ import { CARD_GLASS as CARD, CARD_BG, FOCUS, ragFill } from "@/lib/surface";
 // the status update (one card, one action) → what moved this week (its evidence) →
 // previous weeks, with Markets and Details beside it. Every tab's content is an existing
 // self-fetching component; only the arrangement changed.
-const TABS = ["This week", "Delivery", "Board", "Documents", "Register", "Markets", "Discussion", "Team"] as const;
+const TABS = ["This week", "Delivery", "Board", "Documents", "Register", "Discussion", "Team"] as const;
 type Tab = (typeof TABS)[number];
 
 // Old deep links keep landing: retired tab keys alias to their new homes.
@@ -97,6 +98,7 @@ export function ProjectWorkspace({
   const modules = data.modules ?? [];
   const [market, setMarket] = useState<string | null>(data.initialMarket ?? null);
   const [instance, setInstance] = useState<string | null>(data.initialInstance ?? null);
+  const [marketsOpen, setMarketsOpen] = useState(false);
   const selected = marketsList.find((i) => i.orgUnitId === market) ?? null;
   const selectedInstance = [...namedInstances, ...modules].find((i) => i.id === instance) ?? null;
   const writeQuery = (key: "market" | "instance", id: string | null) => {
@@ -127,9 +129,11 @@ export function ProjectWorkspace({
           members={members}
           onTeam={() => setTab("Team")}
           instanceSwitch={
-            marketsList.length > 0 || namedInstances.length > 0 ? (
+            marketsList.length > 0 || namedInstances.length > 0 || canGovern ? (
               <div className="flex flex-col gap-1.5">
-                {marketsList.length > 0 && <MarketSwitch label="Market" markets={marketsList.map((i) => ({ orgUnitId: i.orgUnitId, code: i.code, flag: i.flag, rag: i.rag }))} value={market} onChange={pickInstance} />}
+                {(marketsList.length > 0 || canGovern) && (
+                  <MarketSwitch label="Market" markets={marketsList.map((i) => ({ orgUnitId: i.orgUnitId, code: i.code, flag: i.flag, rag: i.rag }))} value={market} onChange={pickInstance} onManage={canGovern ? () => setMarketsOpen(true) : undefined} />
+                )}
                 {namedInstances.length > 0 && <InstanceSwitch instances={namedInstances.map((i) => ({ id: i.id, code: i.code, name: i.name }))} value={instance} onChange={pickNamed} />}
               </div>
             ) : null
@@ -142,7 +146,7 @@ export function ProjectWorkspace({
       <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="gap-0">
         <div className="border-b border-[var(--border)] [animation:rise_.5s_cubic-bezier(.22,1,.36,1)_.06s_both]">
           <TabsList variant="line" className="group-data-horizontal/tabs:h-auto w-full justify-start gap-0 overflow-x-auto p-0 [scrollbar-width:thin]">
-            {TABS.filter((t) => t !== "Markets" || marketsList.length > 0 || canGovern).map((t) => (
+            {TABS.map((t) => (
               <TabsTrigger key={t} value={t} className={TRIGGER}>
                 {t}
                 {t === "Register" && registerCount > 0 && (
@@ -186,9 +190,11 @@ export function ProjectWorkspace({
                       <h2 id="ws-markets" className="text-[13px] font-semibold text-foreground">
                         Markets
                       </h2>
-                      <button type="button" onClick={() => setTab("Delivery")} className={`flex items-center gap-0.5 rounded-[4px] text-[11px] font-semibold text-[var(--ink4)] transition-colors hover:text-brand ${FOCUS}`}>
-                        Delivery <ArrowRight className="size-3" aria-hidden />
-                      </button>
+                      {canGovern && (
+                        <button type="button" onClick={() => setMarketsOpen(true)} className={`flex items-center gap-0.5 rounded-[4px] text-[11px] font-semibold text-[var(--ink4)] transition-colors hover:text-brand ${FOCUS}`}>
+                          Manage <ArrowRight className="size-3" aria-hidden />
+                        </button>
+                      )}
                     </div>
                     <div className="flex flex-col">
                       {markets.map((m) => (
@@ -263,19 +269,6 @@ export function ProjectWorkspace({
             </div>
           </TabsContent>
 
-          <TabsContent value="Markets" className="mt-5">
-            <MarketsTab
-              projectId={data.id}
-              label="Market"
-              pmScope={data.pmScope ?? "product"}
-              initial={marketsList.map((i) => ({ orgUnitId: i.orgUnitId, code: i.code, name: i.name, flag: i.flag, kind: i.kind, status: i.status, progress: i.progress, leadUserId: i.leadUserId, leadName: i.leadName, note: i.note }))}
-              onSelect={(id) => {
-                pickInstance(id);
-                setTab("This week");
-              }}
-            />
-          </TabsContent>
-
           <TabsContent value="Board" className="mt-5">
             <ProjectBoard
               projectId={data.id}
@@ -329,6 +322,24 @@ export function ProjectWorkspace({
           </TabsContent>
         </div>
       </Tabs>
+
+      {/* docs/38 — markets are managed from the switch's Manage chip, not a tab. */}
+      <Dialog open={marketsOpen} onOpenChange={setMarketsOpen}>
+        <DialogContent className="max-h-[88vh] overflow-y-auto p-0 sm:max-w-[860px]">
+          <DialogTitle className="sr-only">Markets</DialogTitle>
+          <MarketsTab
+              projectId={data.id}
+              label="Market"
+              pmScope={data.pmScope ?? "product"}
+              initial={marketsList.map((i) => ({ orgUnitId: i.orgUnitId, code: i.code, name: i.name, flag: i.flag, kind: i.kind, status: i.status, progress: i.progress, leadUserId: i.leadUserId, leadName: i.leadName, note: i.note }))}
+              onSelect={(id) => {
+                pickInstance(id);
+                setMarketsOpen(false);
+                setTab("This week");
+              }}
+            />
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

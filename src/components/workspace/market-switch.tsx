@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Settings2 } from "lucide-react";
 import { FOCUS, ragFill } from "@/lib/surface";
 
 /**
@@ -24,6 +24,7 @@ export function MarketSwitch({
   markets,
   value,
   onChange,
+  onManage,
 }: {
   /** Wording: "Market" (default). */
   label: string;
@@ -31,8 +32,10 @@ export function MarketSwitch({
   /** null = the product. */
   value: string | null;
   onChange: (orgUnitId: string | null) => void;
+  /** docs/38 — opens the markets panel (add / retire, lead, status, note, set-up). */
+  onManage?: () => void;
 }) {
-  if (markets.length === 0) return null;
+  if (markets.length === 0 && !onManage) return null;
   const shown = markets.slice(0, MAX_CHIPS);
   const rest = markets.slice(MAX_CHIPS);
   const restSelected = rest.find((i) => i.orgUnitId === value) ?? null;
@@ -75,6 +78,12 @@ export function MarketSwitch({
             ))}
           </select>
         </label>
+      )}
+      {onManage && (
+        <button type="button" onClick={onManage} className={`${chip(false)} gap-1 text-[var(--ink4)]`} title={`Manage ${label.toLowerCase()}s — add, retire, lead, status, set-up`}>
+          <Settings2 className="size-3.5" aria-hidden />
+          {markets.length === 0 ? `Add ${label.toLowerCase()}s` : "Manage"}
+        </button>
       )}
     </div>
   );

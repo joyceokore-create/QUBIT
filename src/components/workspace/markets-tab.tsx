@@ -133,7 +133,7 @@ export function MarketsTab({
   const retire = (orgUnitId: string) => call(orgUnitId, `/api/projects/${projectId}/markets/${orgUnitId}`, { method: "DELETE" });
 
   return (
-    <section className={`${CARD} overflow-hidden`} style={CARD_BG} aria-labelledby="markets-title">
+    <section className={`${CARD} overflow-hidden border-0 shadow-none`} style={CARD_BG} aria-labelledby="markets-title">
       <div className="flex flex-wrap items-center gap-3 p-[12px_16px]">
         <h2 id="markets-title" className="text-[13.5px] font-semibold text-[var(--qink)]">
           {label === "Instance" ? "Instances" : `${label}s`}
