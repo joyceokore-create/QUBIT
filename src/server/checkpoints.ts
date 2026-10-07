@@ -63,21 +63,26 @@ const scopeWhere = (scope?: GateScope) => ({ orgUnitId: scope?.orgUnitId ?? null
 const scopeKey = (projectId: string, checkpointId: string, scope?: GateScope) =>
   `${projectId}:${checkpointId}${scope?.orgUnitId ? `:${scope.orgUnitId}` : ""}${scope?.moduleId ? `:m:${scope.moduleId}` : ""}`;
 
+/** docs/38 — the template a scope follows: the instance's / module's own when set, else
+ * the project's (one track for all markets). */
+async function templateFor(tx: Prisma.TransactionClient, projectId: string, scope?: GateScope) {
+  const select = { id: true, name: true, checkpoints: { select: { id: true, name: true, orderIndex: true }, orderBy: { orderIndex: "asc" as const } } };
+  if (scope?.moduleId) {
+    const mod = await tx.projectModule.findFirst({ where: { id: scope.moduleId, projectId }, select: { checkpointTemplate: { select } } });
+    if (mod?.checkpointTemplate) return mod.checkpointTemplate;
+  }
+  const project = await tx.project.findUnique({ where: { id: projectId }, select: { checkpointTemplate: { select } } });
+  return project?.checkpointTemplate ?? null;
+}
+
 export async function getProjectCheckpoints(
   ctx: TenantContext,
   projectId: string,
   scope?: GateScope,
 ): Promise<ProjectCheckpoints> {
   return withTenant(ctx, async (tx) => {
-    const project = await tx.project.findUnique({
-      where: { id: projectId },
-      select: {
-        checkpointTemplateId: true,
-        checkpointTemplate: {
-          select: { name: true, checkpoints: { select: { id: true, name: true, orderIndex: true }, orderBy: { orderIndex: "asc" } } },
-        },
-      },
-    });
+    const template = await templateFor(tx, projectId, scope);
+    const project = template ? { checkpointTemplateId: template.id, checkpointTemplate: template } : null;
     if (!project?.checkpointTemplateId || !project.checkpointTemplate) {
       return { templateId: null, templateName: null, rows: [], progress: 0 };
     }
@@ -227,12 +232,12 @@ export async function setCheckpointState(
       if (!mod) throw new CheckpointError("That instance or module is not on this project.", "NOT_FOUND");
       if (mod.kind === "module" && !mod.ownGates) throw new CheckpointError(`${mod.name} is tracked by state per market — switch on "own gates" for it first.`, "TEMPLATE_MISMATCH");
     }
-    const [project, checkpoint] = await Promise.all([
-      tx.project.findUnique({ where: { id: projectId }, select: { checkpointTemplateId: true } }),
+    const [template, checkpoint] = await Promise.all([
+      templateFor(tx, projectId, scope),
       tx.checkpoint.findUnique({ where: { id: input.checkpointId }, select: { id: true, name: true, templateId: true } }),
     ]);
-    if (!project || !checkpoint) throw new CheckpointError("Checkpoint not found.", "NOT_FOUND");
-    if (project.checkpointTemplateId !== checkpoint.templateId) {
+    if (!template || !checkpoint) throw new CheckpointError("Checkpoint not found.", "NOT_FOUND");
+    if (template.id !== checkpoint.templateId) {
       throw new CheckpointError("That checkpoint belongs to a different template.", "TEMPLATE_MISMATCH");
     }
     if (input.state === "Blocked" && !input.blockerId) {

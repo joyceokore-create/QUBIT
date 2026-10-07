@@ -57,11 +57,16 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
   const patch = async (body: Record<string, unknown>, key: string) => {
     setBusy(key);
     setError(null);
-    const res = await fetch(`/api/projects/${projectId}/checkpoints`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify("templateId" in body ? body : { ...body, orgUnitId, moduleId }),
-    });
+    // docs/38 — scoped to an instance / module, the template choice is THAT row's own track
+    // (one track for all markets, may differ per instance); otherwise the project's.
+    const res =
+      "templateId" in body && moduleId
+        ? await fetch(`/api/projects/${projectId}/instances/${moduleId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ checkpointTemplateId: body.templateId }) })
+        : await fetch(`/api/projects/${projectId}/checkpoints`, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify("templateId" in body ? body : { ...body, orgUnitId, moduleId }),
+          });
     if (res.status === 409) {
       // Gate unmet — show the checklist and offer the override rather than failing flat.
       const err = (await res.json().catch(() => null))?.error;
@@ -69,6 +74,11 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
       setError(null);
     } else if (!res.ok) {
       setError((await res.json().catch(() => null))?.error?.message ?? "Could not save.");
+    } else if ("templateId" in body && moduleId) {
+      // The row's track changed — reload the scoped matrix.
+      const again = await fetch(`/api/projects/${projectId}/checkpoints?moduleId=${moduleId}${orgUnitId ? `&orgUnitId=${orgUnitId}` : ""}`);
+      if (again.ok) setData(await again.json());
+      setGateBlock(null);
     } else {
       const next = await res.json();
       setData((prev) => (prev ? { ...prev, ...next } : prev));

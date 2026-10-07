@@ -51,6 +51,9 @@ export interface ProjectInstanceRow {
   parentId: string | null;
   /** Instances always track gates; a module only when switched on. */
   ownGates: boolean;
+  /** The gate track this row follows — its own template, or null = the project's. */
+  checkpointTemplateId: string | null;
+  checkpointTemplateName: string | null;
   cells: InstanceCell[];
 }
 
@@ -64,7 +67,7 @@ export function instanceCode(name: string, i = 0): string {
 export async function listProjectInstances(ctx: TenantContext, projectId: string, kind: ModuleKind = "instance"): Promise<ProjectInstanceRow[]> {
   return withTenant(ctx, async (tx) => {
     const [rows, statuses, gates, project] = await Promise.all([
-      tx.projectModule.findMany({ where: { projectId, kind }, select: { id: true, code: true, name: true, orderIndex: true, kind: true, parentId: true, ownGates: true }, orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }] }),
+      tx.projectModule.findMany({ where: { projectId, kind }, select: { id: true, code: true, name: true, orderIndex: true, kind: true, parentId: true, ownGates: true, checkpointTemplateId: true, checkpointTemplate: { select: { name: true, _count: { select: { checkpoints: true } } } } }, orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }] }),
       tx.moduleInstanceStatus.findMany({ where: { projectId }, select: { moduleId: true, orgUnitId: true, state: true, note: true } }),
       tx.checkpointStatus.findMany({ where: { projectId, moduleId: { not: null } }, select: { moduleId: true, orgUnitId: true, state: true } }),
       tx.project.findUnique({
@@ -72,16 +75,19 @@ export async function listProjectInstances(ctx: TenantContext, projectId: string
         select: { checkpointTemplate: { select: { _count: { select: { checkpoints: true } } } }, orgStatuses: { where: { retiredAt: null }, select: { orgUnitId: true } } },
       }),
     ]);
-    const total = project?.checkpointTemplate?._count.checkpoints ?? 0;
+    const projectTotal = project?.checkpointTemplate?._count.checkpoints ?? 0;
     const markets: (string | null)[] = [null, ...(project?.orgStatuses.map((o) => o.orgUnitId) ?? [])];
     const key = (m: string, u: string | null) => `${m}:${u ?? "-"}`;
     const statusByKey = new Map(statuses.map((s) => [key(s.moduleId, s.orgUnitId), s]));
     const gatesByKey = new Map<string, CheckpointState[]>();
     for (const g of gates) gatesByKey.set(key(g.moduleId!, g.orgUnitId), [...(gatesByKey.get(key(g.moduleId!, g.orgUnitId)) ?? []), g.state as CheckpointState]);
-    return rows.map((r) => ({
+    return rows.map(({ checkpointTemplate, ...r }) => ({
       ...r,
       kind: r.kind as ModuleKind,
+      checkpointTemplateName: checkpointTemplate?.name ?? null,
       cells: markets.map((u) => {
+        // One track for all markets; it may differ per instance (its own template).
+        const total = checkpointTemplate?._count.checkpoints ?? projectTotal;
         const st = statusByKey.get(key(r.id, u));
         const states = gatesByKey.get(key(r.id, u)) ?? [];
         const tracksGates = r.kind === "instance" || r.ownGates;
@@ -134,6 +140,8 @@ export const UpdateInstanceInput = z.object({
   /** Modules: switch their own gates on or off (gate rows already recorded are kept). */
   ownGates: z.boolean().optional(),
   parentId: z.string().min(1).nullable().optional(),
+  /** The gate track this instance / module follows; null = the project's template. */
+  checkpointTemplateId: z.string().min(1).nullable().optional(),
 });
 
 export async function updateProjectInstance(ctx: TenantContext, projectId: string, instanceId: string, input: z.infer<typeof UpdateInstanceInput>): Promise<ProjectInstanceRow[]> {
@@ -144,9 +152,18 @@ export async function updateProjectInstance(ctx: TenantContext, projectId: strin
       const parent = await tx.projectModule.findFirst({ where: { id: input.parentId, projectId, kind: "instance" }, select: { id: true } });
       if (!parent || before.kind !== "module") throw new ProjectInstanceError("A module can only sit under one of this project's instances.", "NOT_FOUND");
     }
+    if (input.checkpointTemplateId) {
+      const t = await tx.checkpointTemplate.findUnique({ where: { id: input.checkpointTemplateId }, select: { id: true } });
+      if (!t) throw new ProjectInstanceError("Checkpoint template not found.", "NOT_FOUND");
+    }
     await tx.projectModule.update({
       where: { id: instanceId },
-      data: { name: input.name, orderIndex: input.orderIndex, ...(before.kind === "module" ? { ownGates: input.ownGates, parentId: input.parentId === undefined ? undefined : input.parentId } : {}) },
+      data: {
+        name: input.name,
+        orderIndex: input.orderIndex,
+        checkpointTemplateId: input.checkpointTemplateId === undefined ? undefined : input.checkpointTemplateId,
+        ...(before.kind === "module" ? { ownGates: input.ownGates, parentId: input.parentId === undefined ? undefined : input.parentId } : {}),
+      },
     });
     await audit(tx, ctx, { action: "update", entityType: before.kind === "module" ? "project_module" : "project_instance", entityId: instanceId, before: { name: before.name, orderIndex: before.orderIndex, ownGates: before.ownGates, parentId: before.parentId }, after: { code: before.code, ...input } });
   });

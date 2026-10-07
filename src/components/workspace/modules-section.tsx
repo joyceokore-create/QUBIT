@@ -189,6 +189,11 @@ function GroupRows({
           <td className="py-2 pr-3">
             <span className="font-semibold text-[var(--qink)]">{r.name}</span>
             <span className="ml-1.5 font-mono text-[10px] text-[var(--ink4)]">{r.code}</span>
+            {r.ownGates && (
+              <span className="block text-[10.5px] text-[var(--ink4)]" title="Pick a template in the gates card while this module is selected">
+                track · {r.checkpointTemplateName ?? "project's"}
+              </span>
+            )}
           </td>
           {columns.map((c) => {
             const cell = r.cells.find((x) => x.orgUnitId === c.orgUnitId) ?? { orgUnitId: c.orgUnitId, state: "Planned", note: null, progress: 0 };

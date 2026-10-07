@@ -39,6 +39,8 @@ export interface NamedInstanceJson {
   kind: "instance" | "module";
   parentId: string | null;
   ownGates: boolean;
+  checkpointTemplateId: string | null;
+  checkpointTemplateName: string | null;
   cells: { orgUnitId: string | null; state: string; note: string | null; progress: number }[];
 }
 

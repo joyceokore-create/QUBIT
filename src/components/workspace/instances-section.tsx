@@ -74,7 +74,7 @@ export function InstancesSection({
           Instances
         </h3>
         <span className="text-[11.5px] text-[var(--ink4)]">
-          {rows.length === 0 ? "Named variants of the product (for Schools, for Marketplace …) — each runs as its own project, the same track in every market." : "Click a cell to open that instance's gates for that market."}
+          {rows.length === 0 ? "Named variants of the product (for Schools, for Marketplace …) — each runs as its own project, the same track in every market." : "Click a cell to open that instance's gates for that market; the track is one for all markets and may differ per instance."}
         </span>
         {canManage && (
           <button type="button" onClick={() => setAdding((a) => !a)} className={`${SECONDARY} ml-auto gap-1.5 px-2.5 py-1 text-[12px]`}>
@@ -124,6 +124,9 @@ export function InstancesSection({
                   <td className="py-2 pr-3">
                     <span className="font-semibold text-[var(--qink)]">{r.name}</span>
                     <span className="ml-1.5 font-mono text-[10px] text-[var(--ink4)]">{r.code}</span>
+                    <span className="block text-[10.5px] text-[var(--ink4)]" title="One track for all markets — pick a template in the gates card while this instance is selected">
+                      track · {r.checkpointTemplateName ?? "project's"}
+                    </span>
                   </td>
                   {columns.map((c) => {
                     const cell = r.cells.find((x) => x.orgUnitId === c.orgUnitId) ?? { orgUnitId: c.orgUnitId, state: "Planned", note: null, progress: 0 };
