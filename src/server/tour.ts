@@ -7,7 +7,8 @@ import { withTenant, type TenantContext } from "@/lib/tenant";
  * back. The tour is for people who RUN projects (lead or "Project Manager" member) or hold
  * the ProjectManager role; executives and plain members are never interrupted by it.
  * Finishing or exiting stamps `tourCompletedAt`; "Show me around" replays without
- * touching the stamp.
+ * touching the stamp. Super admins are eligible to replay but never auto-interrupted —
+ * they are not the PM audience, and the e2e smoke signs in as one.
  */
 
 export interface TourOffer {
@@ -33,8 +34,9 @@ export async function shouldOfferTour(ctx: TenantContext): Promise<TourOffer> {
       }),
     ]);
     const eligible = projects.length > 0 || ctx.roles.includes("ProjectManager");
+    const superAdmin = ctx.roles.includes("PlatformSuperAdmin");
     return {
-      offer: eligible && !user?.tourCompletedAt,
+      offer: eligible && !superAdmin && !user?.tourCompletedAt,
       eligible,
       firstProjectId: projects[0]?.id ?? null,
       projectCount: projects.length,

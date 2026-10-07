@@ -18,6 +18,18 @@ const CARD_W = 360;
 
 type Rect = { top: number; left: number; width: number; height: number };
 
+/** Four rectangles covering everything except the cut-out. */
+function panelsAround(cut: { x: number; y: number; w: number; h: number }, vw: number, vh: number): React.CSSProperties[] {
+  const right = Math.max(0, vw - (cut.x + cut.w));
+  const bottom = Math.max(0, vh - (cut.y + cut.h));
+  return [
+    { left: 0, top: 0, width: "100%", height: Math.max(0, cut.y) },
+    { left: 0, top: cut.y, width: Math.max(0, cut.x), height: cut.h },
+    { left: cut.x + cut.w, top: cut.y, width: right, height: cut.h },
+    { left: 0, top: cut.y + cut.h, width: "100%", height: bottom },
+  ];
+}
+
 const PLACES: { key: TourStep["place"]; label: string }[] = [
   { key: "projects", label: "Projects" },
   { key: "workspace", label: "Workspace" },
@@ -133,16 +145,11 @@ export function TourOverlay({
 
   return (
     <div className="fixed inset-0 z-[70]" role="presentation">
-      {/* Scrim with the cut-out — pointer events pass through the hole so the real control works. */}
-      <svg className="absolute inset-0 h-full w-full" aria-hidden style={{ pointerEvents: "none" }}>
-        <defs>
-          <mask id="tour-mask">
-            <rect x="0" y="0" width="100%" height="100%" fill="white" />
-            {cut && <rect x={cut.x} y={cut.y} width={cut.w} height={cut.h} rx="12" fill="black" />}
-          </mask>
-        </defs>
-        <rect x="0" y="0" width="100%" height="100%" fill="color-mix(in oklab, var(--qink) 58%, transparent)" mask="url(#tour-mask)" style={{ pointerEvents: "auto" }} onClick={() => undefined} />
-      </svg>
+      {/* Scrim as four panels around the cut-out: the hole is real, so the framed control
+          takes clicks and the hands-on steps work; everything else is covered. */}
+      {(cut ? panelsAround(cut, vw, vh) : [{ left: 0, top: 0, width: "100%", height: "100%" }]).map((p, i) => (
+        <div key={i} aria-hidden className="absolute" style={{ ...p, background: "color-mix(in oklab, var(--qink) 58%, transparent)", pointerEvents: "auto" }} />
+      ))}
       {cut && (
         <div
           aria-hidden

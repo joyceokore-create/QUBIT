@@ -54,9 +54,11 @@ describe("first-week walkthrough", () => {
     expect((await shouldOfferTour(pm)).offer).toBe(true);
   });
 
-  it("never interrupts an executive or a plain member", async () => {
+  it("never interrupts an executive, a plain member, or a super admin (who may still replay)", async () => {
     expect(await shouldOfferTour(exec)).toMatchObject({ offer: false, eligible: false, projectCount: 0 });
     expect(await shouldOfferTour(member)).toMatchObject({ offer: false, eligible: false });
+    const admin: TenantContext = { tenantId: rbId, userId: pm.userId, roles: ["PlatformSuperAdmin"] };
+    expect(await shouldOfferTour(admin)).toMatchObject({ offer: false, eligible: true, firstProjectId: projectId });
   });
 
   it("per-project setup counts only what exists, and YouTrack only while the flag is on", async () => {
