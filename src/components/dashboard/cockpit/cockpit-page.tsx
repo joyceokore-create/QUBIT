@@ -54,7 +54,7 @@ export async function CockpitPage({
         ) : level === "head" ? (
           <HeadCockpit data={data} />
         ) : level === "pm" ? (
-          <PmCockpit data={data} viewerId={viewerId} viewerName={viewerName} allocationPct={allocationPct} now={now} />
+          <PmCockpit data={data} viewerId={viewerId} viewerName={viewerName} allocationPct={allocationPct} now={now} allowPreviewAll={!roles.includes("ProjectManager")} />
         ) : (
           <UserCockpit data={data} viewerId={viewerId} />
         )}

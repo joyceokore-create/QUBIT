@@ -34,15 +34,19 @@ export function PmCockpit({
   viewerName,
   allocationPct,
   now,
+  allowPreviewAll = true,
 }: {
   data: CockpitData;
   viewerId: string;
   viewerName?: string;
   allocationPct?: number | null;
   now: Date;
+  /** A Head/admin looking at the PM view with no projects of their own sees everyone's;
+   *  a real PM with none sees an empty board, never the whole estate. */
+  allowPreviewAll?: boolean;
 }) {
-  const owned = data.projects.filter((p) => p.pmId === viewerId && !["Completed", "Cancelled"].includes(p.status));
-  const previewingAll = owned.length === 0;
+  const owned = data.projects.filter((p) => p.pmIds.includes(viewerId) && !["Completed", "Cancelled"].includes(p.status));
+  const previewingAll = owned.length === 0 && allowPreviewAll;
   const mine = (previewingAll ? data.projects.filter((p) => !["Completed", "Cancelled"].includes(p.status)) : owned)
     .slice()
     .sort(

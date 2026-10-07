@@ -55,8 +55,11 @@ export interface CockpitProject {
   desc: string;
   category: string; // portfolio category: Approved | Exploring | Shelved | (Unfiled)
   portfolioName: string | null;
+  /** The lead, or the first "Project Manager" member when no lead is set. */
   pmId: string | null;
   pmName: string | null;
+  /** Everyone who runs the project: the lead plus "Project Manager" members. */
+  pmIds: string[];
   status: string; // raw delivery status
   priority: string; // High | Med | Low | New | Strat | Paused
   reported: DimRag;
@@ -139,6 +142,7 @@ export async function getCockpitData(ctx: TenantContext, now = new Date(), trend
         budget: true,
         leadUserId: true,
         lead: { select: { name: true } },
+        members: { where: { role: "Project Manager" }, select: { userId: true, user: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
         portfolio: { select: { name: true, category: true } },
         orgStatuses: { select: { progress: true, status: true, orgUnit: { select: { name: true } } } },
         milestonesV2: {
@@ -228,8 +232,9 @@ export async function getCockpitData(ctx: TenantContext, now = new Date(), trend
       desc: p.objective ?? "",
       category: p.portfolio?.category ?? "Unfiled",
       portfolioName: p.portfolio?.name ?? null,
-      pmId: p.leadUserId,
-      pmName: p.lead?.name ?? null,
+      pmId: p.leadUserId ?? p.members[0]?.userId ?? null,
+      pmName: p.lead?.name ?? p.members[0]?.user.name ?? null,
+      pmIds: [...new Set([p.leadUserId, ...p.members.map((m) => m.userId)].filter((id): id is string => Boolean(id)))],
       status: p.status,
       priority: p.priority,
       reported,
