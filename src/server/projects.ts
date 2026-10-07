@@ -62,6 +62,11 @@ export const UpdateProjectInput = z.object({
   dueDate: z.string().datetime().nullable().optional(),
   budget: z.string().nullable().optional(),
   leadUserId: z.string().uuid().nullable().optional(),
+  // docs/38 — the product's shape (governance rights, like stage / status note).
+  instanceLabel: z.enum(["Market", "Subsidiary", "Instance"]).optional(),
+  moduleTracking: z.enum(["state", "gates"]).optional(),
+  instanceTagging: z.boolean().optional(),
+  pmScope: z.enum(["product", "instance"]).optional(),
   ...ProjectDefinitionFields,
 });
 export type UpdateProjectInput = z.infer<typeof UpdateProjectInput>;
@@ -299,6 +304,11 @@ export interface ProjectPanelData {
   programmeName: string | null;
   avgProgress: number;
   subsidiaries: ProjectSubsidiaryDetail[];
+  /** docs/38 — the product's shape. */
+  instanceLabel: string;
+  moduleTracking: string;
+  instanceTagging: boolean;
+  pmScope: string;
 }
 
 export async function getProjectPanelData(
@@ -343,6 +353,10 @@ export async function getProjectPanelData(
       businessOwner: project.businessOwner,
       startDate: project.startDate,
       leadName: project.lead?.name ?? null,
+      instanceLabel: project.instanceLabel,
+      moduleTracking: project.moduleTracking,
+      instanceTagging: project.instanceTagging,
+      pmScope: project.pmScope,
       portfolioId: project.portfolioId,
       portfolioName: project.portfolio?.name ?? null,
       programmeName: project.programme?.name ?? null,
@@ -574,6 +588,10 @@ export async function updateProject(
         dueDate: input.dueDate === undefined ? undefined : input.dueDate ? new Date(input.dueDate) : null,
         budget: input.budget === undefined ? undefined : input.budget,
         leadUserId: input.leadUserId === undefined ? undefined : input.leadUserId,
+        instanceLabel: input.instanceLabel,
+        moduleTracking: input.moduleTracking,
+        instanceTagging: input.instanceTagging,
+        pmScope: input.pmScope,
         client: input.client === undefined ? undefined : input.client,
         objective: input.objective === undefined ? undefined : input.objective,
         mission: input.mission === undefined ? undefined : input.mission,
@@ -597,6 +615,10 @@ export async function updateProject(
         dueDate: before.dueDate,
         budget: before.budget,
         leadUserId: before.leadUserId,
+        instanceLabel: before.instanceLabel,
+        moduleTracking: before.moduleTracking,
+        instanceTagging: before.instanceTagging,
+        pmScope: before.pmScope,
       },
       after: {
         name: after.name,
@@ -608,6 +630,10 @@ export async function updateProject(
         dueDate: after.dueDate,
         budget: after.budget,
         leadUserId: after.leadUserId,
+        instanceLabel: after.instanceLabel,
+        moduleTracking: after.moduleTracking,
+        instanceTagging: after.instanceTagging,
+        pmScope: after.pmScope,
       },
     });
 

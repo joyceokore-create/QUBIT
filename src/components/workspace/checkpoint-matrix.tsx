@@ -20,7 +20,8 @@ interface Payload extends ProjectCheckpoints {
   canGovern: boolean;
 }
 
-export function CheckpointMatrix({ projectId }: { projectId: string }) {
+/** docs/38 — `orgUnitId` scopes the matrix to one instance's gates (null = the product's own). */
+export function CheckpointMatrix({ projectId, orgUnitId = null }: { projectId: string; orgUnitId?: string | null }) {
   const [data, setData] = useState<Payload | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -32,14 +33,14 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const res = await fetch(`/api/projects/${projectId}/checkpoints`);
+      const res = await fetch(`/api/projects/${projectId}/checkpoints${orgUnitId ? `?orgUnitId=${orgUnitId}` : ""}`);
       if (!res.ok || cancelled) return;
       setData(await res.json());
     })();
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, orgUnitId]);
 
   if (!data) {
     return (
@@ -55,7 +56,7 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
     const res = await fetch(`/api/projects/${projectId}/checkpoints`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify("templateId" in body ? body : { ...body, orgUnitId }),
     });
     if (res.status === 409) {
       // Gate unmet — show the checklist and offer the override rather than failing flat.

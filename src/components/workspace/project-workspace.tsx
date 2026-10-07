@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDate } from "@/components/panels/panel-primitives";
@@ -22,6 +22,9 @@ import { StatusUpdateCard } from "@/components/workspace/status-update-card";
 import { WorkspaceHeader } from "@/components/workspace/workspace-header";
 import { useCheckIn } from "@/components/workspace/use-checkin";
 import { SetupChecklist } from "@/components/workspace/setup-checklist";
+import { InstanceSwitch } from "@/components/workspace/instance-switch";
+import { InstancesTab } from "@/components/workspace/instances-tab";
+import { MarketCheckInCard } from "@/components/workspace/market-checkin-card";
 import type { ProjectPanelJson } from "@/components/panels/project-panel-json";
 import { CARD_GLASS as CARD, CARD_BG, FOCUS, ragFill, ragToken } from "@/lib/surface";
 
@@ -30,7 +33,7 @@ import { CARD_GLASS as CARD, CARD_BG, FOCUS, ragFill, ragToken } from "@/lib/sur
 // the status update (one card, one action) → what moved this week (its evidence) →
 // previous weeks, with Markets and Details beside it. Every tab's content is an existing
 // self-fetching component; only the arrangement changed.
-const TABS = ["This week", "Delivery", "Board", "Documents", "Register", "Discussion", "Team"] as const;
+const TABS = ["This week", "Delivery", "Board", "Documents", "Register", "Instances", "Discussion", "Team"] as const;
 type Tab = (typeof TABS)[number];
 
 // Old deep links keep landing: retired tab keys alias to their new homes.
@@ -81,6 +84,21 @@ export function ProjectWorkspace({
     return () => clearTimeout(t);
   }, [initialTab]);
   const { ci, setCi } = useCheckIn(data.id, data.checkin ?? null);
+  // docs/38 — the selected instance (null = the product). Written to ?instance= so links
+  // and reloads keep it; the gates matrix, the This week card and (I3) every list follow it.
+  const router = useRouter();
+  const pathname = usePathname();
+  const instances = data.instances ?? [];
+  const instanceLabel = data.instanceLabel ?? "Market";
+  const [instance, setInstance] = useState<string | null>(data.initialInstance ?? null);
+  const selected = instances.find((i) => i.orgUnitId === instance) ?? null;
+  const pickInstance = (id: string | null) => {
+    setInstance(id);
+    const q = new URLSearchParams(window.location.search);
+    if (id) q.set("instance", id);
+    else q.delete("instance");
+    router.replace(`${pathname}${q.toString() ? `?${q}` : ""}`, { scroll: false });
+  };
   const canEdit = data.canEdit;
   const canContribute = data.canContribute;
   const canGovern = data.canGovern ?? false;
@@ -90,13 +108,23 @@ export function ProjectWorkspace({
   return (
     <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-5 p-[18px_24px_90px]">
       <div className="[animation:rise_.5s_cubic-bezier(.22,1,.36,1)_.03s_both]">
-        <WorkspaceHeader data={data} members={members} onTeam={() => setTab("Team")} />
+        <WorkspaceHeader
+          data={data}
+          members={members}
+          onTeam={() => setTab("Team")}
+          instanceSwitch={
+            instances.length > 0 ? (
+              <InstanceSwitch label={instanceLabel} instances={instances.map((i) => ({ orgUnitId: i.orgUnitId, code: i.code, flag: i.flag, rag: i.rag }))} value={instance} onChange={pickInstance} />
+            ) : null
+          }
+          selectedInstance={selected ? { code: selected.code, name: selected.name, flag: selected.flag, rag: selected.rag, leadName: selected.leadName, progress: selected.progress } : null}
+        />
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="gap-0">
         <div className="border-b border-[var(--border)] [animation:rise_.5s_cubic-bezier(.22,1,.36,1)_.06s_both]">
           <TabsList variant="line" className="group-data-horizontal/tabs:h-auto w-full justify-start gap-0 overflow-x-auto p-0 [scrollbar-width:thin]">
-            {TABS.map((t) => (
+            {TABS.filter((t) => t !== "Instances" || instances.length > 0 || canGovern).map((t) => (
               <TabsTrigger key={t} value={t} className={TRIGGER}>
                 {t}
                 {t === "Register" && registerCount > 0 && (
@@ -116,7 +144,20 @@ export function ProjectWorkspace({
                 {data.canSetUp && data.setup && data.setup.done < data.setup.total && (
                   <SetupChecklist projectId={data.id} code={data.code} setup={data.setup} onGo={(t) => setTab(t)} />
                 )}
-                {ci && <StatusUpdateCard projectId={data.id} ci={ci} onChange={setCi} onGoToDelivery={() => setTab("Delivery")} />}
+                {selected ? (
+                  <section className="flex flex-col gap-2" aria-label={`${selected.code} this week`}>
+                    <p className="text-[12px] text-[var(--ink4)]">
+                      <b className="text-[var(--qink)]">
+                        {selected.flag ? `${selected.flag} ` : ""}
+                        {selected.name}
+                      </b>{" "}
+                      · this week&apos;s {instanceLabel.toLowerCase()} check-in. The product&apos;s own update is under <button type="button" onClick={() => pickInstance(null)} className={`font-semibold text-[var(--brand)] underline-offset-2 hover:underline ${FOCUS}`}>All</button>.
+                    </p>
+                    <MarketCheckInCard key={selected.orgUnitId} projectId={data.id} orgUnitId={selected.orgUnitId} initial={selected.checkIn} canGovern={canGovern} />
+                  </section>
+                ) : (
+                  ci && <StatusUpdateCard projectId={data.id} ci={ci} onChange={setCi} onGoToDelivery={() => setTab("Delivery")} />
+                )}
                 <WeekActivity projectId={data.id} canNudge={canGovern} />
                 <ReportHistory projectId={data.id} />
               </div>
@@ -125,7 +166,7 @@ export function ProjectWorkspace({
                   <section className={`${CARD} p-4`} style={CARD_BG} aria-labelledby="ws-markets">
                     <div className="mb-2.5 flex items-baseline justify-between">
                       <h2 id="ws-markets" className="text-[13px] font-semibold text-foreground">
-                        Markets
+                        {instanceLabel === "Instance" ? "Instances" : `${instanceLabel}s`}
                       </h2>
                       <button type="button" onClick={() => setTab("Delivery")} className={`flex items-center gap-0.5 rounded-[4px] text-[11px] font-semibold text-[var(--ink4)] transition-colors hover:text-brand ${FOCUS}`}>
                         Delivery <ArrowRight className="size-3" aria-hidden />
@@ -133,10 +174,12 @@ export function ProjectWorkspace({
                     </div>
                     <div className="flex flex-col">
                       {markets.map((m) => (
-                        <Link
+                        <button
                           key={m.orgUnitId}
-                          href={`/projects/${data.id}/markets/${m.orgUnitId}`}
-                          className={`grid grid-cols-[44px_minmax(0,1fr)_40px] items-center gap-2.5 rounded-[4px] border-b border-[var(--hair2)] py-2 text-[12.5px] transition-colors last:border-0 hover:text-brand ${FOCUS}`}
+                          type="button"
+                          onClick={() => pickInstance(m.orgUnitId)}
+                          aria-pressed={instance === m.orgUnitId}
+                          className={`grid w-full grid-cols-[44px_minmax(0,1fr)_40px] items-center gap-2.5 rounded-[4px] border-b border-[var(--hair2)] py-2 text-left text-[12.5px] transition-colors last:border-0 hover:text-brand aria-pressed:text-brand ${FOCUS}`}
                         >
                           <span className="truncate font-semibold text-[var(--qink)]">
                             {m.flag ? `${m.flag} ` : ""}
@@ -146,7 +189,7 @@ export function ProjectWorkspace({
                             <span className="block h-full rounded-full" style={{ width: `${m.progress}%`, ...ragFill(m.rag) }} />
                           </span>
                           <span className="text-right font-mono text-[10.5px] tabular-nums text-[var(--ink4)]">{m.progress}%</span>
-                        </Link>
+                        </button>
                       ))}
                     </div>
                   </section>
@@ -159,35 +202,43 @@ export function ProjectWorkspace({
           <TabsContent value="Delivery" className="mt-5">
             <div className="flex flex-col gap-5">
               <div className="flex flex-col gap-3.5">
-                <h3 className="text-[13px] font-semibold text-foreground">Build track</h3>
+                <h3 className="text-[13px] font-semibold text-foreground">{selected ? `${selected.code} · gates` : "Build track"}</h3>
                 <div className={`${CARD} p-4`} style={CARD_BG}>
-                  <CheckpointMatrix projectId={data.id} />
+                  {selected && (
+                    <p className="mb-2 text-[11.5px] text-[var(--ink4)]">
+                      This {instanceLabel.toLowerCase()}&apos;s own gate states — the product&apos;s are under All. Same template, recorded per {instanceLabel.toLowerCase()}.
+                    </p>
+                  )}
+                  <CheckpointMatrix key={instance ?? "product"} projectId={data.id} orgUnitId={instance} />
                 </div>
                 <div className={`${CARD} p-4`} style={CARD_BG}>
                   <ProjectMilestonesSection projectId={data.id} canEdit={canEdit} />
                 </div>
               </div>
               <div className="flex flex-col gap-3.5">
-                <h3 className="text-[13px] font-semibold text-foreground">In-market track</h3>
+                <h3 className="text-[13px] font-semibold text-foreground">{instanceLabel === "Instance" ? "Instances" : `${instanceLabel}s`}</h3>
                 <div className={`${CARD} p-4`} style={CARD_BG}>
                   <div className="mb-2.5 flex items-center justify-between">
-                    <span className="text-[13px] font-semibold text-foreground">Market rollout</span>
-                    <span className="text-[10.5px] text-ink-3">weekly check-ins live on each market page</span>
+                    <span className="text-[13px] font-semibold text-foreground">Rollout</span>
+                    <button type="button" onClick={() => setTab("Instances")} className={`text-[10.5px] font-semibold text-[var(--ink4)] hover:text-brand ${FOCUS}`}>
+                      Manage {instanceLabel === "Instance" ? "instances" : `${instanceLabel.toLowerCase()}s`} →
+                    </button>
                   </div>
                   {markets.length === 0 ? (
                     <p className="text-xs text-ink-3">
-                      No market tracks — this project ships to no subsidiaries yet. Markets are picked in the project wizard or
-                      inherited from a Rollout portfolio.
+                      This product ships to no {instanceLabel === "Instance" ? "instances" : `${instanceLabel.toLowerCase()}s`} yet — add them under the Instances tab, or pick them when creating a project.
                     </p>
                   ) : (
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
                       {markets.map((m) => {
                         const tok = ragToken(m.rag);
                         return (
-                          <Link
+                          <button
                             key={m.orgUnitId}
-                            href={`/projects/${data.id}/markets/${m.orgUnitId}`}
-                            className={`flex flex-col gap-1 rounded-[10px] border border-[var(--w07)] p-2.5 transition-colors hover:border-[var(--brand)] ${FOCUS}`}
+                            type="button"
+                            onClick={() => pickInstance(m.orgUnitId)}
+                            aria-pressed={instance === m.orgUnitId}
+                            className={`flex flex-col gap-1 rounded-[10px] border border-[var(--w07)] p-2.5 text-left transition-colors hover:border-[var(--brand)] aria-pressed:border-[var(--brand)] ${FOCUS}`}
                           >
                             <span className="flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
                               <span className="size-1.5 rounded-full" style={{ background: `var(${tok})` }} aria-hidden />
@@ -200,7 +251,7 @@ export function ProjectWorkspace({
                             <span className="text-[10.5px] text-ink-3">
                               {m.progress}% · {m.rag}
                             </span>
-                          </Link>
+                          </button>
                         );
                       })}
                     </div>
@@ -208,6 +259,19 @@ export function ProjectWorkspace({
                 </div>
               </div>
             </div>
+          </TabsContent>
+
+          <TabsContent value="Instances" className="mt-5">
+            <InstancesTab
+              projectId={data.id}
+              label={instanceLabel}
+              pmScope={data.pmScope ?? "product"}
+              initial={instances.map((i) => ({ orgUnitId: i.orgUnitId, code: i.code, name: i.name, flag: i.flag, kind: i.kind, status: i.status, progress: i.progress, leadUserId: i.leadUserId, leadName: i.leadName, note: i.note }))}
+              onSelect={(id) => {
+                pickInstance(id);
+                setTab("This week");
+              }}
+            />
           </TabsContent>
 
           <TabsContent value="Board" className="mt-5">
@@ -311,6 +375,7 @@ function DetailsCard({ data, canGovern }: { data: ProjectPanelJson; canGovern: b
             portfolios={data.portfolios}
             budget={data.budget}
             canGovern={canGovern}
+            shape={{ instanceLabel: data.instanceLabel ?? "Market", moduleTracking: data.moduleTracking ?? "state", instanceTagging: data.instanceTagging ?? true, pmScope: data.pmScope ?? "product" }}
           />
         </div>
       )}

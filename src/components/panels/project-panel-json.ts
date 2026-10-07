@@ -13,7 +13,28 @@ export type CheckInJson = Omit<CheckInView, "overrideExpiresAt" | "confirmedAt" 
   canConfirm: boolean;
 };
 
+/** docs/38 — one instance of the product as the workspace sees it. */
+export interface InstanceJson {
+  orgUnitId: string;
+  code: string;
+  name: string;
+  flag: string | null;
+  kind: string;
+  status: string;
+  progress: number;
+  leadUserId: string | null;
+  leadName: string | null;
+  note: string | null;
+  rag: "Green" | "Amber" | "Red";
+  /** This week's instance check-in, when written. */
+  checkIn: { narrative: string; rag: string; isoWeek: string } | null;
+}
+
 export interface ProjectPanelJson {
+  /** docs/38 — the product's instances (markets / subsidiaries) with this week's RAG. */
+  instances?: InstanceJson[];
+  /** docs/38 — the instance the page opened on (?instance=), when it is one of the project's. */
+  initialInstance?: string | null;
   /** M-P2c — dependency-picker candidates (id/code/name of active projects, capped at 300). */
   allProjects?: { id: string; code: string; name: string }[];
   /** M-P2b — the Delivery tab's market strip (project × subsidiary tracks). Milestone A:
@@ -38,6 +59,11 @@ export interface ProjectPanelJson {
   priority: string;
   pipelineStage: string;
   statusNote: string | null;
+  /** docs/38 — the product's shape (see ProjectPanelData). */
+  instanceLabel?: string;
+  moduleTracking?: string;
+  instanceTagging?: boolean;
+  pmScope?: string;
   /** docs/18 §7 — may edit stage/priority/status note/portfolio (PM/lead, heads, execs). */
   canGovern?: boolean;
   portfolioId: string | null;

@@ -27,8 +27,8 @@ export async function getProjectSetup(ctx: TenantContext, projectId: string, now
   const ytOn = flagEnabled("youtrack");
   const [project, gateStates, documents, team, youtrack, checkIn] = await withTenant(ctx, (tx) =>
     Promise.all([
-      tx.project.findUnique({ where: { id: projectId }, select: { checkpointTemplateId: true, leadUserId: true } }),
-      tx.checkpointStatus.count({ where: { projectId, orgUnitId: null } }),
+      tx.project.findUnique({ where: { id: projectId }, select: { checkpointTemplateId: true, leadUserId: true, orgStatuses: { where: { retiredAt: null, leadUserId: { not: null } }, select: { id: true }, take: 1 } } }),
+      tx.checkpointStatus.count({ where: { projectId, orgUnitId: null, moduleId: null } }),
       tx.projectDocument.count({ where: { projectId } }),
       tx.projectMember.count({ where: { projectId } }),
       ytOn ? tx.projectIntegration.findFirst({ where: { projectId, provider: "youtrack", connected: true }, select: { id: true } }) : Promise.resolve(null),
@@ -38,7 +38,7 @@ export async function getProjectSetup(ctx: TenantContext, projectId: string, now
   const items = {
     gates: Boolean(project?.checkpointTemplateId) && gateStates > 0,
     documents: documents > 0,
-    team: team > 0 || Boolean(project?.leadUserId),
+    team: team > 0 || Boolean(project?.leadUserId) || (project?.orgStatuses.length ?? 0) > 0,
     youtrack: ytOn ? Boolean(youtrack) : null,
     thisWeek: Boolean(checkIn?.submittedToHeadAt),
   };

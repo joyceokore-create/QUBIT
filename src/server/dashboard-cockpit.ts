@@ -1,4 +1,5 @@
 import { withTenant, type TenantContext } from "@/lib/tenant";
+import { pmIdsOf } from "@/lib/ownership";
 import type { Rag } from "@/server/health";
 import { deriveDimensions, ragPair, isDispute, type DimensionMap, type DimRag } from "@/server/rag-dimensions";
 
@@ -143,8 +144,9 @@ export async function getCockpitData(ctx: TenantContext, now = new Date(), trend
         leadUserId: true,
         lead: { select: { name: true } },
         members: { where: { role: "Project Manager" }, select: { userId: true, user: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
+        pmScope: true,
         portfolio: { select: { name: true, category: true } },
-        orgStatuses: { select: { progress: true, status: true, orgUnit: { select: { name: true } } } },
+        orgStatuses: { where: { retiredAt: null }, select: { progress: true, status: true, leadUserId: true, orgUnit: { select: { name: true } } } },
         milestonesV2: {
           where: { status: "Pending" },
           orderBy: { dueDate: "asc" },
@@ -234,7 +236,7 @@ export async function getCockpitData(ctx: TenantContext, now = new Date(), trend
       portfolioName: p.portfolio?.name ?? null,
       pmId: p.leadUserId ?? p.members[0]?.userId ?? null,
       pmName: p.lead?.name ?? p.members[0]?.user.name ?? null,
-      pmIds: [...new Set([p.leadUserId, ...p.members.map((m) => m.userId)].filter((id): id is string => Boolean(id)))],
+      pmIds: pmIdsOf(p),
       status: p.status,
       priority: p.priority,
       reported,

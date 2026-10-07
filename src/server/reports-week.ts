@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
+import { pmIdsOf, runsProjectWhere } from "@/lib/ownership";
 import { can, isHeadOfProjects } from "@/lib/rbac";
 import { isoWeekId, isoWeekMonday, isValidIsoWeek, shiftIsoWeek, weekRange, weekWindow } from "@/lib/iso-week";
 import { effectiveRag, getCurrentCheckIn, type CheckInDraft } from "@/server/checkins";
@@ -61,6 +62,8 @@ const projectSelect = (weeks: string[]) =>
     lead: { select: { name: true } },
     portfolio: { select: { id: true, name: true } },
     members: { where: { role: "Project Manager" }, select: { userId: true } },
+    pmScope: true,
+    orgStatuses: { where: { retiredAt: null, leadUserId: { not: null } }, select: { leadUserId: true } },
     checkIns: { where: { isoWeek: { in: weeks } }, select: CHECKIN_SELECT },
   }) satisfies Prisma.ProjectSelect;
 type ProjectRow = Prisma.ProjectGetPayload<{ select: ReturnType<typeof projectSelect> }>;
@@ -304,7 +307,7 @@ export async function getReportsWeek(
       tx.project.findMany({
         where: {
           status: ACTIVE,
-          OR: [{ leadUserId: ctx.userId }, { members: { some: { userId: ctx.userId, role: "Project Manager" } } }],
+          ...runsProjectWhere(ctx.userId),
         },
         select: projectSelect(weeks),
         orderBy: { name: "asc" },
@@ -387,7 +390,7 @@ export async function getReportsWeek(
         computed: ci?.status !== "Confirmed",
         line: ci?.status === "Confirmed" ? ci.narrative : null,
         sentAt: ci?.submittedToHeadAt ?? null,
-        nudgeable: Boolean(p.leadUserId) || p.members.length > 0,
+        nudgeable: pmIdsOf(p).length > 0,
       };
       all.push(row);
       const name = p.portfolio?.name ?? "Unassigned";

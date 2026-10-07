@@ -50,7 +50,12 @@ export function WorkspaceHeader({
   data,
   members,
   onTeam,
+  instanceSwitch = null,
+  selectedInstance = null,
 }: {
+  /** docs/38 — the instance switch (rendered under the title) and the selected instance. */
+  instanceSwitch?: React.ReactNode;
+  selectedInstance?: { code: string; name: string; flag: string | null; rag: "Green" | "Amber" | "Red"; leadName: string | null; progress: number } | null;
   data: ProjectPanelJson;
   members: { name: string }[];
   onTeam: () => void;
@@ -95,10 +100,12 @@ export function WorkspaceHeader({
         <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-2">
           <div className="flex min-h-[36px] flex-wrap items-center gap-2.5">
             <h1 className="font-heading text-[26px] rv:text-heading-lg font-bold leading-[1.25] tracking-[-.6px] text-[var(--qink)]">{data.name}</h1>
-            {ci && <RagChip label="Build" rag={ci.buildRag} />}
-            {ci && markets.length > 0 && <RagChip label="In market" rag={ci.marketRag} />}
+            {ci && !selectedInstance && <RagChip label="Build" rag={ci.buildRag} />}
+            {ci && !selectedInstance && markets.length > 0 && <RagChip label={data.instanceLabel === "Subsidiary" ? "Subsidiaries" : data.instanceLabel === "Instance" ? "Instances" : "In market"} rag={ci.marketRag} />}
+            {selectedInstance && <RagChip label={`${selectedInstance.flag ? `${selectedInstance.flag} ` : ""}${selectedInstance.code}`} rag={selectedInstance.rag} />}
             {data.canEdit && <EditProjectDialog project={data} onUpdated={() => router.refresh()} />}
           </div>
+          {instanceSwitch}
           {data.description && (
             <p className="max-w-[620px] text-[13.5px] rv:text-body-sm leading-[1.5] text-[var(--ink3)]">{data.description}</p>
           )}
@@ -115,9 +122,15 @@ export function WorkspaceHeader({
               </span>
             )}
             {data.programmeName && <span>{data.programmeName}</span>}
-            {markets.length > 0 && (
+            {selectedInstance && (
               <span>
-                Markets · <b className="text-[var(--qink)]">{markets.map((m) => m.code).join(", ")}</b>
+                {selectedInstance.name} · <b className="text-[var(--qink)]">{selectedInstance.progress}%</b>
+                {selectedInstance.leadName && (
+                  <>
+                    {" "}
+                    · lead <b className="text-[var(--qink)]">{selectedInstance.leadName}</b>
+                  </>
+                )}
               </span>
             )}
             <span>

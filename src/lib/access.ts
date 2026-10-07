@@ -24,8 +24,12 @@ function isQaPhase(phase: string | null | undefined): boolean {
 
 /** True if `userId` leads `projectId` or holds a PM-type role on it. Runs inside a tx. */
 async function isDeliveryOwnerTx(tx: Tx, userId: string, projectId: string): Promise<boolean> {
+  // docs/38 — an instance lead runs the product too when the project's pmScope is "instance".
   const [lead, member] = await Promise.all([
-    tx.project.findFirst({ where: { id: projectId, leadUserId: userId }, select: { id: true } }),
+    tx.project.findFirst({
+      where: { id: projectId, OR: [{ leadUserId: userId }, { pmScope: "instance", orgStatuses: { some: { leadUserId: userId, retiredAt: null } } }] },
+      select: { id: true },
+    }),
     tx.projectMember.findFirst({
       where: { projectId, userId, role: { in: PROJECT_WRITE_ROLES } },
       select: { id: true },
@@ -38,7 +42,10 @@ async function isDeliveryOwnerTx(tx: Tx, userId: string, projectId: string): Pro
  * "Part of the project": risks/tasks may be written by anyone on the project (per Joyce). */
 async function isProjectMemberTx(tx: Tx, userId: string, projectId: string): Promise<boolean> {
   const [lead, member] = await Promise.all([
-    tx.project.findFirst({ where: { id: projectId, leadUserId: userId }, select: { id: true } }),
+    tx.project.findFirst({
+      where: { id: projectId, OR: [{ leadUserId: userId }, { pmScope: "instance", orgStatuses: { some: { leadUserId: userId, retiredAt: null } } }] },
+      select: { id: true },
+    }),
     tx.projectMember.findFirst({ where: { projectId, userId }, select: { id: true } }),
   ]);
   return Boolean(lead || member);

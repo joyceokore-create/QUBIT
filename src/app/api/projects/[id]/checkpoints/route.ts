@@ -28,12 +28,18 @@ const STATUS: Record<CheckpointError["code"], number> = {
   GATE_UNMET: 409,
 };
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+// docs/38 — ?orgUnitId= scopes the matrix to one instance's gates, ?moduleId= to one
+// module's own gates (both: that module in that instance). PATCH carries the same scope.
+const Scope = z.object({ orgUnitId: z.string().uuid().nullable().optional(), moduleId: z.string().min(1).nullable().optional() });
+
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const guard = await requirePermission("project:read");
   if ("response" in guard) return guard.response;
   const { id } = await params;
+  const url = new URL(req.url);
+  const scope = Scope.safeParse({ orgUnitId: url.searchParams.get("orgUnitId") || null, moduleId: url.searchParams.get("moduleId") || null });
   const [checkpoints, templates] = await Promise.all([
-    getProjectCheckpoints(guard.ctx, id),
+    getProjectCheckpoints(guard.ctx, id, scope.success ? scope.data : undefined),
     listCheckpointTemplates(guard.ctx),
   ]);
   return NextResponse.json({
@@ -44,7 +50,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 const PatchBody = z.union([
-  SetCheckpointStateInput,
+  SetCheckpointStateInput.merge(Scope),
   z.object({ templateId: z.string().min(1).nullable() }),
 ]);
 
@@ -68,7 +74,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const data =
       "templateId" in parsed.data
         ? await setProjectTemplate(ctx, id, parsed.data.templateId)
-        : await setCheckpointState(ctx, id, parsed.data);
+        : await setCheckpointState(ctx, id, parsed.data, { orgUnitId: parsed.data.orgUnitId ?? null, moduleId: parsed.data.moduleId ?? null });
     return NextResponse.json(data);
   } catch (e) {
     if (e instanceof CheckpointError) {

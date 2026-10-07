@@ -81,6 +81,8 @@ BEGIN
     'checkpoint',
     'checkpoint_status',
     'market_check_in',
+    'project_module',
+    'module_instance_status',
     -- Revamp M8 — document approvals, requirements traceability, closure lessons.
     'document_approval',
     'requirement',

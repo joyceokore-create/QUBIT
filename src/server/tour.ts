@@ -2,6 +2,7 @@ import "server-only";
 import { audit } from "@/lib/audit";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { ownView } from "@/lib/reports-view";
+import { runsProjectWhere } from "@/lib/ownership";
 import { getProjectSetup } from "@/server/project-setup";
 
 /**
@@ -47,7 +48,7 @@ export async function shouldOfferTour(ctx: TenantContext, now = new Date()): Pro
       tx.project.findMany({
         where: {
           status: { notIn: ["Completed", "Cancelled"] },
-          OR: [{ leadUserId: ctx.userId }, { members: { some: { userId: ctx.userId, role: "Project Manager" } } }],
+          ...runsProjectWhere(ctx.userId),
         },
         select: { id: true, code: true, name: true },
         orderBy: { createdAt: "asc" },

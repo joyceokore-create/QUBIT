@@ -4,6 +4,7 @@ import { canWriteProject } from "@/lib/access";
 import { can } from "@/lib/rbac";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { isoWeekId, isoWeekMonday, isValidIsoWeek } from "@/lib/iso-week";
+import { runsProjectWhere } from "@/lib/ownership";
 
 import { confirmCheckIn, getCurrentCheckIn, RAGS, saveCheckInDraft } from "@/server/checkins";
 import { CheckpointError, getProjectCheckpoints, setCheckpointState } from "@/server/checkpoints";
@@ -139,7 +140,7 @@ async function matchableProjects(ctx: TenantContext): Promise<MatchableProject[]
     tx.project.findMany({
       where: {
         status: { notIn: ["Completed", "Cancelled"] },
-        ...(broad ? {} : { OR: [{ leadUserId: ctx.userId }, { members: { some: { userId: ctx.userId, role: "Project Manager" } } }] }),
+        ...(broad ? {} : runsProjectWhere(ctx.userId)),
       },
       select: { id: true, code: true, name: true },
       orderBy: { name: "asc" },
