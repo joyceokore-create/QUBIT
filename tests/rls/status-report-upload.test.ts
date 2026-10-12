@@ -10,6 +10,7 @@ import { confirmCheckIn, getCurrentCheckIn } from "@/server/checkins";
 import { getProjectCheckpoints } from "@/server/checkpoints";
 import { addMarkets } from "@/server/markets";
 import { createProjectInstance, listProjectInstances } from "@/server/project-instances";
+import { composeFromMarkets, draftFromMarkets } from "@/server/market-rollup";
 import { getMarketTrack } from "@/server/rollout";
 import { applyStatusReport, buildStatusTemplate, getDeliveryCatalog, previewStatusReport } from "@/server/status-report-upload";
 import { resolveDelivery } from "@/lib/status-report-delivery";
@@ -194,5 +195,25 @@ describe("status-report upload — apply", () => {
     expect(rows.every((r) => r.delivery && r.delivery.gates.length === 0 && r.delivery.modules.length === 0)).toBe(true);
     expect(rows[1]!.cells.map((c) => c.column)).toEqual(["USSD"]);
     expect(preview.rows.some((r) => r.code === "SRU-C")).toBe(false); // not mine
+  });
+
+  it("drafts the product line from this week's market check-ins: worst RAG, one clause per market, missing markets named", async () => {
+    // The market one-pager above left an Amber check-in on the product's one market.
+    const comp = await composeFromMarkets(pm, product, NOW);
+    expect(comp).not.toBeNull();
+    expect(comp!.markets).toHaveLength(1);
+    expect(comp!.rag).toBe("Amber");
+    expect(comp!.narrative).toMatch(/^[A-Z]{2,4}: Market focus and blockers/);
+    expect(comp!.missing).toEqual([]);
+    // A product without markets composes nothing.
+    expect(await composeFromMarkets(pm, mine, NOW)).toBeNull();
+    // Saved as the draft (the week isn't sent) with the market RAG as a reasoned override.
+    const res = await draftFromMarkets(pm, product, NOW);
+    expect(res.saved).toBe(true);
+    const ci = await getCurrentCheckIn(pm, product, NOW);
+    expect(ci.status).toBe("Draft");
+    expect(ci.narrative).toBe(comp!.narrative);
+    if (ci.computedRag !== "Amber") expect(ci).toMatchObject({ ragOverride: "Amber", overrideReason: expect.stringMatching(/Worst of 1 market check-in/) });
+    await expect(draftFromMarkets(pm, mine, NOW)).rejects.toThrow(/no markets/);
   });
 });

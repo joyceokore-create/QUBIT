@@ -140,6 +140,13 @@ render); modules still work at product level (one state column, "Product").
   the computed one is proposed. `GET /api/reports/status-upload/template` builds QUBIT's own
   Excel template (Status + Channels + Read me sheets, prefilled with codes, gates, channel
   states and this week's draft) so the upload reads back exactly by code.
+- Product line from market check-ins (Joyce, 2026-10-12): `server/market-rollup.ts
+  composeFromMarkets` / `draftFromMarkets` — worst market RAG, one clause (first sentence)
+  per market, worst first, within 500 characters, the markets with no check-in named; saved
+  as the product's draft with the RAG as a reasoned override (prefill only once the week is
+  sent). `POST /api/projects/[id]/checkin/from-markets`; buttons on the workspace status card
+  ("Draft the line from market check-ins (n of m)") and the PM queue row. The PM still edits
+  and sends — nothing composed goes to the Head on its own.
 - Lists: `listProjectTasks`, `listDocuments`, `listRisks`, `listIssues`, `listBlockers`,
   `listMilestones` accept `{ orgUnitId?, moduleId? }`; create/update inputs accept the tags only when
   `instanceTagging` is on (else 400 `TAGGING_OFF`). Materialising a risk and blocking a task copy the

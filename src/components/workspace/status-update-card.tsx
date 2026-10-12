@@ -54,7 +54,8 @@ export function StatusUpdateCard({
   const [rag, setRag] = useState<Rag>((ci.ragOverride as Rag | null) ?? ci.computedRag);
   const [reason, setReason] = useState(ci.overrideReason ?? "");
   const [reasonTouched, setReasonTouched] = useState(false);
-  const [busy, setBusy] = useState<"send" | "draft" | "resend" | null>(null);
+  const [busy, setBusy] = useState<"send" | "draft" | "resend" | "compose" | null>(null);
+  const [composed, setComposed] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -68,6 +69,29 @@ export function StatusUpdateCard({
   const due = mounted ? dueState(new Date()) : null;
 
   const body = () => JSON.stringify({ narrative: narrative.trim(), ...(overridden ? { ragOverride: rag, overrideReason: reason.trim() } : {}) });
+
+  /** docs/38 — the product line from this week's market check-ins (worst RAG, one clause
+   * per market), saved as the draft when the week isn't sent yet; prefilled otherwise. */
+  const composeFromMarkets = async () => {
+    setBusy("compose");
+    setError(null);
+    const res = await fetch(`/api/projects/${projectId}/checkin/from-markets`, { method: "POST" });
+    const d = await res.json().catch(() => null);
+    setBusy(null);
+    if (!res.ok || !d?.data) {
+      setError(d?.error?.message ?? "Could not draft from the markets.");
+      return;
+    }
+    setNarrative(d.data.narrative);
+    setRag(d.data.rag);
+    setReason(d.data.rag !== ci.computedRag ? `Worst of ${d.data.markets.length} market check-ins` : "");
+    setMode("edit");
+    setComposed(`${d.data.markets.length} of ${d.data.markets.length + d.data.missing.length} markets${d.data.missing.length ? ` · no check-in yet: ${d.data.missing.join(", ")}` : ""}`);
+    if (d.data.view) {
+      setSavedAt(new Date());
+      onChange(d.data.view);
+    }
+  };
 
   const send = async () => {
     setBusy("send");
@@ -269,6 +293,18 @@ export function StatusUpdateCard({
               <button type="button" onClick={onGoToDelivery} className={`self-start text-[11.5px] font-semibold text-[var(--brand)] ${FOCUS} rounded-[4px]`}>
                 Edit market check-ins →
               </button>
+              {ci.canConfirm && (
+                <button
+                  type="button"
+                  onClick={() => void composeFromMarkets()}
+                  disabled={busy !== null || !ci.markets.some((m) => m.checkedIn)}
+                  title={ci.markets.some((m) => m.checkedIn) ? "Worst market RAG and one clause per market, for you to edit and send" : "No market has checked in this week yet"}
+                  className={`self-start text-[11.5px] font-semibold text-[var(--brand)] disabled:text-[var(--ink5)] ${FOCUS} rounded-[4px]`}
+                >
+                  {busy === "compose" ? "Drafting…" : `Draft the line from market check-ins (${ci.markets.filter((m) => m.checkedIn).length} of ${ci.markets.length})`}
+                </button>
+              )}
+              {composed && <span className="text-[10.5px] text-[var(--ink4)]">Drafted from {composed}.</span>}
             </>
           )}
         </div>

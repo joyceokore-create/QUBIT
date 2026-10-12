@@ -37,6 +37,9 @@ export interface PmRowJson {
   sentToHead: boolean;
   sentAt: string | null;
   canConfirm: boolean;
+  /** docs/38 — products with markets: how many of them checked in this week. */
+  marketsTotal: number;
+  marketsCheckedIn: number;
 }
 
 const RAGS = ["Green", "Amber", "Red"] as const;
@@ -192,11 +195,30 @@ function PmRow({
   const [reason, setReason] = useState(r.overrideReason ?? "");
   const [reasonTouched, setReasonTouched] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [composing, setComposing] = useState(false);
+  const [composed, setComposed] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const overridden = rag !== r.computedRag;
   const reasonOk = !overridden || reason.trim().length >= 5;
   const workspace = `/projects/${r.projectId}?tab=This%20week`;
   const legacyUnsent = r.confirmed && !r.sentToHead;
+
+  /** The product line from this week's market check-ins (worst RAG, a clause per market). */
+  const draftFromMarkets = async () => {
+    setComposing(true);
+    setError(null);
+    const res = await fetch(`/api/projects/${r.projectId}/checkin/from-markets`, { method: "POST" });
+    const d = await res.json().catch(() => null);
+    setComposing(false);
+    if (!res.ok || !d?.data) {
+      setError(d?.error?.message ?? "Could not draft from the markets.");
+      return;
+    }
+    setNarrative(d.data.narrative);
+    setRag(d.data.rag);
+    setReason(d.data.rag !== r.computedRag ? `Worst of ${d.data.markets.length} market check-ins` : "");
+    setComposed(`${d.data.markets.length} of ${d.data.markets.length + d.data.missing.length} markets${d.data.missing.length ? ` · no check-in yet: ${d.data.missing.join(", ")}` : ""}`);
+  };
 
   const send = async () => {
     setBusy(true);
@@ -318,6 +340,14 @@ function PmRow({
                 <span className="text-[10.5px] text-[var(--ink5)]">Required · the override expires in 7 days</span>
                 {reasonTouched && !reasonOk && <span className="text-[10.5px] text-[var(--bad)]">Give at least 5 characters.</span>}
               </div>
+            )}
+            {r.marketsTotal > 0 && (
+              <p className="flex flex-wrap items-center gap-2 text-[11.5px] text-[var(--ink4)]">
+                <button type="button" onClick={() => void draftFromMarkets()} disabled={composing || r.marketsCheckedIn === 0} className={`${QUIET} text-[var(--brand)] disabled:text-[var(--ink5)]`} title={r.marketsCheckedIn === 0 ? "No market has checked in this week yet" : "Worst market RAG and one clause per market, for you to edit"}>
+                  {composing ? "Drafting…" : `Draft from market check-ins (${r.marketsCheckedIn} of ${r.marketsTotal})`}
+                </button>
+                {composed && <span>Drafted from {composed}</span>}
+              </p>
             )}
             <div className="flex flex-wrap items-center gap-2">
               <button type="button" onClick={() => void send()} disabled={busy || !narrative.trim() || !reasonOk} className={`${PRIMARY} w-full sm:w-auto`}>

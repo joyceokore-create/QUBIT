@@ -65,6 +65,9 @@ const projectSelect = (weeks: string[]) =>
     pmScope: true,
     orgStatuses: { where: { retiredAt: null, leadUserId: { not: null } }, select: { leadUserId: true } },
     checkIns: { where: { isoWeek: { in: weeks } }, select: CHECKIN_SELECT },
+    // docs/38 — products with markets: live markets, and which checked in the chosen week.
+    _count: { select: { orgStatuses: { where: { retiredAt: null } } } },
+    marketCheckIns: { where: { isoWeek: weeks[weeks.length - 1] ?? "" }, select: { orgUnitId: true } },
   }) satisfies Prisma.ProjectSelect;
 type ProjectRow = Prisma.ProjectGetPayload<{ select: ReturnType<typeof projectSelect> }>;
 
@@ -97,6 +100,10 @@ export interface PmWeekRow {
   sentToHead: boolean;
   sentAt: Date | null;
   canConfirm: boolean;
+  /** docs/38 — products with markets: live markets, and how many checked in this week
+   * (the queue offers "Draft from market check-ins"). */
+  marketsTotal: number;
+  marketsCheckedIn: number;
 }
 
 export interface GridCell {
@@ -318,7 +325,7 @@ export async function getReportsWeek(
     let drafted = 0;
     for (const p of projects) {
       const ci = p.checkIns.find((c) => c.isoWeek === isoWeek);
-      const base = { projectId: p.id, code: p.code, name: p.name, portfolioName: p.portfolio?.name ?? "Unassigned", canConfirm };
+      const base = { projectId: p.id, code: p.code, name: p.name, portfolioName: p.portfolio?.name ?? "Unassigned", canConfirm, marketsTotal: p._count.orgStatuses, marketsCheckedIn: p.marketCheckIns.length };
       if (ci) {
         rows.push({
           ...base,
