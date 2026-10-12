@@ -151,6 +151,16 @@ render); modules still work at product level (one state column, "Product").
   `modules[]` and `markets[]` (check-ins); lines are drafted and sent from the queue as
   before. The old upload dialog and the Excel template are gone; `?upload=1` redirects to
   the page.
+- Stage clarifier + learned vocabulary (Joyce, 2026-10-12 — "Requirements aligned; build
+  ongoing" means Prototype): under the status note each card says how the line was read
+  ("reads as MVP1, from 'build'"), with a gate select to answer (the answer re-reads the
+  line: that gate in progress — done when the line says so — and the gates before it; "no
+  gate" moves nothing) and "Remember '<clause>' = <gate>" chips per phrase of the line.
+  Remembered phrases live in `stage_term` (tenant-wide, RLS, migration
+  `20261012160000_i5_stage_terms`, audited), ride on every catalog as `stageTerms`, and
+  `stageGate` checks them BEFORE the built-in synonyms (longest phrase wins). "100 %",
+  "production build complete" close the whole track; a percentage under 100 ("Build 90%
+  complete", a % Complete column) vetoes done.
 - Product line from market check-ins (Joyce, 2026-10-12): `server/market-rollup.ts
   composeFromMarkets` / `draftFromMarkets` — worst market RAG, one clause (first sentence)
   per market, worst first, within 500 characters, the markets with no check-in named; saved

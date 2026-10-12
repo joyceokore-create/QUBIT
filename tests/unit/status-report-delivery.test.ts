@@ -4,7 +4,7 @@
 // grid cells and per-market lists become module states; unchanged items are counted,
 // not written.
 import { describe, expect, it } from "vitest";
-import { gateStateFrom, isNotApplicable, matchName, moduleStateFrom, resolveDelivery, splitTitleMarket, stageGate, type DeliveryCatalog } from "@/lib/status-report-delivery";
+import { gateStateFrom, isNotApplicable, learnedTerm, matchName, moduleStateFrom, resolveDelivery, splitTitleMarket, stageClauses, stageGate, type DeliveryCatalog } from "@/lib/status-report-delivery";
 import { matchProjectAndMarket } from "@/server/status-report/match";
 
 const KE = { orgUnitId: "11111111-1111-4111-8111-111111111111", code: "KE", name: "Kenya", flag: "🇰🇪" };
@@ -110,6 +110,22 @@ describe("resolveDelivery", () => {
     expect(all(resolveDelivery({ project: "Swipe Agent Banking", stage: "Fixing issues on receipts", percent: 100, gates: [], cells: [] }, catalog))).toEqual(["BRD:Done", "MVP1:Done", "UAT:Done"]);
     // 90 % is not done: the stage still decides.
     expect(all(resolveDelivery({ project: "Swipe Agent Banking", stage: "Build 90% complete", percent: 90, gates: [], cells: [] }, catalog))).toEqual(["BRD:Done", "MVP1:InProgress"]);
+  });
+  it("learned terms beat the built-in words, the PM's answer beats both, and the clarifier gets the reading", () => {
+    const line = "Requirements aligned; build ongoing. (deck: 20%)";
+    expect(stageClauses(line)).toEqual(["Requirements aligned", "build ongoing"]);
+    // Built-in: "build" → MVP1.
+    const guess = resolveDelivery({ project: "Swipe Agent Banking", stage: line, gates: [], cells: [] }, catalog);
+    expect(guess.stage).toMatchObject({ gateName: "MVP1", state: "InProgress", matched: "build", learned: false });
+    // Taught: "build ongoing" → Prototype (this catalog has no Prototype gate, so no gate moves — but the reading says so).
+    const taught: DeliveryCatalog = { ...catalog, gates: [...catalog.gates, { checkpointId: "g-proto", name: "Prototype", orderIndex: 1 }], stageTerms: [{ term: "build ongoing", gateName: "Prototype" }] };
+    expect(learnedTerm(line, taught.stageTerms)?.gateName).toBe("Prototype");
+    const learned = resolveDelivery({ project: "Swipe Agent Banking", stage: line, gates: [], cells: [] }, taught);
+    expect(learned.stage).toMatchObject({ gateName: "Prototype", state: "InProgress", matched: "build ongoing", learned: true });
+    expect(learned.gates.map((g) => `${g.name}:${g.to}`)).toEqual(["BRD:Done", "Prototype:InProgress"]);
+    // The PM's own answer wins, and "no gate" means nothing moves.
+    expect(resolveDelivery({ project: "Swipe Agent Banking", stage: line, gates: [], cells: [] }, taught, { stageGateName: "UAT" }).gates.map((g) => g.name)).toEqual(["BRD", "Prototype", "MVP1", "UAT"]);
+    expect(resolveDelivery({ project: "Swipe Agent Banking", stage: line, gates: [], cells: [] }, taught, { stageGateName: null }).gates).toEqual([]);
   });
   it("reads tracker gate cells: ✓ done, n/a left alone, free text listed as not placed", () => {
     const plan = resolveDelivery(

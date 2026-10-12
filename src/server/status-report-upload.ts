@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import { audit } from "@/lib/audit";
 import { canWriteProject } from "@/lib/access";
 import { can } from "@/lib/rbac";
 import { withTenant, type TenantContext } from "@/lib/tenant";
@@ -119,7 +120,34 @@ export async function getDeliveryCatalog(ctx: TenantContext, projectId: string):
       gates: project.checkpointTemplate?.checkpoints.map((c) => ({ checkpointId: c.id, name: c.name, orderIndex: c.orderIndex })) ?? [],
       gateStates: gateStates.map((g) => ({ orgUnitId: g.orgUnitId, checkpointId: g.checkpointId, state: g.state as CheckpointState })),
       moduleStates: moduleStates.map((m) => ({ moduleId: m.moduleId, orgUnitId: m.orgUnitId, state: m.state as InstanceState, note: m.note })),
+      stageTerms: await tx.stageTerm.findMany({ select: { term: true, gateName: true }, orderBy: { term: "asc" } }),
     };
+  });
+}
+
+/** docs/38 — the tenant's stage vocabulary, learned from the workspace's clarifier. */
+export const StageTermInput = z.object({
+  term: z.string().trim().min(3).max(60),
+  /** A gate name on the Product build track; null forgets the term. */
+  gateName: z.string().trim().min(1).max(60).nullable(),
+});
+export async function saveStageTerm(ctx: TenantContext, input: z.infer<typeof StageTermInput>): Promise<{ term: string; gateName: string | null }> {
+  const term = input.term.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  if (term.length < 3) throw new UploadWeekError("Give a phrase of at least three letters.");
+  return withTenant(ctx, async (tx) => {
+    const existing = await tx.stageTerm.findUnique({ where: { tenantId_term: { tenantId: ctx.tenantId, term } }, select: { id: true, gateName: true } });
+    if (!input.gateName) {
+      if (existing) {
+        await tx.stageTerm.delete({ where: { id: existing.id } });
+        await audit(tx, ctx, { action: "delete", entityType: "stage_term", entityId: existing.id, before: { term, gateName: existing.gateName } });
+      }
+      return { term, gateName: null };
+    }
+    const row = existing
+      ? await tx.stageTerm.update({ where: { id: existing.id }, data: { gateName: input.gateName, createdById: ctx.userId } })
+      : await tx.stageTerm.create({ data: { tenantId: ctx.tenantId, term, gateName: input.gateName, createdById: ctx.userId } });
+    await audit(tx, ctx, { action: existing ? "update" : "create", entityType: "stage_term", entityId: row.id, before: existing ? { gateName: existing.gateName } : undefined, after: { term, gateName: input.gateName } });
+    return { term, gateName: input.gateName };
   });
 }
 

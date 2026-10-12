@@ -12,7 +12,7 @@ import { addMarkets } from "@/server/markets";
 import { createProjectInstance, listProjectInstances } from "@/server/project-instances";
 import { composeFromMarkets, draftFromMarkets } from "@/server/market-rollup";
 import { getMarketTrack } from "@/server/rollout";
-import { applyStatusReport, getDeliveryCatalog, getStatusWorkspace } from "@/server/status-report-upload";
+import { applyStatusReport, getDeliveryCatalog, getStatusWorkspace, saveStageTerm } from "@/server/status-report-upload";
 import { resolveDelivery } from "@/lib/status-report-delivery";
 import { createUsers, cleanupFixtureUsers } from "./_users";
 
@@ -61,6 +61,7 @@ describe("status-report upload — apply", () => {
       await tx.checkIn.deleteMany({ where: { projectId: { in: ids } } });
       await tx.notification.deleteMany({ where: { createdAt: { gte: new Date(Date.now() - 120_000) }, link: { contains: "/reports" } } });
       await tx.domainEvent.deleteMany({ where: { entityId: { in: ids } } });
+      await tx.stageTerm.deleteMany({ where: { term: "build ongoing" } });
       await tx.auditLog.deleteMany({ where: { actorId: { in: [pm.userId, other.userId] } } });
       await tx.project.deleteMany({ where: { id: { in: ids } } });
     });
@@ -234,5 +235,15 @@ describe("status-report upload — apply", () => {
     expect(ci.narrative).toBe(comp!.narrative);
     if (ci.computedRag !== "Amber") expect(ci).toMatchObject({ ragOverride: "Amber", overrideReason: expect.stringMatching(/Worst of 1 market check-in/) });
     await expect(draftFromMarkets(pm, mine, NOW)).rejects.toThrow(/no markets/);
+  });
+
+  it("learns a stage phrase tenant-wide, serves it in every catalog, and forgets it on null", async () => {
+    expect(await saveStageTerm(pm, { term: "Build ongoing", gateName: "Prototype" })).toEqual({ term: "build ongoing", gateName: "Prototype" });
+    expect((await getDeliveryCatalog(other, mine))!.stageTerms).toEqual(expect.arrayContaining([{ term: "build ongoing", gateName: "Prototype" }]));
+    // demo-b never sees riverbank's vocabulary.
+    const foreignCatalog = await getDeliveryCatalog({ tenantId: dbId, userId: "seed", roles: ["HeadOfProjects"] }, foreign);
+    expect(foreignCatalog?.stageTerms ?? []).not.toEqual(expect.arrayContaining([{ term: "build ongoing", gateName: "Prototype" }]));
+    expect(await saveStageTerm(pm, { term: "build ongoing", gateName: null })).toEqual({ term: "build ongoing", gateName: null });
+    expect((await getDeliveryCatalog(pm, mine))!.stageTerms).not.toEqual(expect.arrayContaining([{ term: "build ongoing", gateName: "Prototype" }]));
   });
 });

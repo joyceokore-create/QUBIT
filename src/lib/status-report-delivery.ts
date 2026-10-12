@@ -41,6 +41,12 @@ export interface DeliveryCatalog {
   /** Product track (orgUnitId null) and every market's own copy of it. */
   gateStates: { orgUnitId: string | null; checkpointId: string; state: CheckpointState }[];
   moduleStates: { moduleId: string; orgUnitId: string | null; state: InstanceState; note: string | null }[];
+  /** The tenant's learned stage vocabulary ("build ongoing" → Prototype), checked first. */
+  stageTerms?: StageTerm[];
+}
+export interface StageTerm {
+  term: string;
+  gateName: string;
 }
 
 /** A "Where we are" item on the slide: "2 · IN REVIEW" + name + note. */
@@ -83,9 +89,23 @@ export interface ModuleChange {
   /** Live → UAT and the like: shown, not ticked by default. */
   backwards: boolean;
 }
+/** How a status line was read into a gate — for the clarifier. */
+export interface StageReading {
+  /** The gate the line was read as (null = no gate recognised). */
+  gateName: string | null;
+  state: CheckpointState | null;
+  /** The phrase that decided it ("build ongoing"), or null when the whole track closed. */
+  matched: string | null;
+  /** Whether a learned term decided it. */
+  learned: boolean;
+  /** Phrases in the line a PM could teach ("Requirements aligned", "build ongoing"). */
+  clauses: string[];
+}
 export interface DeliveryPlan {
   /** The market the slide is about (from its title), or null = the whole product. */
   market: CatalogMarket | null;
+  /** The stage line's reading, when the row had one and no gate columns. */
+  stage: StageReading | null;
   gates: GateChange[];
   /** Gate items the slide names that already read the same in QUBIT. */
   gatesUnchanged: number;
@@ -197,7 +217,31 @@ const STAGE_DONE_WORDS = /\b(complete|completed|live|done|launched|signed off|si
 /** "Production build 100%", "build complete", a % Complete of 100: the whole track is done. */
 const TRACK_DONE = /\b(production|build|delivery|project)\b[^.]*\b(complete|completed|done|finished|100\s*%)|\b100\s*%\s*(complete|done)?/i;
 
-export function stageGate(stage: string, gates: CatalogGate[]): CatalogGate | null {
+/** The phrases of a status line a PM could teach: split on ; , / . and brackets. */
+export function stageClauses(stage: string): string[] {
+  return stage
+    .replace(/\([^)]*\)/g, " ")
+    .split(/[;,/.·—–|]+/)
+    .map((c) => c.trim())
+    .filter((c) => c.length >= 3 && c.length <= 48 && /[a-z]/i.test(c))
+    .filter((c, i, a) => a.findIndex((x) => fold(x) === fold(c)) === i);
+}
+
+/** The learned term that decides a line (longest whole-phrase match in the folded line). */
+export function learnedTerm(stage: string, terms: StageTerm[] | undefined): StageTerm | null {
+  if (!terms?.length) return null;
+  const f = ` ${fold(stage)} `;
+  let best: StageTerm | null = null;
+  for (const term of terms) {
+    const needle = ` ${fold(term.term)} `;
+    if (needle.trim() && f.includes(needle) && (!best || term.term.length > best.term.length)) best = term;
+  }
+  return best;
+}
+
+export function stageGate(stage: string, gates: CatalogGate[], terms?: StageTerm[]): CatalogGate | null {
+  const learned = learnedTerm(stage, terms);
+  if (learned) return matchName(learned.gateName, gates);
   const direct = matchName(stage, gates);
   if (direct) return direct;
   // The stage's head decides ("Pilot" in "Pilot (live; Phase 2 underway)"), the note only
@@ -211,11 +255,25 @@ export function stageGate(stage: string, gates: CatalogGate[]): CatalogGate | nu
   return null;
 }
 
+/** The word in the line that the built-in synonyms fired on, for the clarifier's "read from". */
+function synonymHit(stage: string): string | null {
+  const head = fold(stage.split(/[(/·—–-]/)[0] ?? "");
+  for (const text of [head, fold(stage)]) {
+    if (!text) continue;
+    for (const [re] of STAGE_SYNONYMS) {
+      const m = text.match(re);
+      if (m) return m[0] ?? null;
+    }
+  }
+  return null;
+}
+
 export function resolveDelivery(
   row: { project: string; stage?: string; percent?: number | null; gates: ParsedGate[]; cells: ParsedCell[] },
   catalog: DeliveryCatalog,
-  /** The PM's own choice of market (null = whole product); undefined = read the title. */
-  opts: { market?: CatalogMarket | null } = {},
+  /** The PM's own choice of market (null = whole product); undefined = read the title.
+   * stageGateName: the PM's own answer to "which gate is this stage?" (null = none). */
+  opts: { market?: CatalogMarket | null; stageGateName?: string | null } = {},
 ): DeliveryPlan {
   const market = opts.market === undefined ? splitTitleMarket(row.project, catalog.markets).market : opts.market;
   const unmatched = new Set<string>();
@@ -246,12 +304,14 @@ export function resolveDelivery(
     }
     byGate.set(gate.checkpointId, { checkpointId: gate.checkpointId, name: gate.name, from, to: want.state, source, blockedWanted: want.blockedWanted, backwards: GATE_RANK[want.state] < GATE_RANK[from] });
   }
+  let stageReading: StageReading | null = null;
   // No gate columns: "100 %" / "production build complete" closes the whole track — unless a
   // percentage under 100 ("Build 90% complete", a % Complete of 90) says it is not there yet.
   const pctInStage = row.stage?.match(/(\d{1,3})\s*%/);
   const under100 = (row.percent != null && row.percent < 100) || (pctInStage ? Number(pctInStage[1]) < 100 : false);
   const trackDone = row.percent === 100 || (!under100 && Boolean(row.stage) && TRACK_DONE.test(row.stage!));
   if (row.gates.length === 0 && trackDone) {
+    stageReading = { gateName: catalog.gates[catalog.gates.length - 1]?.name ?? null, state: "Done", matched: null, learned: false, clauses: [] };
     for (const g of catalog.gates) {
       const from = currentGate(g.checkpointId);
       if (from === "Done" || from === "Blocked") continue;
@@ -261,12 +321,15 @@ export function resolveDelivery(
   // No gate columns, but a Stage ("UAT / Pilot Readiness (VAPT in progress)"): the named
   // gate and everything before it.
   if (row.gates.length === 0 && row.stage && byGate.size === 0) {
-    const gate = stageGate(row.stage, catalog.gates);
+    const learned = opts.stageGateName === undefined ? learnedTerm(row.stage, catalog.stageTerms) : null;
+    const gate = opts.stageGateName === undefined ? stageGate(row.stage, catalog.gates, catalog.stageTerms) : opts.stageGateName ? matchName(opts.stageGateName, catalog.gates) : null;
+    stageReading = { gateName: gate?.name ?? null, state: null, matched: learned?.term ?? (gate ? synonymHit(row.stage) : null), learned: Boolean(learned), clauses: stageClauses(row.stage) };
     if (gate) {
       // "complete" with a percentage under 100 ("Build 90% complete") is still in progress.
       const done = STAGE_DONE_WORDS.test(row.stage) && !under100;
       const from = currentGate(gate.checkpointId);
       const to: CheckpointState = done ? "Done" : "InProgress";
+      stageReading.state = to;
       if (!(from === "Done" && to === "InProgress") && from !== "Blocked") byGate.set(gate.checkpointId, { checkpointId: gate.checkpointId, name: gate.name, from, to, source: `stage: ${row.stage}`, blockedWanted: false, backwards: false });
       for (const earlier of catalog.gates) {
         if (earlier.orderIndex >= gate.orderIndex || byGate.has(earlier.checkpointId)) continue;
@@ -324,7 +387,7 @@ export function resolveDelivery(
   const moduleOrder = new Map(catalog.modules.map((m, i) => [m.id, i]));
   modules.sort((a, b) => (marketOrder.get(a.orgUnitId ?? "") ?? -1) - (marketOrder.get(b.orgUnitId ?? "") ?? -1) || (moduleOrder.get(a.moduleId) ?? 0) - (moduleOrder.get(b.moduleId) ?? 0));
 
-  return { market, gates, gatesUnchanged, modules, modulesUnchanged, unmatched: [...unmatched] };
+  return { market, stage: stageReading, gates, gatesUnchanged, modules, modulesUnchanged, unmatched: [...unmatched] };
 }
 
 export const GATE_STATE_LABEL: Record<CheckpointState, string> = { NotStarted: "Not started", InProgress: "In progress", Done: "Done", Blocked: "Blocked" };

@@ -92,6 +92,7 @@ model Tenant {
   rollupRecipients        RollupRecipient[]
   projectModules          ProjectModule[]
   moduleInstanceStatuses  ModuleInstanceStatus[]
+  stageTerms              StageTerm[]
   ideas                   Idea[]
 
   @@map("tenant")
@@ -2006,4 +2007,25 @@ model Decision {
 
   @@index([tenantId, projectId, decidedAt])
   @@map("decision")
+}
+
+/**
+ * docs/38 — the words this tenant's PMs use for a stage, learned from the weekly update
+ * workspace's clarifier ("build ongoing" → Prototype). Checked before the built-in
+ * synonyms when a status line is read into a gate. One row per phrase.
+ */
+model StageTerm {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  /** The phrase, folded (lower case, letters/digits/spaces). */
+  term        String
+  /** The gate's name on the Product build track ("Prototype"). */
+  gateName    String   @map("gate_name")
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([tenantId, term])
+  @@index([tenantId])
+  @@map("stage_term")
 }

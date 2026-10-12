@@ -84,6 +84,7 @@ BEGIN
     'market_check_in',
     'project_module',
     'module_instance_status',
+    'stage_term',
     -- Revamp M8 — document approvals, requirements traceability, closure lessons.
     'document_approval',
     'requirement',

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, FileText, Flag, Layers, Loader2, Plus, Search, Send, Upload } from "lucide-react";
 import { isoWeekId, isoWeekMonday, shiftIsoWeek, weekRange } from "@/lib/iso-week";
 import { CARD_GLASS as CARD, CARD_BG, FOCUS, PRIMARY, QUIET, SECONDARY, ragChipStyle } from "@/lib/surface";
-import { GATE_STATE_LABEL, MODULE_STATE_LABEL, resolveDelivery, type CatalogMarket, type DeliveryCatalog, type ParsedCell, type ParsedGate } from "@/lib/status-report-delivery";
+import { GATE_STATE_LABEL, MODULE_STATE_LABEL, resolveDelivery, type CatalogMarket, type DeliveryCatalog, type ParsedCell, type ParsedGate, type StageReading } from "@/lib/status-report-delivery";
 import type { Rag } from "@/server/health";
 import type { CheckpointState } from "@/server/checkpoints";
 import type { InstanceState } from "@/server/project-instances";
@@ -88,6 +88,10 @@ interface Card {
   sources: { title: string; lines: string[] }[];
   /** Keys the file changed, to show where a value came from. */
   fromFile: Record<string, string>;
+  /** The PM's answer to "which gate is this stage?" (undefined = QUBIT's reading, null = none). */
+  stageGateName?: string | null;
+  /** Gate keys (scope:checkpointId) the stage reading set, so a new answer can undo them. */
+  stageSet: string[];
 }
 
 const RAGS: Rag[] = ["Green", "Amber", "Red"];
@@ -126,7 +130,29 @@ function baseCard(p: WorkspaceProject): Card {
     markets: Object.fromEntries(p.markets.map((m) => [m.orgUnitId, { rag: m.rag, narrative: m.narrative }])),
     sources: [],
     fromFile: {},
+    stageSet: [],
   };
+}
+
+/** Re-read a card's stage line into gates on the product scope: undo what the last reading
+ * set, then set what this one says. Returns the reading for the clarifier. */
+function readStage(p: WorkspaceProject, base: Card, c: Card, stageGateName: string | null | undefined): { card: Card; reading: StageReading | null } {
+  const next: Card = { ...c, gates: { ...c.gates, "-": { ...c.gates["-"] } }, fromFile: { ...c.fromFile }, stageSet: [] };
+  for (const key of c.stageSet) {
+    const [scope, cid] = key.split(":") as [string, string];
+    next.gates[scope] = { ...next.gates[scope], [cid]: base.gates[scope]![cid]! };
+    delete next.fromFile[`gate:${key}`];
+  }
+  if (!c.stage.trim()) return { card: next, reading: null };
+  // Read against the card's CURRENT product-scope states, so "before X → done" respects hand edits.
+  const catalog: DeliveryCatalog = { ...p.catalog, gateStates: [...p.catalog.gateStates.filter((g) => g.orgUnitId !== null), ...p.catalog.gates.map((g) => ({ orgUnitId: null, checkpointId: g.checkpointId, state: next.gates["-"]![g.checkpointId]! }))] };
+  const plan = resolveDelivery({ project: p.catalog.name, stage: c.stage, gates: [], cells: [] }, catalog, { market: null, ...(stageGateName === undefined ? {} : { stageGateName }) });
+  for (const g of plan.gates) {
+    next.gates["-"] = { ...next.gates["-"], [g.checkpointId]: g.to };
+    next.fromFile[`gate:-:${g.checkpointId}`] = g.source;
+    next.stageSet.push(`-:${g.checkpointId}`);
+  }
+  return { card: next, reading: plan.stage };
 }
 
 interface Diff {
@@ -183,7 +209,36 @@ export function StatusWorkspace({ initial, uploadHint = false }: { initial: Stat
   const [busy, setBusy] = useState<"load" | "read" | "apply" | "create" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<ApplyRow[] | null>(null);
+  const [teaching, setTeaching] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  /** The clarifier: re-read a card's stage line (typed, or answered by the PM). */
+  const rereadStage = (id: string, stageGateName?: string | null, stage?: string) =>
+    setCards((all) => {
+      const p = ws.projects.find((x) => x.catalog.projectId === id)!;
+      const c = { ...all[id]!, ...(stage !== undefined ? { stage } : {}), ...(stageGateName !== undefined ? { stageGateName } : {}) };
+      return { ...all, [id]: readStage(p, bases[id]!, c, c.stageGateName).card };
+    });
+
+  /** Teach QUBIT a phrase → gate, tenant-wide, and re-read every card's stage with it. */
+  async function teach(id: string, term: string, gateName: string | null) {
+    setTeaching(term);
+    setError(null);
+    const res = await fetch("/api/reports/status-upload/stage-terms", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ term, gateName }) });
+    const body = await res.json().catch(() => null);
+    setTeaching(null);
+    if (!res.ok) {
+      setError(body?.error?.message ?? "Could not save the phrase.");
+      return;
+    }
+    const saved = body.data as { term: string; gateName: string | null };
+    setWs((w) => ({
+      ...w,
+      projects: w.projects.map((p) => ({ ...p, catalog: { ...p.catalog, stageTerms: [...(p.catalog.stageTerms ?? []).filter((t) => t.term !== saved.term), ...(saved.gateName ? [{ term: saved.term, gateName: saved.gateName }] : [])] } })),
+    }));
+    // The answer is now the reading itself.
+    setCards((all) => ({ ...all, [id]: { ...all[id]!, stageGateName: undefined } }));
+  }
   const uploadRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (uploadHint) uploadRef.current?.focus();
@@ -241,6 +296,7 @@ export function StatusWorkspace({ initial, uploadHint = false }: { initial: Stat
       }
       const scope = market ? market.orgUnitId : "-";
       for (const g of plan.gates) {
+        if (!market && plan.stage) next.stageSet.push(`-:${g.checkpointId}`);
         if (g.backwards) continue; // a stale file never undoes progress by reflex — the PM can still set it by hand
         next.gates[scope] = { ...next.gates[scope], [g.checkpointId]: g.to };
         next.fromFile[`gate:${scope}:${g.checkpointId}`] = g.source;
@@ -589,8 +645,44 @@ export function StatusWorkspace({ initial, uploadHint = false }: { initial: Stat
                   <span className={LABEL}>
                     Status note (stage){c.fromFile.stage && <span className="normal-case tracking-normal text-[var(--ink5)]"> · from file</span>}
                   </span>
-                  <input value={c.stage} maxLength={200} onChange={(e) => patch(id, (x) => ({ ...x, stage: e.target.value }))} aria-label={`Status note for ${p.catalog.name}`} placeholder="e.g. UAT · pilot readiness" className={`${INPUT} w-full`} />
+                  <input value={c.stage} maxLength={200} onChange={(e) => rereadStage(id, undefined, e.target.value)} aria-label={`Status note for ${p.catalog.name}`} placeholder="e.g. UAT · pilot readiness" className={`${INPUT} w-full`} />
                 </label>
+                {c.stage.trim() && (() => {
+                  const reading = readStage(p, base, c, c.stageGateName).reading;
+                  const known = p.catalog.stageTerms ?? [];
+                  const clauses = (reading?.clauses ?? []).filter((cl) => !known.some((t) => t.term === cl.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()));
+                  return (
+                    <div className="flex flex-col gap-1 rounded-[8px] border border-[var(--hair2)] px-2.5 py-2 text-[11.5px]">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="text-[var(--ink3)]">
+                          Stage reads as
+                          {reading?.matched && <span className="text-[var(--ink5)]"> (from “{reading.matched}”{reading.learned ? ", learned" : ""})</span>}
+                        </span>
+                        <select value={c.stageGateName === undefined ? (reading?.gateName ?? "") : (c.stageGateName ?? "")} onChange={(e) => rereadStage(id, e.target.value || null)} aria-label={`Gate for the stage of ${p.catalog.name}`} className={SELECT}>
+                          <option value="">no gate</option>
+                          {p.catalog.gates.map((g) => (
+                            <option key={g.checkpointId} value={g.name}>
+                              {g.name}
+                              {reading?.gateName === g.name && c.stageGateName === undefined && reading.state ? ` · ${GATE_STATE_LABEL[reading.state].toLowerCase()}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                        {reading?.state && reading.gateName && <span className="text-[var(--ink4)]">→ {GATE_STATE_LABEL[reading.state].toLowerCase()}, earlier gates done</span>}
+                      </div>
+                      {reading?.gateName && clauses.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1.5 text-[var(--ink4)]">
+                          Remember for next time:
+                          {clauses.map((cl) => (
+                            <button key={cl} type="button" disabled={teaching !== null} onClick={() => void teach(id, cl, reading.gateName)} className={`inline-flex items-center gap-1 rounded-full border border-[var(--hair)] px-2 py-0.5 text-[11px] font-semibold text-[var(--ink3)] transition-colors hover:border-brand hover:text-brand disabled:opacity-50 ${FOCUS}`} title={`“${cl}” will always read as ${reading.gateName}`}>
+                              <Plus className="size-3" aria-hidden /> “{cl}” = {reading.gateName}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {reading && !reading.gateName && clauses.length > 0 && <span className="text-[var(--warn)]">New words — pick the gate they mean and QUBIT can remember them.</span>}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* ── gates ── */}
