@@ -155,6 +155,16 @@ describe("resolveDelivery", () => {
     // BRD is already in progress on the product track; the DECISION reading flags it.
     expect(plan.gatesUnchanged).toBe(2); // BRD (in progress already) + UAT (not started already)
   });
+  it("a later gate done closes the earlier ones, except one the file states explicitly", () => {
+    const full: DeliveryCatalog = { ...catalog, gates: [{ checkpointId: "g-brd", name: "BRD", orderIndex: 0 }, { checkpointId: "g-proto", name: "Prototype", orderIndex: 1 }, { checkpointId: "g-mvp", name: "MVP1", orderIndex: 2 }, { checkpointId: "g-uat", name: "UAT", orderIndex: 4 }], gateStates: [] };
+    // Keza: "BRD v1 · in review", "MVP1 · released" — Prototype is not mentioned, so it closes with MVP1; BRD keeps its stated state.
+    const plan = resolveDelivery({ project: "Keza", gates: [{ name: "BRD v1 (Riverbank)", stateRaw: "IN REVIEW", note: "" }, { name: "MVP1", stateRaw: "RELEASED", note: "" }], cells: [] }, full);
+    expect(plan.gates.map((g) => `${g.name}:${g.to}`)).toEqual(["BRD:InProgress", "Prototype:Done", "MVP1:Done"]);
+    expect(plan.gates.find((g) => g.name === "Prototype")?.source).toBe("before MVP1");
+    // A tracker that explicitly says Prototype is not started keeps it so.
+    const explicit = resolveDelivery({ project: "Keza", gates: [{ name: "Prototype", stateRaw: "Not started", note: "" }, { name: "MVP1", stateRaw: "Done", note: "" }], cells: [] }, full);
+    expect(explicit.gates.map((g) => `${g.name}:${g.to}`)).toEqual(["BRD:Done", "MVP1:Done"]);
+  });
   it("scopes gates to the market the title names", () => {
     const plan = resolveDelivery({ project: "Swipe Rwanda", gates: [{ name: "BRD", stateRaw: "COMPLETE", note: "" }, { name: "MVP1", stateRaw: "IN PROGRESS", note: "" }], cells: [] }, catalog);
     expect(plan.market?.code).toBe("RW");

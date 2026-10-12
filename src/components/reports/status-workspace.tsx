@@ -725,7 +725,21 @@ export function StatusWorkspace({ initial, uploadHint = false }: { initial: Stat
                           {from === "Blocked" ? (
                             <span className="text-[11px] font-semibold text-[var(--bad)]">Blocked</span>
                           ) : (
-                            <select value={to} onChange={(e) => patch(id, (x) => ({ ...x, gates: { ...x.gates, [x.scope]: { ...x.gates[x.scope], [g.checkpointId]: e.target.value as CheckpointState } } }))} aria-label={`${g.name} state`} className={SELECT} style={{ color: `var(${GATE_TOK[to]})` }}>
+                            <select
+                              value={to}
+                              onChange={(e) =>
+                                patch(id, (x) => {
+                                  const state = e.target.value as CheckpointState;
+                                  const scoped = { ...x.gates[x.scope], [g.checkpointId]: state };
+                                  // A later gate done closes the earlier ones (a PM can reopen one explicitly after).
+                                  if (state === "Done") for (const earlier of p.catalog.gates) if (earlier.orderIndex < g.orderIndex && scoped[earlier.checkpointId] !== "Done" && scoped[earlier.checkpointId] !== "Blocked") scoped[earlier.checkpointId] = "Done";
+                                  return { ...x, gates: { ...x.gates, [x.scope]: scoped } };
+                                })
+                              }
+                              aria-label={`${g.name} state`}
+                              className={SELECT}
+                              style={{ color: `var(${GATE_TOK[to]})` }}
+                            >
                               {GATE_STATES.map((s) => (
                                 <option key={s} value={s}>
                                   {GATE_STATE_LABEL[s]}

@@ -339,6 +339,19 @@ export function resolveDelivery(
       }
     }
   }
+  // Joyce (2026-10-12): a later gate done means the earlier ones are done too, unless the
+  // file states an earlier gate's own state ("BRD · in review" stays in review).
+  const stated = new Set(row.gates.map((g) => matchName(g.name, catalog.gates)?.checkpointId).filter((x): x is string => Boolean(x)));
+  for (const c of [...byGate.values()]) {
+    if (c.to !== "Done") continue;
+    const order = catalog.gates.find((g) => g.checkpointId === c.checkpointId)?.orderIndex ?? 0;
+    for (const earlier of catalog.gates) {
+      if (earlier.orderIndex >= order || stated.has(earlier.checkpointId) || byGate.has(earlier.checkpointId)) continue;
+      const ef = currentGate(earlier.checkpointId);
+      if (ef === "Done" || ef === "Blocked") continue;
+      byGate.set(earlier.checkpointId, { checkpointId: earlier.checkpointId, name: earlier.name, from: ef, to: "Done", source: `before ${c.name}`, blockedWanted: false, backwards: false });
+    }
+  }
   const gates: GateChange[] = [];
   for (const c of byGate.values()) {
     if (c.to === c.from) gatesUnchanged++;

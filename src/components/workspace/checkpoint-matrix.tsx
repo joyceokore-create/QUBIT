@@ -81,7 +81,18 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
       if (again.ok) setData(await again.json());
       setGateBlock(null);
     } else {
-      const next = await res.json();
+      let next = await res.json();
+      // Joyce (2026-10-12): a later gate done means the earlier ones are done — close any
+      // still open (a gate whose checklist refuses stays as it was, for the PM to decide).
+      if (body.state === "Done" && !("templateId" in body)) {
+        const rows: { checkpointId: string; orderIndex: number; state: string }[] = next.rows ?? [];
+        const me = rows.find((r) => r.checkpointId === body.checkpointId);
+        for (const r of rows) {
+          if (!me || r.orderIndex >= me.orderIndex || r.state === "Done" || r.state === "Blocked") continue;
+          const again = await fetch(`/api/projects/${projectId}/checkpoints`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ checkpointId: r.checkpointId, state: "Done", orgUnitId, moduleId, allMarkets: !orgUnitId }) });
+          if (again.ok) next = await again.json();
+        }
+      }
       setData((prev) => (prev ? { ...prev, ...next } : prev));
       setGateBlock(null);
       setOverrideReason("");
