@@ -7,14 +7,16 @@ import { isoWeekId, isoWeekMonday, isValidIsoWeek } from "@/lib/iso-week";
 import { runsProjectWhere } from "@/lib/ownership";
 
 import { confirmCheckIn, getCurrentCheckIn, RAGS, saveCheckInDraft } from "@/server/checkins";
-import { CHECKPOINT_STATES, CheckpointError, getProjectCheckpoints, setCheckpointState, type CheckpointState, type GateScope } from "@/server/checkpoints";
+import { CHECKPOINT_STATES, CheckpointError, listCheckpointTemplates, setCheckpointState, setProjectTemplate, type CheckpointState, type GateScope } from "@/server/checkpoints";
 import { createDocument } from "@/server/documents";
+import type { Rag } from "@/server/health";
 import { INSTANCE_STATES, setInstanceState, type InstanceState } from "@/server/project-instances";
-import { updateProject } from "@/server/projects";
+import { createProject, updateProject } from "@/server/projects";
 import { saveMarketCheckIn } from "@/server/rollout";
 import { extractStatusReport, NARRATIVE_MAX, STAGE_MAX, type ParsedRow, type ReportFormat } from "@/server/status-report/parse";
-import { matchProjectAndMarket, matchStageGate, type MatchableProject, type RowMatch } from "@/server/status-report/match";
-import { resolveDelivery, type DeliveryCatalog, type DeliveryPlan } from "@/lib/status-report-delivery";
+import { matchProjectAndMarket, type MatchableProject, type RowMatch } from "@/server/status-report/match";
+import { GATE_STATE_LABEL, MODULE_STATE_LABEL, resolveDelivery, type DeliveryCatalog, type DeliveryPlan } from "@/lib/status-report-delivery";
+import { writeZip } from "@/lib/zip-write";
 
 /**
  * Status-report upload (Reports › This week). Two steps, both through the engines the
@@ -27,7 +29,8 @@ import { resolveDelivery, type DeliveryCatalog, type DeliveryPlan } from "@/lib/
  * "replace": a week already sent is re-confirmed with the new line and RAG (= resent, the
  * Head is notified again), which is how a sent update is recalled by uploading a new file.
  * The Stage cell also moves the delivery gates when it names one ("UAT …" → UAT in
- * progress, the gates before it done). A report can be for a PAST week (last week, or any
+ * progress, the gates before it done) — resolved into the review like every other change
+ * (lib/status-report-delivery), never applied unseen. A report can be for a PAST week (last week, or any
  * earlier date): its rows are then sent as reviewed in the dialog, since a closed week has
  * no queue to confirm from — they land in that week's Head inbox and roll-up.
  *
@@ -63,6 +66,8 @@ export interface PreviewRow extends ParsedRow {
   match: RowMatch;
   /** This week's state of the matched project, so the table can say "already sent". */
   alreadySent: boolean;
+  /** The matched project's computed RAG — proposed when the file carries none. */
+  computedRag: Rag | null;
   /** What the slide would change on the matched project's delivery (null = no project). */
   delivery: DeliveryPlan | null;
 }
@@ -172,34 +177,6 @@ export interface ApplyRow {
   problems?: string[];
 }
 
-/** The Stage cell names a gate → that gate is in progress and every gate before it done
- * (states already Done/Blocked are left alone; a gate whose checklist is unmet is closed
- * with the upload as the written reason). Returns a one-line summary, or null. */
-async function applyStageToGates(ctx: TenantContext, projectId: string, stage: string, reason: string): Promise<string | null> {
-  const cps = await getProjectCheckpoints(ctx, projectId);
-  const gate = matchStageGate(stage, cps.rows);
-  if (!gate) return null;
-  let closed = 0;
-  for (const row of cps.rows) {
-    if (row.orderIndex < gate.orderIndex && (row.state === "NotStarted" || row.state === "InProgress")) {
-      try {
-        await setCheckpointState(ctx, projectId, { checkpointId: row.checkpointId, state: "Done" });
-      } catch (e) {
-        if (!(e instanceof CheckpointError)) throw e;
-        await setCheckpointState(ctx, projectId, { checkpointId: row.checkpointId, state: "Done", overrideReason: reason });
-      }
-      closed++;
-    }
-  }
-  let moved = false;
-  if (gate.state === "NotStarted") {
-    await setCheckpointState(ctx, projectId, { checkpointId: gate.checkpointId, state: "InProgress" });
-    moved = true;
-  }
-  if (!moved && closed === 0) return `${gate.name} already recorded`;
-  return `${gate.name} in progress${closed > 0 ? ` · ${closed} earlier ${closed === 1 ? "gate" : "gates"} done` : ""}`;
-}
-
 /** The projects the viewer may fill from a report: the PM rule (lead or PM member), or
  * every active project for Heads / admins holding project:update. */
 async function matchableProjects(ctx: TenantContext): Promise<MatchableProject[]> {
@@ -227,17 +204,20 @@ export async function previewStatusReport(ctx: TenantContext, buf: Buffer, fileN
     ).map((c) => c.projectId),
   );
   const catalogs: Record<string, DeliveryCatalog> = {};
+  const computed: Record<string, Rag> = {};
   const rows: PreviewRow[] = [];
+  const { at } = resolveReportWeek(week, now);
   for (const r of report.rows) {
-    const match = matchProjectAndMarket(r.project, projects);
+    const match = matchProjectAndMarket(r.project, projects, { code: r.code, market: r.market });
     // A market one-pager writes the market's check-in: the product's sent state is moot.
     const alreadySent = Boolean(match.projectId && !match.orgUnitId && sentIds.has(match.projectId));
     let delivery: DeliveryPlan | null = null;
     if (match.projectId) {
       catalogs[match.projectId] ??= (await getDeliveryCatalog(ctx, match.projectId))!;
-      delivery = resolveDelivery(r, catalogs[match.projectId]!);
+      computed[match.projectId] ??= (await getCurrentCheckIn(ctx, match.projectId, at)).computedRag;
+      delivery = resolveDelivery(r, catalogs[match.projectId]!, match.orgUnitId ? { market: catalogs[match.projectId]!.markets.find((m) => m.orgUnitId === match.orgUnitId) ?? null } : {});
     }
-    rows.push({ ...r, match, alreadySent, delivery, warnings: alreadySent ? [...r.warnings, "This week's update was already sent — tick Replace to resend it with this row."] : r.warnings });
+    rows.push({ ...r, match, alreadySent, computedRag: match.projectId ? (computed[match.projectId] ?? null) : null, delivery, warnings: alreadySent ? [...r.warnings, "This week's update was already sent — tick Replace to resend it with this row."] : r.warnings });
   }
   return { format: report.format, preparedBy: report.preparedBy, reportDate: report.reportDate, isoWeek, past, rows, projects, catalogs, warnings: report.warnings };
 }
@@ -361,9 +341,6 @@ export async function applyStatusReport(ctx: TenantContext, raw: ApplyInputT, re
         const g = await applyGates(ctx, row.projectId, row.gates, scope, reason);
         gates = g.summary;
         problems.push(...g.problems);
-      } else if (row.stage) {
-        // A table row's Stage cell ("UAT …") still walks the gates the old way.
-        gates = await applyStageToGates(ctx, row.projectId, row.stage, reason).catch(() => null);
       }
       let modules: string | null = null;
       if (row.modules?.length) {
@@ -388,4 +365,111 @@ export async function applyStatusReport(ctx: TenantContext, raw: ApplyInputT, re
     }
   }
   return out;
+}
+
+/**
+ * A report row for a project QUBIT doesn't have yet: create it from the row (the uploader
+ * becomes its PM, the tenant's first live gate template its track) so the row can land.
+ * Needs project:create — the same right as the New project dialog.
+ */
+export async function createProjectFromReport(ctx: TenantContext, name: string): Promise<{ id: string; code: string; name: string }> {
+  if (!can(ctx, "project:create")) throw new UploadWeekError("You can't create projects.");
+  const clean = name.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
+  if (!clean) throw new UploadWeekError("The row has no project name.");
+  const project = await createProject(ctx, { name: clean, type: "Project", priority: "Med", status: "Planning", leadUserId: ctx.userId });
+  const template = (await listCheckpointTemplates(ctx))[0];
+  if (template) await setProjectTemplate(ctx, project.id, template.id);
+  return { id: project.id, code: project.code, name: project.name };
+}
+
+// ── QUBIT's own template: an Excel workbook the PM fills and uploads back ─────────────
+const xmlEsc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const colRef = (i: number) => {
+  let n = i + 1;
+  let out = "";
+  while (n > 0) {
+    const r = (n - 1) % 26;
+    out = String.fromCharCode(65 + r) + out;
+    n = Math.floor((n - 1) / 26);
+  }
+  return out;
+};
+function sheetXml(rows: string[][], widths: number[]): string {
+  const cols = widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join("");
+  const body = rows
+    .map((cells, r) => `<row r="${r + 1}">${cells.map((v, c) => (v === "" ? "" : `<c r="${colRef(c)}${r + 1}" t="inlineStr"${r === 0 ? ' s="1"' : ""}><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`)).join("")}</row>`)
+    .join("");
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${cols}</cols><sheetData>${body}</sheetData></worksheet>`;
+}
+
+/**
+ * This week's template for the viewer's projects, prefilled from QUBIT: sheet "Status" —
+ * Code · Project · Market · RAG · one column per gate · Current stage · Update and Outlook
+ * (one row per product, then one per market); sheet "Channels" — Code · Project · Market ·
+ * Channel · State · Note. Codes make the upload exact; the gate and state words are the
+ * ones the upload reads back.
+ */
+export async function buildStatusTemplate(ctx: TenantContext, now = new Date()): Promise<{ fileName: string; xlsx: Buffer }> {
+  const projects = await matchableProjects(ctx);
+  const isoWeek = isoWeekId(now);
+  const catalogs = await Promise.all(projects.map((p) => getDeliveryCatalog(ctx, p.id)));
+  const gateNames: string[] = [];
+  for (const c of catalogs) for (const g of c?.gates ?? []) if (!gateNames.includes(g.name)) gateNames.push(g.name);
+  const extra = await withTenant(ctx, async (tx) => {
+    const ids = projects.map((p) => p.id);
+    const [notes, checkIns, marketCheckIns] = await Promise.all([
+      tx.project.findMany({ where: { id: { in: ids } }, select: { id: true, statusNote: true } }),
+      tx.checkIn.findMany({ where: { projectId: { in: ids }, isoWeek }, select: { projectId: true, narrative: true, ragOverride: true, computedRag: true } }),
+      tx.marketCheckIn.findMany({ where: { projectId: { in: ids }, isoWeek }, select: { projectId: true, orgUnitId: true, narrative: true, rag: true } }),
+    ]);
+    return { notes: new Map(notes.map((n) => [n.id, n.statusNote ?? ""])), checkIns: new Map(checkIns.map((c) => [c.projectId, c])), market: new Map(marketCheckIns.map((c) => [`${c.projectId}:${c.orgUnitId}`, c])) };
+  });
+  const header = ["Code", "Project", "Market", "RAG", ...gateNames, "Current stage", "Update and Outlook"];
+  const status: string[][] = [header];
+  const channels: string[][] = [["Code", "Project", "Market", "Channel", "State", "Note"]];
+  projects.forEach((p, i) => {
+    const c = catalogs[i];
+    const ci = extra.checkIns.get(p.id);
+    const gateCells = (unit: string | null) => gateNames.map((name) => {
+      const g = c?.gates.find((x) => x.name === name);
+      if (!g) return "";
+      return GATE_STATE_LABEL[c?.gateStates.find((s) => s.orgUnitId === unit && s.checkpointId === g.checkpointId)?.state ?? "NotStarted"];
+    });
+    status.push([p.code, p.name, "", ci?.ragOverride ?? ci?.computedRag ?? "", ...gateCells(null), extra.notes.get(p.id) ?? "", ci?.narrative ?? ""]);
+    for (const mk of c?.markets ?? []) {
+      const mc = extra.market.get(`${p.id}:${mk.orgUnitId}`);
+      status.push([p.code, p.name, mk.code, mc?.rag ?? "", ...gateCells(mk.orgUnitId), "", mc?.narrative ?? ""]);
+      for (const mod of c?.modules ?? []) {
+        const st = c?.moduleStates.find((s) => s.moduleId === mod.id && s.orgUnitId === mk.orgUnitId);
+        channels.push([p.code, p.name, mk.code, mod.name, MODULE_STATE_LABEL[st?.state ?? "Planned"], st?.note ?? ""]);
+      }
+    }
+    if (!c?.markets.length) for (const mod of c?.modules ?? []) {
+      const st = c?.moduleStates.find((s) => s.moduleId === mod.id && s.orgUnitId === null);
+      channels.push([p.code, p.name, "", mod.name, MODULE_STATE_LABEL[st?.state ?? "Planned"], st?.note ?? ""]);
+    }
+  });
+  const readme: string[][] = [
+    ["QUBIT status report template", ""],
+    ["Week", `${isoWeek} — upload this file under Reports › This week`],
+    ["Status sheet", "One row per project, then one per market (Market column). Set RAG to Green / Amber / Red, each gate to Done / In progress / Not started / n/a, write the stage and the update. Leave a cell blank to leave it alone."],
+    ["Channels sheet", "One row per channel × market. State: Planned / Build / UAT / Live / N/A. The note is optional."],
+    ["Rules", "Keep the Code column: it makes the match exact. Rows with a Market go to that market's check-in; the product row goes to the Head. Nothing is sent until you review and send in QUBIT."],
+  ];
+  const sheets: { name: string; xml: string }[] = [
+    { name: "Status", xml: sheetXml(status, [10, 28, 8, 8, ...gateNames.map(() => 13), 28, 60]) },
+    ...(channels.length > 1 ? [{ name: "Channels", xml: sheetXml(channels, [10, 28, 8, 22, 10, 40]) }] : []),
+    { name: "Read me", xml: sheetXml(readme, [18, 110]) },
+  ];
+  const files: Record<string, string> = {
+    "[Content_Types].xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("")}</Types>`,
+    "_rels/.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
+    "xl/workbook.xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheets.map((sh, i) => `<sheet name="${xmlEsc(sh.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("")}</sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join("")}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
+    "xl/styles.xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" applyFont="1"/></cellXfs></styleSheet>`,
+  };
+  sheets.forEach((sh, i) => {
+    files[`xl/worksheets/sheet${i + 1}.xml`] = sh.xml;
+  });
+  return { fileName: `qubit-status-report-${isoWeek}.xlsx`, xlsx: writeZip(files) };
 }

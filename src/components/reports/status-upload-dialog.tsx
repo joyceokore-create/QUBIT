@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Check, FileText, Flag, Layers, Plus, Upload } from "lucide-react";
+import { AlertTriangle, Check, Download, FileText, Flag, Layers, Plus, Upload } from "lucide-react";
 import { isoWeekId, isoWeekMonday, shiftIsoWeek, weekRange } from "@/lib/iso-week";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FOCUS, PRIMARY, QUIET, SECONDARY, ragChipStyle } from "@/lib/surface";
@@ -21,7 +21,10 @@ import type { Rag } from "@/server/health";
 interface PreviewRow {
   line: number;
   project: string;
+  code: string | null;
+  market: string | null;
   status: Rag | null;
+  computedRag: Rag | null;
   stage: string;
   update: string;
   warnings: string[];
@@ -84,10 +87,11 @@ function planFor(row: PreviewRow, catalog: DeliveryCatalog | undefined, market: 
   if (!catalog) return null;
   return resolveDelivery(row, catalog, market === undefined ? {} : { market });
 }
+/** Every change ticked, except moves backwards — a stale file must not undo progress by reflex. */
 function allOn(plan: DeliveryPlan | null): Pick<Draft, "gatesOn" | "modulesOn"> {
   return {
-    gatesOn: Object.fromEntries((plan?.gates ?? []).map((g) => [g.checkpointId, true])),
-    modulesOn: Object.fromEntries((plan?.modules ?? []).map((m) => [moduleKey(m), true])),
+    gatesOn: Object.fromEntries((plan?.gates ?? []).map((g) => [g.checkpointId, !g.backwards])),
+    modulesOn: Object.fromEntries((plan?.modules ?? []).map((m) => [moduleKey(m), !m.backwards])),
   };
 }
 
@@ -103,7 +107,7 @@ export function StatusUploadDialog({ open, onOpenChange, onApplied }: { open: bo
   const weekLabel = (w: string) => `Week ${w.split("-W")[1]} · ${weekRange(isoWeekMonday(w))}`;
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
   const [attach, setAttach] = useState(true);
-  const [busy, setBusy] = useState<"read" | "apply" | null>(null);
+  const [busy, setBusy] = useState<"read" | "apply" | "create" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<ApplyRow[] | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -144,7 +148,7 @@ export function StatusUploadDialog({ open, onOpenChange, onApplied }: { open: bo
           {
             projectId: r.match.projectId,
             orgUnitId: r.delivery?.market?.orgUnitId ?? r.match.orgUnitId ?? null,
-            rag: r.status ?? "Amber",
+            rag: r.status ?? r.computedRag ?? "Amber",
             stage: r.stage,
             narrative: r.update,
             resend: r.alreadySent,
@@ -173,6 +177,25 @@ export function StatusUploadDialog({ open, onOpenChange, onApplied }: { open: bo
     }
     const plan = planFor(row, catalog, market);
     patch(row.line, { projectId, orgUnitId: plan?.market?.orgUnitId ?? (market === undefined ? null : (market?.orgUnitId ?? null)), plan, ...allOn(plan) });
+  }
+
+  /** A row QUBIT has no project for: create it from the row and land the row on it. */
+  async function createFor(row: PreviewRow) {
+    if (!preview) return;
+    setBusy("create");
+    setError(null);
+    const res = await fetch("/api/reports/status-upload/create-project", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: row.project }) });
+    const body = await res.json().catch(() => null);
+    setBusy(null);
+    if (!res.ok) {
+      setError(body?.error?.message ?? "Could not create the project.");
+      return;
+    }
+    const { project, catalog } = body.data as { project: { id: string; code: string; name: string }; catalog: DeliveryCatalog };
+    setPreview((p) => (p ? { ...p, projects: [...p.projects, { ...project, markets: [] }].sort((a, b) => a.name.localeCompare(b.name)) } : p));
+    setCatalogs((all) => ({ ...all, [project.id]: catalog }));
+    const plan = planFor(row, catalog, null);
+    patch(row.line, { projectId: project.id, orgUnitId: null, plan, ...allOn(plan) });
   }
 
   const chosen = preview ? preview.rows.filter((r) => drafts[r.line]?.projectId && drafts[r.line]!.narrative.trim() && (!r.alreadySent || drafts[r.line]!.resend || drafts[r.line]!.orgUnitId)) : [];
@@ -248,9 +271,9 @@ export function StatusUploadDialog({ open, onOpenChange, onApplied }: { open: bo
         <DialogHeader>
           <DialogTitle>Upload a status report</DialogTitle>
           <DialogDescription>
-            A Word, Excel or PDF table (Project · Status · Stage · Update), or a PowerPoint one-pager per project or per market. Each row fills that
-            project&apos;s weekly update and moves its delivery — gates and channel states per market — exactly as you tick it here. Nothing goes to the
-            Head until you send it; a past week&apos;s report is sent as you review it.
+            QUBIT&apos;s own Excel template, your tracker (Word, Excel or PDF — a Project · Status · Stage · Update table, or one column per gate), or a
+            PowerPoint one-pager per project or per market. Each row fills that project&apos;s weekly update and moves its delivery — gates and channel
+            states per market — exactly as you tick it here. Nothing goes to the Head until you send it; a past week&apos;s report is sent as you review it.
           </DialogDescription>
         </DialogHeader>
 
@@ -278,9 +301,17 @@ export function StatusUploadDialog({ open, onOpenChange, onApplied }: { open: bo
               {weekPast && " — a past week: rows are sent to the Head as you review them here."}
             </p>
             <input ref={fileInput} type="file" accept=".docx,.xlsx,.pptx,.pdf" className="sr-only" aria-label="Status report file" onChange={(e) => void read(e.target.files?.[0])} />
-            <button type="button" onClick={() => fileInput.current?.click()} disabled={busy !== null || !week} className={PRIMARY}>
-              <Upload className="size-3.5" aria-hidden /> {busy === "read" ? "Reading…" : "Choose file"}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={() => fileInput.current?.click()} disabled={busy !== null || !week} className={PRIMARY}>
+                <Upload className="size-3.5" aria-hidden /> {busy === "read" ? "Reading…" : "Choose file"}
+              </button>
+              <a href="/api/reports/status-upload/template" download className={`${SECONDARY} gap-1.5`} title="An Excel workbook with your projects, their gates and channel states as QUBIT has them now — fill it in and upload it back">
+                <Download className="size-3.5" aria-hidden /> Download this week&apos;s template
+              </a>
+            </div>
+            <p className="max-w-[560px] text-[12px] text-[var(--ink4)]">
+              The template is prefilled with your projects (codes, gates, channel states per market, this week&apos;s draft). Your own tracker works too: a table with Project · Status · Stage · Update, or one column per gate (BRD · Prototype · MVP1 …).
+            </p>
             {error && (
               <p role="alert" className="text-[12px] text-[var(--bad)]">
                 {error}
@@ -328,17 +359,27 @@ export function StatusUploadDialog({ open, onOpenChange, onApplied }: { open: bo
                       <p className={LABEL}>In the file</p>
                       <h3 id={`row-${r.line}`} className="truncate text-[14px] font-semibold text-[var(--qink)]">
                         {r.project}
+                        {r.code && <span className="ml-1.5 font-mono text-[11px] font-semibold text-[var(--ink4)]">{r.code}</span>}
+                        {r.market && <span className="ml-1.5 text-[11px] font-semibold text-[var(--ink4)]">· {r.market}</span>}
                         {r.match.confidence === "suggested" && (
                           <span className="ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={ragChipStyle("Amber")}>
                             check the project
                           </span>
                         )}
-                        {r.match.confidence === "none" && (
+                        {r.match.confidence === "none" && !d.projectId && (
                           <span className="ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={ragChipStyle("Red")}>
-                            no match
+                            not in QUBIT
                           </span>
                         )}
                       </h3>
+                      {!d.projectId && (
+                        <p className="mt-1 flex flex-wrap items-center gap-2 text-[11.5px] text-[var(--ink3)]">
+                          Pick the project it belongs to, or
+                          <button type="button" onClick={() => void createFor(r)} disabled={busy !== null} className={`${QUIET} inline-flex items-center gap-1 text-[var(--brand)]`}>
+                            <Plus className="size-3" aria-hidden /> {busy === "create" ? "Creating…" : `create “${r.project.replace(/\s*\([^)]*\)\s*/g, " ").trim()}” as a new project`}
+                          </button>
+                        </p>
+                      )}
                       {r.dimensions.length > 0 && (
                         <p className="mt-1 flex flex-wrap gap-1.5 text-[11px]">
                           {r.dimensions.map((x) => (
@@ -387,7 +428,7 @@ export function StatusUploadDialog({ open, onOpenChange, onApplied }: { open: bo
                         </label>
                       )}
                       <fieldset className="flex flex-col gap-1" aria-label={`RAG for ${r.project}`}>
-                        <legend className={LABEL}>RAG</legend>
+                        <legend className={LABEL}>RAG{!r.status && d.projectId ? <span className="ml-1 normal-case tracking-normal text-[var(--ink5)]">· none in the file, computed proposed</span> : null}</legend>
                         <div className="flex gap-1">
                           {RAGS.map((g) => (
                             <label key={g} className="cursor-pointer rounded-full px-2.5 py-1 text-[11px] font-semibold has-[:checked]:ring-2 has-[:checked]:ring-[var(--brand)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--brand)]" style={ragChipStyle(g)}>
@@ -448,11 +489,16 @@ export function StatusUploadDialog({ open, onOpenChange, onApplied }: { open: bo
                         <p className={LABEL}>
                           Delivery · {isMarket ? `${market?.flag ? `${market.flag} ` : ""}${market?.name ?? "market"} only` : catalog && catalog.markets.length > 0 ? "product and every market" : "this project"}
                         </p>
+                        {d.plan && [...d.plan.gates, ...d.plan.modules].length > 0 && [...d.plan.gates, ...d.plan.modules].every((c) => c.backwards) && (
+                          <p className="flex items-center gap-1.5 text-[11.5px] text-[var(--warn)]">
+                            <AlertTriangle className="size-3.5" aria-hidden /> Every change here goes backwards — this file looks older than QUBIT. Nothing is ticked.
+                          </p>
+                        )}
                         {!d.plan || (d.plan.gates.length === 0 && d.plan.modules.length === 0) ? (
                           <p className="text-[12px] text-[var(--ink4)]">
                             {r.gates.length === 0 && r.cells.length === 0
                               ? "Nothing on this row changes gates or channel states."
-                              : `Everything this slide says already matches QUBIT${d.plan ? ` (${d.plan.gatesUnchanged + d.plan.modulesUnchanged} items)` : ""}.`}
+                              : `Everything this row says already matches QUBIT${d.plan ? ` (${d.plan.gatesUnchanged + d.plan.modulesUnchanged} items)` : ""}.`}
                           </p>
                         ) : null}
 
@@ -479,7 +525,12 @@ export function StatusUploadDialog({ open, onOpenChange, onApplied }: { open: bo
                                     </span>
                                   </label>
                                   <p className="ml-[22px] text-[10.5px] text-[var(--ink4)]">
-                                    slide: {g.source}
+                                    {g.backwards && (
+                                      <span className="mr-1 inline-flex items-center gap-1 font-semibold text-[var(--warn)]">
+                                        <AlertTriangle className="size-3" aria-hidden /> moves back — is the file older than QUBIT?
+                                      </span>
+                                    )}
+                                    file: {g.source}
                                     {g.blockedWanted && (
                                       <span className="ml-1 inline-flex items-center gap-1 text-[var(--warn)]">
                                         <AlertTriangle className="size-3" aria-hidden /> says blocked — link a blocker in the register to mark it
@@ -489,7 +540,7 @@ export function StatusUploadDialog({ open, onOpenChange, onApplied }: { open: bo
                                 </li>
                               ))}
                             </ul>
-                            {d.plan.gatesUnchanged > 0 && <p className="mt-1 text-[10.5px] text-[var(--ink5)]">{d.plan.gatesUnchanged} already as the slide says.</p>}
+                            {d.plan.gatesUnchanged > 0 && <p className="mt-1 text-[10.5px] text-[var(--ink5)]">{d.plan.gatesUnchanged} already as the file says.</p>}
                           </div>
                         )}
 
@@ -514,7 +565,7 @@ export function StatusUploadDialog({ open, onOpenChange, onApplied }: { open: bo
                                       return (
                                         <label
                                           key={k}
-                                          title={`${m.source}${m.note ? ` — ${m.note}` : ""}`}
+                                          title={`${m.backwards ? "Moves back — is the file older than QUBIT? " : ""}${m.source}${m.note ? ` — ${m.note}` : ""}`}
                                           className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--brand)] ${on ? "border-[var(--brand)] text-[var(--qink)]" : "border-[var(--hair)] text-[var(--ink4)] line-through"}`}
                                         >
                                           <input type="checkbox" checked={on} onChange={(e) => patch(r.line, { modulesOn: { ...d.modulesOn, [k]: e.target.checked } })} className="sr-only" />
@@ -537,7 +588,7 @@ export function StatusUploadDialog({ open, onOpenChange, onApplied }: { open: bo
                                 </li>
                               ))}
                             </ul>
-                            {d.plan.modulesUnchanged > 0 && <p className="mt-1 text-[10.5px] text-[var(--ink5)]">{d.plan.modulesUnchanged} already as the slide says.</p>}
+                            {d.plan.modulesUnchanged > 0 && <p className="mt-1 text-[10.5px] text-[var(--ink5)]">{d.plan.modulesUnchanged} already as the file says.</p>}
                           </div>
                         )}
                         {d.plan && d.plan.unmatched.length > 0 && <p className="text-[10.5px] text-[var(--ink5)]">Not placed: {d.plan.unmatched.join(" · ")}</p>}

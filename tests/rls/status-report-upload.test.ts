@@ -11,7 +11,7 @@ import { getProjectCheckpoints } from "@/server/checkpoints";
 import { addMarkets } from "@/server/markets";
 import { createProjectInstance, listProjectInstances } from "@/server/project-instances";
 import { getMarketTrack } from "@/server/rollout";
-import { applyStatusReport, getDeliveryCatalog } from "@/server/status-report-upload";
+import { applyStatusReport, buildStatusTemplate, getDeliveryCatalog, previewStatusReport } from "@/server/status-report-upload";
 import { resolveDelivery } from "@/lib/status-report-delivery";
 import { createUsers, cleanupFixtureUsers } from "./_users";
 
@@ -181,5 +181,18 @@ describe("status-report upload — apply", () => {
     // A market row needs its market.
     const [bad] = await applyStatusReport(pm, { rows: [{ projectId: product, rag: "Amber", stage: "", narrative: "x", target: "market", orgUnitId: null }] }, NOW);
     expect(bad).toMatchObject({ outcome: "error" });
+  });
+
+  it("builds this week's Excel template from my projects and reads it back exactly, by code", async () => {
+    const { fileName, xlsx } = await buildStatusTemplate(pm, NOW);
+    expect(fileName).toBe(`qubit-status-report-${WEEK}.xlsx`);
+    const preview = await previewStatusReport(pm, xlsx, fileName, null, NOW);
+    expect(preview.format).toBe("xlsx");
+    const rows = preview.rows.filter((r) => r.code === "SRU-P");
+    // The product row and one per market, each matched exactly by code; nothing changes on an untouched template.
+    expect(rows.map((r) => [r.match.confidence, Boolean(r.match.orgUnitId)])).toEqual([["exact", false], ["exact", true]]);
+    expect(rows.every((r) => r.delivery && r.delivery.gates.length === 0 && r.delivery.modules.length === 0)).toBe(true);
+    expect(rows[1]!.cells.map((c) => c.column)).toEqual(["USSD"]);
+    expect(preview.rows.some((r) => r.code === "SRU-C")).toBe(false); // not mine
   });
 });

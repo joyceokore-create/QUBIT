@@ -67,6 +67,9 @@ export interface GateChange {
   /** The slide says blocked / decision needed — Blocked needs a linked blocker, so we
    * propose In progress and say so. */
   blockedWanted: boolean;
+  /** A move backwards (Done → In progress): the file may be older than QUBIT — shown, not
+   * ticked by default. */
+  backwards: boolean;
 }
 export interface ModuleChange {
   moduleId: string;
@@ -77,6 +80,8 @@ export interface ModuleChange {
   to: InstanceState;
   note: string | null;
   source: string;
+  /** Live → UAT and the like: shown, not ticked by default. */
+  backwards: boolean;
 }
 export interface DeliveryPlan {
   /** The market the slide is about (from its title), or null = the whole product. */
@@ -135,12 +140,19 @@ export function splitTitleMarket(title: string, markets: CatalogMarket[]): { res
 }
 
 const GATE_RANK: Record<CheckpointState, number> = { NotStarted: 0, InProgress: 1, Blocked: 1, Done: 2 };
+const MODULE_RANK: Record<InstanceState, number> = { Planned: 0, Build: 1, UAT: 2, Live: 3, NotApplicable: 0 };
 
-/** What a stage label on the slide means for a gate. null = not a state word. */
+/** "n/a", "-", blank: the gate does not apply here — left alone, never "not placed". */
+export function isNotApplicable(raw: string): boolean {
+  return /^(n\/?a|not applicable|none|-|—|–|x)?$/i.test(raw.trim());
+}
+
+/** What a stage label on the slide (or a tracker cell) means for a gate. null = not a state word. */
 export function gateStateFrom(raw: string): { state: CheckpointState; blockedWanted: boolean } | null {
+  if (/^[✓✔☑]/.test(raw.trim()) || /^(yes|y)$/i.test(raw.trim())) return { state: "Done", blockedWanted: false };
   const s = fold(raw);
   if (!s) return null;
-  if (/^(complete|completed|done|released|live|signed|approved|closed|delivered|achieved)\b/.test(s)) return { state: "Done", blockedWanted: false };
+  if (/^(complete|completed|done|released|live|signed|approved|closed|delivered|achieved|finished)\b/.test(s)) return { state: "Done", blockedWanted: false };
   if (/^(decision|blocked|stuck|at risk|escalated|waiting)\b/.test(s)) return { state: "InProgress", blockedWanted: true };
   if (/^(in review|review|in progress|ongoing|active|uat|sit|testing|in uat|in sit|build|in build|development|started|pilot|current)\b/.test(s)) return { state: "InProgress", blockedWanted: false };
   if (/^(on hold|planned|planning|not started|upcoming|next|pending|todo|backlog|later|hold)\b/.test(s)) return { state: "NotStarted", blockedWanted: false };
@@ -167,8 +179,38 @@ function sentence(s: string | null): string | null {
   return t === t.toUpperCase() ? t.charAt(0) + t.slice(1).toLowerCase() : t;
 }
 
+/**
+ * The words PMs use for a stage, mapped to Riverbank's gate names when the catalog has
+ * them: "Development / (…)" → MVP1, "Production (build complete)" → Go-Live, "Pilot" → UAT.
+ * The named gate is in progress — done when the stage says complete / live — and every
+ * gate before it is done. Nothing moves backwards from a stage mention.
+ */
+const STAGE_SYNONYMS: [RegExp, string][] = [
+  [/\b(go[\s-]?live|production|live|launched|rolled out|in market|released)\b/, "Go-Live"],
+  [/\b(uat|user acceptance|pilot|pilot readiness)\b/, "UAT"],
+  [/\b(sit|system integration|integration testing)\b/, "SIT"],
+  [/\b(mvp\s*1?|development|dev|build|implementation|coding)\b/, "MVP1"],
+  [/\b(prototype|poc|proof of concept|evaluation|demo)\b/, "Prototype"],
+  [/\b(brd|requirements|discovery|scoping|business requirements|design)\b/, "BRD"],
+];
+const STAGE_DONE_WORDS = /\b(complete|completed|live|done|launched|signed off|signed|approved|closed|deployed|in production|finished)\b/i;
+
+export function stageGate(stage: string, gates: CatalogGate[]): CatalogGate | null {
+  const direct = matchName(stage, gates);
+  if (direct) return direct;
+  // The stage's head decides ("Pilot" in "Pilot (live; Phase 2 underway)"), the note only
+  // when the head says nothing; the first synonym that fits is final — "Production (build
+  // complete)" on a product with no Go-Live gate is not an MVP1 mention.
+  const head = fold(stage.split(/[(/·—–-]/)[0] ?? "");
+  for (const text of [head, fold(stage)]) {
+    if (!text) continue;
+    for (const [re, canonical] of STAGE_SYNONYMS) if (re.test(text)) return matchName(canonical, gates);
+  }
+  return null;
+}
+
 export function resolveDelivery(
-  row: { project: string; gates: ParsedGate[]; cells: ParsedCell[] },
+  row: { project: string; stage?: string; gates: ParsedGate[]; cells: ParsedCell[] },
   catalog: DeliveryCatalog,
   /** The PM's own choice of market (null = whole product); undefined = read the title. */
   opts: { market?: CatalogMarket | null } = {},
@@ -185,7 +227,12 @@ export function resolveDelivery(
   for (const g of row.gates) {
     const gate = matchName(g.name, catalog.gates);
     const want = gateStateFrom(g.stateRaw);
-    if (!gate || !want) continue;
+    if (!gate) continue;
+    if (!want) {
+      // A gate column with free text ("Not returned from KCB") — shown, never guessed.
+      if (!isNotApplicable(g.stateRaw)) unmatched.add(`${gate.name} · ${g.stateRaw}`);
+      continue;
+    }
     const from = currentGate(gate.checkpointId);
     const source = `${g.name} · ${g.stateRaw.toLowerCase()}`;
     const prev = byGate.get(gate.checkpointId);
@@ -195,7 +242,24 @@ export function resolveDelivery(
       prev.blockedWanted = prev.blockedWanted || want.blockedWanted;
       continue;
     }
-    byGate.set(gate.checkpointId, { checkpointId: gate.checkpointId, name: gate.name, from, to: want.state, source, blockedWanted: want.blockedWanted });
+    byGate.set(gate.checkpointId, { checkpointId: gate.checkpointId, name: gate.name, from, to: want.state, source, blockedWanted: want.blockedWanted, backwards: GATE_RANK[want.state] < GATE_RANK[from] });
+  }
+  // No gate columns, but a Stage ("UAT / Pilot Readiness (VAPT in progress)"): the named
+  // gate and everything before it.
+  if (row.gates.length === 0 && row.stage) {
+    const gate = stageGate(row.stage, catalog.gates);
+    if (gate) {
+      const done = STAGE_DONE_WORDS.test(row.stage);
+      const from = currentGate(gate.checkpointId);
+      const to: CheckpointState = done ? "Done" : "InProgress";
+      if (!(from === "Done" && to === "InProgress") && from !== "Blocked") byGate.set(gate.checkpointId, { checkpointId: gate.checkpointId, name: gate.name, from, to, source: `stage: ${row.stage}`, blockedWanted: false, backwards: false });
+      for (const earlier of catalog.gates) {
+        if (earlier.orderIndex >= gate.orderIndex || byGate.has(earlier.checkpointId)) continue;
+        const ef = currentGate(earlier.checkpointId);
+        if (ef === "Done" || ef === "Blocked") continue;
+        byGate.set(earlier.checkpointId, { checkpointId: earlier.checkpointId, name: earlier.name, from: ef, to: "Done", source: `before ${gate.name}`, blockedWanted: false, backwards: false });
+      }
+    }
   }
   const gates: GateChange[] = [];
   for (const c of byGate.values()) {
@@ -232,7 +296,7 @@ export function resolveDelivery(
     const current = catalog.moduleStates.find((s) => s.moduleId === mod!.id && s.orgUnitId === orgUnitId);
     const from = current?.state ?? "Planned";
     const note = sentence(cell.note);
-    const change: ModuleChange = { moduleId: mod.id, name: mod.name, orgUnitId, marketCode: unit?.code ?? null, from, to, note, source: `${cell.row ?? ""}${cell.row && cell.column ? " × " : ""}${cell.column ?? ""} · ${cell.stateRaw}`.trim() };
+    const change: ModuleChange = { moduleId: mod.id, name: mod.name, orgUnitId, marketCode: unit?.code ?? null, from, to, note, source: `${cell.row ?? ""}${cell.row && cell.column ? " × " : ""}${cell.column ?? ""} · ${cell.stateRaw}`.trim(), backwards: MODULE_RANK[to] < MODULE_RANK[from] && to !== "NotApplicable" };
     if (byCell.has(key)) continue;
     byCell.set(key, change);
   }

@@ -5,7 +5,9 @@ import type { ParsedCell, ParsedGate } from "@/lib/status-report-delivery";
 
 /**
  * Status-report upload — turn Riverbank's weekly "Project Status Report" (Word, Excel or
- * PDF; one row per project: Project · Status · Stage · Update and Outlook — or a PowerPoint
+ * PDF; one row per project: Project · Status · Stage · Update and Outlook, or the team's
+ * milestone tracker with one column per gate: Project · BRD · Prototype · MVP1 · SIT · UAT ·
+ * Go Live · Current Stage · Comments — or a PowerPoint
  * one-pager per project: title, headline, overall RAG, "Where we are") into rows the
  * PM reviews. A PowerPoint slide is read by GEOMETRY as well as text: the "Where we are"
  * stages, a channels-by-market grid (LIVE / UAT / N/A cells under module headers beside
@@ -23,6 +25,10 @@ export const FILE_MAX_BYTES = 5 * 1024 * 1024;
 export interface ParsedRow {
   line: number;
   project: string;
+  /** A Code column (QUBIT's own template) — matched before the name. */
+  code: string | null;
+  /** A Market column — the row is that market's check-in. */
+  market: string | null;
   status: Rag | null;
   statusRaw: string;
   stage: string;
@@ -83,26 +89,53 @@ export function normaliseStatus(raw: string): Rag | null {
   return null;
 }
 
-function isHeader(cells: string[]): boolean {
-  const f = cells.map((c) => c.toLowerCase());
-  return f.some((c) => c.includes("project")) && f.some((c) => c.includes("status")) && f.some((c) => c.includes("update") || c.includes("outlook") || c.includes("comment"));
+/** Header cells that are never a gate column. */
+const KNOWN_COLUMN = /^(project|project name|code|status|rag|stage|current stage|phase|update|updates|update and outlook|outlook|comment|comments|narrative|team|owner|pm|%|% complete|percent|percentage|progress|notes|note|next steps|risks|issues|due|date|market|markets|subsidiary|country|instance|portfolio|programme|priority|channel|module|state|lead|sponsor|classification)$/i;
+
+interface Columns {
+  project: number;
+  code: number;
+  status: number;
+  stage: number;
+  update: number;
+  market: number;
+  /** Tracker format: one column per gate (BRD · Prototype · MVP1 …). */
+  gates: { index: number; name: string }[];
 }
 
-/** Column positions from a header row (any order), falling back to the template's. */
-function columns(header: string[]): { project: number; status: number; stage: number; update: number } {
-  const f = header.map((c) => c.toLowerCase());
-  const find = (...needles: string[]) => f.findIndex((c) => needles.some((n) => c.includes(n)));
-  const project = find("project");
-  const status = find("status", "rag");
-  const stage = find("stage", "phase");
-  const update = find("update", "outlook", "comment", "narrative");
-  return { project: project < 0 ? 0 : project, status: status < 0 ? 1 : status, stage, update: update < 0 ? (stage >= 0 ? 3 : 2) : update };
+/** Column positions from a header row (any order). null when the row is no header. */
+function columnsOf(header: string[]): Columns | null {
+  const f = header.map((c) => squash(c).toLowerCase());
+  const find = (test: (c: string) => boolean) => f.findIndex((c) => c && test(c));
+  const project = find((c) => c === "project" || c.startsWith("project name") || c === "projects");
+  if (project < 0) return null;
+  const code = find((c) => c === "code" || c === "project code");
+  const status = find((c) => c === "status" || c === "rag" || c === "rag status" || c === "overall status");
+  const stage = find((c) => c === "stage" || c === "current stage" || c === "phase" || c === "current phase");
+  const update = find((c) => c.includes("update") || c.includes("outlook") || c.includes("comment") || c.includes("narrative") || c === "notes");
+  const market = find((c) => c === "market" || c === "subsidiary" || c === "country" || c === "instance");
+  const gates = header
+    .map((h, index) => ({ index, name: squash(h).replace(/\s*\n[\s\S]*$/, "") }))
+    .filter(({ index, name }) => name && ![project, code, status, stage, update, market].includes(index) && !KNOWN_COLUMN.test(name) && name.length <= 24);
+  if (status < 0 && update < 0 && gates.length < 2) return null;
+  return { project, code, status, stage, update, market, gates };
+}
+
+const isHeader = (cells: string[]) => columnsOf(cells) !== null;
+
+/** A gate cell: "✓ (Internal draft based on requirements sessions)" → ✓ + note;
+ * "In progress" → as is; free text stays whole so the review can show it unplaced. */
+function gateCell(text: string): { stateRaw: string; note: string } {
+  const t = squash(text).replace(/\s*\n\s*/g, " ");
+  const m = t.match(/^([^()]*?)\s*(?:\(([^)]*)\))?\s*$/);
+  const head = m?.[1]?.trim() ?? t;
+  return { stateRaw: head || t, note: m?.[2]?.trim() ?? "" };
 }
 
 function rowsFromTable(table: string[][], warnings: string[]): ParsedRow[] {
   const headerAt = table.findIndex(isHeader);
   if (headerAt < 0) return [];
-  const col = columns(table[headerAt]!);
+  const col = columnsOf(table[headerAt]!)!;
   const rows: ParsedRow[] = [];
   let ignored = 0;
   table.slice(headerAt + 1).forEach((cells, i) => {
@@ -110,19 +143,24 @@ function rowsFromTable(table: string[][], warnings: string[]): ParsedRow[] {
     // portfolio) is context the matcher doesn't need.
     const project = squash(cells[col.project] ?? "").split("\n")[0]!.trim();
     if (!project) return;
-    const statusRaw = squash(cells[col.status] ?? "");
+    const code = col.code >= 0 ? squash(cells[col.code] ?? "").split("\n")[0]!.trim() || null : null;
+    const market = col.market >= 0 ? squash(cells[col.market] ?? "").split("\n")[0]!.trim() || null : null;
+    const statusRaw = col.status >= 0 ? squash(cells[col.status] ?? "") : "";
     const status = normaliseStatus(statusRaw);
     let stage = col.stage >= 0 ? squash(cells[col.stage] ?? "").replace(/\s*\n\s*/g, " ") : "";
-    let update = squash(cells[col.update] ?? "");
-    // A line with neither a status nor an update is a group heading or a footnote
-    // ("Note: status updates as provided…"), not a project.
-    if (!statusRaw && !update) {
+    let update = col.update >= 0 ? squash(cells[col.update] ?? "") : "";
+    const gates: ParsedGate[] = col.gates
+      .filter(({ index }) => squash(cells[index] ?? ""))
+      .map(({ index, name }) => ({ name, ...gateCell(cells[index]!) }));
+    // A line with neither a status, an update nor a gate cell is a group heading or a
+    // footnote ("Note: status updates as provided…"), not a project.
+    if (!statusRaw && !update && gates.length === 0) {
       ignored++;
       return;
     }
     const w: string[] = [];
     if (statusRaw && !status) w.push(`Status "${statusRaw}" isn't Green, Amber or Red — pick one.`);
-    if (!statusRaw) w.push("No status in the file — pick one.");
+    if (!statusRaw) w.push(col.status >= 0 ? "No status in the file — the computed RAG is proposed." : "The file has no RAG column — the computed RAG is proposed.");
     if (stage.length > STAGE_MAX) {
       stage = stage.slice(0, STAGE_MAX - 1).trimEnd() + "…";
       w.push(`Stage shortened to ${STAGE_MAX} characters.`);
@@ -132,11 +170,40 @@ function rowsFromTable(table: string[][], warnings: string[]): ParsedRow[] {
       w.push(`Update shortened to ${NARRATIVE_MAX} characters — the full text stays in the attached report.`);
     }
     if (!update) w.push("No update text for this project.");
-    rows.push({ line: headerAt + 2 + i, project, status, statusRaw, stage, update, warnings: w, ...NO_SLIDE });
+    if (/\b(shelved|discontinued|on hold|cancelled|canceled|parked)\b/i.test(stage)) w.push(`The stage says "${stage}" — if the project is paused, set its status in the workspace too.`);
+    rows.push({ line: headerAt + 2 + i, project, code, market, status, statusRaw, stage, update, warnings: w, ...NO_SLIDE, gates });
   });
   if (rows.length === 0) warnings.push("The table was found but had no project rows.");
   else if (ignored) warnings.push(`${ignored} heading/footnote ${ignored === 1 ? "line" : "lines"} in the table ignored.`);
   return rows;
+}
+
+/**
+ * QUBIT's own template carries a second sheet, "Channels": Code · Project · Market ·
+ * Channel · State · Note — one row per channel × market. Returns the cells keyed by the
+ * project's code and name (folded) so they attach to the Status sheet's rows.
+ */
+function cellsFromTable(table: string[][]): Map<string, ParsedCell[]> {
+  const out = new Map<string, ParsedCell[]>();
+  const headerAt = table.findIndex((cells) => {
+    const f = cells.map((c) => squash(c).toLowerCase());
+    return f.some((c) => c === "project" || c === "code") && f.some((c) => c === "market" || c === "subsidiary" || c === "country") && f.some((c) => c === "channel" || c === "module" || c === "instance") && f.some((c) => c === "state" || c === "status");
+  });
+  if (headerAt < 0) return out;
+  const f = table[headerAt]!.map((c) => squash(c).toLowerCase());
+  const at = (...names: string[]) => f.findIndex((c) => names.includes(c));
+  const [code, project, market, channel, state, note] = [at("code"), at("project"), at("market", "subsidiary", "country"), at("channel", "module", "instance"), at("state", "status"), at("note", "notes", "comment", "comments")];
+  for (const cells of table.slice(headerAt + 1)) {
+    const st = state >= 0 ? squash(cells[state] ?? "") : "";
+    const ch = channel >= 0 ? squash(cells[channel] ?? "") : "";
+    if (!st || !ch) continue;
+    const cell: ParsedCell = { column: ch, row: market >= 0 ? squash(cells[market] ?? "") || null : null, stateRaw: st, note: note >= 0 ? squash(cells[note] ?? "") || null : null };
+    for (const key of [code >= 0 ? cells[code] : "", project >= 0 ? cells[project] : ""]) {
+      const k = squash(key ?? "").toLowerCase();
+      if (k) out.set(k, [...(out.get(k) ?? []), cell]);
+    }
+  }
+  return out;
 }
 
 function metaFromText(text: string): { preparedBy: string | null; reportDate: string | null } {
@@ -202,6 +269,7 @@ export function parseXlsx(buf: Buffer): ParsedReport {
   const warnings: string[] = [];
   let rows: ParsedRow[] = [];
   let bodyText = "";
+  let channels = new Map<string, ParsedCell[]>();
   for (const name of sheets) {
     const xml = entries.get(name)!.read().toString("utf8");
     const table: string[][] = [];
@@ -226,10 +294,11 @@ export function parseXlsx(buf: Buffer): ParsedReport {
       if (cells.some((v) => v && v.trim())) table.push(cells.map((v) => v ?? ""));
     }
     bodyText += table.map((r) => r.join(" ")).join("\n") + "\n";
-    rows = rowsFromTable(table, warnings);
-    if (rows.length) break;
+    if (!rows.length) rows = rowsFromTable(table, warnings);
+    if (channels.size === 0) channels = cellsFromTable(table);
   }
-  if (!rows.length && !warnings.length) warnings.push("No sheet with Project / Status / Update columns was found.");
+  for (const r of rows) r.cells = channels.get((r.code ?? "").toLowerCase()) ?? channels.get(r.project.toLowerCase()) ?? [];
+  if (!rows.length && !warnings.length) warnings.push("No sheet with Project / Status / Update (or gate) columns was found.");
   return { ...metaFromText(bodyText), rows, warnings };
 }
 
@@ -498,7 +567,7 @@ export function parsePptx(buf: Buffer): ParsedReport {
       if (a && !reportDate) reportDate = a[1]!.trim();
     }
     const structure = slideStructure(shapes, slideWidth, titleIdx);
-    rows.push({ line: i + 1, project, status, statusRaw: ragIdx >= 0 ? rest[ragIdx]! : "", stage, update, warnings: w, gates, ...structure });
+    rows.push({ line: i + 1, project, code: null, market: null, status, statusRaw: ragIdx >= 0 ? rest[ragIdx]! : "", stage, update, warnings: w, gates, ...structure });
   });
   if (!rows.length) warnings.push("No slide with a project title was found.");
   return { preparedBy, reportDate, rows, warnings };

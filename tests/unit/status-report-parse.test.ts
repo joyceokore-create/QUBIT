@@ -91,6 +91,48 @@ describe("parseDocx", () => {
   });
 });
 
+describe("tracker format (one column per gate)", () => {
+  it("reads gate cells, the current stage and comments; keeps free text whole; n/a as is", () => {
+    const rows = [
+      `<w:tr>${cell(runs("Project"))}${cell(runs("BRD"))}${cell(runs("Prototype"))}${cell(runs("MVP1"))}${cell(runs("Go Live"))}${cell(runs("Current Stage"))}${cell(runs("% Complete"))}${cell(runs("Comments"))}${cell(runs("Team"))}</w:tr>`,
+      `<w:tr>${cell(runs("RetailFlow"))}${cell(runs("✓ (Internal draft based on requirements sessions)"))}${cell(runs("In progress"))}${cell(runs("Not started"))}${cell(runs("n/a"))}${cell(runs("Fixing issues on receipts"))}${cell(runs("60"))}${cell(runs("BRD from internal team."))}${cell(runs("Titus, Joyce"))}</w:tr>`,
+      `<w:tr>${cell(runs("Anchor Pario"))}${cell(runs("Not returned from KCB"))}${cell(runs("✓"))}${cell(runs("In Progress"))}${cell(runs(""))}${cell(runs("Shelved"))}${cell(runs(""))}${cell(runs(""))}${cell(runs(""))}</w:tr>`,
+    ];
+    const r = parseDocx(zip({ "word/document.xml": docxXml(rows) }));
+    expect(r.rows).toHaveLength(2);
+    const [retail, anchor] = r.rows;
+    expect(retail).toMatchObject({ project: "RetailFlow", status: null, stage: "Fixing issues on receipts", update: "BRD from internal team." });
+    expect(retail!.gates).toEqual([
+      { name: "BRD", stateRaw: "✓", note: "Internal draft based on requirements sessions" },
+      { name: "Prototype", stateRaw: "In progress", note: "" },
+      { name: "MVP1", stateRaw: "Not started", note: "" },
+      { name: "Go Live", stateRaw: "n/a", note: "" },
+    ]);
+    expect(retail!.warnings).toContain("The file has no RAG column — the computed RAG is proposed.");
+    expect(anchor!.gates.map((g) => g.stateRaw)).toEqual(["Not returned from KCB", "✓", "In Progress"]);
+    expect(anchor!.warnings.some((w) => /Shelved/.test(w))).toBe(true);
+  });
+  it("reads QUBIT's own template: Code and Market columns, and a Channels sheet attached by code", () => {
+    const sheet = (rows: string[][]) =>
+      `<worksheet><sheetData>${rows.map((cells, r) => `<row r="${r + 1}">${cells.map((v, c) => `<c r="${String.fromCharCode(65 + c)}${r + 1}" t="inlineStr"><is><t>${v}</t></is></c>`).join("")}</row>`).join("")}</sheetData></worksheet>`;
+    const status = sheet([
+      ["Code", "Project", "Market", "RAG", "BRD", "MVP1", "Current stage", "Update and Outlook"],
+      ["SWIPE", "Swipe Agent Banking", "", "Amber", "Done", "In progress", "Build", "Product line."],
+      ["SWIPE", "Swipe Agent Banking", "RW", "Red", "Done", "Not started", "", "Rwanda line."],
+    ]);
+    const channels = sheet([
+      ["Code", "Project", "Market", "Channel", "State", "Note"],
+      ["SWIPE", "Swipe Agent Banking", "RW", "USSD", "UAT", "retest"],
+    ]);
+    const r = parseXlsx(zip({ "xl/worksheets/sheet1.xml": status, "xl/worksheets/sheet2.xml": channels }));
+    expect(r.rows).toHaveLength(2);
+    expect(r.rows[0]).toMatchObject({ code: "SWIPE", market: null, status: "Amber", stage: "Build", update: "Product line." });
+    expect(r.rows[0]!.gates).toEqual([{ name: "BRD", stateRaw: "Done", note: "" }, { name: "MVP1", stateRaw: "In progress", note: "" }]);
+    expect(r.rows[1]).toMatchObject({ code: "SWIPE", market: "RW", status: "Red" });
+    expect(r.rows[1]!.cells).toEqual([{ column: "USSD", row: "RW", stateRaw: "UAT", note: "retest" }]);
+  });
+});
+
 describe("parseXlsx", () => {
   it("resolves shared strings and finds the header on any sheet", () => {
     const sst = `<sst><si><t>Project</t></si><si><t>Status</t></si><si><t>Stage</t></si><si><t>Update</t></si><si><t>Sifa</t></si><si><t>GREEN</t></si><si><t>Pilot</t></si><si><r><t>Live, </t></r><r><t>phase 2 underway.</t></r></si></sst>`;

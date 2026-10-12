@@ -128,6 +128,18 @@ render); modules still work at product level (one state column, "Product").
   with a tick; `applyStatusReport` writes only what was ticked, through `setCheckpointState`,
   `setInstanceState` and `saveMarketCheckIn` (audited as always). Unmapped slide items are
   listed as "Not placed", never guessed. Catalog on demand: `GET /api/reports/status-upload/catalog`.
+  Test pass on the real files (Joyce, 2026-10-12): the team's milestone tracker (one column
+  per gate: BRD · Prototype · MVP1 · SIT · UAT · Go Live · Current Stage · Comments, in Word or
+  Excel) is read as gate states per project (✓ / Done / In progress / Not started; n/a left
+  alone; free text such as "Not returned from KCB" shown as not placed); a Stage cell maps
+  through synonyms (Development → MVP1, Pilot → UAT, Production → Go-Live; the stage's head
+  decides) to the named gate — done when the stage says complete/live — plus the gates before
+  it, shown in the review like every other change; a file older than QUBIT proposes moves
+  backwards, which are flagged and unticked by default; a row for a project QUBIT lacks can
+  create it from the dialog (uploader = PM, first live template); when the file has no RAG
+  the computed one is proposed. `GET /api/reports/status-upload/template` builds QUBIT's own
+  Excel template (Status + Channels + Read me sheets, prefilled with codes, gates, channel
+  states and this week's draft) so the upload reads back exactly by code.
 - Lists: `listProjectTasks`, `listDocuments`, `listRisks`, `listIssues`, `listBlockers`,
   `listMilestones` accept `{ orgUnitId?, moduleId? }`; create/update inputs accept the tags only when
   `instanceTagging` is on (else 400 `TAGGING_OFF`). Materialising a risk and blocking a task copy the

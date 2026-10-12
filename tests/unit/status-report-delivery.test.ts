@@ -4,7 +4,7 @@
 // grid cells and per-market lists become module states; unchanged items are counted,
 // not written.
 import { describe, expect, it } from "vitest";
-import { gateStateFrom, matchName, moduleStateFrom, resolveDelivery, splitTitleMarket, type DeliveryCatalog } from "@/lib/status-report-delivery";
+import { gateStateFrom, isNotApplicable, matchName, moduleStateFrom, resolveDelivery, splitTitleMarket, stageGate, type DeliveryCatalog } from "@/lib/status-report-delivery";
 import { matchProjectAndMarket } from "@/server/status-report/match";
 
 const KE = { orgUnitId: "11111111-1111-4111-8111-111111111111", code: "KE", name: "Kenya", flag: "🇰🇪" };
@@ -44,7 +44,17 @@ describe("words → states", () => {
     expect(gateStateFrom("IN REVIEW")).toEqual({ state: "InProgress", blockedWanted: false });
     expect(gateStateFrom("DECISION")).toEqual({ state: "InProgress", blockedWanted: true });
     expect(gateStateFrom("ON HOLD")).toEqual({ state: "NotStarted", blockedWanted: false });
+    expect(gateStateFrom("✓")).toEqual({ state: "Done", blockedWanted: false });
     expect(gateStateFrom("Some words")).toBeNull();
+    expect(isNotApplicable("n/a")).toBe(true);
+    expect(isNotApplicable("Not returned from KCB")).toBe(false);
+  });
+  it("maps the words PMs use for a stage onto the gates the product has", () => {
+    expect(stageGate("UAT / Pilot Readiness (internal VAPT in progress)", catalog.gates)?.name).toBe("UAT");
+    expect(stageGate("Development (requirements alignment ongoing)", catalog.gates)?.name).toBe("MVP1");
+    expect(stageGate("Pilot (live; Phase 2 underway)", catalog.gates)?.name).toBe("UAT");
+    expect(stageGate("Production (build complete)", catalog.gates)).toBeNull(); // this catalog has no Go-Live gate
+    expect(stageGate("Documentation (ARB approved)", catalog.gates)).toBeNull();
   });
   it("reads module cell words", () => {
     expect(moduleStateFrom("LIVE")).toBe("Live");
@@ -76,6 +86,31 @@ describe("words → states", () => {
 });
 
 describe("resolveDelivery", () => {
+  it("turns a Stage cell into the named gate (done when the stage says so) and closes the gates before it", () => {
+    const plan = resolveDelivery({ project: "Swipe Agent Banking", stage: "UAT / Pilot Readiness (VAPT in progress)", gates: [], cells: [] }, catalog);
+    expect(plan.gates.map((g) => `${g.name}:${g.from}→${g.to}`)).toEqual(["BRD:InProgress→Done", "MVP1:NotStarted→Done", "UAT:NotStarted→InProgress"]);
+    expect(plan.gates.find((g) => g.name === "UAT")?.source).toMatch(/^stage:/);
+    const live = resolveDelivery({ project: "Swipe Agent Banking", stage: "Pilot (live; Phase 2 underway)", gates: [], cells: [] }, catalog);
+    expect(live.gates.find((g) => g.name === "UAT")?.to).toBe("Done");
+    // A gate already done never moves back because a stage merely mentions it.
+    const back = resolveDelivery({ project: "Swipe Rwanda", stage: "BRD review", gates: [], cells: [] }, catalog);
+    expect(back.gates).toEqual([]);
+  });
+  it("flags moves backwards so a stale file is not applied by reflex", () => {
+    const plan = resolveDelivery({ project: "Swipe Rwanda", gates: [{ name: "BRD", stateRaw: "In progress", note: "" }], cells: [{ row: "Kenya", column: "P20 POS", stateRaw: "UAT", note: null }] }, catalog, { market: null });
+    expect(plan.gates.map((g) => [g.name, g.backwards])).toEqual([]); // BRD on the product track is already in progress
+    const rw = resolveDelivery({ project: "Swipe Rwanda", gates: [{ name: "BRD", stateRaw: "In progress", note: "" }], cells: [] }, catalog);
+    expect(rw.gates.map((g) => [g.name, g.from, g.to, g.backwards])).toEqual([["BRD", "Done", "InProgress", true]]);
+    expect(plan.modules.map((m) => [m.name, m.from, m.to, m.backwards])).toEqual([["P20 POS", "Live", "UAT", true]]);
+  });
+  it("reads tracker gate cells: ✓ done, n/a left alone, free text listed as not placed", () => {
+    const plan = resolveDelivery(
+      { project: "Swipe Agent Banking", gates: [{ name: "BRD", stateRaw: "✓", note: "Internal draft" }, { name: "MVP1", stateRaw: "n/a", note: "" }, { name: "UAT", stateRaw: "Not returned from KCB", note: "" }], cells: [] },
+      catalog,
+    );
+    expect(plan.gates.map((g) => `${g.name}:${g.to}`)).toEqual(["BRD:Done"]);
+    expect(plan.unmatched).toEqual(["UAT · Not returned from KCB"]);
+  });
   it("turns 'Where we are' into gate changes on the product track, furthest reading winning, unchanged counted", () => {
     const plan = resolveDelivery(
       {

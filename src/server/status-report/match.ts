@@ -57,7 +57,9 @@ export function matchProject(rowName: string, projects: MatchableProject[]): Row
       best = { id: p.id, score };
     } else if (score > second) second = score;
   }
-  if (best && best.score >= 0.6 && best.score > second) return { projectId: best.id, confidence: "suggested" };
+  // "Anchor Pario" → Anchor ERP, "KCB Safiri" → ZED-SAFIRI: half the words in common and
+  // nothing else close is worth a "check" — the PM confirms before anything is written.
+  if (best && best.score >= 0.5 && best.score > second) return { projectId: best.id, confidence: "suggested" };
   return { projectId: null, confidence: "none" };
 }
 
@@ -66,7 +68,15 @@ export function matchProject(rowName: string, projects: MatchableProject[]): Row
  * when a project's market name or code ends (or starts) the title, the rest is matched as
  * the project. A plain title falls through to matchProject.
  */
-export function matchProjectAndMarket(rowName: string, projects: MatchableProject[]): RowMatch {
+export function matchProjectAndMarket(rowName: string, projects: MatchableProject[], hints: { code?: string | null; market?: string | null } = {}): RowMatch {
+  // QUBIT's own template: the Code column is exact, the Market column names the market.
+  if (hints.code) {
+    const p = projects.find((x) => fold(x.code) === fold(hints.code!));
+    if (p) {
+      const mk = hints.market ? (p.markets ?? []).find((x) => fold(x.code) === fold(hints.market!) || fold(x.name) === fold(hints.market!)) : null;
+      return { projectId: p.id, confidence: "exact", orgUnitId: mk?.orgUnitId ?? null };
+    }
+  }
   const f = fold(rowName);
   for (const p of projects) {
     for (const mk of p.markets ?? []) {
@@ -84,7 +94,13 @@ export function matchProjectAndMarket(rowName: string, projects: MatchableProjec
       }
     }
   }
-  return { ...matchProject(rowName, projects), orgUnitId: null };
+  const m = matchProject(rowName, projects);
+  if (m.projectId && hints.market) {
+    const p = projects.find((x) => x.id === m.projectId);
+    const mk = (p?.markets ?? []).find((x) => fold(x.code) === fold(hints.market!) || fold(x.name) === fold(hints.market!));
+    return { ...m, orgUnitId: mk?.orgUnitId ?? null };
+  }
+  return { ...m, orgUnitId: null };
 }
 
 
