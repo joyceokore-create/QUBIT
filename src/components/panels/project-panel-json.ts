@@ -41,7 +41,7 @@ export interface NamedInstanceJson {
   ownGates: boolean;
   checkpointTemplateId: string | null;
   checkpointTemplateName: string | null;
-  cells: { orgUnitId: string | null; state: string; note: string | null; progress: number }[];
+  cells: { orgUnitId: string | null; state: string; note: string | null; progress: number; source?: { label: string; at: Date | string; byName: string | null } | null }[];
 }
 
 export interface ProjectPanelJson {

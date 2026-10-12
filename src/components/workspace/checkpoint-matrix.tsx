@@ -3,7 +3,7 @@
 import { dispatchTourEvent } from "@/components/tour/tour-events";
 
 import { useEffect, useState } from "react";
-import { Loader2, ShieldAlert, TriangleAlert } from "lucide-react";
+import { FileText, Loader2, ShieldAlert, TriangleAlert } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { CheckpointState, ProjectCheckpoints, TemplateOption } from "@/server/checkpoints";
 
@@ -143,6 +143,15 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
                 />
                 <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink2)]">{row.name}</span>
                 {busy === row.checkpointId && <Loader2 className="size-3 animate-spin text-[var(--ink4)]" />}
+                {row.source && (
+                  <span
+                    title={`Moved by ${row.source.label} · ${new Date(row.source.at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}${row.source.byName ? ` · ${row.source.byName}` : ""}`}
+                    className="flex flex-none items-center gap-1 rounded-[5px] px-1.5 py-0.5 font-mono text-[8.5px] font-bold uppercase tracking-[.6px] text-[var(--ink3)]"
+                    style={{ background: "color-mix(in oklab, var(--qinfo) 10%, transparent)" }}
+                  >
+                    <FileText className="size-2.5" aria-hidden /> from report
+                  </span>
+                )}
                 {row.overrideReason && (
                   <span
                     title={`Gate closed early: ${row.overrideReason}`}

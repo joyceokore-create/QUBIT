@@ -147,6 +147,13 @@ render); modules still work at product level (one state column, "Product").
   sent). `POST /api/projects/[id]/checkin/from-markets`; buttons on the workspace status card
   ("Draft the line from market check-ins (n of m)") and the PM queue row. The PM still edits
   and sends — nothing composed goes to the Head on its own.
+- Provenance (Joyce, 2026-10-12): `checkpoint_status` and `module_instance_status` carry
+  `source` / `source_at` / `source_by_id` (migration `20261012130000_i4_upload_provenance`),
+  set by machine paths through `StateOrigin` (`setCheckpointState` / `setInstanceState`'s
+  last argument — the upload passes "Status report · Week NN · file") and CLEARED by the next
+  hand change, so the marker is never stale. Shown as a "from report" chip on the gate row
+  and a "report" tag under the module cell, with file · date · who on hover; the audit row
+  carries `source` too.
 - Lists: `listProjectTasks`, `listDocuments`, `listRisks`, `listIssues`, `listBlockers`,
   `listMilestones` accept `{ orgUnitId?, moduleId? }`; create/update inputs accept the tags only when
   `instanceTagging` is on (else 400 `TAGGING_OFF`). Materialising a risk and blocking a task copy the

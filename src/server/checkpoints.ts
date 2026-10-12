@@ -40,6 +40,13 @@ export interface CheckpointRow {
   gate: GateRule[];
   /** Set when the gate was closed with its checklist unmet — visible forever. */
   overrideReason: string | null;
+  /** Provenance when a status-report upload moved it: the file, when, by whom. */
+  source: { label: string; at: Date; byName: string | null } | null;
+}
+
+/** Who moved a state and from what — a machine path's stamp (the upload's file name). */
+export interface StateOrigin {
+  source: string;
 }
 
 export interface ProjectCheckpoints {
@@ -93,10 +100,13 @@ export async function getProjectCheckpoints(
       where: { projectId, ...scopeWhere(scope) },
       select: {
         checkpointId: true, state: true, blockerId: true, overrideReason: true,
+        source: true, sourceAt: true, sourceById: true,
         blocker: { select: { description: true } },
       },
     });
     const byCheckpoint = new Map(statuses.map((s) => [s.checkpointId, s]));
+    const sourceIds = [...new Set(statuses.map((s) => s.sourceById).filter((x): x is string => Boolean(x)))];
+    const names = new Map(sourceIds.length ? (await tx.user.findMany({ where: { id: { in: sourceIds } }, select: { id: true, name: true } })).map((u) => [u.id, u.name]) : []);
 
     // Gate checklists are evaluated for every checkpoint so the UI can show what a gate
     // will ask for BEFORE somebody tries to close it (docs/16 §6).
@@ -115,6 +125,7 @@ export async function getProjectCheckpoints(
         blockerReason: s?.blocker?.description ?? null,
         gate: gates[i].rules,
         overrideReason: s?.overrideReason ?? null,
+        source: s?.source && s.sourceAt ? { label: s.source, at: s.sourceAt, byName: s.sourceById ? (names.get(s.sourceById) ?? null) : null } : null,
       };
     });
     return {
@@ -224,6 +235,8 @@ export async function setCheckpointState(
   projectId: string,
   input: SetCheckpointStateInputT,
   scope?: GateScope,
+  /** Set by machine paths (the status-report upload); a hand change clears the stamp. */
+  origin?: StateOrigin,
 ): Promise<ProjectCheckpoints> {
   await withTenant(ctx, async (tx) => {
     if (scope?.orgUnitId) {
@@ -289,6 +302,9 @@ export async function setCheckpointState(
         overrideReason: override?.reason ?? null,
         overriddenById: override?.byId ?? null,
         overriddenAt: override?.at ?? null,
+        source: origin?.source.slice(0, 160) ?? null,
+        sourceAt: origin ? new Date() : null,
+        sourceById: origin ? ctx.userId : null,
       };
 
       if (before) {
@@ -317,6 +333,7 @@ export async function setCheckpointState(
           ...(unitScope.orgUnitId ? { orgUnitId: unitScope.orgUnitId } : {}),
           ...(scope?.moduleId ? { moduleId: scope.moduleId } : {}),
           ...(override ? { gateOverridden: true, overrideReason: override.reason } : {}),
+          ...(origin ? { source: origin.source } : {}),
         },
       });
       // The exec delta feed narrates gate movement like any other tracked change.

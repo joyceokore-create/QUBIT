@@ -3,7 +3,7 @@ import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { emitDomainEvent } from "@/server/events";
 import { withTenant, type TenantContext } from "@/lib/tenant";
-import { derivedProgress, type CheckpointState } from "@/server/checkpoints";
+import { derivedProgress, type CheckpointState, type StateOrigin } from "@/server/checkpoints";
 
 /**
  * docs/38 (Joyce, 2026-10-07) — a product's NAMED INSTANCES and MODULES, both rows of
@@ -37,6 +37,8 @@ export interface InstanceCell {
   note: string | null;
   /** Gate-derived % of this instance's own track in this market (stored/derived rule as markets). */
   progress: number;
+  /** Provenance when a status-report upload set it: the file, when, by whom. */
+  source: { label: string; at: Date; byName: string | null } | null;
 }
 
 export type ModuleKind = "instance" | "module";
@@ -68,7 +70,7 @@ export async function listProjectInstances(ctx: TenantContext, projectId: string
   return withTenant(ctx, async (tx) => {
     const [rows, statuses, gates, project] = await Promise.all([
       tx.projectModule.findMany({ where: { projectId, kind }, select: { id: true, code: true, name: true, orderIndex: true, kind: true, parentId: true, ownGates: true, checkpointTemplateId: true, checkpointTemplate: { select: { name: true, _count: { select: { checkpoints: true } } } } }, orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }] }),
-      tx.moduleInstanceStatus.findMany({ where: { projectId }, select: { moduleId: true, orgUnitId: true, state: true, note: true } }),
+      tx.moduleInstanceStatus.findMany({ where: { projectId }, select: { moduleId: true, orgUnitId: true, state: true, note: true, source: true, sourceAt: true, sourceById: true } }),
       tx.checkpointStatus.findMany({ where: { projectId, moduleId: { not: null } }, select: { moduleId: true, orgUnitId: true, state: true } }),
       tx.project.findUnique({
         where: { id: projectId },
@@ -76,6 +78,8 @@ export async function listProjectInstances(ctx: TenantContext, projectId: string
       }),
     ]);
     const projectTotal = project?.checkpointTemplate?._count.checkpoints ?? 0;
+    const sourceIds = [...new Set(statuses.map((s) => s.sourceById).filter((x): x is string => Boolean(x)))];
+    const names = new Map(sourceIds.length ? (await tx.user.findMany({ where: { id: { in: sourceIds } }, select: { id: true, name: true } })).map((u) => [u.id, u.name]) : []);
     const markets: (string | null)[] = [null, ...(project?.orgStatuses.map((o) => o.orgUnitId) ?? [])];
     const key = (m: string, u: string | null) => `${m}:${u ?? "-"}`;
     const statusByKey = new Map(statuses.map((s) => [key(s.moduleId, s.orgUnitId), s]));
@@ -95,6 +99,7 @@ export async function listProjectInstances(ctx: TenantContext, projectId: string
           orgUnitId: u,
           state: st?.state ?? "Planned",
           note: st?.note ?? null,
+          source: st?.source && st.sourceAt ? { label: st.source, at: st.sourceAt, byName: st.sourceById ? (names.get(st.sourceById) ?? null) : null } : null,
           progress: tracksGates && total > 0 ? derivedProgress([...states, ...Array<CheckpointState>(Math.max(0, total - states.length)).fill("NotStarted")]) : 0,
         };
       }),
@@ -199,7 +204,7 @@ export const SetInstanceStateInput = z.object({
 });
 
 /** The state of one instance in one market (or at product level). Audited; event `instance.state_changed`. */
-export async function setInstanceState(ctx: TenantContext, projectId: string, instanceId: string, input: z.infer<typeof SetInstanceStateInput>): Promise<ProjectInstanceRow[]> {
+export async function setInstanceState(ctx: TenantContext, projectId: string, instanceId: string, input: z.infer<typeof SetInstanceStateInput>, origin?: StateOrigin): Promise<ProjectInstanceRow[]> {
   let kindSet: ModuleKind = "instance";
   await withTenant(ctx, async (tx) => {
     const inst = await tx.projectModule.findFirst({ where: { id: instanceId, projectId }, select: { id: true, code: true, kind: true } });
@@ -216,12 +221,12 @@ export async function setInstanceState(ctx: TenantContext, projectId: string, in
         : [input.orgUnitId];
     for (const orgUnitId of units) {
       const existing = await tx.moduleInstanceStatus.findFirst({ where: { moduleId: instanceId, orgUnitId }, select: { id: true, state: true, note: true } });
-      const data = { state: input.state, note: input.note === undefined ? undefined : input.note, updatedById: ctx.userId };
+      const data = { state: input.state, note: input.note === undefined ? undefined : input.note, updatedById: ctx.userId, source: origin?.source.slice(0, 160) ?? null, sourceAt: origin ? new Date() : null, sourceById: origin ? ctx.userId : null };
       const row = existing
         ? await tx.moduleInstanceStatus.update({ where: { id: existing.id }, data })
         : await tx.moduleInstanceStatus.create({ data: { tenantId: ctx.tenantId, projectId, moduleId: instanceId, orgUnitId, ...data, note: input.note ?? null } });
       if (existing?.state === input.state && (input.note === undefined || input.note === existing.note)) continue;
-      await audit(tx, ctx, { action: "update", entityType: "instance_state", entityId: row.id, before: { state: existing?.state ?? "Planned" }, after: { instance: inst.code, orgUnitId, state: input.state, note: input.note ?? undefined } });
+      await audit(tx, ctx, { action: "update", entityType: "instance_state", entityId: row.id, before: { state: existing?.state ?? "Planned" }, after: { instance: inst.code, orgUnitId, state: input.state, note: input.note ?? undefined, ...(origin ? { source: origin.source } : {}) } });
       await emitDomainEvent(tx, ctx, { type: "instance.state_changed", entityType: "instance_state", entityId: row.id, payload: { projectId, instanceId, orgUnitId, from: existing?.state ?? "Planned", to: input.state } });
     }
   });

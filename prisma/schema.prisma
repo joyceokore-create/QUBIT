@@ -1271,6 +1271,11 @@ model ModuleInstanceStatus {
   note        String?
   updatedById String?       @map("updated_by_id")
   updatedBy   User?         @relation("ModuleStateUpdater", fields: [updatedById], references: [id])
+  // Provenance — the status-report upload that set this state (file name), when, by whom;
+  // cleared by the next hand change.
+  source      String?       @map("source")
+  sourceAt    DateTime?     @map("source_at")
+  sourceById  String?       @map("source_by_id")
   updatedAt   DateTime      @updatedAt @map("updated_at")
 
   @@unique([moduleId, orgUnitId])
@@ -1302,6 +1307,11 @@ model CheckpointStatus {
   overriddenById String?        @map("overridden_by_id")
   overriddenBy   User?          @relation("CheckpointOverrider", fields: [overriddenById], references: [id])
   overriddenAt   DateTime?      @map("overridden_at")
+  // Provenance — set when a machine path moved the gate (a status-report upload: the
+  // file's name); cleared by the next human change so the marker is never stale.
+  source         String?        @map("source")
+  sourceAt       DateTime?      @map("source_at")
+  sourceById     String?        @map("source_by_id")
   updatedAt      DateTime       @updatedAt @map("updated_at")
 
   // Postgres treats NULLs as distinct, so the null combinations (project-level row, and

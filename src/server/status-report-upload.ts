@@ -7,7 +7,7 @@ import { isoWeekId, isoWeekMonday, isValidIsoWeek } from "@/lib/iso-week";
 import { runsProjectWhere } from "@/lib/ownership";
 
 import { confirmCheckIn, getCurrentCheckIn, RAGS, saveCheckInDraft } from "@/server/checkins";
-import { CHECKPOINT_STATES, CheckpointError, listCheckpointTemplates, setCheckpointState, setProjectTemplate, type CheckpointState, type GateScope } from "@/server/checkpoints";
+import { CHECKPOINT_STATES, CheckpointError, listCheckpointTemplates, setCheckpointState, setProjectTemplate, type CheckpointState, type GateScope, type StateOrigin } from "@/server/checkpoints";
 import { createDocument } from "@/server/documents";
 import type { Rag } from "@/server/health";
 import { INSTANCE_STATES, setInstanceState, type InstanceState } from "@/server/project-instances";
@@ -226,17 +226,17 @@ const GATE_WORD: Record<CheckpointState, string> = { NotStarted: "not started", 
 
 /** The ticked gate states, each tried without and then with the upload as the override
  * reason (a gate whose checklist is unmet closes with a written reason, docs/16 §6). */
-async function applyGates(ctx: TenantContext, projectId: string, gates: { checkpointId: string; state: CheckpointState }[], scope: GateScope, reason: string): Promise<{ summary: string | null; problems: string[] }> {
+async function applyGates(ctx: TenantContext, projectId: string, gates: { checkpointId: string; state: CheckpointState }[], scope: GateScope, reason: string, origin: StateOrigin): Promise<{ summary: string | null; problems: string[] }> {
   const done: string[] = [];
   const problems: string[] = [];
   for (const g of gates) {
     try {
       let cps;
       try {
-        cps = await setCheckpointState(ctx, projectId, { checkpointId: g.checkpointId, state: g.state }, scope);
+        cps = await setCheckpointState(ctx, projectId, { checkpointId: g.checkpointId, state: g.state }, scope, origin);
       } catch (e) {
         if (!(e instanceof CheckpointError) || e.code !== "GATE_UNMET") throw e;
-        cps = await setCheckpointState(ctx, projectId, { checkpointId: g.checkpointId, state: g.state, overrideReason: reason }, scope);
+        cps = await setCheckpointState(ctx, projectId, { checkpointId: g.checkpointId, state: g.state, overrideReason: reason }, scope, origin);
       }
       const name = cps.rows.find((r) => r.checkpointId === g.checkpointId)?.name ?? "gate";
       done.push(`${name} ${GATE_WORD[g.state]}`);
@@ -247,12 +247,12 @@ async function applyGates(ctx: TenantContext, projectId: string, gates: { checkp
   return { summary: done.length ? done.join(" · ") : null, problems };
 }
 
-async function applyModules(ctx: TenantContext, projectId: string, modules: { moduleId: string; orgUnitId: string | null; state: InstanceState; note?: string | null }[]): Promise<{ summary: string | null; problems: string[] }> {
+async function applyModules(ctx: TenantContext, projectId: string, modules: { moduleId: string; orgUnitId: string | null; state: InstanceState; note?: string | null }[], origin: StateOrigin): Promise<{ summary: string | null; problems: string[] }> {
   let ok = 0;
   const problems: string[] = [];
   for (const m of modules) {
     try {
-      await setInstanceState(ctx, projectId, m.moduleId, { orgUnitId: m.orgUnitId, state: m.state, ...(m.note !== undefined ? { note: m.note } : {}) });
+      await setInstanceState(ctx, projectId, m.moduleId, { orgUnitId: m.orgUnitId, state: m.state, ...(m.note !== undefined ? { note: m.note } : {}) }, origin);
       ok++;
     } catch (e) {
       problems.push(`Module state not saved: ${e instanceof Error ? e.message : "could not save"}`);
@@ -267,6 +267,8 @@ export async function applyStatusReport(ctx: TenantContext, raw: ApplyInputT, re
   const week = isoWeek.split("-W")[1];
   const dateLabel = realNow.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
   const reason = `From the status report uploaded ${dateLabel}${input.preparedBy ? ` (prepared by ${input.preparedBy})` : ""}`.slice(0, 300);
+  // The stamp gates and module states carry: the report (its file name) and the week.
+  const origin: StateOrigin = { source: `Status report · Week ${week}${input.file ? ` · ${input.file.name}` : ""}` };
   const projectsIn = await withTenant(ctx, (tx) =>
     tx.project.findMany({
       where: { id: { in: input.rows.map((r) => r.projectId) } },
@@ -298,8 +300,8 @@ export async function applyStatusReport(ctx: TenantContext, raw: ApplyInputT, re
         // One market's one-pager: its check-in (RAG + narrative), its copy of the gates,
         // its module states. The product's weekly update is the product deck's to fill.
         await saveMarketCheckIn(ctx, row.projectId, row.orgUnitId, { narrative: row.narrative, rag: row.rag }, now);
-        const g = row.gates?.length ? await applyGates(ctx, row.projectId, row.gates, scope, reason) : { summary: null, problems: [] };
-        const m = row.modules?.length ? await applyModules(ctx, row.projectId, row.modules) : { summary: null, problems: [] };
+        const g = row.gates?.length ? await applyGates(ctx, row.projectId, row.gates, scope, reason, origin) : { summary: null, problems: [] };
+        const m = row.modules?.length ? await applyModules(ctx, row.projectId, row.modules, origin) : { summary: null, problems: [] };
         let attached = false;
         if (input.file) {
           await createDocument(ctx, row.projectId, {
@@ -338,13 +340,13 @@ export async function applyStatusReport(ctx: TenantContext, raw: ApplyInputT, re
       let gates: string | null = null;
       if (row.stage) await updateProject(ctx, row.projectId, { statusNote: row.stage });
       if (row.gates?.length) {
-        const g = await applyGates(ctx, row.projectId, row.gates, scope, reason);
+        const g = await applyGates(ctx, row.projectId, row.gates, scope, reason, origin);
         gates = g.summary;
         problems.push(...g.problems);
       }
       let modules: string | null = null;
       if (row.modules?.length) {
-        const m = await applyModules(ctx, row.projectId, row.modules);
+        const m = await applyModules(ctx, row.projectId, row.modules, origin);
         modules = m.summary;
         problems.push(...m.problems);
       }

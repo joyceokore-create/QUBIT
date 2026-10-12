@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, ShieldAlert, X } from "lucide-react";
+import { FileText, Loader2, Plus, ShieldAlert, X } from "lucide-react";
 import type { NamedInstanceJson } from "@/components/panels/project-panel-json";
 import { CARD_GLASS as CARD, CARD_BG, FOCUS, PRIMARY, QUIET, SECONDARY } from "@/lib/surface";
 
@@ -216,8 +216,9 @@ function GroupRows({
             )}
           </td>
           {columns.map((c) => {
-            const base = r.cells.find((x) => x.orgUnitId === c.orgUnitId) ?? { orgUnitId: c.orgUnitId, state: "Planned", note: null, progress: 0 };
+            const base = r.cells.find((x) => x.orgUnitId === c.orgUnitId) ?? { orgUnitId: c.orgUnitId, state: "Planned", note: null, progress: 0, source: null };
             const cell = c.all ? { ...base, state: allState(r.cells) } : base;
+            const source = c.all ? null : (base.source ?? null);
             const on = selected.instance === r.id && selected.market === c.orgUnitId;
             const tok = STATE_TOK[cell.state] ?? "--ink4";
             const mixed = c.all && cell.state === "";
@@ -243,6 +244,14 @@ function GroupRows({
                   ) : (
                     <span className="rounded-full border px-2 py-0.5 text-[11px] font-semibold" style={{ color: `var(${tok})`, borderColor: `color-mix(in oklab, var(${tok}) 40%, transparent)` }}>
                       {mixed ? "Mixed" : (STATE_LABEL[cell.state] ?? cell.state)}
+                    </span>
+                  )}
+                  {source && (
+                    <span
+                      className="inline-flex items-center gap-0.5 font-mono text-[8.5px] font-bold uppercase tracking-[.6px] text-[var(--ink4)]"
+                      title={`Set by ${source.label} · ${new Date(source.at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}${source.byName ? ` · ${source.byName}` : ""}${cell.note ? ` — ${cell.note}` : ""}`}
+                    >
+                      <FileText className="size-2.5" aria-hidden /> report
                     </span>
                   )}
                   {r.ownGates ? (

@@ -7,7 +7,7 @@ import { prisma } from "@/lib/db";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { isoWeekId, shiftIsoWeek } from "@/lib/iso-week";
 import { confirmCheckIn, getCurrentCheckIn } from "@/server/checkins";
-import { getProjectCheckpoints } from "@/server/checkpoints";
+import { getProjectCheckpoints, setCheckpointState } from "@/server/checkpoints";
 import { addMarkets } from "@/server/markets";
 import { createProjectInstance, listProjectInstances } from "@/server/project-instances";
 import { composeFromMarkets, draftFromMarkets } from "@/server/market-rollup";
@@ -167,8 +167,15 @@ describe("status-report upload — apply", () => {
       expect(productRow!.gates).toMatch(/done/);
     }
     const cells = (await listProjectInstances(pm, product, "module")).find((m) => m.id === ussd.id)!.cells;
-    expect(cells.find((c) => c.orgUnitId === market.orgUnitId)).toMatchObject({ state: "Live", note: "Rolled out" });
+    expect(cells.find((c) => c.orgUnitId === market.orgUnitId)).toMatchObject({ state: "Live", note: "Rolled out", source: { label: expect.stringMatching(/^Status report · Week \d\d$/), byName: expect.any(String) } });
     expect(productRow!.modules).toBe("1 state updated");
+    if (gate) {
+      // Provenance on the gate the upload moved — and a hand change clears it.
+      expect((await getProjectCheckpoints(pm, product)).rows[0]!.source).toMatchObject({ label: expect.stringMatching(/^Status report/) });
+      await setCheckpointState(pm, product, { checkpointId: gate.checkpointId, state: "InProgress" });
+      expect((await getProjectCheckpoints(pm, product)).rows[0]!.source).toBeNull();
+      await setCheckpointState(pm, product, { checkpointId: gate.checkpointId, state: "Done", overrideReason: "back to done for the test" }, { allMarkets: true });
+    }
 
     // Market one-pager ("Upload product <Market>"): the market's check-in, not the product's draft.
     const [marketRow] = await applyStatusReport(
