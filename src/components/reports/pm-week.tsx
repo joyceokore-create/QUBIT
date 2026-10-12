@@ -4,9 +4,7 @@ import { dispatchTourEvent } from "@/components/tour/tour-events";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { CheckCheck, Send, ShieldAlert, Upload } from "lucide-react";
-import { StatusUploadDialog } from "@/components/reports/status-upload-dialog";
 import { RagTally, WeekMeter } from "@/components/reports/week-meter";
 import { LocalTime } from "@/components/reports/local-time";
 import { lineTone, TONE_TOKEN } from "@/lib/status-lines";
@@ -48,10 +46,8 @@ const stage = (r: PmRowJson) => (!r.confirmed ? 0 : !r.sentToHead ? 1 : 2);
 const sortRows = (rows: PmRowJson[]) =>
   [...rows].sort((a, b) => stage(a) - stage(b) || RANK[a.effectiveRag] - RANK[b.effectiveRag] || a.name.localeCompare(b.name));
 
-export function PmWeek({ isCurrent, rows: initial, canUpload = false, openUploadOnLoad = false }: { isoWeek: string; isCurrent: boolean; rows: PmRowJson[]; canUpload?: boolean; /** ?upload=1 — the walkthrough's "set up all at once" door. */ openUploadOnLoad?: boolean }) {
-  const router = useRouter();
+export function PmWeek({ isCurrent, rows: initial, canUpload = false }: { isoWeek: string; isCurrent: boolean; rows: PmRowJson[]; canUpload?: boolean }) {
   const [rows, setRows] = useState<PmRowJson[]>(initial);
-  const [uploadOpen, setUploadOpen] = useState(openUploadOnLoad && canUpload);
   const [sendingAll, setSendingAll] = useState<{ done: number; total: number } | null>(null);
   const [sendAllErrors, setSendAllErrors] = useState<string[]>([]);
   const [openId, setOpenId] = useState<string | null>(() => initial.find((r) => !r.confirmed && r.canConfirm)?.projectId ?? null);
@@ -133,9 +129,9 @@ export function PmWeek({ isCurrent, rows: initial, canUpload = false, openUpload
         <div className="flex flex-wrap items-center gap-2" data-tour="pm-week-actions">
           <RagTally counts={counts} />
           {canUpload && isCurrent && (
-            <button type="button" onClick={() => setUploadOpen(true)} className={`${SECONDARY} gap-1.5`}>
-              <Upload className="size-3.5" aria-hidden /> Upload status report
-            </button>
+            <Link href="/reports/update" className={`${SECONDARY} gap-1.5`} title="Every project you run on one page: gates, channel states, market check-ins and the line — or prefill it from a status report">
+              <Upload className="size-3.5" aria-hidden /> Update all my projects
+            </Link>
           )}
           {sendable.length >= 2 && (
             <button type="button" onClick={() => void sendAll()} disabled={sendingAll !== null} className={`${PRIMARY} gap-1.5`}>
@@ -148,13 +144,6 @@ export function PmWeek({ isCurrent, rows: initial, canUpload = false, openUpload
         <p role="alert" className="px-[18px] py-2 text-[12px] text-[var(--bad)]">
           {sendAllErrors.join(" · ")}
         </p>
-      )}
-      {canUpload && (
-        <StatusUploadDialog
-          open={uploadOpen}
-          onOpenChange={setUploadOpen}
-          onApplied={() => router.refresh()}
-        />
       )}
       <ul>
         {rows.map((r) => (

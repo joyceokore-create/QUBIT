@@ -183,7 +183,7 @@ export function ProjectWorkspace({
                     <>
                       <StatusUpdateCard projectId={data.id} ci={ci} onChange={setCi} onGoToDelivery={() => setTab("Delivery")} />
                       {data.canSetUp && (
-                        <Link href="/reports" className={`-mt-2 inline-flex items-center gap-1 self-start rounded-[4px] text-[12.5px] font-semibold text-[var(--brand)] underline-offset-2 hover:underline ${FOCUS}`}>
+                        <Link href="/reports/update" className={`-mt-2 inline-flex items-center gap-1 self-start rounded-[4px] text-[12.5px] font-semibold text-[var(--brand)] underline-offset-2 hover:underline ${FOCUS}`}>
                           Update all my projects <ArrowRight className="size-3.5" aria-hidden />
                         </Link>
                       )}

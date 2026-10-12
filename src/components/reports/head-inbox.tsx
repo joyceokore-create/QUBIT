@@ -2,9 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Bell, Check, Upload } from "lucide-react";
-import { StatusUploadDialog } from "@/components/reports/status-upload-dialog";
 import { WeekMeter } from "@/components/reports/week-meter";
 import { LocalTime } from "@/components/reports/local-time";
 import { CARD_GLASS as CARD, CARD_BG, FOCUS, ragFill, ragToken } from "@/lib/surface";
@@ -49,25 +47,19 @@ export function HeadInbox({
   isCurrent,
   canNudge,
   canUpload = false,
-  openUploadOnLoad = false,
   header,
   groups,
 }: {
   isoWeek: string;
   isCurrent: boolean;
   canNudge: boolean;
-  /** Heads run projects too (and may fill any project from a report): the same upload door
-   * as the PM queue. */
+  /** Heads run projects too (and may fill any project): the same door as the PM queue. */
   canUpload?: boolean;
-  /** ?upload=1 — the walkthrough's "set up all at once" door. */
-  openUploadOnLoad?: boolean;
   header: { in: number; total: number; outstanding: number };
   groups: InboxGroupJson[];
 }) {
-  const router = useRouter();
   const [rowState, setRowState] = useState<Record<string, NudgeState>>({});
   const [all, setAll] = useState<"idle" | "busy" | { created: number } | { error: string }>("idle");
-  const [uploadOpen, setUploadOpen] = useState(openUploadOnLoad && canUpload && isCurrent);
 
   const nudgeAll = async () => {
     setAll("busy");
@@ -94,9 +86,9 @@ export function HeadInbox({
       </h2>
       <WeekMeter done={header.in} total={header.total} label={`${header.in} of ${header.total} updates in`} sub={`${header.outstanding} outstanding`} ariaLabel="Updates received this week">
         {canUpload && isCurrent && (
-          <button type="button" onClick={() => setUploadOpen(true)} className={BTN} title="Fill projects' updates, gates and channel states from a status report (Word, Excel, PDF or PowerPoint)">
-            <Upload className="size-3.5" aria-hidden /> Upload status report
-          </button>
+          <Link href="/reports/update" className={BTN} title="Every project on one page: gates, channel states, market check-ins and the line — or prefill it from a status report">
+            <Upload className="size-3.5" aria-hidden /> Update all my projects
+          </Link>
         )}
         {isCurrent && canNudge && header.outstanding > 0 && (
           all === "idle" || all === "busy" ? (
@@ -114,7 +106,6 @@ export function HeadInbox({
           )
         )}
       </WeekMeter>
-      {canUpload && <StatusUploadDialog open={uploadOpen} onOpenChange={setUploadOpen} onApplied={() => router.refresh()} />}
 
       {groups.length === 0 ? (
         <p className="p-[14px_18px] text-[12.5px] text-[var(--ink5)]">No active projects this week.</p>

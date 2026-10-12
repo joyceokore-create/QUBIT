@@ -12,7 +12,7 @@ import { addMarkets } from "@/server/markets";
 import { createProjectInstance, listProjectInstances } from "@/server/project-instances";
 import { composeFromMarkets, draftFromMarkets } from "@/server/market-rollup";
 import { getMarketTrack } from "@/server/rollout";
-import { applyStatusReport, buildStatusTemplate, getDeliveryCatalog, previewStatusReport } from "@/server/status-report-upload";
+import { applyStatusReport, getDeliveryCatalog, getStatusWorkspace } from "@/server/status-report-upload";
 import { resolveDelivery } from "@/lib/status-report-delivery";
 import { createUsers, cleanupFixtureUsers } from "./_users";
 
@@ -151,7 +151,6 @@ describe("status-report upload — apply", () => {
             rag: "Green",
             stage: "",
             narrative: "Product slide.",
-            target: "project",
             gates: plan.gates.map((g) => ({ checkpointId: g.checkpointId, state: g.to })),
             modules: plan.modules.map((m) => ({ moduleId: m.moduleId, orgUnitId: m.orgUnitId, state: m.to, note: m.note })),
           },
@@ -177,33 +176,46 @@ describe("status-report upload — apply", () => {
       await setCheckpointState(pm, product, { checkpointId: gate.checkpointId, state: "Done", overrideReason: "back to done for the test" }, { allMarkets: true });
     }
 
-    // Market one-pager ("Upload product <Market>"): the market's check-in, not the product's draft.
+    // A market one-pager: the market's check-in and its channel states, not the product's draft.
     const [marketRow] = await applyStatusReport(
       pm,
-      { rows: [{ projectId: product, rag: "Amber", stage: "", narrative: "Market focus and blockers.", target: "market", orgUnitId: market.orgUnitId, modules: [{ moduleId: ussd.id, orgUnitId: market.orgUnitId, state: "UAT" }] }] },
+      { rows: [{ projectId: product, markets: [{ orgUnitId: market.orgUnitId, rag: "Amber", narrative: "Market focus and blockers." }], modules: [{ moduleId: ussd.id, orgUnitId: market.orgUnitId, state: "UAT" }] }] },
       NOW,
     );
-    expect(marketRow).toMatchObject({ outcome: "market", market: market.code, modules: "1 state updated" });
+    expect(marketRow).toMatchObject({ outcome: "none", markets: `1 market check-in saved: ${market.code}`, modules: "1 state updated" });
     expect((await getMarketTrack(pm, product, market.orgUnitId, NOW))?.checkIn).toMatchObject({ narrative: "Market focus and blockers.", rag: "Amber" });
     expect((await getCurrentCheckIn(pm, product, NOW)).narrative).toBe("Product slide."); // untouched
-    // A market row needs its market.
-    const [bad] = await applyStatusReport(pm, { rows: [{ projectId: product, rag: "Amber", stage: "", narrative: "x", target: "market", orgUnitId: null }] }, NOW);
-    expect(bad).toMatchObject({ outcome: "error" });
   });
 
-  it("builds this week's Excel template from my projects and reads it back exactly, by code", async () => {
-    const { fileName, xlsx } = await buildStatusTemplate(pm, NOW);
-    expect(fileName).toBe(`qubit-status-report-${WEEK}.xlsx`);
-    const preview = await previewStatusReport(pm, xlsx, fileName, null, NOW);
-    expect(preview.format).toBe("xlsx");
-    const rows = preview.rows.filter((r) => r.code === "SRU-P");
-    // The product row and one per market, each matched exactly by code; nothing changes on an untouched template.
-    expect(rows.map((r) => [r.match.confidence, Boolean(r.match.orgUnitId)])).toEqual([["exact", false], ["exact", true]]);
-    expect(rows.every((r) => r.delivery && r.delivery.gates.length === 0 && r.delivery.modules.length === 0)).toBe(true);
-    expect(rows[1]!.cells.map((c) => c.column)).toEqual(["USSD"]);
-    expect(preview.rows.some((r) => r.code === "SRU-C")).toBe(false); // not mine
+  it("serves the weekly update workspace: my projects with catalog, this week's line, status note and market check-ins", async () => {
+    const ws = await getStatusWorkspace(pm, null, NOW);
+    expect(ws.isoWeek).toBe(WEEK);
+    const codes = ws.projects.map((p) => p.catalog.code);
+    expect(codes).toEqual(expect.arrayContaining(["SRU-A", "SRU-B", "SRU-P"]));
+    expect(codes).not.toContain("SRU-C"); // not mine
+    const prod = ws.projects.find((p) => p.catalog.code === "SRU-P")!;
+    expect(prod.catalog.markets).toHaveLength(1);
+    expect(prod.markets[0]).toMatchObject({ orgUnitId: prod.catalog.markets[0]!.orgUnitId, rag: "Amber", narrative: "Market focus and blockers." });
+    expect(prod.product).toMatchObject({ narrative: "Product slide.", alreadySent: false });
+    expect(ws.projects.find((p) => p.catalog.code === "SRU-B")!.product.alreadySent).toBe(true);
   });
-
+  it("applies a workspace row with no line: a market check-in and a market-scoped gate, the product's update untouched", async () => {
+    const catalog = (await getDeliveryCatalog(pm, product))!;
+    const market = catalog.markets[0]!;
+    const gate = catalog.gates[1];
+    const [row] = await applyStatusReport(
+      pm,
+      { rows: [{ projectId: product, markets: [{ orgUnitId: market.orgUnitId, rag: "Red", narrative: "Blocked on TMS." }], gates: gate ? [{ checkpointId: gate.checkpointId, state: "InProgress", orgUnitId: market.orgUnitId }] : [] }] },
+      NOW,
+    );
+    expect(row).toMatchObject({ outcome: "none", markets: `1 market check-in saved: ${market.code}`, problems: [] });
+    expect((await getMarketTrack(pm, product, market.orgUnitId, NOW))?.checkIn).toMatchObject({ rag: "Red", narrative: "Blocked on TMS." });
+    expect((await getCurrentCheckIn(pm, product, NOW)).narrative).toBe("Product slide.");
+    if (gate) {
+      expect((await getProjectCheckpoints(pm, product, { orgUnitId: market.orgUnitId })).rows[1]!.state).toBe("InProgress");
+      expect((await getProjectCheckpoints(pm, product)).rows[1]!.state).toBe("NotStarted"); // product track untouched
+    }
+  });
   it("drafts the product line from this week's market check-ins: worst RAG, one clause per market, missing markets named", async () => {
     // The market one-pager above left an Amber check-in on the product's one market.
     const comp = await composeFromMarkets(pm, product, NOW);

@@ -137,9 +137,20 @@ render); modules still work at product level (one state column, "Product").
   it, shown in the review like every other change; a file older than QUBIT proposes moves
   backwards, which are flagged and unticked by default; a row for a project QUBIT lacks can
   create it from the dialog (uploader = PM, first live template); when the file has no RAG
-  the computed one is proposed. `GET /api/reports/status-upload/template` builds QUBIT's own
-  Excel template (Status + Channels + Read me sheets, prefilled with codes, gates, channel
-  states and this week's draft) so the upload reads back exactly by code.
+  the computed one is proposed.
+- The weekly update WORKSPACE (Joyce, 2026-10-12 — "everything updated at the upload step;
+  every gate appears whether in the report or not; a template is an edit workspace, not a
+  download"): `/reports/update` — one card per project the viewer runs, prefilled from
+  QUBIT by `getStatusWorkspace` (`GET /api/reports/status-upload/workspace?week=`): the
+  line for the Head + RAG, the status note, EVERY gate on the Product build track with a
+  scope select (the product = every market, or one market's copy), every channel's state
+  per market, each market's own check-in (RAG + focus & blockers), the derived progress
+  updating as gates move. A report file only prefills the cards (rows it cannot place are
+  offered a project, a suggested match, or "create it"). "Apply" sends only the diff to
+  `applyStatusReport`, whose rows now carry an optional line, scoped `gates[].orgUnitId`,
+  `modules[]` and `markets[]` (check-ins); lines are drafted and sent from the queue as
+  before. The old upload dialog and the Excel template are gone; `?upload=1` redirects to
+  the page.
 - Product line from market check-ins (Joyce, 2026-10-12): `server/market-rollup.ts
   composeFromMarkets` / `draftFromMarkets` — worst market RAG, one clause (first sentence)
   per market, worst first, within 500 characters, the markets with no check-in named; saved

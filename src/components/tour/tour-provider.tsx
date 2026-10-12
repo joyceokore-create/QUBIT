@@ -172,8 +172,8 @@ export function TourProvider({
   const uploadAll = useCallback(() => {
     stamp();
     dispatch({ type: "exit" });
-    router.push(`/reports${reportsQuery}${reportsQuery ? "&" : "?"}upload=1`);
-  }, [stamp, reportsQuery, router]);
+    router.push("/reports/update?upload=1");
+  }, [stamp, router]);
 
   const act = useCallback(
     (type: "next" | "back" | "skip" | "exit") => {

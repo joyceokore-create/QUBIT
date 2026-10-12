@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { isoWeekId, isValidIsoWeek } from "@/lib/iso-week";
@@ -44,6 +45,8 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   if (!session?.user) return null;
   const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
   const sp = await searchParams;
+  // The walkthrough's "update all at once" door moved to its own page.
+  if (sp.upload === "1") redirect("/reports/update?upload=1");
 
   const currentWeek = isoWeekId(new Date());
   const week = sp.week && isValidIsoWeek(sp.week) && sp.week <= currentWeek ? sp.week : currentWeek;
@@ -92,7 +95,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
               emptyCopy="No confirmed status updates yet — this week's will be the first."
             />
           ) : (
-            <PmWeek isoWeek={week} isCurrent={data.week.isCurrent} canUpload={!previewing} openUploadOnLoad={sp.upload === "1" && !previewing && data.week.isCurrent} rows={data.rows.map((r) => ({ ...r, sentAt: r.sentAt?.toISOString() ?? null }))} />
+            <PmWeek isoWeek={week} isCurrent={data.week.isCurrent} canUpload={!previewing} rows={data.rows.map((r) => ({ ...r, sentAt: r.sentAt?.toISOString() ?? null }))} />
           )
         ) : data.kind === "head" ? (
           tab === "rollups" ? (
@@ -104,7 +107,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
                 isCurrent={data.week.isCurrent}
                 canNudge={data.can.nudge}
                 canUpload={!previewing}
-                openUploadOnLoad={sp.upload === "1" && !previewing && data.week.isCurrent}
+               
                 header={data.header}
                 groups={data.groups.map((g) => ({
                   portfolioName: g.portfolioName,

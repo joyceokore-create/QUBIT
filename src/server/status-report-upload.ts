@@ -15,13 +15,16 @@ import { createProject, updateProject } from "@/server/projects";
 import { saveMarketCheckIn } from "@/server/rollout";
 import { extractStatusReport, NARRATIVE_MAX, STAGE_MAX, type ParsedRow, type ReportFormat } from "@/server/status-report/parse";
 import { matchProjectAndMarket, type MatchableProject, type RowMatch } from "@/server/status-report/match";
-import { GATE_STATE_LABEL, MODULE_STATE_LABEL, resolveDelivery, type DeliveryCatalog, type DeliveryPlan } from "@/lib/status-report-delivery";
-import { writeZip } from "@/lib/zip-write";
+import { resolveDelivery, type DeliveryCatalog, type DeliveryPlan } from "@/lib/status-report-delivery";
 
 /**
- * Status-report upload (Reports › This week). Two steps, both through the engines the
- * workspace already uses: PREVIEW parses the file and matches rows to the viewer's own
- * projects (nothing written); APPLY fills each chosen project's weekly draft
+ * Weekly update workspace (Reports › Update all my projects). GET the WORKSPACE — every
+ * project the viewer runs, prefilled from QUBIT: the delivery catalog (gates and their
+ * states per scope, channel states per market), this week's line and RAG, the status
+ * note, this week's market check-ins — so the PM keys in everything in one place. A
+ * report file is only a way to prefill it: PREVIEW parses the file and matches rows to
+ * the viewer's own projects (nothing written); APPLY writes what the PM reviewed — the
+ * product's weekly draft
  * (saveCheckInDraft: narrative + the report's RAG as a reasoned override), writes the Stage
  * into the project's status note (updateProject — the PM's own governance field) and
  * attaches the file to the project's Documents. Sending stays the PM's one action
@@ -120,6 +123,60 @@ export async function getDeliveryCatalog(ctx: TenantContext, projectId: string):
   });
 }
 
+/** One project in the weekly update workspace: everything editable, as QUBIT has it now. */
+export interface WorkspaceProject {
+  catalog: DeliveryCatalog;
+  product: {
+    status: "Draft" | "Confirmed" | "None";
+    narrative: string;
+    computedRag: Rag;
+    ragOverride: Rag | null;
+    statusNote: string;
+    alreadySent: boolean;
+  };
+  /** This week's market check-ins (rag null = none yet). */
+  markets: { orgUnitId: string; rag: Rag | null; narrative: string }[];
+}
+export interface StatusWorkspace {
+  isoWeek: string;
+  past: boolean;
+  projects: WorkspaceProject[];
+}
+
+export async function getStatusWorkspace(ctx: TenantContext, week?: string | null, now = new Date()): Promise<StatusWorkspace> {
+  const { isoWeek, at, past } = resolveReportWeek(week, now);
+  const projects = await matchableProjects(ctx);
+  const ids = projects.map((p) => p.id);
+  const extra = await withTenant(ctx, async (tx) => {
+    const [notes, marketCheckIns] = await Promise.all([
+      tx.project.findMany({ where: { id: { in: ids } }, select: { id: true, statusNote: true } }),
+      tx.marketCheckIn.findMany({ where: { projectId: { in: ids }, isoWeek }, select: { projectId: true, orgUnitId: true, narrative: true, rag: true } }),
+    ]);
+    return { notes: new Map(notes.map((n) => [n.id, n.statusNote ?? ""])), market: new Map(marketCheckIns.map((c) => [`${c.projectId}:${c.orgUnitId}`, c])) };
+  });
+  const out: WorkspaceProject[] = [];
+  for (const p of projects) {
+    const [catalog, ci] = await Promise.all([getDeliveryCatalog(ctx, p.id), getCurrentCheckIn(ctx, p.id, at)]);
+    if (!catalog) continue;
+    out.push({
+      catalog,
+      product: {
+        status: ci.status,
+        narrative: ci.narrative ?? "",
+        computedRag: ci.computedRag,
+        ragOverride: (ci.ragOverride as Rag | null) ?? null,
+        statusNote: extra.notes.get(p.id) ?? "",
+        alreadySent: ci.status === "Confirmed",
+      },
+      markets: catalog.markets.map((m) => {
+        const c = extra.market.get(`${p.id}:${m.orgUnitId}`);
+        return { orgUnitId: m.orgUnitId, rag: (c?.rag as Rag | undefined) ?? null, narrative: c?.narrative ?? "" };
+      }),
+    });
+  }
+  return { isoWeek, past, projects: out };
+}
+
 export const ApplyInput = z.object({
   /** ISO week the report is for (default: this week). */
   week: z.string().regex(/^\d{4}-W\d{2}$/).optional(),
@@ -129,23 +186,22 @@ export const ApplyInput = z.object({
     .array(
       z.object({
         projectId: z.string().uuid(),
-        rag: z.enum(RAGS),
+        /** The product's line for the Head — empty = leave the weekly update alone. */
+        narrative: z.string().trim().max(NARRATIVE_MAX).optional().default(""),
+        rag: z.enum(RAGS).optional(),
         stage: z.string().trim().max(STAGE_MAX).optional().default(""),
-        narrative: z.string().trim().min(1).max(NARRATIVE_MAX),
-        /** Replace an already-sent week with this row and resend it. */
+        /** Replace an already-sent week with this line and resend it. */
         resend: z.boolean().optional(),
-        /** "market": the row is one market's one-pager → that market's check-in, not the
-         * product's update (orgUnitId required). */
-        target: z.enum(["project", "market"]).optional().default("project"),
-        orgUnitId: z.string().uuid().nullable().optional(),
-        /** Gate states the PM ticked, written on the product track (every market at
-         * product level) or on the named market's copy. */
-        gates: z.array(z.object({ checkpointId: z.string().min(1), state: z.enum(CHECKPOINT_STATES) })).max(40).optional(),
-        /** Module states per market the PM ticked. */
+        /** Gate states the PM set: orgUnitId null = the product track (every market at
+         * product level), set = that market's copy. */
+        gates: z.array(z.object({ checkpointId: z.string().min(1), state: z.enum(CHECKPOINT_STATES), orgUnitId: z.string().uuid().nullable().optional() })).max(200).optional(),
+        /** Module states per market the PM set. */
         modules: z
           .array(z.object({ moduleId: z.string().min(1), orgUnitId: z.string().uuid().nullable(), state: z.enum(INSTANCE_STATES), note: z.string().trim().max(200).nullable().optional() }))
           .max(400)
           .optional(),
+        /** This week's market check-ins (focus & blockers per market). */
+        markets: z.array(z.object({ orgUnitId: z.string().uuid(), rag: z.enum(RAGS), narrative: z.string().trim().min(1).max(1000) })).max(40).optional(),
       }),
     )
     .min(1)
@@ -163,12 +219,12 @@ export type ApplyInputT = z.input<typeof ApplyInput>;
 export interface ApplyRow {
   projectId: string;
   code: string;
-  /** "market": the market's check-in was saved (the product's update untouched). */
-  outcome: "drafted" | "resent" | "sent" | "market" | "skipped" | "error";
+  /** What happened to the product's weekly line ("none" = no line given, delivery only). */
+  outcome: "drafted" | "resent" | "sent" | "none" | "skipped" | "error";
   message?: string;
   attached: boolean;
-  /** The market the row was about, when it was one market's one-pager. */
-  market?: string | null;
+  /** Market check-ins saved ("2 market check-ins saved: KE, RW"). */
+  markets?: string | null;
   /** What the row did to the delivery gates ("MVP1 done · BRD in progress"). */
   gates?: string | null;
   /** What the row did to module states ("9 of 42 states updated"). */
@@ -289,69 +345,77 @@ export async function applyStatusReport(ctx: TenantContext, raw: ApplyInputT, re
         out.push({ projectId: row.projectId, code, outcome: "error", message: "You don't run this project.", attached: false });
         continue;
       }
-      const marketCode = row.orgUnitId ? codesOfMarkets.get(`${row.projectId}:${row.orgUnitId}`) ?? null : null;
       const problems: string[] = [];
-      const scope: GateScope = row.orgUnitId ? { orgUnitId: row.orgUnitId } : { allMarkets: true };
-      if (row.target === "market") {
-        if (!row.orgUnitId || !marketCode) {
-          out.push({ projectId: row.projectId, code, outcome: "error", message: "Pick the market this one-pager is about.", attached: false });
-          continue;
+      let outcome: ApplyRow["outcome"] = "none";
+      let message: string | undefined;
+      // ── the product's weekly line ──
+      if (row.narrative) {
+        const current = await getCurrentCheckIn(ctx, row.projectId, now);
+        const rag = row.rag ?? current.computedRag;
+        const override = rag !== current.computedRag ? { ragOverride: rag, overrideReason: reason } : {};
+        if (past) {
+          // A closed week has no queue: the review here is the review, so send now.
+          if (current.status === "Confirmed" && !row.resend) {
+            outcome = "skipped";
+            message = `Week ${week} was already sent — tick Replace to resend it.`;
+          } else {
+            await confirmCheckIn(ctx, row.projectId, { narrative: row.narrative, ...override }, now);
+            outcome = current.status === "Confirmed" ? "resent" : "sent";
+          }
+        } else if (current.status === "Confirmed") {
+          if (!row.resend) {
+            outcome = "skipped";
+            message = "Already sent this week — tick Replace to resend it.";
+          } else {
+            // Recall: re-confirm = resend with the new line and RAG.
+            await confirmCheckIn(ctx, row.projectId, { narrative: row.narrative, ...override }, now);
+            outcome = "resent";
+          }
+        } else {
+          await saveCheckInDraft(ctx, row.projectId, { narrative: row.narrative, ragOverride: rag, overrideReason: reason }, now);
+          outcome = "drafted";
         }
-        // One market's one-pager: its check-in (RAG + narrative), its copy of the gates,
-        // its module states. The product's weekly update is the product deck's to fill.
-        await saveMarketCheckIn(ctx, row.projectId, row.orgUnitId, { narrative: row.narrative, rag: row.rag }, now);
-        const g = row.gates?.length ? await applyGates(ctx, row.projectId, row.gates, scope, reason, origin) : { summary: null, problems: [] };
-        const m = row.modules?.length ? await applyModules(ctx, row.projectId, row.modules, origin) : { summary: null, problems: [] };
-        let attached = false;
-        if (input.file) {
-          await createDocument(ctx, row.projectId, {
-            title: `Status report · Week ${week} · ${marketCode}${input.preparedBy ? ` · ${input.preparedBy}` : ""}`,
-            kind: "Other",
-            format: input.file.format,
-            fileData: input.file.base64,
-            source: "Uploaded",
-          });
-          attached = true;
-        }
-        out.push({ projectId: row.projectId, code, outcome: "market", attached, market: marketCode, gates: g.summary, modules: m.summary, problems: [...g.problems, ...m.problems] });
-        continue;
       }
-      const current = await getCurrentCheckIn(ctx, row.projectId, now);
-      let outcome: ApplyRow["outcome"] = "drafted";
-      if (past) {
-        // A closed week has no queue: the dialog's review is the review, so send now.
-        if (current.status === "Confirmed" && !row.resend) {
-          out.push({ projectId: row.projectId, code, outcome: "skipped", message: `Week ${week} was already sent — tick Replace to resend it.`, attached: false });
-          continue;
-        }
-        await confirmCheckIn(ctx, row.projectId, { narrative: row.narrative, ...(row.rag !== current.computedRag ? { ragOverride: row.rag, overrideReason: reason } : {}) }, now);
-        outcome = current.status === "Confirmed" ? "resent" : "sent";
-      } else if (current.status === "Confirmed") {
-        if (!row.resend) {
-          out.push({ projectId: row.projectId, code, outcome: "skipped", message: "Already sent this week — tick Replace to resend it.", attached: false });
-          continue;
-        }
-        // Recall by upload: re-confirm = resend with the new line and RAG.
-        await confirmCheckIn(ctx, row.projectId, { narrative: row.narrative, ...(row.rag !== current.computedRag ? { ragOverride: row.rag, overrideReason: reason } : {}) }, now);
-        outcome = "resent";
-      } else {
-        await saveCheckInDraft(ctx, row.projectId, { narrative: row.narrative, ragOverride: row.rag, overrideReason: reason }, now);
-      }
-      let gates: string | null = null;
       if (row.stage) await updateProject(ctx, row.projectId, { statusNote: row.stage });
-      if (row.gates?.length) {
-        const g = await applyGates(ctx, row.projectId, row.gates, scope, reason, origin);
-        gates = g.summary;
-        problems.push(...g.problems);
+      // ── market check-ins ──
+      let markets: string | null = null;
+      if (row.markets?.length) {
+        const saved: string[] = [];
+        for (const m of row.markets) {
+          const mc = codesOfMarkets.get(`${row.projectId}:${m.orgUnitId}`);
+          try {
+            await saveMarketCheckIn(ctx, row.projectId, m.orgUnitId, { narrative: m.narrative, rag: m.rag }, now);
+            saved.push(mc ?? "?");
+          } catch (e) {
+            problems.push(`${mc ?? "Market"} check-in not saved: ${e instanceof Error ? e.message : "could not save"}`);
+          }
+        }
+        markets = saved.length ? `${saved.length} market check-in${saved.length === 1 ? "" : "s"} saved: ${saved.join(", ")}` : null;
       }
+      // ── gates, per scope (product = every market; a market = its own copy) ──
+      let gates: string | null = null;
+      if (row.gates?.length) {
+        const byScope = new Map<string | null, { checkpointId: string; state: CheckpointState }[]>();
+        for (const g of row.gates) byScope.set(g.orgUnitId ?? null, [...(byScope.get(g.orgUnitId ?? null) ?? []), { checkpointId: g.checkpointId, state: g.state }]);
+        const parts: string[] = [];
+        for (const [unit, list] of byScope) {
+          const g = await applyGates(ctx, row.projectId, list, unit ? { orgUnitId: unit } : { allMarkets: true }, reason, origin);
+          if (g.summary) parts.push(unit ? `${codesOfMarkets.get(`${row.projectId}:${unit}`) ?? "market"}: ${g.summary}` : g.summary);
+          problems.push(...g.problems);
+        }
+        gates = parts.length ? parts.join(" · ") : null;
+      }
+      // ── module states ──
       let modules: string | null = null;
       if (row.modules?.length) {
         const m = await applyModules(ctx, row.projectId, row.modules, origin);
         modules = m.summary;
         problems.push(...m.problems);
       }
+      // ── the file, once per project, when something was applied ──
       let attached = false;
-      if (input.file) {
+      const applied = outcome === "drafted" || outcome === "resent" || outcome === "sent" || markets || gates || modules;
+      if (input.file && applied) {
         await createDocument(ctx, row.projectId, {
           title: `Status report · Week ${week}${input.preparedBy ? ` · ${input.preparedBy}` : ""}`,
           kind: "Other",
@@ -361,7 +425,7 @@ export async function applyStatusReport(ctx: TenantContext, raw: ApplyInputT, re
         });
         attached = true;
       }
-      out.push({ projectId: row.projectId, code, outcome, attached, market: marketCode, gates, modules, problems });
+      out.push({ projectId: row.projectId, code, outcome, message, attached, markets, gates, modules, problems });
     } catch (e) {
       out.push({ projectId: row.projectId, code, outcome: "error", message: e instanceof Error ? e.message : "Could not apply.", attached: false });
     }
@@ -382,96 +446,4 @@ export async function createProjectFromReport(ctx: TenantContext, name: string):
   const template = (await listCheckpointTemplates(ctx))[0];
   if (template) await setProjectTemplate(ctx, project.id, template.id);
   return { id: project.id, code: project.code, name: project.name };
-}
-
-// ── QUBIT's own template: an Excel workbook the PM fills and uploads back ─────────────
-const xmlEsc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-const colRef = (i: number) => {
-  let n = i + 1;
-  let out = "";
-  while (n > 0) {
-    const r = (n - 1) % 26;
-    out = String.fromCharCode(65 + r) + out;
-    n = Math.floor((n - 1) / 26);
-  }
-  return out;
-};
-function sheetXml(rows: string[][], widths: number[]): string {
-  const cols = widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join("");
-  const body = rows
-    .map((cells, r) => `<row r="${r + 1}">${cells.map((v, c) => (v === "" ? "" : `<c r="${colRef(c)}${r + 1}" t="inlineStr"${r === 0 ? ' s="1"' : ""}><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`)).join("")}</row>`)
-    .join("");
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${cols}</cols><sheetData>${body}</sheetData></worksheet>`;
-}
-
-/**
- * This week's template for the viewer's projects, prefilled from QUBIT: sheet "Status" —
- * Code · Project · Market · RAG · one column per gate · Current stage · Update and Outlook
- * (one row per product, then one per market); sheet "Channels" — Code · Project · Market ·
- * Channel · State · Note. Codes make the upload exact; the gate and state words are the
- * ones the upload reads back.
- */
-export async function buildStatusTemplate(ctx: TenantContext, now = new Date()): Promise<{ fileName: string; xlsx: Buffer }> {
-  const projects = await matchableProjects(ctx);
-  const isoWeek = isoWeekId(now);
-  const catalogs = await Promise.all(projects.map((p) => getDeliveryCatalog(ctx, p.id)));
-  const gateNames: string[] = [];
-  for (const c of catalogs) for (const g of c?.gates ?? []) if (!gateNames.includes(g.name)) gateNames.push(g.name);
-  const extra = await withTenant(ctx, async (tx) => {
-    const ids = projects.map((p) => p.id);
-    const [notes, checkIns, marketCheckIns] = await Promise.all([
-      tx.project.findMany({ where: { id: { in: ids } }, select: { id: true, statusNote: true } }),
-      tx.checkIn.findMany({ where: { projectId: { in: ids }, isoWeek }, select: { projectId: true, narrative: true, ragOverride: true, computedRag: true } }),
-      tx.marketCheckIn.findMany({ where: { projectId: { in: ids }, isoWeek }, select: { projectId: true, orgUnitId: true, narrative: true, rag: true } }),
-    ]);
-    return { notes: new Map(notes.map((n) => [n.id, n.statusNote ?? ""])), checkIns: new Map(checkIns.map((c) => [c.projectId, c])), market: new Map(marketCheckIns.map((c) => [`${c.projectId}:${c.orgUnitId}`, c])) };
-  });
-  const header = ["Code", "Project", "Market", "RAG", ...gateNames, "Current stage", "Update and Outlook"];
-  const status: string[][] = [header];
-  const channels: string[][] = [["Code", "Project", "Market", "Channel", "State", "Note"]];
-  projects.forEach((p, i) => {
-    const c = catalogs[i];
-    const ci = extra.checkIns.get(p.id);
-    const gateCells = (unit: string | null) => gateNames.map((name) => {
-      const g = c?.gates.find((x) => x.name === name);
-      if (!g) return "";
-      return GATE_STATE_LABEL[c?.gateStates.find((s) => s.orgUnitId === unit && s.checkpointId === g.checkpointId)?.state ?? "NotStarted"];
-    });
-    status.push([p.code, p.name, "", ci?.ragOverride ?? ci?.computedRag ?? "", ...gateCells(null), extra.notes.get(p.id) ?? "", ci?.narrative ?? ""]);
-    for (const mk of c?.markets ?? []) {
-      const mc = extra.market.get(`${p.id}:${mk.orgUnitId}`);
-      status.push([p.code, p.name, mk.code, mc?.rag ?? "", ...gateCells(mk.orgUnitId), "", mc?.narrative ?? ""]);
-      for (const mod of c?.modules ?? []) {
-        const st = c?.moduleStates.find((s) => s.moduleId === mod.id && s.orgUnitId === mk.orgUnitId);
-        channels.push([p.code, p.name, mk.code, mod.name, MODULE_STATE_LABEL[st?.state ?? "Planned"], st?.note ?? ""]);
-      }
-    }
-    if (!c?.markets.length) for (const mod of c?.modules ?? []) {
-      const st = c?.moduleStates.find((s) => s.moduleId === mod.id && s.orgUnitId === null);
-      channels.push([p.code, p.name, "", mod.name, MODULE_STATE_LABEL[st?.state ?? "Planned"], st?.note ?? ""]);
-    }
-  });
-  const readme: string[][] = [
-    ["QUBIT status report template", ""],
-    ["Week", `${isoWeek} — upload this file under Reports › This week`],
-    ["Status sheet", "One row per project, then one per market (Market column). Set RAG to Green / Amber / Red, each gate to Done / In progress / Not started / n/a, write the stage and the update. Leave a cell blank to leave it alone."],
-    ["Channels sheet", "One row per channel × market. State: Planned / Build / UAT / Live / N/A. The note is optional."],
-    ["Rules", "Keep the Code column: it makes the match exact. Rows with a Market go to that market's check-in; the product row goes to the Head. Nothing is sent until you review and send in QUBIT."],
-  ];
-  const sheets: { name: string; xml: string }[] = [
-    { name: "Status", xml: sheetXml(status, [10, 28, 8, 8, ...gateNames.map(() => 13), 28, 60]) },
-    ...(channels.length > 1 ? [{ name: "Channels", xml: sheetXml(channels, [10, 28, 8, 22, 10, 40]) }] : []),
-    { name: "Read me", xml: sheetXml(readme, [18, 110]) },
-  ];
-  const files: Record<string, string> = {
-    "[Content_Types].xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("")}</Types>`,
-    "_rels/.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
-    "xl/workbook.xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheets.map((sh, i) => `<sheet name="${xmlEsc(sh.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("")}</sheets></workbook>`,
-    "xl/_rels/workbook.xml.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join("")}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
-    "xl/styles.xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" applyFont="1"/></cellXfs></styleSheet>`,
-  };
-  sheets.forEach((sh, i) => {
-    files[`xl/worksheets/sheet${i + 1}.xml`] = sh.xml;
-  });
-  return { fileName: `qubit-status-report-${isoWeek}.xlsx`, xlsx: writeZip(files) };
 }
