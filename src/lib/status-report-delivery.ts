@@ -263,7 +263,8 @@ export function resolveDelivery(
   if (row.gates.length === 0 && row.stage && byGate.size === 0) {
     const gate = stageGate(row.stage, catalog.gates);
     if (gate) {
-      const done = STAGE_DONE_WORDS.test(row.stage);
+      // "complete" with a percentage under 100 ("Build 90% complete") is still in progress.
+      const done = STAGE_DONE_WORDS.test(row.stage) && !under100;
       const from = currentGate(gate.checkpointId);
       const to: CheckpointState = done ? "Done" : "InProgress";
       if (!(from === "Done" && to === "InProgress") && from !== "Blocked") byGate.set(gate.checkpointId, { checkpointId: gate.checkpointId, name: gate.name, from, to, source: `stage: ${row.stage}`, blockedWanted: false, backwards: false });
