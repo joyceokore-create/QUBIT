@@ -103,6 +103,14 @@ describe("resolveDelivery", () => {
     expect(rw.gates.map((g) => [g.name, g.from, g.to, g.backwards])).toEqual([["BRD", "Done", "InProgress", true]]);
     expect(plan.modules.map((m) => [m.name, m.from, m.to, m.backwards])).toEqual([["P20 POS", "Live", "UAT", true]]);
   });
+  it("'production build complete', 'build 100 %' or a % Complete of 100 close every gate on the track", () => {
+    const all = (plan: ReturnType<typeof resolveDelivery>) => plan.gates.map((g) => `${g.name}:${g.to}`);
+    expect(all(resolveDelivery({ project: "Swipe Agent Banking", stage: "Production (build complete)", gates: [], cells: [] }, catalog))).toEqual(["BRD:Done", "MVP1:Done", "UAT:Done"]);
+    expect(all(resolveDelivery({ project: "Swipe Agent Banking", stage: "Production build 100%", gates: [], cells: [] }, catalog))).toEqual(["BRD:Done", "MVP1:Done", "UAT:Done"]);
+    expect(all(resolveDelivery({ project: "Swipe Agent Banking", stage: "Fixing issues on receipts", percent: 100, gates: [], cells: [] }, catalog))).toEqual(["BRD:Done", "MVP1:Done", "UAT:Done"]);
+    // 90 % is not done: the stage still decides.
+    expect(all(resolveDelivery({ project: "Swipe Agent Banking", stage: "Build 90% complete", percent: 90, gates: [], cells: [] }, catalog))).toEqual(["BRD:Done", "MVP1:InProgress"]);
+  });
   it("reads tracker gate cells: ✓ done, n/a left alone, free text listed as not placed", () => {
     const plan = resolveDelivery(
       { project: "Swipe Agent Banking", gates: [{ name: "BRD", stateRaw: "✓", note: "Internal draft" }, { name: "MVP1", stateRaw: "n/a", note: "" }, { name: "UAT", stateRaw: "Not returned from KCB", note: "" }], cells: [] },

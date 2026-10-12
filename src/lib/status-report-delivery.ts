@@ -193,7 +193,9 @@ const STAGE_SYNONYMS: [RegExp, string][] = [
   [/\b(prototype|poc|proof of concept|evaluation|demo)\b/, "Prototype"],
   [/\b(brd|requirements|discovery|scoping|business requirements|design)\b/, "BRD"],
 ];
-const STAGE_DONE_WORDS = /\b(complete|completed|live|done|launched|signed off|signed|approved|closed|deployed|in production|finished)\b/i;
+const STAGE_DONE_WORDS = /\b(complete|completed|live|done|launched|signed off|signed|approved|closed|deployed|in production|finished)\b|100\s*%/i;
+/** "Production build 100%", "build complete", a % Complete of 100: the whole track is done. */
+const TRACK_DONE = /\b(production|build|delivery|project)\b[^.]*\b(complete|completed|done|finished|100\s*%)|\b100\s*%\s*(complete|done)?/i;
 
 export function stageGate(stage: string, gates: CatalogGate[]): CatalogGate | null {
   const direct = matchName(stage, gates);
@@ -210,7 +212,7 @@ export function stageGate(stage: string, gates: CatalogGate[]): CatalogGate | nu
 }
 
 export function resolveDelivery(
-  row: { project: string; stage?: string; gates: ParsedGate[]; cells: ParsedCell[] },
+  row: { project: string; stage?: string; percent?: number | null; gates: ParsedGate[]; cells: ParsedCell[] },
   catalog: DeliveryCatalog,
   /** The PM's own choice of market (null = whole product); undefined = read the title. */
   opts: { market?: CatalogMarket | null } = {},
@@ -244,9 +246,21 @@ export function resolveDelivery(
     }
     byGate.set(gate.checkpointId, { checkpointId: gate.checkpointId, name: gate.name, from, to: want.state, source, blockedWanted: want.blockedWanted, backwards: GATE_RANK[want.state] < GATE_RANK[from] });
   }
+  // No gate columns: "100 %" / "production build complete" closes the whole track — unless a
+  // percentage under 100 ("Build 90% complete", a % Complete of 90) says it is not there yet.
+  const pctInStage = row.stage?.match(/(\d{1,3})\s*%/);
+  const under100 = (row.percent != null && row.percent < 100) || (pctInStage ? Number(pctInStage[1]) < 100 : false);
+  const trackDone = row.percent === 100 || (!under100 && Boolean(row.stage) && TRACK_DONE.test(row.stage!));
+  if (row.gates.length === 0 && trackDone) {
+    for (const g of catalog.gates) {
+      const from = currentGate(g.checkpointId);
+      if (from === "Done" || from === "Blocked") continue;
+      byGate.set(g.checkpointId, { checkpointId: g.checkpointId, name: g.name, from, to: "Done", source: row.percent === 100 ? "100 % complete" : `stage: ${row.stage}`, blockedWanted: false, backwards: false });
+    }
+  }
   // No gate columns, but a Stage ("UAT / Pilot Readiness (VAPT in progress)"): the named
   // gate and everything before it.
-  if (row.gates.length === 0 && row.stage) {
+  if (row.gates.length === 0 && row.stage && byGate.size === 0) {
     const gate = stageGate(row.stage, catalog.gates);
     if (gate) {
       const done = STAGE_DONE_WORDS.test(row.stage);

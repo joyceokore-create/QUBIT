@@ -29,6 +29,8 @@ export interface ParsedRow {
   code: string | null;
   /** A Market column — the row is that market's check-in. */
   market: string | null;
+  /** A "% Complete" column, when the file has one (100 = every gate done). */
+  percent: number | null;
   status: Rag | null;
   statusRaw: string;
   stage: string;
@@ -99,6 +101,7 @@ interface Columns {
   stage: number;
   update: number;
   market: number;
+  percent: number;
   /** Tracker format: one column per gate (BRD · Prototype · MVP1 …). */
   gates: { index: number; name: string }[];
 }
@@ -114,11 +117,12 @@ function columnsOf(header: string[]): Columns | null {
   const stage = find((c) => c === "stage" || c === "current stage" || c === "phase" || c === "current phase");
   const update = find((c) => c.includes("update") || c.includes("outlook") || c.includes("comment") || c.includes("narrative") || c === "notes");
   const market = find((c) => c === "market" || c === "subsidiary" || c === "country" || c === "instance");
+  const percent = find((c) => c === "%" || c.includes("% complete") || c === "percent" || c === "percentage" || c === "progress" || c === "% done");
   const gates = header
     .map((h, index) => ({ index, name: squash(h).replace(/\s*\n[\s\S]*$/, "") }))
-    .filter(({ index, name }) => name && ![project, code, status, stage, update, market].includes(index) && !KNOWN_COLUMN.test(name) && name.length <= 24);
+    .filter(({ index, name }) => name && ![project, code, status, stage, update, market, percent].includes(index) && !KNOWN_COLUMN.test(name) && name.length <= 24);
   if (status < 0 && update < 0 && gates.length < 2) return null;
-  return { project, code, status, stage, update, market, gates };
+  return { project, code, status, stage, update, market, percent, gates };
 }
 
 const isHeader = (cells: string[]) => columnsOf(cells) !== null;
@@ -145,6 +149,8 @@ function rowsFromTable(table: string[][], warnings: string[]): ParsedRow[] {
     if (!project) return;
     const code = col.code >= 0 ? squash(cells[col.code] ?? "").split("\n")[0]!.trim() || null : null;
     const market = col.market >= 0 ? squash(cells[col.market] ?? "").split("\n")[0]!.trim() || null : null;
+    const pct = col.percent >= 0 ? Number(squash(cells[col.percent] ?? "").replace(/[%\s]/g, "")) : NaN;
+    const percent = Number.isFinite(pct) && pct >= 0 && pct <= 100 ? Math.round(pct) : null;
     const statusRaw = col.status >= 0 ? squash(cells[col.status] ?? "") : "";
     const status = normaliseStatus(statusRaw);
     let stage = col.stage >= 0 ? squash(cells[col.stage] ?? "").replace(/\s*\n\s*/g, " ") : "";
@@ -171,7 +177,7 @@ function rowsFromTable(table: string[][], warnings: string[]): ParsedRow[] {
     }
     if (!update) w.push("No update text for this project.");
     if (/\b(shelved|discontinued|on hold|cancelled|canceled|parked)\b/i.test(stage)) w.push(`The stage says "${stage}" — if the project is paused, set its status in the workspace too.`);
-    rows.push({ line: headerAt + 2 + i, project, code, market, status, statusRaw, stage, update, warnings: w, ...NO_SLIDE, gates });
+    rows.push({ line: headerAt + 2 + i, project, code, market, percent, status, statusRaw, stage, update, warnings: w, ...NO_SLIDE, gates });
   });
   if (rows.length === 0) warnings.push("The table was found but had no project rows.");
   else if (ignored) warnings.push(`${ignored} heading/footnote ${ignored === 1 ? "line" : "lines"} in the table ignored.`);
@@ -567,7 +573,7 @@ export function parsePptx(buf: Buffer): ParsedReport {
       if (a && !reportDate) reportDate = a[1]!.trim();
     }
     const structure = slideStructure(shapes, slideWidth, titleIdx);
-    rows.push({ line: i + 1, project, code: null, market: null, status, statusRaw: ragIdx >= 0 ? rest[ragIdx]! : "", stage, update, warnings: w, gates, ...structure });
+    rows.push({ line: i + 1, project, code: null, market: null, percent: null, status, statusRaw: ragIdx >= 0 ? rest[ragIdx]! : "", stage, update, warnings: w, gates, ...structure });
   });
   if (!rows.length) warnings.push("No slide with a project title was found.");
   return { preparedBy, reportDate, rows, warnings };
