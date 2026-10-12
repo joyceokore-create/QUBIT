@@ -11,7 +11,7 @@ import { getProjectCheckpoints, setCheckpointState } from "@/server/checkpoints"
 import { addMarkets } from "@/server/markets";
 import { createProjectInstance, listProjectInstances } from "@/server/project-instances";
 import { composeFromMarkets, draftFromMarkets } from "@/server/market-rollup";
-import { getMarketTrack } from "@/server/rollout";
+import { getMarketTrack, saveMarketCheckIn } from "@/server/rollout";
 import { applyStatusReport, getDeliveryCatalog, getStatusWorkspace, saveStageTerm } from "@/server/status-report-upload";
 import { resolveDelivery } from "@/lib/status-report-delivery";
 import { createUsers, cleanupFixtureUsers } from "./_users";
@@ -218,7 +218,9 @@ describe("status-report upload — apply", () => {
     }
   });
   it("drafts the product line from this week's market check-ins: worst RAG, one clause per market, missing markets named", async () => {
-    // The market one-pager above left an Amber check-in on the product's one market.
+    // Own fixture, whatever earlier tests left on the market: one Amber check-in.
+    const mk = (await getDeliveryCatalog(pm, product))!.markets[0]!;
+    await saveMarketCheckIn(pm, product, mk.orgUnitId, { narrative: "Market focus and blockers.", rag: "Amber" }, NOW);
     const comp = await composeFromMarkets(pm, product, NOW);
     expect(comp).not.toBeNull();
     expect(comp!.markets).toHaveLength(1);
