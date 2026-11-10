@@ -15,6 +15,9 @@ import { AmbientField } from "@/components/layout/ambient-field";
 import { ssoEnabled } from "@/lib/sso";
 import { TourProvider } from "@/components/tour/tour-provider";
 import { shouldOfferTour } from "@/server/tour";
+import { getViewState } from "@/server/preferences";
+import { menuFor } from "@/lib/role-menus";
+import { SUPER_ADMIN } from "@/lib/view-roles";
 
 type BrandStyle = CSSProperties & { "--brand"?: string };
 
@@ -59,6 +62,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // First-week walkthrough: offered once to people who run projects (or hold the PM role).
   const tour = await shouldOfferTour(ctx);
 
+  // UX3 (D2a/D6/D11): with the new layout on, the sidebar is the "Viewing as" role's menu,
+  // filtered by the person's REAL permissions (roles pick the layout, permissions hide items).
+  const view = isRiverbank ? await getViewState(ctx) : null;
+  const newNav =
+    view?.uiMode === "new"
+      ? {
+          groups: menuFor(view.viewRole, { can: (perm) => can(ctx, perm), roles: ctx.roles, moduleAllowedRoles }),
+          viewRole: view.viewRole,
+          options: view.options,
+          showSwitch: view.showSwitch,
+          superAdmin: ctx.roles.includes(SUPER_ADMIN),
+        }
+      : undefined;
+
   return (
     <div data-tenant={session.user.tenantSlug} style={brandStyle} className="app-shell relative isolate min-h-screen bg-background">
       <TenantScope slug={session.user.tenantSlug} />
@@ -81,6 +98,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 userName={session.user.name ?? ""}
                 userEmail={session.user.email ?? ""}
                 userRole={primaryRoleLabel(session.user.roles)}
+                uiMode={view?.uiMode}
+                newNav={newNav}
               >
                 {children}
               </RiverbankShell>

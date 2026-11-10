@@ -1,6 +1,8 @@
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
-import { resolveRequestedLevel } from "@/lib/dashboard-level";
+import { DASHBOARD_LEVELS, resolveRequestedLevel } from "@/lib/dashboard-level";
+import { VIEW_ROLE_LEVEL } from "@/lib/view-roles";
+import { getViewState } from "@/server/preferences";
 import { CockpitPage } from "@/components/dashboard/cockpit/cockpit-page";
 import { Forbidden } from "@/components/forbidden";
 
@@ -25,7 +27,12 @@ export default async function DashboardPage({
   if (!can(ctx, "dashboard:read")) return <Forbidden />;
 
   const { level: requestedLevel, scope, period } = await searchParams;
-  const level = resolveRequestedLevel(ctx.roles, requestedLevel);
+  // UX3 (D2a): in the new layout "Viewing as" picks the level. A ?level= deep link (the
+  // product tour's PM walk) still works, validated downward-only as before; no button sets it.
+  const view = await getViewState(ctx);
+  const newUi = view.uiMode === "new";
+  const deepLink = typeof requestedLevel === "string" && (DASHBOARD_LEVELS as readonly string[]).includes(requestedLevel);
+  const level = newUi && !deepLink ? VIEW_ROLE_LEVEL[view.viewRole] : resolveRequestedLevel(ctx.roles, requestedLevel);
 
-  return <CockpitPage ctx={ctx} level={level} roles={ctx.roles} viewerId={ctx.userId} viewerName={session.user.name ?? undefined} scope={scope} period={period} />;
+  return <CockpitPage ctx={ctx} level={level} roles={ctx.roles} viewerId={ctx.userId} viewerName={session.user.name ?? undefined} scope={scope} period={period} newUi={newUi} />;
 }

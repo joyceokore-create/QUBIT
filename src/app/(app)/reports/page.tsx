@@ -4,6 +4,8 @@ import { can } from "@/lib/rbac";
 import { isoWeekId, isValidIsoWeek } from "@/lib/iso-week";
 import { canPreview, ownView, reportsHref, resolveReportsView, resolveTab, TABS, VIEW_LABEL, type ReportsView } from "@/lib/reports-view";
 import { getReportsWeek } from "@/server/reports-week";
+import { getViewState } from "@/server/preferences";
+import { isPreviewing, VIEW_ROLE_REPORTS } from "@/lib/view-roles";
 import { listRollups } from "@/server/portfolio-reports";
 import { listShares } from "@/server/q/shares";
 import { allowedDatasetKeys } from "@/server/custom-reports";
@@ -50,11 +52,18 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
 
   const currentWeek = isoWeekId(new Date());
   const week = sp.week && isValidIsoWeek(sp.week) && sp.week <= currentWeek ? sp.week : currentWeek;
-  const view = resolveReportsView(ctx.roles, sp.as);
-  const previewing = view !== ownView(ctx.roles);
+  // UX3 (D2a): in the new layout "Viewing as" picks the view, and the in-page preview
+  // switch goes. A ?as= deep link (the product tour) still works for those who may preview.
+  const viewState = await getViewState(ctx);
+  const newUi = viewState.uiMode === "new";
+  const asDeepLink = Boolean(sp.as) && canPreview(ctx.roles);
+  const view: ReportsView = newUi && !asDeepLink ? VIEW_ROLE_REPORTS[viewState.viewRole] : resolveReportsView(ctx.roles, sp.as);
+  // Previewing = read-only: a role the person doesn't hold (Super Admin's preview, a Head's ?as=).
+  const previewing = newUi && !asDeepLink ? isPreviewing(ctx.roles, viewState.viewRole) : view !== ownView(ctx.roles);
   const tab = resolveTab(view, sp.tab);
-  const defaults = { week: currentWeek, view: ownView(ctx.roles) };
-  const href = (p: { week?: string | null; as?: string | null; tab?: string | null }) => reportsHref({ week, as: previewing ? view : null, tab, ...p }, defaults);
+  const defaults = { week: currentWeek, view: newUi && !asDeepLink ? view : ownView(ctx.roles) };
+  const href = (p: { week?: string | null; as?: string | null; tab?: string | null }) =>
+    reportsHref({ week, as: previewing && (!newUi || asDeepLink) ? view : null, tab, ...p }, defaults);
   const isHead = can(ctx, "reports:read") && !previewing && view === "head";
 
   const data = await getReportsWeek(ctx, { isoWeek: week, view, previewing });
@@ -74,7 +83,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
           <WeekSwitcher isoWeek={week} range={data.week.range} prev={data.week.prev} next={data.week.next} currentWeek={currentWeek} hrefFor={(w) => href({ week: w })} />
-          {canPreview(ctx.roles) && <PreviewSwitch view={view} hrefFor={(v) => href({ as: v, tab: tab === "custom" ? "custom" : "week" })} />}
+          {!newUi && canPreview(ctx.roles) && <PreviewSwitch view={view} hrefFor={(v) => href({ as: v, tab: tab === "custom" ? "custom" : "week" })} />}
         </div>
       </div>
 

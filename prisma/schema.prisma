@@ -176,6 +176,11 @@ model User {
    * null follows the FEATURE_NEW_UI default. Changed from the profile menu, audited.
    */
   uiMode                 String?     @map("ui_mode")
+  /**
+   * UX3 (UX plan D2a): the role last chosen in "Viewing as" — picks the home page and menu
+   * only, never permissions. Null = land on the highest role held. Every switch is audited.
+   */
+  lastViewRole           String?     @map("last_view_role")
   status                 String      @default("ACTIVE") // "ACTIVE" | "INVITED" | "SUSPENDED" | "DELETED"
   deletedAt              DateTime?   @map("deleted_at")
   lastLoginAt            DateTime?   @map("last_login_at") // null = invited but never signed in

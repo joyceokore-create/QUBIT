@@ -9,7 +9,8 @@ export type AuditAction =
   | "mfa_enroll"
   | "role_grant"
   | "role_revoke"
-  | "access_request_review";
+  | "access_request_review"
+  | "view_switch"; // UX3 (D2a): a "Viewing as" / "Preview home as…" change — presentation only
 
 export interface AuditEntry {
   action: AuditAction;

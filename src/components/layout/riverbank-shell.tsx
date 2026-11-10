@@ -19,8 +19,24 @@ import {
   Globe,
   BarChart3,
   Circle,
+  Home,
+  Inbox,
+  Layers,
+  Lightbulb,
+  Users,
+  SlidersHorizontal,
+  User,
+  KeyRound,
+  Building2,
+  Compass,
+  History,
   type LucideIcon,
 } from "lucide-react";
+import { activeMenuKey, type MenuGroup, type MenuIcon } from "@/lib/role-menus";
+import type { UiMode } from "@/lib/ui-mode";
+import type { ViewRole } from "@/lib/view-roles";
+import { ViewingAs } from "./viewing-as";
+import { CommandPalette } from "./command-palette";
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { getInitials } from "@/lib/format";
 import { jumpToSection, useCockpitSections } from "@/components/dashboard/cockpit/section-nav";
@@ -44,8 +60,38 @@ interface RiverbankShellProps {
   userName: string;
   userEmail: string;
   userRole: string;
+  /** UX3: the person's layout (D11). "new" draws the role menu below. */
+  uiMode?: UiMode;
+  /** UX3 (D2a/D6): present when uiMode is "new" — the role's grouped menu and the switch. */
+  newNav?: {
+    groups: MenuGroup[];
+    viewRole: ViewRole;
+    options: ViewRole[];
+    showSwitch: boolean;
+    superAdmin: boolean;
+  };
   children: React.ReactNode;
 }
+
+/** Role-menu icon names → lucide (UX3). */
+const MENU_ICONS: Record<MenuIcon, LucideIcon> = {
+  home: Home,
+  board: ListChecks,
+  inbox: Inbox,
+  layers: Layers,
+  folder: Folder,
+  bulb: Lightbulb,
+  alert: TriangleAlert,
+  users: Users,
+  chart: BarChart3,
+  shield: Shield,
+  filter: SlidersHorizontal,
+  user: User,
+  key: KeyRound,
+  building: Building2,
+  compass: Compass,
+  history: History,
+};
 
 const SIDEBAR_KEY = "rv-sidebar-open";
 
@@ -75,6 +121,8 @@ export function RiverbankShell({
   userName,
   userEmail,
   userRole,
+  uiMode = "classic",
+  newNav,
   children,
 }: RiverbankShellProps) {
   const pathname = usePathname();
@@ -142,6 +190,21 @@ export function RiverbankShell({
   }, [mobileOpen]);
 
   const items = visibleNavItems({ canAccessAdmin, canStaff, memberOnly, roles, moduleAllowedRoles });
+  const activeMenu = newNav ? activeMenuKey(pathname, newNav.groups) : null;
+  // The Access requests item carries its waiting count (only fetched when the item is shown).
+  const hasAccessItem = Boolean(newNav?.groups.some((g) => g.items.some((i) => i.key === "access-requests")));
+  const [accessCount, setAccessCount] = useState(0);
+  useEffect(() => {
+    if (!hasAccessItem) return;
+    let live = true;
+    fetch("/api/admin/access-requests/count")
+      .then((r) => (r.ok ? r.json() : { new: 0 }))
+      .then((d) => live && setAccessCount(d.new ?? 0))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [hasAccessItem]);
   const activeHref = activeNavHref(pathname, items);
   // Labels show when expanded on desktop, or always inside the mobile drawer.
   const labelled = open || mobileOpen;
@@ -194,7 +257,60 @@ export function RiverbankShell({
           </button>
         </div>
 
-        {/* Navigation */}
+        {/* UX3 (D2a): "Viewing as" sits at the top, just below the logo. */}
+        {newNav?.showSwitch && (
+          <ViewingAs current={newNav.viewRole} options={newNav.options} superAdmin={newNav.superAdmin} labelled={labelled} />
+        )}
+
+        {/* UX3 (D6): the role's menu, grouped by job; items the person can't open are hidden. */}
+        {newNav && (
+          <nav aria-label="Main" className="flex-1 overflow-y-auto p-3">
+            {newNav.groups.map((g) => (
+              <div key={g.label} className="mb-3 last:mb-0">
+                {labelled ? (
+                  <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-[.08em] text-white/60">{g.label}</p>
+                ) : (
+                  <div className="mx-auto my-1.5 h-px w-8 bg-white/10" aria-hidden />
+                )}
+                <ul className="space-y-1">
+                  {g.items.map((item) => {
+                    const active = item.key === activeMenu;
+                    const Icon = MENU_ICONS[item.icon];
+                    const count = item.key === "access-requests" && accessCount > 0 ? accessCount : null;
+                    return (
+                      <li key={item.key}>
+                        <Link
+                          href={item.href}
+                          aria-current={active ? "page" : undefined}
+                          title={labelled ? undefined : item.label}
+                          onClick={() => setMobileOpen(false)}
+                          className={[
+                            "relative flex items-center rounded-lg transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white/70",
+                            labelled ? "gap-3 px-3 py-2" : "mx-auto h-11 w-11 justify-center",
+                            active ? "font-semibold text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
+                          ].join(" ")}
+                          style={active ? { background: "var(--rv-active)" } : undefined}
+                        >
+                          <Icon className="size-[18px] flex-shrink-0" strokeWidth={1.75} aria-hidden />
+                          {labelled && <span className="flex-1 text-[13.5px] font-medium">{item.label}</span>}
+                          {count !== null &&
+                            (labelled ? (
+                              <span className="rounded-full bg-white/15 px-1.5 text-[11px] font-bold leading-[18px] text-white">{count}</span>
+                            ) : (
+                              <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-white" aria-label={`${count} waiting`} />
+                            ))}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+          </nav>
+        )}
+
+        {/* Navigation (classic layout) */}
+        {!newNav && (
         <nav aria-label="Main" className="flex-1 space-y-1.5 overflow-y-auto p-3">
           {items.map((item) => {
             const active = item.href === activeHref;
@@ -277,6 +393,7 @@ export function RiverbankShell({
             );
           })}
         </nav>
+        )}
 
         {/* User footer — identity only. DM1.73: the ONE account menu (with sign-out and
             tenant switching) is the header chip; the sidebar's duplicate menu and the
@@ -318,6 +435,7 @@ export function RiverbankShell({
           <h1 className="min-w-0 flex-1 truncate font-heading rv:text-heading-sm text-[17px] font-bold tracking-[-.3px]">
             {tenantName}
           </h1>
+          {newNav && <CommandPalette menu={newNav.groups} />}
           <div className="flex items-center gap-1.5">
             <SetupNudge />
             <NotificationBell />
@@ -330,6 +448,7 @@ export function RiverbankShell({
               tenants={tenants}
               canSwitchTenant={canSwitchTenant}
               currentSlug={tenantSlug}
+              uiMode={uiMode}
             />
             <AskQButton />
           </div>

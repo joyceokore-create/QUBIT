@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { CockpitProject } from "@/server/dashboard-cockpit";
 import type { DashboardLevel } from "@/lib/dashboard-level";
 import { LEVEL_LABEL } from "@/lib/dashboard-level";
+import { DENSITY_EVENT, DENSITY_KEY } from "@/lib/density";
 import { DIMENSIONS } from "@/server/rag-dimensions";
 import { RagChip, DimensionSquares, Freshness, RiskList, MarketMatrix } from "./primitives";
 
@@ -15,6 +16,9 @@ interface Props {
   portfolios: string[];
   scope: string;
   period: string;
+  /** UX3: in the new layout "Viewing as" picks the level and density lives in the profile
+   * menu, so the level pills and the density button are not drawn. */
+  newUi?: boolean;
   children: React.ReactNode;
 }
 
@@ -29,7 +33,7 @@ const fmt = (d: Date | string | null) =>
  * a project drawer (click any [data-open]), section jumps ([data-jump]), a project search,
  * and the level switcher. Keeps client JS to a single component.
  */
-export function CockpitInteractive({ level, allowed, projects, portfolios, scope, period, children }: Props) {
+export function CockpitInteractive({ level, allowed, projects, portfolios, scope, period, newUi = false, children }: Props) {
   const router = useRouter();
   const params = useSearchParams();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -41,12 +45,16 @@ export function CockpitInteractive({ level, allowed, projects, portfolios, scope
 
   // Restore the density preference once mounted (SSR-safe).
   useEffect(() => {
-    setCompact(window.localStorage.getItem("qubit.cockpit.compact") === "1");
+    setCompact(window.localStorage.getItem(DENSITY_KEY) === "1");
+    // UX3: the profile menu's "Compact density" applies here without a reload.
+    const onDensity = (e: Event) => setCompact(Boolean((e as CustomEvent<boolean>).detail));
+    window.addEventListener(DENSITY_EVENT, onDensity);
+    return () => window.removeEventListener(DENSITY_EVENT, onDensity);
   }, []);
   function toggleCompact() {
     setCompact((c) => {
       const next = !c;
-      window.localStorage.setItem("qubit.cockpit.compact", next ? "1" : "0");
+      window.localStorage.setItem(DENSITY_KEY, next ? "1" : "0");
       return next;
     });
   }
@@ -130,7 +138,7 @@ export function CockpitInteractive({ level, allowed, projects, portfolios, scope
     const jump = target.closest<HTMLElement>("[data-jump]");
     if (jump) { document.getElementById(jump.dataset.jump!)?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
     const pmCard = target.closest<HTMLElement>("[data-pm]");
-    if (pmCard) { switchLevel("pm"); return; }
+    if (pmCard && !newUi) { switchLevel("pm"); return; }
   }
 
   function switchLevel(next: DashboardLevel) {
@@ -142,7 +150,7 @@ export function CockpitInteractive({ level, allowed, projects, portfolios, scope
   return (
     <div ref={rootRef} onClick={onClick} className={compact ? "cockpit-compact" : undefined}>
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        {allowed.length > 1 && (
+        {!newUi && allowed.length > 1 && (
           <div className="inline-flex rounded-lg border border-[var(--hair)] bg-[var(--wash2)] p-0.5" role="group" aria-label="Dashboard level">
             {allowed.map((l) => (
               <button
@@ -188,6 +196,7 @@ export function CockpitInteractive({ level, allowed, projects, portfolios, scope
           aria-label="Find a project"
           className="ml-auto w-[min(240px,60vw)] rounded-lg border border-[var(--hair)] bg-[var(--wash2)] px-3 py-1.5 text-[13px] text-[var(--qink)] outline-none placeholder:text-[var(--ink4)] focus-visible:ring-2 focus-visible:ring-[var(--brand-light)]"
         />
+        {!newUi && (
         <button
           type="button"
           onClick={toggleCompact}
@@ -197,6 +206,7 @@ export function CockpitInteractive({ level, allowed, projects, portfolios, scope
         >
           ≡
         </button>
+        )}
       </div>
 
       {children}

@@ -1,12 +1,17 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Check, ChevronDown, Compass, LogOut, ShieldCheck, ClipboardCheck } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, ChevronDown, Compass, LogOut, ShieldCheck, ClipboardCheck, LayoutDashboard, Rows3, Sparkles } from "lucide-react";
+import type { UiMode } from "@/lib/ui-mode";
+import { DENSITY_EVENT, DENSITY_KEY } from "@/lib/density";
 import { useTour } from "@/components/tour/tour-provider";
 import { signOut } from "next-auth/react";
 import { signOutAction } from "@/lib/auth-actions";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -38,6 +43,9 @@ interface UserMenuProps {
    *          Riverbank header where it stands in for the old tenant chip.
    */
   variant?: "avatar" | "chip";
+  /** UX3 (D11): the person's layout. Offers the switch back (or forward) and, in the new
+   * layout, the density setting that used to sit on the dashboard. */
+  uiMode?: UiMode;
 }
 
 // Each tenant carries its own brand disc colour, independent of the active theme brand.
@@ -53,9 +61,40 @@ export function UserMenu({
   canSwitchTenant = false,
   currentSlug,
   variant = "avatar",
+  uiMode,
 }: UserMenuProps) {
   const tour = useTour();
+  const router = useRouter();
   const showSwitch = canSwitchTenant && tenants.length > 0;
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    try {
+      setCompact(window.localStorage.getItem(DENSITY_KEY) === "1");
+    } catch {
+      // storage blocked — keep the default density
+    }
+  }, []);
+
+  function toggleCompact(next: boolean) {
+    setCompact(next);
+    try {
+      window.localStorage.setItem(DENSITY_KEY, next ? "1" : "0");
+    } catch {
+      // storage blocked — the change still applies to this page
+    }
+    window.dispatchEvent(new CustomEvent(DENSITY_EVENT, { detail: next }));
+  }
+
+  async function switchLayout(mode: UiMode) {
+    const res = await fetch("/api/me/ui-mode", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode }),
+    }).catch(() => null);
+    if (!res?.ok) return;
+    router.push("/dashboard");
+    router.refresh();
+  }
 
   return (
     <DropdownMenu>
@@ -105,6 +144,29 @@ export function UserMenu({
             <ClipboardCheck />
             Set up my projects
           </DropdownMenuItem>
+        )}
+
+        {uiMode === "new" && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem checked={compact} onCheckedChange={(v) => toggleCompact(Boolean(v))}>
+              <Rows3 />
+              Compact density
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuItem onClick={() => void switchLayout("classic")}>
+              <LayoutDashboard />
+              Back to classic dashboard
+            </DropdownMenuItem>
+          </>
+        )}
+        {uiMode === "classic" && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => void switchLayout("new")}>
+              <Sparkles />
+              Try the new layout
+            </DropdownMenuItem>
+          </>
         )}
 
         {showSwitch && (

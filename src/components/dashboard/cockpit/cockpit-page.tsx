@@ -22,6 +22,7 @@ export async function CockpitPage({
   viewerName,
   scope,
   period,
+  newUi = false,
 }: {
   ctx: TenantContext;
   level: DashboardLevel;
@@ -30,6 +31,7 @@ export async function CockpitPage({
   viewerName?: string;
   scope?: string;
   period?: string;
+  newUi?: boolean;
 }) {
   const now = new Date();
   const activePeriod = period && PERIOD_WEEKS[period] ? period : "8w";
@@ -57,7 +59,7 @@ export async function CockpitPage({
 
   return (
     <main className="mx-auto flex w-full max-w-[1280px] flex-col gap-5 p-[24px_24px_72px]">
-      <CockpitInteractive level={level} allowed={allowed} projects={data.projects} portfolios={portfolios} scope={activeScope} period={activePeriod}>
+      <CockpitInteractive newUi={newUi} level={level} allowed={allowed} projects={data.projects} portfolios={portfolios} scope={activeScope} period={activePeriod}>
         {level === "superadmin" || level === "exec" ? (
           <ExecCockpit data={data} />
         ) : level === "head" ? (
