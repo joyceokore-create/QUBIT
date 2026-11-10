@@ -1,3 +1,4 @@
+import { lifecycleStage } from "@/lib/lifecycle";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
@@ -578,9 +579,26 @@ export async function updateProject(
       });
     }
 
+    // UX10 (D8b): a change of lifecycle stage restarts the stage clock.
+    // The portfolio's category counts too (a Shelved portfolio makes its projects Inactive).
+    const nextPortfolioId = input.portfolioId ?? before.portfolioId;
+    const cats = await tx.portfolio.findMany({
+      where: { id: { in: [before.portfolioId, nextPortfolioId].filter((x): x is string => !!x) } },
+      select: { id: true, category: true },
+    });
+    const catOf = (id: string | null) => (id ? (cats.find((c) => c.id === id)?.category ?? null) : null);
+    const nextStage = lifecycleStage({
+      status: input.status ?? before.status,
+      pipelineStage: input.pipelineStage ?? before.pipelineStage,
+      priority: input.priority ?? before.priority,
+      portfolioCategory: catOf(nextPortfolioId),
+    });
+    const stageChanged = nextStage !== lifecycleStage({ ...before, portfolioCategory: catOf(before.portfolioId) });
+
     const after = await tx.project.update({
       where: { id: projectId },
       data: {
+        ...(stageChanged ? { stageEnteredAt: new Date() } : {}),
         name: input.name,
         description: input.description === undefined ? undefined : input.description,
         status: input.status,

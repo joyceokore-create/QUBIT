@@ -124,7 +124,7 @@ export interface HeadKpis {
 
 export function headKpis(ps: CockpitProject[]): HeadKpis {
   const live = active(ps);
-  const approved = live.filter((p) => p.category === "Approved");
+  const approved = live.filter((p) => p.lifecycle === "Approved");
   const by = { ok: 0, warn: 0, bad: 0, none: 0 };
   for (const p of approved) {
     if (p.reported === "G") by.ok++;

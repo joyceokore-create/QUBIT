@@ -48,6 +48,8 @@ function project(over: Partial<CockpitProject> & { id: string }): CockpitProject
     update: null,
     hasBudget: false,
     ...over,
+    // UX10: Approved = the lifecycle stage; derive it from the fixture's overrides.
+    lifecycle: over.lifecycle ?? (over.status === "Completed" ? "Live" : over.status === "Cancelled" || over.priority === "Paused" ? "Inactive" : over.category && over.category !== "Approved" ? "Exploring" : "Approved"),
   };
 }
 

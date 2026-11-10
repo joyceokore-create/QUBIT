@@ -1,6 +1,7 @@
 // M-P1b (docs/27 §2) — portfolio & programme creation, feeding the wizards. Server-only.
 // Categories are the business-pipeline axis (docs/26 §2); markets are OrgUnit.kind=Market
 // rows picked at org level and inherited by the project wizard.
+import { lifecycleStage } from "@/lib/lifecycle";
 import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { withTenant, type TenantContext } from "@/lib/tenant";
@@ -154,6 +155,15 @@ export async function updatePortfolio(ctx: TenantContext, id: string, input: Upd
         ...(input.marketIds !== undefined ? { defaultMarkets: input.marketIds.length ? input.marketIds : undefined } : {}),
       },
     });
+    // UX10 (D8b): shelving or un-shelving a portfolio moves its projects' lifecycle stage, so
+    // restart the stage clock for each project whose stage actually changes.
+    if (input.category !== undefined && (before.category === "Shelved") !== (portfolio.category === "Shelved")) {
+      const projects = await tx.project.findMany({ where: { portfolioId: id }, select: { id: true, status: true, pipelineStage: true, priority: true } });
+      const moved = projects
+        .filter((p) => lifecycleStage({ ...p, portfolioCategory: before.category }) !== lifecycleStage({ ...p, portfolioCategory: portfolio.category }))
+        .map((p) => p.id);
+      if (moved.length) await tx.project.updateMany({ where: { id: { in: moved } }, data: { stageEnteredAt: new Date() } });
+    }
     await audit(tx, ctx, {
       action: "update",
       entityType: "portfolio",

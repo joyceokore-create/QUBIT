@@ -346,7 +346,7 @@ function execItems({ projects }: BriefInput): BriefItem[] {
   const live = active(projects);
   const items: BriefItem[] = [];
 
-  const atRisk = live.filter((p) => p.category === "Approved" && p.calculated === "R");
+  const atRisk = live.filter((p) => p.lifecycle === "Approved" && p.calculated === "R");
   if (atRisk.length) {
     items.push({
       id: "exec-at-risk",

@@ -1,3 +1,4 @@
+import { lifecycleStage } from "@/lib/lifecycle";
 import type { Prisma } from "@prisma/client";
 import { audit } from "@/lib/audit";
 import { isoWeekId } from "@/lib/iso-week";
@@ -26,7 +27,7 @@ export const nightlySnapshot: JobDefinition = {
 
     const [projects, taskAgg, blockerAgg, riskAgg, overdueAgg, allocations, escalationsOpen] = await Promise.all([
       tx.project.findMany({
-        select: { id: true, status: true, orgStatuses: { select: { progress: true } } },
+        select: { id: true, status: true, pipelineStage: true, priority: true, portfolio: { select: { category: true } }, orgStatuses: { select: { progress: true } } },
       }),
       tx.projectTask.groupBy({
         by: ["projectId", "status"],
@@ -72,6 +73,8 @@ export const nightlySnapshot: JobDefinition = {
         tasksOverdue: overdueByProject.get(p.id) ?? 0,
         blockersOpen: blockersByProject.get(p.id) ?? 0,
         risksOpen: risksByProject.get(p.id) ?? 0,
+        // UX10 (D8b): the lifecycle stage that day — feeds the Portfolios change lines.
+        stage: lifecycleStage({ ...p, portfolioCategory: p.portfolio?.category ?? null }),
       };
       await tx.projectSnapshot.upsert({
         where: { tenantId_projectId_day: { tenantId: tenant.id, projectId: p.id, day } },

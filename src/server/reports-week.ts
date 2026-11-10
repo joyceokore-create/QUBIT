@@ -425,16 +425,10 @@ export async function getReportsWeek(
 
   // exec
   const weeks = gridWeeksEnding(isoWeek);
-  const cutoff = new Date(now.getTime() - NUDGE_THRESHOLDS.blockerHeadDays * DAY);
-  const [projects, blockers] = await withTenant(ctx, (tx) =>
+  const [projects, decisions] = await withTenant(ctx, (tx) =>
     Promise.all([
       tx.project.findMany({ where: { status: ACTIVE }, select: projectSelect(weeks), orderBy: { name: "asc" } }),
-      tx.blocker.findMany({
-        where: { status: "Open", project: { status: ACTIVE }, OR: [{ severity: "Critical" }, { dateRaised: { lt: cutoff } }] },
-        select: { id: true, description: true, severity: true, dateRaised: true, projectId: true, project: { select: { code: true, name: true } } },
-        orderBy: { dateRaised: "asc" },
-        take: 6,
-      }),
+      findDecisionBlockers(tx, now),
     ]),
   );
   const grid = buildGrid(projects, weeks, now);
@@ -453,18 +447,38 @@ export async function getReportsWeek(
     grid,
     tiles: { green: tally.green, amber: tally.amber, red: tally.red, total: projects.length },
     delta: deltaSentence(grid, weeks),
-    decisions: blockers.map((b) => {
-      const ageDays = Math.max(0, Math.floor((now.getTime() - b.dateRaised.getTime()) / DAY));
-      return {
-        id: b.id,
-        description: b.description,
-        projectId: b.projectId,
-        projectCode: b.project.code,
-        projectName: b.project.name,
-        ageDays,
-        severity: b.severity,
-        escalated: ageDays >= NUDGE_THRESHOLDS.blockerHeadDays,
-      };
-    }),
+    decisions,
   };
+}
+
+/** How many blockers the "Blockers needing a decision" list shows. */
+export const DECISION_BLOCKERS_TAKE = 6;
+
+/**
+ * The Executive's "Blockers needing a decision" — ONE rule for Reports › This week and the
+ * Executive's Portfolio home (UX10): open blockers on active projects that are Critical or
+ * older than the nudger's Head-escalation threshold, oldest first. Runs inside the caller's
+ * withTenant transaction, so RLS scopes it to the caller's tenant.
+ */
+export async function findDecisionBlockers(tx: Prisma.TransactionClient, now: Date, take = DECISION_BLOCKERS_TAKE): Promise<DecisionBlocker[]> {
+  const cutoff = new Date(now.getTime() - NUDGE_THRESHOLDS.blockerHeadDays * DAY);
+  const blockers = await tx.blocker.findMany({
+    where: { status: "Open", project: { status: ACTIVE }, OR: [{ severity: "Critical" }, { dateRaised: { lt: cutoff } }] },
+    select: { id: true, description: true, severity: true, dateRaised: true, projectId: true, project: { select: { code: true, name: true } } },
+    orderBy: { dateRaised: "asc" },
+    take,
+  });
+  return blockers.map((b) => {
+    const ageDays = Math.max(0, Math.floor((now.getTime() - b.dateRaised.getTime()) / DAY));
+    return {
+      id: b.id,
+      description: b.description,
+      projectId: b.projectId,
+      projectCode: b.project.code,
+      projectName: b.project.name,
+      ageDays,
+      severity: b.severity,
+      escalated: ageDays >= NUDGE_THRESHOLDS.blockerHeadDays,
+    };
+  });
 }

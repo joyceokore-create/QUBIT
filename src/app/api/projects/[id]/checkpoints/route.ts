@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/api-guard";
 import { can } from "@/lib/rbac";
 import { canWriteProject } from "@/lib/access";
-import { gateAccessLimitedToTesting } from "@/lib/testing-gates";
+import { gateWriteScope } from "@/lib/testing-gates";
 import { getTenantContext } from "@/lib/tenant";
 import {
   CheckpointError,
@@ -48,9 +48,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   return NextResponse.json({
     ...checkpoints,
     templates,
-    canGovern: can(guard.ctx, "project:stage") || runs,
-    // UX9 (D10): Head of QA may set testing gates only — the matrix greys out the rest.
-    testingOnly: gateAccessLimitedToTesting(guard.ctx.roles, runs),
+    // D10: Executives set no gates (UX10); Head of QA sets testing gates only (UX9).
+    canGovern: (can(guard.ctx, "project:stage") || runs) && gateWriteScope(guard.ctx.roles, runs) !== "none",
+    testingOnly: gateWriteScope(guard.ctx.roles, runs) === "testing",
   });
 }
 
@@ -75,9 +75,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const runs = await canWriteProject(ctx, id);
   const allowed = can(ctx, "project:stage") || runs;
   if (!allowed) return NextResponse.json({ error: { code: "FORBIDDEN" } }, { status: 403 });
-  // UX9 (D10): a Head of QA (without a full-gate role, not running this project) may set
-  // testing gates only — SIT/UAT entry and exit — and may not swap the project's template.
-  if (gateAccessLimitedToTesting(ctx.roles, runs)) {
+  // D10: an Executive (without a full-gate role, not running this project) sets no gates —
+  // they act through Decisions (UX10). A Head of QA sets testing gates only — SIT/UAT entry
+  // and exit — and may not swap the project's template (UX9).
+  const scope = gateWriteScope(ctx.roles, runs);
+  if (scope === "none") {
+    return NextResponse.json(
+      { error: { code: "GATES_NOT_ALLOWED", message: "Executives don't set gates; the project's PM or a Head does." } },
+      { status: 403 },
+    );
+  }
+  if (scope === "testing") {
     const testing = "templateId" in parsed.data ? false : await checkpointIsTesting(ctx, parsed.data.checkpointId);
     if (testing === null) return NextResponse.json({ error: { code: "NOT_FOUND", message: "Gate not found." } }, { status: 404 });
     if (!testing) {

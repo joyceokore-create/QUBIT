@@ -18,15 +18,27 @@ export function isTestingCheckpoint(c: { name: string; testing?: boolean | null 
   return TESTING_NAME.test(c.name.replace(/[^a-z0-9 ]/gi, " "));
 }
 
-/** The roles whose gate access is NOT limited to testing gates (they hold it in full). */
-const FULL_GATE_ROLES = ["PlatformSuperAdmin", "HeadOfProjects", "Executive"] as const;
+/** The roles that set any gate on any project (D10). */
+const FULL_GATE_ROLES = ["PlatformSuperAdmin", "HeadOfProjects"] as const;
+
+export type GateScope = "all" | "testing" | "none";
 
 /**
- * D10: a Head of QA's gate access is limited to testing gates — unless they also hold a role
- * with full gate access, or run the project themselves (then the PM rule applies).
+ * D10 — which gates a person may set on a project, ON TOP of holding the gate permission
+ * (`project:stage`) or running the project:
+ *  - the project's own PM/lead (runsProject), Super Admin and Head → every gate;
+ *  - Head of QA → testing gates only (UX9);
+ *  - Executive → none: Executives act through Decisions ("no authoring", docs/07), UX10.
+ * A person with several roles gets the widest scope they hold.
  */
+export function gateWriteScope(roles: readonly string[], runsProject: boolean): GateScope {
+  if (runsProject || FULL_GATE_ROLES.some((r) => roles.includes(r))) return "all";
+  if (roles.includes("HeadOfQA")) return "testing";
+  if (roles.includes("Executive")) return "none";
+  return "all"; // any other holder of project:stage (e.g. a custom role) keeps today's access
+}
+
+/** UX9 helper, kept for callers: true when the scope is testing gates only. */
 export function gateAccessLimitedToTesting(roles: readonly string[], runsProject: boolean): boolean {
-  if (runsProject) return false;
-  if (!roles.includes("HeadOfQA")) return false;
-  return !FULL_GATE_ROLES.some((r) => roles.includes(r));
+  return gateWriteScope(roles, runsProject) === "testing";
 }

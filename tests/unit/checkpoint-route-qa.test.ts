@@ -52,3 +52,14 @@ describe("checkpoint PATCH for Head of QA (UX9)", () => {
     expect(checkpointIsTesting).not.toHaveBeenCalled();
   });
 });
+
+describe("checkpoint PATCH for an Executive (UX10, D10)", () => {
+  it("refuses every gate and the template; nothing is written", async () => {
+    (getTenantContext as unknown as Mock).mockResolvedValue({ ...qa, userId: "ex1", roles: ["Executive"] });
+    const res = await patch({ checkpointId: "c-sit", state: "Done" });
+    expect(res.status).toBe(403);
+    await expect(res.json()).resolves.toMatchObject({ error: { code: "GATES_NOT_ALLOWED" } });
+    expect((await patch({ templateId: "tpl" })).status).toBe(403);
+    expect(setCheckpointState).not.toHaveBeenCalled();
+  });
+});

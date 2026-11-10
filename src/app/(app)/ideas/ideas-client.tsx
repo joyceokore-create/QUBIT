@@ -286,7 +286,7 @@ export function IdeasClient({
   );
 }
 
-function NewIdeaDialog({
+export function NewIdeaDialog({
   open,
   onOpenChange,
   portfolios,

@@ -28,3 +28,15 @@ describe("gateAccessLimitedToTesting", () => {
     expect(gateAccessLimitedToTesting(["ProjectManager"], false)).toBe(false);
   });
 });
+
+describe("gateWriteScope (D10, UX10)", () => {
+  it("gives Executives no gates, Head of QA testing gates, Heads and Super Admin all", async () => {
+    const { gateWriteScope } = await import("@/lib/testing-gates");
+    expect(gateWriteScope(["Executive"], false)).toBe("none");
+    expect(gateWriteScope(["Executive", "HeadOfQA"], false)).toBe("testing");
+    expect(gateWriteScope(["Executive", "HeadOfProjects"], false)).toBe("all");
+    expect(gateWriteScope(["Executive"], true)).toBe("all"); // runs the project
+    expect(gateWriteScope(["PlatformSuperAdmin"], false)).toBe("all");
+    expect(gateWriteScope(["HeadOfQA"], false)).toBe("testing");
+  });
+});

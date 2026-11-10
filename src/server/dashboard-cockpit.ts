@@ -1,4 +1,5 @@
 import { withTenant, type TenantContext } from "@/lib/tenant";
+import { lifecycleStage, type LifecycleStage } from "@/lib/lifecycle";
 import { pmIdsOf } from "@/lib/ownership";
 import { isoWeekId, isoWeekMonday, shiftIsoWeek, weekWindow } from "@/lib/iso-week";
 import { projectRag, type Rag, type RagSignals } from "@/server/health";
@@ -64,6 +65,9 @@ export interface CockpitProject {
   name: string;
   desc: string;
   category: string; // portfolio category: Approved | Exploring | Shelved | (Unfiled)
+  /** UX10 (D8b): the shared lifecycle stage (src/lib/lifecycle.ts) — what "Approved" means on
+   *  every new surface, so the homes and the Portfolios cards always agree. */
+  lifecycle: LifecycleStage;
   portfolioName: string | null;
   /** The lead, or the first "Project Manager" member when no lead is set. */
   pmId: string | null;
@@ -172,6 +176,7 @@ export async function getCockpitData(ctx: TenantContext, now = new Date(), trend
         objective: true,
         status: true,
         priority: true,
+        pipelineStage: true,
         statusNote: true,
         dueDate: true,
         budget: true,
@@ -294,6 +299,7 @@ export async function getCockpitData(ctx: TenantContext, now = new Date(), trend
       name: p.name,
       desc: p.objective ?? "",
       category: p.portfolio?.category ?? "Unfiled",
+      lifecycle: lifecycleStage({ status: p.status, pipelineStage: p.pipelineStage, priority: p.priority, portfolioCategory: p.portfolio?.category ?? null }),
       portfolioName: p.portfolio?.name ?? null,
       pmId: p.leadUserId ?? p.members[0]?.userId ?? null,
       pmName: p.lead?.name ?? p.members[0]?.user.name ?? null,

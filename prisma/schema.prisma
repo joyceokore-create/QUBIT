@@ -1024,6 +1024,9 @@ model Project {
   // docs/18 §1 — the business pipeline: Exploring | Evaluating | Approved | Paused.
   // Audited + evented on change; the exec dashboard groups by this.
   pipelineStage   String     @default("Exploring") @map("pipeline_stage")
+  /// UX10 (D8b) — when the project entered its current lifecycle stage (src/lib/lifecycle.ts).
+  /// Set on create and whenever the stage changes; backfilled from audit history.
+  stageEnteredAt  DateTime?  @default(now()) @map("stage_entered_at")
   // docs/18 §7 — the one-line status/comment column; dashboards fall back to the
   // latest confirmed check-in narrative when unset.
   statusNote      String?    @map("status_note")
@@ -1792,6 +1795,8 @@ model ProjectSnapshot {
   tasksOverdue   Int      @map("tasks_overdue")
   blockersOpen   Int      @map("blockers_open")
   risksOpen      Int      @map("risks_open")
+  /// UX10 (D8b) — the lifecycle stage that day (src/lib/lifecycle.ts); NULL before UX10.
+  stage          String?
   createdAt      DateTime @default(now()) @map("created_at")
 
   @@unique([tenantId, projectId, day])
