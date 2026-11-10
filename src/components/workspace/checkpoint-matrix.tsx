@@ -18,6 +18,8 @@ const STATES: CheckpointState[] = ["NotStarted", "InProgress", "Done", "Blocked"
 interface Payload extends ProjectCheckpoints {
   templates: TemplateOption[];
   canGovern: boolean;
+  /** UX9 (D10): Head of QA — only testing gates (SIT/UAT) are editable. */
+  testingOnly?: boolean;
 }
 
 /** docs/38 — `orgUnitId` scopes the matrix to one market's gates, `moduleId` to one named
@@ -103,12 +105,17 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
 
   return (
     <div className="flex flex-col gap-2.5">
+      {data.testingOnly && (
+        <p className="rounded-[8px] bg-[var(--surface-2)] px-3 py-2 text-[12.5px] text-[var(--ink2)]">
+          As Head of QA you can set testing gates (SIT and UAT). The project&apos;s PM sets the others.
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-[9px] font-bold uppercase tracking-[1.2px] text-[var(--ink4)]">Checkpoints</span>
         {data.templateId && (
           <span className="font-mono text-[9.5px] font-bold tabular-nums text-[var(--qink)]">{data.progress}%</span>
         )}
-        {data.canGovern && !orgUnitId ? (
+        {data.canGovern && !data.testingOnly && !orgUnitId ? (
           <span data-tour="gate-template" className="ml-auto inline-flex">
           <Select
             value={data.templateId ?? "none"}
@@ -172,7 +179,7 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
                     <ShieldAlert className="size-2.5" /> overridden
                   </span>
                 )}
-                {data.canGovern ? (
+                {data.canGovern && (!data.testingOnly || row.testing) ? (
                   <Select
                     value={row.state}
                     onValueChange={(v) => void patch({ checkpointId: row.checkpointId, state: v }, row.checkpointId)}

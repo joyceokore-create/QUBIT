@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { isoWeekId, isValidIsoWeek } from "@/lib/iso-week";
 import { MY_DATASET_KEYS } from "@/lib/report-catalogue";
-import { canPreview, CUSTOM_ONLY_TABS, customReportsOnly, ownView, reportsHref, resolveReportsView, resolveTab, TABS, VIEW_LABEL, type ReportsView } from "@/lib/reports-view";
+import { canPreview, CUSTOM_ONLY_TABS, customReportsOnly, ownView, reportsHref, resolveReportsView, resolveTab, showsQualityTab, tabsFor, VIEW_LABEL, type ReportsView } from "@/lib/reports-view";
 import { getReportsWeek } from "@/server/reports-week";
 import { getTenantTimeZone, getViewState } from "@/server/preferences";
 import { isPreviewing, VIEW_ROLE_REPORTS } from "@/lib/view-roles";
@@ -21,6 +21,7 @@ import { RollupRail } from "@/components/reports/rollup-rail";
 import { RecentRollups, RollupArchive } from "@/components/reports/rollup-archive";
 import { ExecWeek } from "@/components/reports/exec-week";
 import { CustomReportBuilder } from "@/components/reports/custom-report-builder";
+import { QualityReport } from "@/components/reports/quality-report";
 import { listRecipients } from "@/server/rollup-recipients";
 import { pdfAvailable } from "@/server/pdf/render";
 
@@ -36,6 +37,10 @@ import { pdfAvailable } from "@/server/pdf/render";
  * UX6 (D13) — a viewer WITHOUT reports:read (a Member) gets Custom reports only, offering
  * just My tasks · My projects · Blockers I raised. That branch returns before any weekly
  * loader (getReportsWeek, recipients, roll-ups) runs, whatever ?tab= / ?as= / ?week= say.
+ *
+ * UX9 (D13) — a Head of QA reading the Executive view (classic layout, or the new layout
+ * "Viewing as" Head of QA) also gets a Quality tab: This week · Past weeks · Quality · Custom
+ * reports. It reads "now", so the week switcher steps aside on that tab.
  */
 
 const SUBTITLE: Record<ReportsView, (n: number) => string> = {
@@ -46,6 +51,8 @@ const SUBTITLE: Record<ReportsView, (n: number) => string> = {
   head: () => "Every project's update for the week, in one inbox. Approve the roll-up, then send or export it.",
   exec: () => "The approved weekly roll-up — status, trend and the blockers that need you.",
 };
+
+const QUALITY_SUBTITLE = "Quality across every active project — test coverage, critical issues and test work.";
 
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ week?: string; as?: string; tab?: string; upload?: string }> }) {
   const session = await auth();
@@ -88,7 +95,9 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const view: ReportsView = newUi && !asDeepLink ? VIEW_ROLE_REPORTS[viewState.viewRole] : resolveReportsView(ctx.roles, sp.as);
   // Previewing = read-only: a role the person doesn't hold (Super Admin's preview, a Head's ?as=).
   const previewing = newUi && !asDeepLink ? isPreviewing(ctx.roles, viewState.viewRole) : view !== ownView(ctx.roles);
-  const tab = resolveTab(view, sp.tab);
+  // UX9: Head of QA's Quality tab (real roles + reports:read; the layout only decides when).
+  const tabOpts = { quality: showsQualityTab(ctx, viewState) };
+  const tab = resolveTab(view, sp.tab, tabOpts);
   const defaults = { week: currentWeek, view: newUi && !asDeepLink ? view : ownView(ctx.roles) };
   const href = (p: { week?: string | null; as?: string | null; tab?: string | null }) =>
     reportsHref({ week, as: previewing && (!newUi || asDeepLink) ? view : null, tab, ...p }, defaults);
@@ -109,23 +118,25 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         <div className="min-w-0 flex-[1_1_420px]">
           <h1 className="font-heading text-[26px] rv:text-heading-lg font-bold tracking-[-.7px] text-[var(--qink)]">Reports</h1>
           <p className="mt-1 text-[13.5px] text-[var(--ink3)] [text-wrap:pretty]">
-            {SUBTITLE[view](rowCount)}
+            {tab === "quality" ? QUALITY_SUBTITLE : SUBTITLE[view](rowCount)}
             {previewing && <span className="text-[var(--ink5)]"> · Previewing as {VIEW_LABEL[view]}</span>}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
-          <WeekSwitcher isoWeek={week} range={data.week.range} prev={data.week.prev} next={data.week.next} currentWeek={currentWeek} hrefFor={(w) => href({ week: w })} />
+          {tab !== "quality" && <WeekSwitcher isoWeek={week} range={data.week.range} prev={data.week.prev} next={data.week.next} currentWeek={currentWeek} hrefFor={(w) => href({ week: w })} />}
           {!newUi && canPreview(ctx.roles) && <PreviewSwitch view={view} hrefFor={(v) => href({ as: v, tab: tab === "custom" ? "custom" : "week" })} />}
         </div>
       </div>
 
       <div className="[animation:rise_.5s_cubic-bezier(.22,1,.36,1)_.06s_both]">
-        <ReportTabs tabs={TABS[view]} active={tab} hrefFor={(k) => href({ tab: k })} />
+        <ReportTabs tabs={tabsFor(view, tabOpts)} active={tab} hrefFor={(k) => href({ tab: k })} />
       </div>
 
       <div className="[animation:rise_.5s_cubic-bezier(.22,1,.36,1)_.1s_both]">
         {tab === "custom" ? (
           <CustomReportBuilder allowedDatasets={offeredDatasetKeys(ctx)} pdfAvailable={canPdf} timeZone={timeZone} />
+        ) : tab === "quality" ? (
+          <QualityReport ctx={ctx} />
         ) : data.kind === "pm" ? (
           tab === "history" ? (
             <StatusGrid

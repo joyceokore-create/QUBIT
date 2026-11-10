@@ -317,7 +317,8 @@ function qaItems({ projects, extras }: BriefInput): BriefItem[] {
       weight: 20 + total,
       emphasis: `${count(total, "critical issue is", "critical issues are")} open.`,
       detail: withCrit.length === 1 ? `All on ${worst[0].name}.` : `Most on ${worst[0].name}; ${count(withCrit.length, "project", "projects")} affected.`,
-      action: { label: "See issues", href: "/risks" },
+      // Critical bugs live on boards, not in Risks & Issues — the Quality home tab lists both.
+      action: { label: "See issues", href: "/dashboard?tab=critical" },
     });
   }
 

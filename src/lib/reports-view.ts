@@ -44,13 +44,46 @@ export const TABS: Record<ReportsView, { key: string; label: string }[]> = {
   ],
 };
 
+/** UX9 (UX plan D13) — Reports › Quality: Head of QA's extra tab in the Executive view. */
+export const QUALITY_TAB = { key: "quality", label: "Quality" } as const;
+
+/**
+ * The tabs a view offers. Every view is TABS[view], except that a Head of QA reading the
+ * Executive view also gets Quality (This week · Past weeks · Quality · Custom reports).
+ */
+export function tabsFor(view: ReportsView, opts: { quality: boolean } = { quality: false }): { key: string; label: string }[] {
+  if (view !== "exec" || !opts.quality) return TABS[view];
+  const [week, past, ...rest] = TABS.exec;
+  return [week!, past!, { ...QUALITY_TAB }, ...rest];
+}
+
 /** Old six-tab keys keep landing: custom stays custom, the old Roll-ups tab becomes the
- * view's archive, everything else (mine/team/checkins/focus) is This week now. */
-export function resolveTab(view: ReportsView, requested?: string | null): string {
-  if (requested && TABS[view].some((t) => t.key === requested)) return requested;
+ * view's archive, everything else (mine/team/checkins/focus) is This week now. "quality" is
+ * accepted only where the tab is offered; anyone else asking for it gets This week. */
+export function resolveTab(view: ReportsView, requested?: string | null, opts: { quality: boolean } = { quality: false }): string {
+  if (requested && tabsFor(view, opts).some((t) => t.key === requested)) return requested;
   if (requested === "custom") return "custom";
   if (requested === "rollups") return view === "head" ? "rollups" : view === "exec" ? "past" : "week";
   return "week";
+}
+
+/**
+ * Who may read the Quality report (the tab and its CSV): someone who holds Head of QA and
+ * reports:read. Decided on REAL roles and permissions — "Viewing as" never widens it, and a
+ * Super Admin previewing Head of QA (a role they don't hold) doesn't get it.
+ */
+export function canReadQualityReport(ctx: TenantContext): boolean {
+  return ctx.roles.includes("HeadOfQA") && can(ctx, "reports:read");
+}
+
+/**
+ * Whether /reports offers the Quality tab: the person may read it AND is reading as Head of
+ * QA — the classic layout (one view per person), or the new layout "Viewing as" Head of QA.
+ * A Head of QA who also holds Executive and is viewing as Executive sees the Executive tabs.
+ */
+export function showsQualityTab(ctx: TenantContext, layout: { uiMode: string; viewRole: string }): boolean {
+  if (!canReadQualityReport(ctx)) return false;
+  return layout.uiMode !== "new" || layout.viewRole === "HeadOfQA";
 }
 
 /** `/reports?…` with only the non-default params, so `/reports` stays the canonical URL. */

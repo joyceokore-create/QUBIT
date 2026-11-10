@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isTestingCheckpoint } from "@/lib/testing-gates";
 import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
@@ -31,6 +32,8 @@ export interface CheckpointRow {
   gate: GateRule[];
   /** Set when the gate was closed with its checklist unmet — visible forever. */
   overrideReason: string | null;
+  /** UX9 (D10): a testing gate (SIT/UAT) — the only kind Head of QA may set. */
+  testing: boolean;
   /** Provenance when a status-report upload moved it: the file, when, by whom. */
   source: { label: string; at: Date; byName: string | null } | null;
 }
@@ -67,7 +70,7 @@ const scopeKey = (projectId: string, checkpointId: string, scope?: GateScope) =>
 /** docs/38 — the template a scope follows: the instance's / module's own when set, else
  * the project's (one track for all markets). */
 async function templateFor(tx: Prisma.TransactionClient, projectId: string, scope?: GateScope) {
-  const select = { id: true, name: true, checkpoints: { select: { id: true, name: true, orderIndex: true }, orderBy: { orderIndex: "asc" as const } } };
+  const select = { id: true, name: true, checkpoints: { select: { id: true, name: true, orderIndex: true, testing: true }, orderBy: { orderIndex: "asc" as const } } };
   if (scope?.moduleId) {
     const mod = await tx.projectModule.findFirst({ where: { id: scope.moduleId, projectId }, select: { checkpointTemplate: { select } } });
     if (mod?.checkpointTemplate) return mod.checkpointTemplate;
@@ -109,6 +112,7 @@ export async function getProjectCheckpoints(
       const s = byCheckpoint.get(c.id);
       return {
         checkpointId: c.id,
+        testing: isTestingCheckpoint(c),
         name: c.name,
         orderIndex: c.orderIndex,
         state: ((s?.state ?? "NotStarted") as CheckpointState),
@@ -207,6 +211,12 @@ export class CheckpointError extends Error {
     this.code = code;
     this.unmet = unmet;
   }
+}
+
+/** UX9 (D10): is this checkpoint a testing gate (flag, else its name)? Null when not found. */
+export async function checkpointIsTesting(ctx: TenantContext, checkpointId: string): Promise<boolean | null> {
+  const c = await withTenant(ctx, (tx) => tx.checkpoint.findUnique({ where: { id: checkpointId }, select: { name: true, testing: true } }));
+  return c ? isTestingCheckpoint(c) : null;
 }
 
 export const SetCheckpointStateInput = z.object({

@@ -3,9 +3,11 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/api-guard";
 import { can } from "@/lib/rbac";
 import { canWriteProject } from "@/lib/access";
+import { gateAccessLimitedToTesting } from "@/lib/testing-gates";
 import { getTenantContext } from "@/lib/tenant";
 import {
   CheckpointError,
+  checkpointIsTesting,
   SetCheckpointStateInput,
   getProjectCheckpoints,
   listCheckpointTemplates,
@@ -42,10 +44,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     getProjectCheckpoints(guard.ctx, id, scope.success ? scope.data : undefined),
     listCheckpointTemplates(guard.ctx),
   ]);
+  const runs = await canWriteProject(guard.ctx, id);
   return NextResponse.json({
     ...checkpoints,
     templates,
-    canGovern: can(guard.ctx, "project:stage") || (await canWriteProject(guard.ctx, id)),
+    canGovern: can(guard.ctx, "project:stage") || runs,
+    // UX9 (D10): Head of QA may set testing gates only — the matrix greys out the rest.
+    testingOnly: gateAccessLimitedToTesting(guard.ctx.roles, runs),
   });
 }
 
@@ -67,8 +72,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!parsed.success) {
     return NextResponse.json({ error: { code: "VALIDATION", message: "Invalid input." } }, { status: 400 });
   }
-  const allowed = can(ctx, "project:stage") || (await canWriteProject(ctx, id));
+  const runs = await canWriteProject(ctx, id);
+  const allowed = can(ctx, "project:stage") || runs;
   if (!allowed) return NextResponse.json({ error: { code: "FORBIDDEN" } }, { status: 403 });
+  // UX9 (D10): a Head of QA (without a full-gate role, not running this project) may set
+  // testing gates only — SIT/UAT entry and exit — and may not swap the project's template.
+  if (gateAccessLimitedToTesting(ctx.roles, runs)) {
+    const testing = "templateId" in parsed.data ? false : await checkpointIsTesting(ctx, parsed.data.checkpointId);
+    if (testing === null) return NextResponse.json({ error: { code: "NOT_FOUND", message: "Gate not found." } }, { status: 404 });
+    if (!testing) {
+      return NextResponse.json(
+        { error: { code: "TESTING_GATES_ONLY", message: "Head of QA can set testing gates (SIT and UAT) only." } },
+        { status: 403 },
+      );
+    }
+  }
 
   try {
     const data =

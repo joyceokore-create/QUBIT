@@ -1173,6 +1173,10 @@ model Checkpoint {
   template   CheckpointTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
   name       String
   orderIndex Int                @default(0) @map("order_index")
+  /// UX9 (D10) — a testing gate (SIT/UAT entry and exit). Head of QA may set only these.
+  /// NULL = not set: the name decides (src/lib/testing-gates.ts). An admin can set it
+  /// explicitly either way.
+  testing    Boolean?
   statuses   CheckpointStatus[]
 
   @@unique([templateId, name])
