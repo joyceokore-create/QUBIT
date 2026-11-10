@@ -18,7 +18,7 @@ const PRIO_GROUPS: { key: string; label: string; color: string }[] = [
   { key: "Paused", label: "Paused", color: "grey" },
 ];
 
-export function ExecCockpit({ data }: { data: CockpitData }) {
+export function ExecCockpit({ data, brief }: { data: CockpitData; brief?: React.ReactNode }) {
   const now = data.generatedAt;
   const all = data.projects;
   const active = all.filter((p) => !["Completed", "Cancelled"].includes(p.status));
@@ -88,6 +88,7 @@ export function ExecCockpit({ data }: { data: CockpitData }) {
 
   return (
     <ExecV3
+      brief={brief}
       briefLines={briefLines("exec", data, "")}
       generatedAt={now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
       stats={{

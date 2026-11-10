@@ -9,6 +9,10 @@ import { PmCockpit } from "./pm";
 import { HeadCockpit } from "./head";
 import { ExecCockpit } from "./exec";
 import { UserCockpit } from "./user";
+import { getDailyBrief } from "@/server/daily-brief";
+import { DailyBrief } from "@/components/dashboard/daily-brief";
+import { formatTime } from "@/lib/dates";
+import type { ViewRole } from "@/lib/view-roles";
 
 // Every level has a cockpit preset; Superadmin sees the Executive cockpit (platform
 // admin lives under /admin, not on the dashboard) and can preview any level.
@@ -23,6 +27,7 @@ export async function CockpitPage({
   scope,
   period,
   newUi = false,
+  briefRole,
 }: {
   ctx: TenantContext;
   level: DashboardLevel;
@@ -32,6 +37,8 @@ export async function CockpitPage({
   scope?: string;
   period?: string;
   newUi?: boolean;
+  /** UX4: in the new layout, the role whose Daily Brief tops the page ("Viewing as"). */
+  briefRole?: ViewRole;
 }) {
   const now = new Date();
   const activePeriod = period && PERIOD_WEEKS[period] ? period : "8w";
@@ -57,17 +64,25 @@ export async function CockpitPage({
     await Promise.all(owned.map(async (p) => void (setups[p.id] = await getProjectSetup(ctx, p.id, now))));
   }
 
+  // UX4 (D4): the new layout's Daily Brief, worked out from the same projects as the figures
+  // below (scope filter included) plus a few role reads, in the tenant's time zone.
+  let brief: React.ReactNode = undefined;
+  if (newUi && briefRole) {
+    const { brief: b, timeZone } = await getDailyBrief(ctx, briefRole, data.projects, now);
+    brief = <DailyBrief items={b.items} generatedAt={formatTime(b.generatedAt, timeZone)} />;
+  }
+
   return (
     <main className="mx-auto flex w-full max-w-[1280px] flex-col gap-5 p-[24px_24px_72px]">
       <CockpitInteractive newUi={newUi} level={level} allowed={allowed} projects={data.projects} portfolios={portfolios} scope={activeScope} period={activePeriod}>
         {level === "superadmin" || level === "exec" ? (
-          <ExecCockpit data={data} />
+          <ExecCockpit data={data} brief={brief} />
         ) : level === "head" ? (
-          <HeadCockpit data={data} />
+          <HeadCockpit data={data} brief={brief} />
         ) : level === "pm" ? (
-          <PmCockpit data={data} viewerId={viewerId} viewerName={viewerName} allocationPct={allocationPct} now={now} allowPreviewAll={!roles.includes("ProjectManager")} setups={setups} />
+          <PmCockpit data={data} viewerId={viewerId} viewerName={viewerName} allocationPct={allocationPct} now={now} allowPreviewAll={!roles.includes("ProjectManager")} setups={setups} brief={brief} />
         ) : (
-          <UserCockpit data={data} viewerId={viewerId} />
+          <UserCockpit data={data} viewerId={viewerId} brief={brief} />
         )}
       </CockpitInteractive>
     </main>

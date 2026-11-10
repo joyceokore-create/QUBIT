@@ -32,7 +32,9 @@
   --v3shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.6);
 }
 .pmv3 *{box-sizing:border-box}
-.pmv3 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+/* UX4: the button reset sits in the base layer so shared components placed inside the cockpit
+   (the Daily Brief) keep their Tailwind classes; the cockpit's own button rules still win. */
+@layer base{.pmv3 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}}
 .pmv3 button:focus-visible,.pmv3 select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .pmv3 select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line-2);border-radius:var(--control-r);padding:5px 28px 5px 10px;appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 55%,calc(100% - 10px) 55%;background-size:5px 5px;background-repeat:no-repeat}
 .pmv3 .num{font-variant-numeric:tabular-nums}
@@ -81,6 +83,7 @@
 /* Section jumps land below the sticky app topbar, not underneath it. */
 .pmv3 [id]{scroll-margin-top:76px}
 .pmv3 .pm-toprow{display:grid;grid-template-columns:1.15fr 1fr;gap:18px;align-items:stretch}
+.pmv3 .pm-toprow.solo{grid-template-columns:1fr}
 .pmv3 .pm-hero{background:radial-gradient(120% 140% at 0% 0%,#ff5b63 0%,var(--v3brand) 45%,#8f1319 100%);color:#fff;border-radius:16px;padding:22px 24px;display:flex;flex-direction:column;gap:12px;min-width:0;box-shadow:0 12px 30px -14px rgba(237,28,36,.6);position:relative;overflow:hidden}
 .pmv3 .pm-hero::after{content:"";position:absolute;inset:0;background:radial-gradient(60% 60% at 100% 100%,rgba(255,255,255,.16),transparent 70%);pointer-events:none}
 .pmv3 .pm-hero-top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}

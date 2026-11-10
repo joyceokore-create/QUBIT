@@ -949,3 +949,10 @@ input, textarea, [contenteditable="true"] { caret-color: var(--brand); }
   --stage-approved: #2dd4bf;
   --stage-live: #6dd49a;
 }
+
+/* ── UX4 Daily Brief (UX plan D4) ──
+   The one bold element on a home page: a SOLID dark brand surface (no gradient) with
+   full-opacity white text, footer and timestamp included. Riverbank #a3161c is 7.8:1 with
+   white; any other tenant's brand is darkened to 60% so white text stays above 4.5:1. */
+:root { --brief-bg: color-mix(in oklab, var(--brand) 60%, black); --brief-ink: #ffffff; }
+[data-tenant="riverbank"] { --brief-bg: #a3161c; }

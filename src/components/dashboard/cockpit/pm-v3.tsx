@@ -43,6 +43,8 @@ export interface V3Risk { sev: "R" | "A"; t: string; meta: string; projectName: 
 export interface V3Market { name: string; flag: string; pct: number; gates: string[]; live: boolean }
 
 export interface PmV3Props {
+  /** UX4: the new-layout Daily Brief, shown full width in place of the hero brief. */
+  brief?: React.ReactNode;
   viewer: { name: string; title: string; initials: string };
   briefLines: { emphasis: string; detail: string }[];
   generatedAt: string;
@@ -130,7 +132,7 @@ export function Gate({ g }: { g: string }) {
   return <span className={`gate ${v.cls}`} title={v.title}>{v.ch}</span>;
 }
 
-export function PmV3({ viewer, briefLines, generatedAt, projects, ragCounts, stats, queue, queueEmpty, risks, collisions, market }: PmV3Props) {
+export function PmV3({ brief, viewer, briefLines, generatedAt, projects, ragCounts, stats, queue, queueEmpty, risks, collisions, market }: PmV3Props) {
   const [wqFilter, setWqFilter] = useState("");
   const [search, setSearch] = useState("");
 
@@ -162,7 +164,9 @@ export function PmV3({ viewer, briefLines, generatedAt, projects, ragCounts, sta
         <div className="pm-shell">
 
           <div className="pm-content">
-            <div className="pm-toprow" id="pm-top">
+            {brief}
+            <div className={`pm-toprow${brief ? " solo" : ""}`} id="pm-top">
+              {!brief && (
               <section className="pm-hero">
                 <div className="pm-hero-top">
                   <span className="pm-hero-tag"><Ic name="sparkle" />Daily Brief</span>
@@ -173,6 +177,7 @@ export function PmV3({ viewer, briefLines, generatedAt, projects, ragCounts, sta
                 </div>
                 <p className="pm-hero-foot">Generated from status updates, gate records and RAID items — verify before acting.</p>
               </section>
+              )}
               <div className="pm-statgrid">
                 <div className="pm-stat"><div className="pm-stat-icon blue"><Ic name="folder" /></div><div className="v num">{projects.length}</div><div className="l">Projects owned</div><RagBarV3 c={ragCounts} /></div>
                 <div className={`pm-stat ${stats.overdueMilestones ? "hot" : ""}`}><div className="pm-stat-icon red"><Ic name="alarm" /></div><div className="v num">{stats.overdueMilestones}</div><div className="l">Overdue milestones</div></div>

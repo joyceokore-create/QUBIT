@@ -103,6 +103,16 @@ right with the logo above and a footer below. One step per screen (work email �
 authenticator code), each with its own illustration (`public/login/`). Shared: `AuthShell`
 (`src/components/auth/auth-shell.tsx`).
 
+### Daily Brief (UX4)
+
+The one bold element on a home page. A solid `--brief-bg` surface (no gradient) with white text
+at full opacity, footer included (Riverbank `#a3161c`, 7.8:1). At most three lines, each clamped
+to two text lines, ranked Needs action now → Waiting on you → For your information. "View N more"
+sits top right only when N > 0 and opens the full Brief in the right-hand drawer (full screen on
+phones). Each line ends with its action link. With nothing to say it shows one line: "Nothing
+needs your attention right now." Component: `src/components/dashboard/daily-brief.tsx`; rules:
+`src/lib/daily-brief.ts`.
+
 ## Core components (map to shadcn/ui where possible)
 
 | Component | Built from | Notes |

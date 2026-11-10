@@ -25,8 +25,11 @@ export function PmCockpit({
   now,
   allowPreviewAll = true,
   setups = {},
+  brief,
 }: {
   data: CockpitData;
+  /** UX4: the new-layout Daily Brief (replaces the hero brief). */
+  brief?: React.ReactNode;
   viewerId: string;
   viewerName?: string;
   allocationPct?: number | null;
@@ -161,6 +164,7 @@ export function PmCockpit({
 
   return (
     <PmV3
+      brief={brief}
       viewer={{ name, title: previewingAll ? "Project Manager (previewing all)" : "Project Manager", initials }}
       briefLines={briefLines("pm", data, viewerId)}
       generatedAt={now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}

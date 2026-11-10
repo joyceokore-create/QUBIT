@@ -34,5 +34,5 @@ export default async function DashboardPage({
   const deepLink = typeof requestedLevel === "string" && (DASHBOARD_LEVELS as readonly string[]).includes(requestedLevel);
   const level = newUi && !deepLink ? VIEW_ROLE_LEVEL[view.viewRole] : resolveRequestedLevel(ctx.roles, requestedLevel);
 
-  return <CockpitPage ctx={ctx} level={level} roles={ctx.roles} viewerId={ctx.userId} viewerName={session.user.name ?? undefined} scope={scope} period={period} newUi={newUi} />;
+  return <CockpitPage ctx={ctx} level={level} roles={ctx.roles} viewerId={ctx.userId} viewerName={session.user.name ?? undefined} scope={scope} period={period} newUi={newUi} briefRole={newUi ? view.viewRole : undefined} />;
 }

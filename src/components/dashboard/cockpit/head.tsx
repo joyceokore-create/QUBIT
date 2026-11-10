@@ -18,7 +18,7 @@ const CATEGORY_BUCKETS: { key: string; label: string; color: string }[] = [
   { key: "Unfiled", label: "Unfiled", color: "teal" },
 ];
 
-export function HeadCockpit({ data }: { data: CockpitData }) {
+export function HeadCockpit({ data, brief }: { data: CockpitData; brief?: React.ReactNode }) {
   const now = data.generatedAt;
   const active = data.projects.filter((p) => !["Completed", "Cancelled"].includes(p.status));
   const approved = active.filter((p) => p.category === "Approved");
@@ -90,6 +90,7 @@ export function HeadCockpit({ data }: { data: CockpitData }) {
 
   return (
     <HeadV3
+      brief={brief}
       briefLines={briefLines("head", data, "")}
       generatedAt={now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
       gateLabels={GATE_KEYS.map((k) => GATE_LABELS[k])}
