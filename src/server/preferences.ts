@@ -1,5 +1,6 @@
 import "server-only";
 import { audit } from "@/lib/audit";
+import { can } from "@/lib/rbac";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { DEFAULT_TIME_ZONE, isValidTimeZone } from "@/lib/dates";
 import { cache } from "react";
@@ -17,6 +18,32 @@ import { landingViewRole, showViewSwitch, viewRoleOptions, type ViewRole } from 
 export async function getTenantTimeZone(ctx: Pick<TenantContext, "tenantId" | "userId">): Promise<string> {
   const row = await withTenant(ctx, (tx) => tx.tenant.findUnique({ where: { id: ctx.tenantId }, select: { timeZone: true } }));
   return row?.timeZone && isValidTimeZone(row.timeZone) ? row.timeZone : DEFAULT_TIME_ZONE;
+}
+
+export class TimeZoneError extends Error {
+  constructor(
+    message: string,
+    public code: "FORBIDDEN" | "BAD_ZONE",
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * UX11 (UX plan Q3) — Admin › Settings › Time zone. Super Admin only (`iam:manage`, the same
+ * gate as the audit log), checked here as well as at the route. The zone must be one the
+ * runtime's Intl data knows. Audited on the tenant row; a no-op change writes nothing.
+ */
+export async function setTenantTimeZone(ctx: TenantContext, timeZone: string): Promise<string> {
+  if (!can(ctx, "iam:manage")) throw new TimeZoneError("Only a Super Admin can change the time zone.", "FORBIDDEN");
+  if (!isValidTimeZone(timeZone)) throw new TimeZoneError("Choose a time zone from the list.", "BAD_ZONE");
+  await withTenant(ctx, async (tx) => {
+    const before = await tx.tenant.findUnique({ where: { id: ctx.tenantId }, select: { timeZone: true } });
+    if (!before || before.timeZone === timeZone) return;
+    await tx.tenant.update({ where: { id: ctx.tenantId }, data: { timeZone } });
+    await audit(tx, ctx, { action: "update", entityType: "tenant", entityId: ctx.tenantId, before: { timeZone: before.timeZone }, after: { timeZone } });
+  });
+  return timeZone;
 }
 
 /** This person's effective layout: their stored choice, else the FEATURE_NEW_UI default. */

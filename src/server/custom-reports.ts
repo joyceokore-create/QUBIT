@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
-import { can } from "@/lib/rbac";
+import { can, primaryRoleLabel } from "@/lib/rbac";
+import { ssoEnabled } from "@/lib/sso";
 import { taskVisibleTo, type LensTask } from "@/lib/board-lens";
 import { projectRoleCategory, type ProjectRoleCategory } from "@/lib/roles";
 import {
@@ -14,6 +15,8 @@ import { ownerNamesById } from "@/server/raid-shared";
 import { listRisks } from "@/server/risks";
 import { listIssues } from "@/server/issues";
 import { listWorkload } from "@/server/resources";
+import { listUsersForReport } from "@/server/users";
+import { listAccessRequests } from "@/server/access-requests";
 
 // Custom Reports engine — binds each dataset in src/lib/report-catalogue.ts to a
 // tenant-scoped row builder. Requested column keys are validated against the registry
@@ -50,6 +53,9 @@ export const DATASET_PERMISSION: Record<ReportDatasetKey, string | null> = {
   myTasks: null,
   myProjects: null,
   myBlockers: null,
+  // UX11 — admin datasets: the Users page's gate, and the Access requests page's gate.
+  users: "admin:access",
+  accessRequests: "iam:manage",
 };
 
 /** Datasets this viewer may run (the route-level gate; the API door honours exactly this). */
@@ -438,6 +444,52 @@ async function myBlockerRows(ctx: TenantContext): Promise<ReportRow[]> {
   });
 }
 
+// ── UX11: the admin datasets ─────────────────────────────────────────────────────────
+
+const USER_STATUS_LABEL: Record<string, string> = { ACTIVE: "Active", INVITED: "Invited", SUSPENDED: "Suspended" };
+
+/**
+ * The user directory (status ≠ DELETED) under the tenant's RLS context, through the same
+ * read the Users page uses (roles, department, counts) plus team names. MFA is a STATUS —
+ * On / Off, or "SSO" when the identity provider enforces it — never the secret.
+ */
+async function userRows(ctx: TenantContext): Promise<ReportRow[]> {
+  const sso = ssoEnabled();
+  const users = await listUsersForReport(ctx);
+  return users.map((u) => ({
+    name: u.name,
+    email: u.email,
+    roles: u.roles.map((r) => primaryRoleLabel([r])).join(", ") || null,
+    department: u.departmentName,
+    status: USER_STATUS_LABEL[u.status] ?? u.status,
+    mfa: sso ? "SSO" : u.mfaEnabled ? "On" : "Off",
+    lastActive: u.lastLoginAt,
+    createdAt: u.createdAt,
+    teams: u.teamNames.join(", ") || null,
+  }));
+}
+
+const ACCESS_REQUEST_STATUS_LABEL: Record<string, string> = { NEW: "New", REVIEWED: "Reviewed", DISMISSED: "Dismissed" };
+
+/**
+ * The request-access queue. access_request is a SYSTEM table with no tenant_id (requests
+ * arrive before any tenant exists), so it is read through access-requests.ts's system read,
+ * exactly as the Access requests page does — the gate is iam:manage (DATASET_PERMISSION,
+ * re-checked in runCustomReport), not tenant scoping.
+ */
+async function accessRequestRows(): Promise<ReportRow[]> {
+  const requests = await listAccessRequests();
+  return requests.map((r) => ({
+    name: r.fullName,
+    email: r.email,
+    company: r.company,
+    jobTitle: r.jobTitle,
+    status: ACCESS_REQUEST_STATUS_LABEL[r.status] ?? r.status,
+    submittedAt: r.createdAt,
+    reviewedAt: r.reviewedAt,
+  }));
+}
+
 const BUILDERS: Record<ReportDatasetKey, (ctx: TenantContext) => Promise<ReportRow[]>> = {
   projects: projectRows,
   portfolios: portfolioRows,
@@ -449,6 +501,8 @@ const BUILDERS: Record<ReportDatasetKey, (ctx: TenantContext) => Promise<ReportR
   myTasks: myTaskRows,
   myProjects: myProjectRows,
   myBlockers: myBlockerRows,
+  users: userRows,
+  accessRequests: accessRequestRows,
 };
 
 export interface CustomReportResult {
@@ -462,6 +516,12 @@ export async function runCustomReport(
   dataset: ReportDatasetKey,
   columnKeys: string[],
 ): Promise<CustomReportResult> {
+  // Defence in depth: every door (the JSON/CSV route, the PDF export, the email action)
+  // already checks DATASET_PERMISSION, but the engine refuses on its own too, so no future
+  // caller can run e.g. the admin datasets for a viewer without the gate.
+  if (!allowedDatasetKeys(ctx).includes(dataset)) {
+    throw new CustomReportError("That dataset is not yours to report on.", "FORBIDDEN");
+  }
   const meta = reportDataset(dataset);
   const byKey = new Map(meta.columns.map((c) => [c.key, c]));
   const unknown = columnKeys.filter((k) => !byKey.has(k));

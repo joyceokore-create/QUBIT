@@ -149,6 +149,17 @@ export async function listUsers(
 
 /** Statuses the Users list can filter on (DELETED rows never list). */
 export const USER_LIST_STATUSES = ["ACTIVE", "INVITED", "SUSPENDED"] as const;
+/** The Users page's tabs (UX11): the whole directory, or the No MFA base set. */
+export const USER_LIST_TABS = ["all", "nomfa"] as const;
+export type UserListTab = (typeof USER_LIST_TABS)[number];
+
+/**
+ * The ONE "No MFA" rule (UX11): ACTIVE users without app-level TOTP. The overview tile's
+ * count, the No MFA tab and the `users` report all read it from here, so they can't drift.
+ * (The tile's URL shortcut — status=ACTIVE & mfa=off — selects exactly this set.) Under SSO,
+ * MFA lives at the identity provider and the page hides every surface that uses it.
+ */
+export const NO_MFA_WHERE = { status: "ACTIVE", mfaSecret: null } satisfies Prisma.UserWhereInput;
 /** Onboarding gaps the overview tiles filter on. */
 export const USER_ONBOARDING_FILTERS = ["not-signed-in", "unplaced"] as const;
 
@@ -167,11 +178,15 @@ export const UserListQuery = z.object({
   mfa: z.enum(["on", "off"]).optional(),
   status: z.enum(USER_LIST_STATUSES).optional(),
   onboarding: z.enum(USER_ONBOARDING_FILTERS).optional(),
+  /** The base set: every live user (default), or only the No MFA rule's users. */
+  tab: z.enum(USER_LIST_TABS).default("all"),
 });
 export type UserListQuery = z.input<typeof UserListQuery>;
 
 function userListWhere(q: z.output<typeof UserListQuery>): Prisma.UserWhereInput {
   const and: Prisma.UserWhereInput[] = [{ status: q.status ?? { not: "DELETED" } }];
+  // The tab narrows the base set; search and the other filters still AND on top of it.
+  if (q.tab === "nomfa") and.push(NO_MFA_WHERE);
   if (q.q) and.push({ OR: [{ name: containsText(q.q) }, { email: containsText(q.q) }] });
   if (q.role) and.push({ roles: { some: { role: q.role } } });
   if (q.department) and.push({ departmentId: q.department === "none" ? null : q.department });
@@ -233,7 +248,7 @@ export async function userDirectoryStats(ctx: TenantContext, opts: { sso: boolea
     const [all, notSignedIn, noMfa, unplaced, suspended, onboarded, noMfaAdmins, noDepartment, activeAdmins] = await Promise.all([
       count(live),
       count({ ...active, lastLoginAt: null }),
-      count({ ...active, mfaSecret: null }),
+      count(NO_MFA_WHERE),
       count({ ...active, teamMemberships: { none: {} }, projectAllocations: { none: {} } }),
       count({ status: "SUSPENDED" }),
       count({ AND: [active, { lastLoginAt: { not: null } }, placed, ...(opts.sso ? [] : [{ mfaSecret: { not: null } }])] }),
@@ -242,6 +257,30 @@ export async function userDirectoryStats(ctx: TenantContext, opts: { sso: boolea
       count({ AND: [active, admin] }),
     ]);
     return { all, notSignedIn, noMfa, unplaced, suspended, onboarded, noMfaAdmins, noDepartment, activeAdmins };
+  });
+}
+
+/** A directory row plus the names of the teams the user sits on — the `users` report. */
+export interface UserReportRow extends AdminUserSummary {
+  teamNames: string[];
+}
+
+/**
+ * Every non-deleted user for the `users` Custom report dataset (UX11): the same include and
+ * mapping as the Users page (roles, department, counts) plus team names, under the tenant's
+ * RLS context. The caller gates on `admin:access` (DATASET_PERMISSION).
+ */
+export async function listUsersForReport(ctx: TenantContext): Promise<UserReportRow[]> {
+  return withTenant(ctx, async (tx) => {
+    const users = await tx.user.findMany({
+      where: { status: { not: "DELETED" } },
+      include: { ...SUMMARY_INCLUDE, teamMemberships: { select: { team: { select: { name: true } } } } },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+    });
+    return users.map((u) => ({
+      ...toSummary(u),
+      teamNames: u.teamMemberships.map((m) => m.team.name).sort((a, b) => a.localeCompare(b)),
+    }));
   });
 }
 

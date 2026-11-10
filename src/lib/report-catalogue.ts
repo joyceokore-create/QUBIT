@@ -24,7 +24,11 @@ export type ReportDatasetKey =
   // rows, so they are the whole of a Member's Reports page (Members hold no reports:read).
   | "myTasks"
   | "myProjects"
-  | "myBlockers";
+  | "myBlockers"
+  // UX11 (D13) — Super Admin datasets: the user directory (admin:access) and the
+  // request-access queue (iam:manage). Offered only to viewers holding the gate.
+  | "users"
+  | "accessRequests";
 
 export type ReportColumnType = "text" | "number" | "date" | "enum" | "boolean";
 
@@ -55,6 +59,12 @@ const TASK_PRIORITIES = ["Low", "Medium", "High", "Critical"] as const;
 const CATEGORIES = ["Approved", "Exploring", "Shelved"] as const;
 const BLOCKER_STATUSES = ["Open", "Resolved"] as const;
 const BLOCKER_SEVERITIES = ["Low", "Medium", "Critical"] as const;
+/** User statuses a report can show (DELETED users never appear). */
+export const USER_REPORT_STATUSES = ["Active", "Invited", "Suspended"] as const;
+/** The users report's MFA cell: app-level TOTP set or not; "SSO" when the identity provider
+ *  enforces MFA (the app can't observe it). A status, never the secret. */
+export const USER_REPORT_MFA = ["On", "Off", "SSO"] as const;
+export const ACCESS_REQUEST_REPORT_STATUSES = ["New", "Reviewed", "Dismissed"] as const;
 
 export const REPORT_DATASETS: ReportDataset[] = [
   {
@@ -253,7 +263,44 @@ export const REPORT_DATASETS: ReportDataset[] = [
     ],
     defaults: ["description", "project", "task", "status", "dateRaised", "owner"],
   },
+  {
+    key: "users",
+    label: "Users",
+    moduleLabel: "Admin & access",
+    description: "One row per user in your organisation — roles, department, status, MFA and teams. Deleted users are excluded.",
+    columns: [
+      { key: "name", label: "Name", type: "text" },
+      { key: "email", label: "Email", type: "text" },
+      { key: "roles", label: "Roles", type: "text" },
+      { key: "department", label: "Department", type: "text" },
+      { key: "status", label: "Status", type: "enum", values: USER_REPORT_STATUSES },
+      { key: "mfa", label: "MFA", type: "enum", values: USER_REPORT_MFA },
+      { key: "lastActive", label: "Last active", type: "date" },
+      { key: "createdAt", label: "Created", type: "date" },
+      { key: "teams", label: "Teams", type: "text" },
+    ],
+    defaults: ["name", "email", "roles", "department", "status", "mfa", "lastActive"],
+  },
+  {
+    key: "accessRequests",
+    label: "Access requests",
+    moduleLabel: "Admin & access",
+    description: "One row per request from the public request-access form, newest first within each status.",
+    columns: [
+      { key: "name", label: "Name", type: "text" },
+      { key: "email", label: "Email", type: "text" },
+      { key: "company", label: "Company", type: "text" },
+      { key: "jobTitle", label: "Job title", type: "text" },
+      { key: "status", label: "Status", type: "enum", values: ACCESS_REQUEST_REPORT_STATUSES },
+      { key: "submittedAt", label: "Submitted", type: "date" },
+      { key: "reviewedAt", label: "Reviewed at", type: "date" },
+    ],
+    defaults: ["name", "email", "company", "status", "submittedAt"],
+  },
 ];
+
+/** The admin datasets (UX11): tenant users and the system access-request queue. */
+export const ADMIN_DATASET_KEYS = ["users", "accessRequests"] as const satisfies readonly ReportDatasetKey[];
 
 /** The "My …" datasets (UX6): the only ones offered to a viewer without reports:read. */
 export const MY_DATASET_KEYS = ["myTasks", "myProjects", "myBlockers"] as const satisfies readonly ReportDatasetKey[];

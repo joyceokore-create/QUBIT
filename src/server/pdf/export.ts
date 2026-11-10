@@ -68,7 +68,7 @@ export async function buildExport(ctx: TenantContext, input: ExportRequestInput,
       const data = await getTableReport(ctx, input.dataset, input.columns, now);
       return { ...renderTable(data), kind: "table", isoWeek: isoWeekId(now), label: `${data.title} · custom report` };
     } catch (e) {
-      if (e instanceof CustomReportError) throw new ExportError(e.message, "BAD_REQUEST");
+      if (e instanceof CustomReportError) throw new ExportError(e.message, e.code === "FORBIDDEN" ? "FORBIDDEN" : "BAD_REQUEST");
       throw e;
     }
   }

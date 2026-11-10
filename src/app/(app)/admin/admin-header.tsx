@@ -19,6 +19,8 @@ const TABS = [
   { label: "Markets", href: "/admin/organisation" },
   { label: "Audit", href: "/admin/audit", iamOnly: true },
   { label: "Access requests", href: "/admin/access-requests", iamOnly: true },
+  // UX11 (Q3): tenant settings — the time zone. Super Admin only.
+  { label: "Settings", href: "/admin/settings", iamOnly: true },
 ];
 
 // UX5 (L2): a converted list page passes `title` (+ `description`), and the header becomes the

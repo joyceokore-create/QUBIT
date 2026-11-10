@@ -3,7 +3,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { withTenant, type TenantContext } from "@/lib/tenant";
-import { MY_DATASET_KEYS, REPORT_DATASETS } from "@/lib/report-catalogue";
+import { ADMIN_DATASET_KEYS, MY_DATASET_KEYS, REPORT_DATASETS } from "@/lib/report-catalogue";
 import { allowedDatasetKeys, offeredDatasetKeys, runCustomReport } from "@/server/custom-reports";
 import { buildExport } from "@/server/pdf/export";
 import { cleanupFixtureUsers, createUsers } from "./_users";
@@ -103,9 +103,11 @@ describe("UX6 My reports datasets", () => {
     expect(offeredDatasetKeys(me)).toEqual([...MY_DATASET_KEYS]);
     // BASE read permissions still let a Member run e.g. projects through the API, as before.
     expect(allowedDatasetKeys(me)).toEqual(expect.arrayContaining(["projects", "tasks", ...MY_DATASET_KEYS]));
-    // A report reader is offered everything they may run, the My datasets included.
+    // A report reader is offered everything they may run, the My datasets included (the
+    // UX11 admin datasets need admin:access / iam:manage, which a PM doesn't hold).
     const pm: TenantContext = { tenantId: rbId, userId: me.userId, roles: ["ProjectManager"] };
-    expect(offeredDatasetKeys(pm).sort()).toEqual(REPORT_DATASETS.map((d) => d.key).sort());
+    const admin = ADMIN_DATASET_KEYS as readonly string[];
+    expect(offeredDatasetKeys(pm).sort()).toEqual(REPORT_DATASETS.map((d) => d.key).filter((k) => !admin.includes(k)).sort());
   });
 
   it("myTasks: only my Published tasks (done ones included, drafts never), never another user's", async () => {

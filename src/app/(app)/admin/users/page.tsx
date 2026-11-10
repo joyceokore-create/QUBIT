@@ -2,13 +2,14 @@ import { auth } from "@/lib/auth";
 import { can, CANONICAL_ROLES, primaryRoleLabel } from "@/lib/rbac";
 import { ssoEnabled } from "@/lib/sso";
 import { parseListParams } from "@/lib/list-state";
-import { listUserOptions, listUsersPaged, userDirectoryStats, USER_LIST_STATUSES, USER_ONBOARDING_FILTERS, type UserDirectoryStats } from "@/server/users";
+import { listUserOptions, listUsersPaged, userDirectoryStats, USER_LIST_STATUSES, USER_ONBOARDING_FILTERS, type UserDirectoryStats, type UserListTab } from "@/server/users";
 import { listAssignableRoles } from "@/server/role-permissions";
 import { listDepartments } from "@/server/departments";
 import { listTeams } from "@/server/teams";
 import { listProjects } from "@/server/projects";
 import { getTenantTimeZone } from "@/server/preferences";
 import { Forbidden } from "@/components/forbidden";
+import { TabStrip } from "@/components/ui/tab-strip";
 import { AdminHeader } from "../admin-header";
 import { NewUserDialog } from "./new-user-dialog";
 import { UsersClient, type AdminInsight } from "./users-client";
@@ -85,7 +86,14 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: S
   // Allow-lists for every filter: the tenant's assignable roles, its departments (+ "none"),
   // MFA on/off (not offered under SSO — MFA lives at the identity provider), the listable
   // statuses and the onboarding gaps the overview tiles filter on.
-  const params = parseListParams(await searchParams, {
+  const sp = await searchParams;
+  // UX11 — tabs: All users · No MFA (`?tab=nomfa`, a stable link the Admin home uses). The No
+  // MFA tab is the NO_MFA_WHERE base set (ACTIVE, no TOTP); it doesn't exist under SSO, where
+  // MFA lives at the identity provider — a stale ?tab=nomfa then reads as All users.
+  const rawTab = Array.isArray(sp.tab) ? sp.tab[0] : sp.tab;
+  const tab: UserListTab = !sso && rawTab === "nomfa" ? "nomfa" : "all";
+
+  const params = parseListParams(sp, {
     defaultSize: 10,
     filters: {
       role: assignableRoles,
@@ -96,15 +104,20 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: S
     },
   });
   const f = params.filters;
+  // On the No MFA tab the tab itself fixes status (ACTIVE) and MFA (off), so those two
+  // filters are neither offered nor applied there; search, role, department, onboarding and
+  // paging still apply on top of the tab's base set.
+  const nomfa = tab === "nomfa";
   const { rows, info } = await listUsersPaged(ctx, {
     q: params.q,
     page: params.page,
     size: params.size,
     role: f.role,
     department: f.department,
-    mfa: f.mfa === "on" || f.mfa === "off" ? f.mfa : undefined,
-    status: USER_LIST_STATUSES.find((s) => s === f.status),
+    mfa: !nomfa && (f.mfa === "on" || f.mfa === "off") ? f.mfa : undefined,
+    status: nomfa ? undefined : USER_LIST_STATUSES.find((s) => s === f.status),
     onboarding: USER_ONBOARDING_FILTERS.find((o) => o === f.onboarding),
+    tab,
   });
 
   return (
@@ -126,6 +139,22 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: S
         }
       />
       <UsersClient
+        key={tab}
+        tab={tab}
+        // Hidden under SSO, like the MFA tile and filter. Each tab is a plain link, so
+        // switching tab drops the other tab's search, filters and page.
+        tabs={
+          sso ? undefined : (
+            <TabStrip
+              label="User views"
+              active={tab}
+              tabs={[
+                { key: "all", label: "All users", href: "/admin/users", count: stats.all },
+                { key: "nomfa", label: "No MFA", href: "/admin/users?tab=nomfa", count: stats.noMfa },
+              ]}
+            />
+          )
+        }
         users={rows}
         info={info}
         stats={stats}

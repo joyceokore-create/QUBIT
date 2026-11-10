@@ -3,7 +3,8 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/api-guard";
 import { reviewAccessRequest, AccessRequestError } from "@/server/access-requests";
 
-const BodySchema = z.object({ status: z.enum(["REVIEWED", "DISMISSED"]) });
+// UX11: an optional dismissal reason, kept on the audit row only.
+const BodySchema = z.object({ status: z.enum(["REVIEWED", "DISMISSED"]), reason: z.string().trim().max(300).optional() });
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const guard = await requirePermission("iam:manage");
@@ -16,7 +17,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   try {
-    await reviewAccessRequest(guard.ctx, id, parsed.data.status);
+    const { status, reason } = parsed.data;
+    if (reason) await reviewAccessRequest(guard.ctx, id, status, { reason });
+    else await reviewAccessRequest(guard.ctx, id, status);
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e instanceof AccessRequestError) {

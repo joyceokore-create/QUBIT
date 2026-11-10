@@ -54,13 +54,14 @@ const I = {
   departments: { key: "departments", label: "Departments", href: "/admin/departments", icon: "building", perm: "admin:access", module: "ADMIN_IAM" },
   organisation: { key: "organisation", label: "Organisation", href: "/admin/organisation", icon: "compass", perm: "admin:access", module: "ADMIN_IAM" },
   audit: { key: "audit", label: "Audit log", href: "/admin/audit", icon: "history", perm: "iam:manage", module: "ADMIN_IAM" },
+  settings: { key: "settings", label: "Settings", href: "/admin/settings", icon: "filter", perm: "iam:manage", module: "ADMIN_IAM" },
 } satisfies Record<string, MenuItem>;
 
 export const ROLE_MENUS: Record<ViewRole, MenuGroup[]> = {
   PlatformSuperAdmin: [
     { label: "Work", items: [I.home, I.approvals, I.accessRequests] },
     { label: "Delivery", items: [I.portfolios, I.projects, I.risks, I.people] },
-    { label: "Administration", items: [I.users, I.teams, I.roles, I.departments, I.organisation, I.configs, I.audit] },
+    { label: "Administration", items: [I.users, I.teams, I.roles, I.departments, I.organisation, I.configs, I.audit, I.settings] },
     { label: "Reports", items: [I.reports] },
   ],
   HeadOfProjects: [

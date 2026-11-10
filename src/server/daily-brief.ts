@@ -59,7 +59,18 @@ export async function getBriefExtras(ctx: Ctx, role: ViewRole, projects: Cockpit
         Promise.all([
           tx.user.count({ where: { status: "ACTIVE", mfaSecret: null } }),
           // An invite that ran out before it was used, for someone who never signed in.
-          tx.inviteToken.count({ where: { purpose: "invite", consumedAt: null, expiresAt: { lt: now }, user: { lastLoginAt: null, status: { not: "DELETED" } } } }),
+          // People (not tokens) whose invite ran out: never signed in, not deleted, an expired
+          // unused invite and no live one — the Admin home's "Invites expired" rule.
+          tx.user.count({
+            where: {
+              lastLoginAt: null,
+              status: { not: "DELETED" },
+              AND: [
+                { inviteTokens: { some: { purpose: "invite", consumedAt: null, expiresAt: { lt: now } } } },
+                { inviteTokens: { none: { purpose: "invite", consumedAt: null, expiresAt: { gte: now } } } },
+              ],
+            },
+          }),
         ]),
       ).then(([noMfa, expired]) => {
         extras.usersWithoutMfa = noMfa;

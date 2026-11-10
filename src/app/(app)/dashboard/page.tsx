@@ -10,6 +10,7 @@ import { PmTodayPage } from "@/components/pm-today/pm-today-page";
 import { HeadHealthPage } from "@/components/head-health/head-health-page";
 import { QualityHomePage } from "@/components/quality-home/quality-home-page";
 import { PortfolioHomePage } from "@/components/portfolio-home/portfolio-home-page";
+import { AdminHomePage } from "@/components/admin-home/admin-home-page";
 
 // The dashboard is the RBAC-level Delivery Cockpit (docs/17 rework). The level is resolved
 // from the viewer's highest canonical role; a ?level= override (validated against what the
@@ -19,7 +20,8 @@ import { PortfolioHomePage } from "@/components/portfolio-home/portfolio-home-pa
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ level?: string; scope?: string; period?: string }>;
+  // tab / page / size: the Admin home's server-paged Access requests list (UX11).
+  searchParams: Promise<{ level?: string; scope?: string; period?: string; tab?: string; page?: string; size?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) return null;
@@ -31,7 +33,7 @@ export default async function DashboardPage({
   };
   if (!can(ctx, "dashboard:read")) return <Forbidden />;
 
-  const { level: requestedLevel, scope, period } = await searchParams;
+  const { level: requestedLevel, scope, period, tab, page, size } = await searchParams;
   // UX3 (D2a): in the new layout "Viewing as" picks the level. A ?level= deep link (the
   // product tour's PM walk) still works, validated downward-only as before; no button sets it.
   const view = await getViewState(ctx);
@@ -47,6 +49,8 @@ export default async function DashboardPage({
   if (newUi && !deepLink && view.viewRole === "HeadOfQA") return <QualityHomePage ctx={ctx} />;
   // UX10: the Executive's home is "Portfolio home".
   if (newUi && !deepLink && view.viewRole === "Executive") return <PortfolioHomePage ctx={ctx} />;
+  // UX11: the Super Admin's home is "Admin home".
+  if (newUi && !deepLink && view.viewRole === "PlatformSuperAdmin") return <AdminHomePage ctx={ctx} params={{ tab, page, size }} />;
   const level = newUi && !deepLink ? VIEW_ROLE_LEVEL[view.viewRole] : resolveRequestedLevel(ctx.roles, requestedLevel);
 
   return <CockpitPage ctx={ctx} level={level} roles={ctx.roles} viewerId={ctx.userId} viewerName={session.user.name ?? undefined} scope={scope} period={period} newUi={newUi} briefRole={newUi ? view.viewRole : undefined} />;

@@ -1,7 +1,8 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { formatDayMonth } from "@/lib/dates";
-import type { AdminUserSummary, UserDirectoryStats } from "@/server/users";
+import type { AdminUserSummary, UserDirectoryStats, UserListTab } from "@/server/users";
 import type { DepartmentSummary } from "@/server/departments";
 import type { PageInfo } from "@/lib/list-state";
 import { FilterChips, FilterSelect, ListToolbar, SearchField, type ActiveFilter, type FilterOption } from "@/components/list/list-toolbar";
@@ -37,9 +38,16 @@ function steps(u: AdminUserSummary) {
 // component renders the overview tiles, the toolbar, the current page and the always-visible
 // footer, with every bit of view state in the URL. The tiles are shortcuts that SET the same
 // URL filters (status / mfa / onboarding), so a tile and the toolbar can never disagree.
+//
+// UX11: the All users · No MFA tabs (`?tab=nomfa`) sit above the toolbar. The No MFA tab is a
+// base set (ACTIVE, no TOTP — the same rule as the No MFA tile) that already fixes status and
+// MFA, so those two filters step aside there. The tiles stay whole-directory shortcuts: a tile
+// click returns to All users with its filters set.
 
 const FILTER_KEYS = ["role", "department", "mfa", "status", "onboarding"] as const;
 type FilterKey = (typeof FILTER_KEYS)[number];
+/** Filters the No MFA tab leaves in play (it fixes status and MFA itself). */
+const NOMFA_FILTER_KEYS = ["role", "department", "onboarding"] as const satisfies readonly FilterKey[];
 const STATUS_LABEL: Record<string, string> = { ACTIVE: "Active", INVITED: "Invited", SUSPENDED: "Suspended" };
 const MFA_LABEL: Record<string, string> = { on: "MFA set", off: "MFA not set" };
 const ONBOARDING_LABEL: Record<string, string> = { "not-signed-in": "Never signed in", unplaced: "Not on a team or project" };
@@ -55,6 +63,8 @@ const SEGMENT_FILTERS: Record<Segment, Record<"status" | "mfa" | "onboarding", s
 };
 
 export function UsersClient({
+  tab = "all",
+  tabs,
   users,
   info,
   stats,
@@ -70,6 +80,10 @@ export function UsersClient({
   customRoles = [],
   sso = false,
 }: {
+  /** The active base set (UX11). */
+  tab?: UserListTab;
+  /** The All users · No MFA tab strip, rendered above the toolbar (absent under SSO). */
+  tabs?: ReactNode;
   /** The current page of the directory (server-paged). */
   users: AdminUserSummary[];
   info: PageInfo;
@@ -98,7 +112,10 @@ export function UsersClient({
   sso?: boolean;
 }) {
   const list = useListUrl("admin-users", 10);
-  const f = Object.fromEntries(FILTER_KEYS.map((k) => [k, list.get(k)])) as Record<FilterKey, string>;
+  const nomfaTab = tab === "nomfa";
+  const filterKeys: readonly FilterKey[] = nomfaTab ? NOMFA_FILTER_KEYS : FILTER_KEYS;
+  // A key the tab doesn't use reads as unset, so it shows no chip (the server ignores it too).
+  const f = Object.fromEntries(FILTER_KEYS.map((k) => [k, filterKeys.includes(k) ? list.get(k) : ""])) as Record<FilterKey, string>;
 
   const departmentOptions: FilterOption[] = [...departments.map((d) => ({ value: d.id, label: d.name })), { value: "none", label: "No department" }];
   const statusOptions: FilterOption[] = Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label }));
@@ -115,9 +132,11 @@ export function UsersClient({
     ...chip("status", "Status", STATUS_LABEL[f.status]),
     ...chip("onboarding", "Onboarding", ONBOARDING_LABEL[f.onboarding]),
   ];
-  const filtered = stats.all > 0 && (active.length > 0 || !!list.q);
+  const filtered = (nomfaTab || stats.all > 0) && (active.length > 0 || !!list.q);
+  const clearFilters = () => list.clear([...filterKeys]);
 
-  const segment = (Object.keys(SEGMENT_FILTERS) as Segment[]).find((k) => {
+  // A tile reflects the whole directory, so it only lights up on the All users tab.
+  const segment = nomfaTab ? undefined : (Object.keys(SEGMENT_FILTERS) as Segment[]).find((k) => {
     const want = SEGMENT_FILTERS[k];
     return (want.status ?? "") === f.status && (want.mfa ?? "") === f.mfa && (want.onboarding ?? "") === f.onboarding;
   });
@@ -148,7 +167,7 @@ export function UsersClient({
               key={t.key}
               type="button"
               aria-pressed={on}
-              onClick={() => list.set(SEGMENT_FILTERS[t.key])}
+              onClick={() => list.set({ ...SEGMENT_FILTERS[t.key], tab: null })}
               className={`${CARD} p-[14px_16px] text-left transition-colors ${FOCUS}`}
               style={{ borderColor: on ? "var(--brand)" : "var(--cardbd)", background: on ? "color-mix(in oklab, var(--brand) 8%, transparent)" : "var(--cardbg)" }}
             >
@@ -161,22 +180,28 @@ export function UsersClient({
 
       {/* Toolbar outside the table card, above the directory and its rail (L2) */}
       <div className="flex flex-col gap-2">
+        {tabs}
         <ListToolbar>
           <SearchField value={list.q} onChange={(q) => list.set({ q })} placeholder="Search names or emails" label="Search users" />
           <FilterSelect label="Role" allLabel="All roles" value={f.role} options={roleOptions} onChange={(v) => list.set({ role: v })} />
           <FilterSelect label="Department" allLabel="All departments" value={f.department} options={departmentOptions} onChange={(v) => list.set({ department: v })} />
-          {!sso && <FilterSelect label="MFA" allLabel="MFA: any" value={f.mfa} options={mfaOptions} onChange={(v) => list.set({ mfa: v })} />}
-          <FilterSelect label="Status" allLabel="All statuses" value={f.status} options={statusOptions} onChange={(v) => list.set({ status: v })} />
+          {!sso && !nomfaTab && <FilterSelect label="MFA" allLabel="MFA: any" value={f.mfa} options={mfaOptions} onChange={(v) => list.set({ mfa: v })} />}
+          {!nomfaTab && <FilterSelect label="Status" allLabel="All statuses" value={f.status} options={statusOptions} onChange={(v) => list.set({ status: v })} />}
         </ListToolbar>
-        <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={() => list.clear([...FILTER_KEYS])} />
+        <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={clearFilters} />
       </div>
 
       <div className="grid grid-cols-1 items-start gap-[18px] lg:grid-cols-[minmax(0,1fr)_300px] [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.12s_both]">
         {/* Directory: the card holds only the table, its empty state and the footer (L2) */}
         <div className="min-w-0">
           <TableCard footer={<TableFooter info={info} noun="users" onPage={list.setPage} onSize={list.setSize} />}>
-            {users.length === 0 ? (
-              <ListEmpty filtered={filtered} noun="users" onClear={() => list.clear([...FILTER_KEYS])} hint={filtered ? undefined : "Use “Create a user” to add the first person."} />
+            {users.length === 0 && nomfaTab && !filtered ? (
+              <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
+                <p className="text-[14px] font-semibold text-[var(--qink)]">Everyone has MFA set up.</p>
+                <p className="max-w-[48ch] text-[12.5px] text-[var(--ink3)]">Active users who haven’t turned on two-factor sign-in appear here.</p>
+              </div>
+            ) : users.length === 0 ? (
+              <ListEmpty filtered={filtered} noun="users" onClear={clearFilters} hint={filtered ? undefined : "Use “Create a user” to add the first person."} />
             ) : (
               <table className="relative w-full min-w-[780px] text-left text-[13px]">
                 <thead className="border-b border-[var(--border)] text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--ink3)]">

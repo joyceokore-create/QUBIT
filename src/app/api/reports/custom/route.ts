@@ -60,7 +60,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ ...result, rowCount: result.rows.length });
   } catch (e) {
     if (e instanceof CustomReportError) {
-      return NextResponse.json({ error: { code: e.code, message: e.message } }, { status: 400 });
+      return NextResponse.json({ error: { code: e.code, message: e.message } }, { status: e.code === "FORBIDDEN" ? 403 : 400 });
     }
     throw e;
   }
