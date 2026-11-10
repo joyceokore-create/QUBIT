@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { TabStrip } from "@/components/ui/tab-strip";
 import { usePathname } from "next/navigation";
 
-// Shared QUBIT App v3 admin header — eyebrow + Archivo title + chip tabs across the five
+// Shared QUBIT App v3 admin header — eyebrow + Archivo title + U1 tabs across the five
 // admin routes (Users / Roles / Audit / Departments / Access requests). `action` is an
 // optional trailing slot (e.g. the New user / New department dialog trigger).
 // DM1.73 (T6): Teams moved here from the top-level nav (it is admin territory and its
@@ -49,30 +49,16 @@ export function AdminHeader({ subtitle, action, canManageIam = true }: { subtitl
         </div>
         {action}
       </div>
-      <div className="flex flex-wrap gap-1.5">
-        {TABS.filter((t) => canManageIam || !t.iamOnly).map((t) => {
-          const active = path === t.href || path.startsWith(`${t.href}/`);
-          return (
-            <Link
-              key={t.href}
-              href={t.href}
-              className="rounded-full border px-3.5 py-1.5 text-[12px] font-semibold transition-colors"
-              style={{
-                borderColor: active ? "var(--brand)" : "var(--hair)",
-                background: active ? "color-mix(in oklab, var(--brand) 10%, transparent)" : "transparent",
-                color: active ? "var(--brand)" : "var(--ink3)",
-              }}
-            >
-              {t.label}
-              {t.href === "/admin/access-requests" && newCount > 0 && (
-                <span className="ml-1.5 inline-flex min-w-[16px] items-center justify-center rounded-full bg-[var(--brand)] px-1 text-[10px] font-bold leading-[16px] text-[var(--onbrand)]">
-                  {newCount}
-                </span>
-              )}
-            </Link>
-          );
-        })}
-      </div>
+      <TabStrip
+        label="Admin sections"
+        active={TABS.find((t) => path === t.href || path.startsWith(`${t.href}/`))?.href ?? ""}
+        tabs={TABS.filter((t) => canManageIam || !t.iamOnly).map((t) => ({
+          key: t.href,
+          label: t.label,
+          href: t.href,
+          count: t.href === "/admin/access-requests" && newCount > 0 ? newCount : undefined,
+        }))}
+      />
     </div>
   );
 }

@@ -2,6 +2,7 @@
    claude.ai artifact 1fd51a43 / share 4vzE7RvVgiXTtfNuodTL8R). Every selector scoped under
    .pmv3; the artifact's :root tokens become .pmv3 tokens (light) + .dark .pmv3 (dark). */
 
+/* UX2 (U3): control radii use --control-r; panels use the shared 16px card radius. */
 .pmv3{
   --v3bg:#f6f6f6; --surface:#ffffff; --surface-2:#f0f0f0; --input-bg:#fafafa; --ink:#231F20; --ink-2:#5b5754; --muted:#8c8884;
   --line:#e3dfda; --line-2:#d2cdc6; --v3brand:#ED1C24; --accent:#1c5cab; --accent-ink:#ffffff; --accent-wash:rgba(28,92,171,.1);
@@ -33,7 +34,7 @@
 .pmv3 *{box-sizing:border-box}
 .pmv3 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 .pmv3 button:focus-visible,.pmv3 select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.pmv3 select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line-2);border-radius:6px;padding:5px 28px 5px 10px;appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 55%,calc(100% - 10px) 55%;background-size:5px 5px;background-repeat:no-repeat}
+.pmv3 select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line-2);border-radius:var(--control-r);padding:5px 28px 5px 10px;appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 55%,calc(100% - 10px) 55%;background-size:5px 5px;background-repeat:no-repeat}
 .pmv3 .num{font-variant-numeric:tabular-nums}
 .pmv3 .eyebrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
 .pmv3 h1,.pmv3 h2,.pmv3 h3{margin:0;text-wrap:balance}
@@ -43,7 +44,7 @@
 .pmv3 .c5{grid-column:span 5}.pmv3 .c6{grid-column:span 6}.pmv3 .c7{grid-column:span 7}
 @media (max-width:1100px){.pmv3 .c5{grid-column:span 6}.pmv3 .c6{grid-column:span 12}.pmv3 .c7{grid-column:span 12}}
 @media (max-width:720px){.pmv3 .g12>*{grid-column:span 12}}
-.pmv3 .panel{background:var(--surface);border-radius:18px;padding:18px 20px;min-width:0;box-shadow:var(--v3shadow)}
+Npx;padding:18px 20px;min-width:0;box-shadow:var(--v3shadow)}
 .pmv3 .panel-h{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:24px}
 .pmv3 .panel-h h2{line-height:1.3}
 .pmv3 .panel-h .sub,.pmv3 .sub{color:var(--muted);font-size:12px}
@@ -51,11 +52,11 @@
 .pmv3 .ic{width:16px;height:16px;flex:none}
 
 /* header bar — title + search only; brand/theme/bell/avatar live in the app shell now */
-.pmv3 .pm-headerbar{display:flex;align-items:center;gap:20px;background:var(--surface);border-radius:18px;padding:14px 22px;box-shadow:var(--v3shadow)}
+Npx;padding:14px 22px;box-shadow:var(--v3shadow)}
 .pmv3 .pm-hb-main{display:flex;flex:1;align-items:center;gap:20px;min-width:0}
 .pmv3 .pm-hb-main h1{font-size:22px;font-weight:700;letter-spacing:-.02em;flex:none}
 .pmv3 .pm-hb-search{flex:1;max-width:340px;min-width:140px;margin-left:auto}
-.pmv3 .pm-hb-search input{width:100%;background:var(--input-bg);border:1px solid var(--line);border-radius:9px;padding:9px 16px;font-size:13px;color:var(--ink);line-height:1.4}
+.pmv3 .pm-hb-search input{width:100%;background:var(--input-bg);border:1px solid var(--line);border-radius:var(--control-r);padding:9px 16px;font-size:13px;color:var(--ink);line-height:1.4}
 .pmv3 .pm-hb-search input::placeholder{color:var(--muted)}
 @media (max-width:640px){.pmv3 .pm-hb-main{flex-wrap:wrap}.pmv3 .pm-hb-search{order:3;max-width:none;flex:1 0 100%}}
 
@@ -80,7 +81,7 @@
 /* Section jumps land below the sticky app topbar, not underneath it. */
 .pmv3 [id]{scroll-margin-top:76px}
 .pmv3 .pm-toprow{display:grid;grid-template-columns:1.15fr 1fr;gap:18px;align-items:stretch}
-.pmv3 .pm-hero{background:radial-gradient(120% 140% at 0% 0%,#ff5b63 0%,var(--v3brand) 45%,#8f1319 100%);color:#fff;border-radius:18px;padding:22px 24px;display:flex;flex-direction:column;gap:12px;min-width:0;box-shadow:0 12px 30px -14px rgba(237,28,36,.6);position:relative;overflow:hidden}
+Npx;padding:22px 24px;display:flex;flex-direction:column;gap:12px;min-width:0;box-shadow:0 12px 30px -14px rgba(237,28,36,.6);position:relative;overflow:hidden}
 .pmv3 .pm-hero::after{content:"";position:absolute;inset:0;background:radial-gradient(60% 60% at 100% 100%,rgba(255,255,255,.16),transparent 70%);pointer-events:none}
 .pmv3 .pm-hero-top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .pmv3 .pm-hero-tag{display:inline-flex;align-items:center;gap:6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;background:rgba(255,255,255,.22);padding:5px 12px 5px 10px;border-radius:999px;white-space:nowrap}
@@ -111,7 +112,7 @@
 
 /* project strip */
 .pmv3 .strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
-.pmv3 .pcard{background:var(--surface-2);border-radius:18px;padding:14px 16px;text-align:left;display:flex;flex-direction:column;gap:8px;min-width:0;box-shadow:0 1px 2px rgba(35,31,32,.04)}
+Npx;padding:14px 16px;text-align:left;display:flex;flex-direction:column;gap:8px;min-width:0;box-shadow:0 1px 2px rgba(35,31,32,.04)}
 .pmv3 .pcard:hover{box-shadow:var(--v3shadow)}
 .pmv3 .pcard.G{background:var(--good-wash)}.pmv3 .pcard.A{background:var(--amber-wash)}.pmv3 .pcard.R{background:var(--red-wash)}
 .pmv3 .pcard .t{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
@@ -165,7 +166,7 @@
 .pmv3 .queue-pm .qi-status.blue{background:var(--azure-wash);color:var(--azure-ink)}
 .pmv3 .queue-pm .qi-status.violet{background:var(--violet-wash);color:var(--violet-ink)}
 .pmv3 .chip{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:4px;background:var(--surface-2);border:1px solid var(--line);font-size:11px;font-weight:600;color:var(--ink-2)}
-.pmv3 .act-btn{font-size:12px;font-weight:600;color:var(--accent);padding:3px 8px;border-radius:5px;border:1px solid var(--line-2);background:var(--surface)}
+.pmv3 .act-btn{font-size:12px;font-weight:600;color:var(--accent);padding:3px 8px;border-radius:var(--control-r);border:1px solid var(--line-2);background:var(--surface)}
 .pmv3 .act-btn:hover{background:var(--accent-wash)}
 .pmv3 .act-btn.dark{background:var(--ink);color:var(--v3bg);border-color:var(--ink)}
 .pmv3 .act-btn.dark:hover{background:var(--ink);color:var(--v3bg);opacity:.85}
@@ -215,7 +216,7 @@
 .pmv3 .sgt-count.accent{background:var(--accent-wash);color:var(--accent)}
 .pmv3 .sgt-count.grey{background:var(--grey-wash);color:var(--ink-2)}
 .pmv3 .sgt-leg{margin-left:auto;flex-wrap:nowrap}
-.pmv3 .sgt-toggle{display:inline-flex;align-items:center;gap:8px;text-align:left;border:none;background:none;cursor:pointer;padding:2px 4px 2px 0;border-radius:6px}
+.pmv3 .sgt-toggle{display:inline-flex;align-items:center;gap:8px;text-align:left;border:none;background:none;cursor:pointer;padding:2px 4px 2px 0;border-radius:var(--control-r)}
 .pmv3 .sgt-toggle:hover b{color:var(--accent)}
 .pmv3 .sgt-toggle::before{content:'';width:0;height:0;border-left:5px solid var(--muted);border-top:4px solid transparent;border-bottom:4px solid transparent;transform:rotate(90deg);transition:transform .12s;flex:none}
 .pmv3 .sgt-toggle[aria-expanded="false"]::before{transform:none}
@@ -237,7 +238,7 @@
 .pmv3 .date{color:var(--ink-2)}
 .pmv3 .date.past{color:var(--red-ink);font-weight:600}
 .pmv3 .sort{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted)}
-.pmv3 .sort button{padding:2px 8px;border-radius:4px;border:1px solid var(--line);color:var(--ink-2);font-size:12px}
+.pmv3 .sort button{padding:2px 8px;border-radius:var(--control-r);border:1px solid var(--line);color:var(--ink-2);font-size:12px}
 .pmv3 .sort button[aria-pressed="true"]{background:var(--ink);color:var(--v3bg);border-color:var(--ink)}
 .pmv3 td .name{font-weight:600;color:var(--ink)}
 .pmv3 td .desc{display:block;color:var(--muted);font-size:12px;font-weight:400;white-space:normal;max-width:26ch}

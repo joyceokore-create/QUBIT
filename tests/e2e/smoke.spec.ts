@@ -13,12 +13,18 @@ import { expect, test } from "@playwright/test";
 
 const ADMIN = { email: "demo.admin@demo-b.example.invalid", password: "Passw0rd!23" };
 
+/** UX plan D8c: the sign-in asks for the work email, then the password, one step each. */
+async function signIn(page: import("@playwright/test").Page, email: string, password: string) {
+  await page.goto("/login");
+  await page.getByLabel("Work email").fill(email);
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+}
+
 test.describe("golden path (Demo Org B fixture super-admin)", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto("/login");
-    await page.getByPlaceholder("you@company.com").fill(ADMIN.email);
-    await page.getByPlaceholder("Password").fill(ADMIN.password);
-    await page.getByRole("button", { name: "Sign in" }).click();
+    await signIn(page, ADMIN.email, ADMIN.password);
     await page.waitForURL("**/dashboard**");
   });
 
@@ -68,10 +74,7 @@ test.describe("golden path (Demo Org B fixture super-admin)", () => {
 });
 
 test("Riverbank theming: login resolves the red tenant", async ({ page }) => {
-  await page.goto("/login");
-  await page.getByPlaceholder("you@company.com").fill("joyce.okore@riverbank.solutions");
-  await page.getByPlaceholder("Password").fill("Passw0rd!23");
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await signIn(page, "joyce.okore@riverbank.solutions", "Passw0rd!23");
   await page.waitForURL("**/dashboard**");
   await expect(page.getByText("Riverbank Group").first()).toBeVisible();
 });

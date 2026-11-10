@@ -42,11 +42,22 @@ export function ragTokenOf(rag: Rag): string {
 export const FOCUS =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--cardbg)]";
 
-// ── Milestone A/B: the three button voices and the tab-link look, shared by the
-// workspace status card and the /reports views. One source so the vocabulary can't drift.
-export const PRIMARY = `inline-flex items-center gap-2 rounded-[8px] bg-[var(--brand)] px-4 py-2 text-[13px] font-bold text-[var(--onbrand)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`;
-export const SECONDARY = `inline-flex items-center rounded-[8px] border border-[var(--input)] bg-background px-3.5 py-2 text-[13px] font-semibold text-[var(--ink2)] transition-colors hover:text-[var(--qink)] disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`;
+// ── The three button voices and the tab look (UX plan U1/U3), shared by the workspace
+// status card, the /reports views, admin and every new surface. One source so the
+// vocabulary can't drift. Buttons use the control tokens: 36px tall, 10px radius.
+export const PRIMARY = `inline-flex h-[var(--control-h)] items-center justify-center gap-2 rounded-[var(--control-r)] bg-[var(--brand)] px-4 text-[13px] font-bold text-[var(--onbrand)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`;
+export const SECONDARY = `inline-flex h-[var(--control-h)] items-center justify-center gap-2 rounded-[var(--control-r)] border border-[var(--input)] bg-background px-3.5 text-[13px] font-semibold text-[var(--ink2)] transition-colors hover:text-[var(--qink)] disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`;
 export const QUIET = `rounded-[6px] px-1.5 py-1 text-[12.5px] font-semibold text-[var(--ink3)] transition-colors hover:text-brand ${FOCUS}`;
-/** An underline tab rendered as a link (URL-driven tabs): idle, plus the active overlay. */
-export const TAB_LINK = `relative flex-none whitespace-nowrap rounded-[4px] px-2.5 py-2 text-[13px] font-semibold text-[var(--ink3)] transition-colors hover:text-[var(--qink)] ${FOCUS}`;
-export const TAB_LINK_ACTIVE = "text-[var(--qink)] after:absolute after:inset-x-0 after:bottom-[-1px] after:h-0.5 after:bg-[var(--brand)]";
+
+/**
+ * U1 tabs: no full-width line under the strip. Each tab is its own block with rounded top
+ * corners; the active one gets a fill and a 2px brand border under THAT tab only. The fill
+ * is the card colour when the strip sits on the grey page, and --surface-2 when it sits
+ * inside a white card (`TAB_ACTIVE_ON_CARD`). Inactive tabs are plain text.
+ */
+export const TABS_ROW = "flex flex-wrap items-end gap-1";
+export const TAB = `relative inline-flex h-[var(--control-h)] flex-none items-center gap-2 whitespace-nowrap rounded-t-[var(--control-r)] border-b-2 border-transparent px-3.5 text-[13px] font-semibold text-[var(--ink3)] transition-colors hover:text-[var(--qink)] ${FOCUS}`;
+export const TAB_ACTIVE = "border-[var(--brand)] bg-[var(--qcard)] text-[var(--qink)]";
+export const TAB_ACTIVE_ON_CARD = "border-[var(--brand)] bg-[var(--surface-2)] text-[var(--qink)]";
+/** The count after a tab label ("Waiting 3"). */
+export const TAB_COUNT = "inline-flex min-w-[20px] items-center justify-center rounded-full bg-[var(--surface-2)] px-1.5 text-[11px] font-bold tabular-nums text-[var(--ink3)]";

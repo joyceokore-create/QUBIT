@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { formatDayMonth } from "@/lib/dates";
 import type { AdminUserSummary } from "@/server/users";
 import type { DepartmentSummary } from "@/server/departments";
 import { UserRowActions } from "./user-row-actions";
@@ -175,7 +176,7 @@ export function UsersClient({
                       <span className="ml-1 font-mono rv:font-data text-[9px] rv:text-data-sm text-[var(--ink5)]">{okCount}/{sso ? 2 : 3}</span>
                     </span>
                     <span className="font-mono rv:font-data text-[10px] rv:text-data-sm text-[var(--ink4)]">
-                      {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : <span className="font-semibold text-[var(--warn)]">Never</span>}
+                      {u.lastLoginAt ? formatDayMonth(u.lastLoginAt) : <span className="font-semibold text-[var(--warn)]">Never</span>}
                     </span>
                     <span className="flex justify-end">
                       <UserRowActions user={u} currentUserId={currentUserId} departments={departments} users={users} canManage={canManage} canGrantSuperAdmin={canGrantSuperAdmin} canResetPassword={canResetPassword} customRoles={customRoles} />
