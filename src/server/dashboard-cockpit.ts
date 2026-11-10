@@ -1,7 +1,7 @@
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { pmIdsOf } from "@/lib/ownership";
 import { isoWeekId, isoWeekMonday, shiftIsoWeek, weekWindow } from "@/lib/iso-week";
-import { projectRag, type Rag } from "@/server/health";
+import { projectRag, type Rag, type RagSignals } from "@/server/health";
 import { effectiveRag } from "@/server/checkins";
 import type { CheckpointState } from "@/lib/checkpoint-progress";
 import { gateTrackOf, type GateMap } from "@/lib/cockpit-gates";
@@ -75,6 +75,8 @@ export interface CockpitProject {
   /** True when `reported` is the PM's confirmed check-in for this week. */
   reportedConfirmed: boolean;
   calculated: DimRag;
+  /** UX7: the signals behind `calculated` (derivedRag), so a dispute can say why. */
+  signals: RagSignals;
   dispute: boolean;
   dims: DimensionMap;
   pct: number;
@@ -299,6 +301,7 @@ export async function getCockpitData(ctx: TenantContext, now = new Date(), trend
       reported,
       reportedConfirmed: weekCheckIn?.status === "Confirmed",
       calculated,
+      signals,
       dispute: isDispute(reported, calculated),
       dims,
       pct,

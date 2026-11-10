@@ -27,6 +27,7 @@ function project(over: Partial<CockpitProject> & { id: string }): CockpitProject
     reported: "G",
     reportedConfirmed: false,
     calculated: "G",
+    signals: { status: "InProgress" },
     dispute: false,
     dims: {} as CockpitProject["dims"],
     pct: 40,

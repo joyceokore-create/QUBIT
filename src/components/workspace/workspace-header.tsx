@@ -7,6 +7,8 @@ import { EditProjectDialog } from "@/components/panels/edit-project-dialog";
 import { AskQAbout } from "@/components/q/ask-q-about";
 import { RequestToJoinButton } from "@/components/workspace/request-to-join-button";
 import { FOCUS, ragChipStyle, ragFill } from "@/lib/surface";
+import { formatDayMonth } from "@/lib/dates";
+import { healthWord } from "@/lib/status-words";
 import type { ProjectPanelJson } from "@/components/panels/project-panel-json";
 import type { Rag } from "@/server/health";
 
@@ -28,7 +30,8 @@ export function timelineParts(dueDate: string | null, now = new Date()): { date:
   if (!dueDate) return null;
   const due = new Date(dueDate);
   const days = Math.round((due.getTime() - now.getTime()) / 86_400_000);
-  const date = due.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  // UX7 (U5): one zone on server and browser, so the header can't hydrate differently.
+  const date = formatDayMonth(due);
   if (days > 0) return { date, rel: `${days} ${days === 1 ? "day" : "days"}`, overdue: false };
   if (days === 0) return { date, rel: "today", overdue: false };
   return { date, rel: `${-days} ${days === -1 ? "day" : "days"} overdue`, overdue: true };
@@ -41,7 +44,7 @@ function RagChip({ label, rag }: { label: string; rag: Rag | null }) {
       style={rag ? ragChipStyle(rag) : { color: "var(--ink4)", background: "var(--wash2)" }}
     >
       <span className="size-[7px] rounded-full" style={rag ? ragFill(rag) : { background: "var(--ink5)" }} aria-hidden />
-      {label} · {rag ?? "No check-in"}
+      {label} · {rag ? healthWord(rag) : "No check-in"}
     </span>
   );
 }

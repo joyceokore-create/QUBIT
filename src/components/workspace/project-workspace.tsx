@@ -31,7 +31,7 @@ import { InstancesSection } from "@/components/workspace/instances-section";
 import { ModulesSection } from "@/components/workspace/modules-section";
 import { MarketCheckInCard } from "@/components/workspace/market-checkin-card";
 import type { ProjectPanelJson } from "@/components/panels/project-panel-json";
-import { CARD_GLASS as CARD, CARD_BG, FOCUS, ragFill } from "@/lib/surface";
+import { CARD_GLASS as CARD, CARD_BG, FOCUS, ragFill, TAB_COUNT } from "@/lib/surface";
 
 // Milestone A (docs handoff §2) — the workspace, rearranged around the weekly act: a
 // plain header, seven underline tabs, and a "This week" home that reads top to bottom as
@@ -51,9 +51,8 @@ const TAB_ALIASES: Record<string, Tab> = {
   Integrations: "Team",
 };
 
-// Same variant prefixes as shadcn's own classes so twMerge replaces (not stacks) them.
-const TRIGGER =
-  "flex-none rounded-none px-2.5 py-2 text-[13px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)] data-active:text-[var(--qink)] group-data-horizontal/tabs:after:bottom-[-1px] after:bg-[var(--brand)]";
+// UX7 (D12, U1): the seven tabs stay, in the shared block-tab style (the Tabs default
+// variant) — no full-width line; the active tab gets the fill and the 2px brand border.
 
 /** `?tab=` (or a legacy alias) → a tab, or null when it names nothing we have. */
 function resolveTab(raw: string | undefined): Tab | null {
@@ -145,13 +144,13 @@ export function ProjectWorkspace({
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="gap-0">
-        <div className="border-b border-[var(--border)] [animation:rise_.5s_cubic-bezier(.22,1,.36,1)_.06s_both]">
-          <TabsList variant="line" className="group-data-horizontal/tabs:h-auto w-full justify-start gap-0 overflow-x-auto p-0 [scrollbar-width:thin]">
+        <div className="[animation:rise_.5s_cubic-bezier(.22,1,.36,1)_.06s_both]">
+          <TabsList aria-label="Project sections" className="w-full justify-start">
             {TABS.map((t) => (
-              <TabsTrigger key={t} value={t} className={TRIGGER}>
+              <TabsTrigger key={t} value={t} className="gap-2">
                 {t}
                 {t === "Register" && registerCount > 0 && (
-                  <span className="rounded-full px-1.5 text-[10.5px] font-bold" style={{ color: "var(--bad)", background: "color-mix(in oklab, var(--bad) 12%, transparent)" }}>
+                  <span className={TAB_COUNT} aria-label={`${registerCount} open`}>
                     {registerCount}
                   </span>
                 )}
