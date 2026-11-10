@@ -1,44 +1,63 @@
-import { format } from "date-fns";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
-import { listAuditLog } from "@/server/audit";
+import { parseListParams } from "@/lib/list-state";
+import { formatDateTime } from "@/lib/dates";
+import { dayRange } from "@/lib/list-query";
+import { auditFilterOptions, listAuditLogPaged } from "@/server/audit";
+import { getTenantTimeZone } from "@/server/preferences";
 import { Forbidden } from "@/components/forbidden";
 import { AdminHeader } from "../admin-header";
-import { CARD_GLASS as CARD } from "@/lib/surface";
+import { AuditClient } from "./audit-client";
 
-const ROW = "grid grid-cols-[130px_160px_140px_minmax(0,1fr)] items-center gap-3.5 p-[9px_18px]";
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-export default async function AdminAuditPage() {
+// UX5 (L1–L5): the audit log grows without limit, so it pages, searches and filters on the
+// server (L4), under the tenant's RLS context. Dates show in the tenant's time zone, and the
+// from/to filter days are read as tenant-local days.
+export default async function AdminAuditPage({ searchParams }: { searchParams: SearchParams }) {
   const session = await auth();
   if (!session?.user) return null;
 
   const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
   // Audit is a super-admin surface (§5): heads' scoped console has no audit view.
   if (!can(ctx, "iam:manage")) return <Forbidden />;
-  const rows = await listAuditLog(ctx);
+
+  const [options, tz] = await Promise.all([auditFilterOptions(ctx), getTenantTimeZone(ctx)]);
+  // Allow-lists: Action and Who must be values that exist in THIS tenant's log; from/to are
+  // short text here and validated as real calendar days by dayRange.
+  const params = parseListParams(await searchParams, {
+    defaultSize: 10,
+    filters: { action: options.actions, actor: options.actors.map((a) => a.id), from: "text", to: "text" },
+  });
+  const range = dayRange(params.filters.from, params.filters.to, tz);
+  const { rows, info } = await listAuditLogPaged(ctx, {
+    q: params.q,
+    page: params.page,
+    size: params.size,
+    action: params.filters.action,
+    actor: params.filters.actor,
+    from: range.gte,
+    to: range.lt,
+  });
 
   return (
     <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
-      <AdminHeader subtitle={`Latest ${rows.length} ${rows.length === 1 ? "event" : "events"} · every mutation writes a row, atomic with the change`} />
-
-      <div className={`overflow-hidden [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.06s_both] ${CARD}`} style={{ background: "var(--cardbg)" }}>
-        <div className="overflow-x-auto">
-          <div className="min-w-[640px]">
-            <div className={`${ROW} border-b border-[var(--hair)] font-mono rv:font-sans text-[9px] rv:text-overline font-semibold uppercase tracking-[1.6px] text-[var(--ink4)]`}>
-              <span>When</span><span>Actor</span><span>Action</span><span>Entity</span>
-            </div>
-            {rows.map((row) => (
-              <div key={row.id} className={`${ROW} border-b border-[var(--hair2)] transition-colors last:border-0 hover:bg-[var(--wash)]`}>
-                <span className="font-mono rv:font-data text-[10px] rv:text-data-sm text-[var(--ink4)]">{format(row.createdAt, "MMM d HH:mm")}</span>
-                <span className="truncate text-[12px] rv:text-body-sm font-medium text-[var(--ink2)]">{row.actorName ?? row.actorId ?? "—"}</span>
-                <span className="justify-self-start rounded-[5px] bg-[var(--wash2)] px-2 py-[3px] font-mono text-[9px] font-semibold tracking-[.6px] text-[var(--ink3)]">{row.action}</span>
-                <span className="truncate font-mono text-[10px] rv:text-data-xs text-[var(--ink4)]">{row.entityType}:{row.entityId}</span>
-              </div>
-            ))}
-            {rows.length === 0 && <div className="p-8 text-center text-[12px] rv:text-body-sm text-[var(--ink5)]">No audit events yet.</div>}
-          </div>
-        </div>
-      </div>
+      <AdminHeader title="Audit log" description="Every change writes a row, at the same moment as the change. Times are in your organisation's time zone." />
+      <AuditClient
+        info={info}
+        actions={options.actions}
+        actors={options.actors}
+        range={{ from: range.from ?? "", to: range.to ?? "" }}
+        anyEvents={options.actions.length > 0}
+        rows={rows.map((r) => ({
+          id: r.id,
+          when: formatDateTime(r.createdAt, tz),
+          createdAt: r.createdAt.toISOString(),
+          actor: r.actorName ?? r.actorId ?? "—",
+          action: r.action,
+          entity: `${r.entityType}:${r.entityId}`,
+        }))}
+      />
     </main>
   );
 }

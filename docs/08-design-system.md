@@ -103,6 +103,18 @@ right with the logo above and a footer below. One step per screen (work email �
 authenticator code), each with its own illustration (`public/login/`). Shared: `AuthShell`
 (`src/components/auth/auth-shell.tsx`).
 
+### List pages (UX5)
+
+Every list page: `PageHeader` (title, one-line description, actions top right; the page's
+main action is its one filled primary) → optional URL tabs (`TabStrip`) → toolbar (search on
+the left with a placeholder saying what it searches, then filters; nothing else) → active
+filter chips with "Clear all" last (shown when more than one filter is on) → `TableCard`
+holding only the table, its empty state and the always-visible `TableFooter` ("Showing 1–10
+of 48", rows per page 5/10/25/50/100, Previous / pages / Next). All view state is in the URL
+(`useListUrl`); rows per page is remembered per table. Empty states say why: "No risks match
+these filters · Clear filters" vs "No risks yet". Components: `src/components/list/`; rules:
+`src/lib/list-state.ts`.
+
 ### Daily Brief (UX4)
 
 The one bold element on a home page. A solid `--brief-bg` surface (no gradient) with white text

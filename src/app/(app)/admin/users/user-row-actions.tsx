@@ -30,7 +30,8 @@ interface UserRowActionsProps {
   user: AdminUserSummary;
   currentUserId: string;
   departments: DepartmentSummary[];
-  users: AdminUserSummary[];
+  /** Manager-picker options for Edit department: every non-deleted user, id + name. */
+  users: { id: string; name: string }[];
   /** Full CRUD (roles/suspend/delete) — PlatformSuperAdmin. Heads only get department membership. */
   canManage: boolean;
   /** Only a Super Admin may grant the Super Admin role (mirrors the server guard, M-O1). */

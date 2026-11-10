@@ -39,3 +39,10 @@ describe("today and overdue follow the tenant's calendar day", () => {
     expect(isOverdue(new Date("2026-11-08T12:00:00.000Z"), now)).toBe(true);
   });
 });
+
+describe("September abbreviation (UX5)", () => {
+  it("prints Sep, not Sept, whatever the ICU data", () => {
+    expect(formatDate(new Date("2026-09-14T09:00:00Z"), "Africa/Nairobi")).toBe("14 Sep 2026");
+    expect(formatDayMonth(new Date("2026-09-14T09:00:00Z"), "Africa/Nairobi")).toBe("14 Sep");
+  });
+});

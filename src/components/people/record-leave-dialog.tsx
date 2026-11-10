@@ -85,7 +85,7 @@ export function RecordLeaveDialog({ people }: { people: { id: string; name: stri
       busyLabel="Recording…"
       onSubmit={submit}
       trigger={
-        <DialogTrigger render={<Button size="sm" variant="outline" className="rounded-full" />}>
+        <DialogTrigger render={<Button variant="outline" />}>
           <CalendarOff /> Record leave
         </DialogTrigger>
       }

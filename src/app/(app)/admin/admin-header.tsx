@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { TabStrip } from "@/components/ui/tab-strip";
 import { usePathname } from "next/navigation";
+import { PageHeader } from "@/components/list/page-header";
 
 // Shared QUBIT App v3 admin header — eyebrow + Archivo title + U1 tabs across the five
 // admin routes (Users / Roles / Audit / Departments / Access requests). `action` is an
@@ -20,7 +21,22 @@ const TABS = [
   { label: "Access requests", href: "/admin/access-requests", iamOnly: true },
 ];
 
-export function AdminHeader({ subtitle, action, canManageIam = true }: { subtitle?: string; action?: React.ReactNode; canManageIam?: boolean }) {
+// UX5 (L2): a converted list page passes `title` (+ `description`), and the header becomes the
+// shared PageHeader — "Admin" eyebrow, the page's own title and description, its actions top
+// right — above the admin tab strip. Pages that don't pass `title` keep the old layout.
+export function AdminHeader({
+  subtitle,
+  action,
+  canManageIam = true,
+  title,
+  description,
+}: {
+  subtitle?: string;
+  action?: React.ReactNode;
+  canManageIam?: boolean;
+  title?: string;
+  description?: React.ReactNode;
+}) {
   const path = usePathname();
 
   const [newCount, setNewCount] = useState(0);
@@ -39,16 +55,20 @@ export function AdminHeader({ subtitle, action, canManageIam = true }: { subtitl
 
   return (
     <div className="flex flex-col gap-3.5 [animation:rise_.5s_cubic-bezier(.22,1,.36,1)_both]">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <div className="mb-1.5 font-mono rv:font-sans text-[10px] rv:text-overline font-semibold uppercase tracking-[2.4px] text-[var(--ink4)]">
-            Administration · IAM v1 · gated on admin:access
+      {title ? (
+        <PageHeader eyebrow="Admin" title={title} description={description} actions={action} />
+      ) : (
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="mb-1.5 font-mono rv:font-sans text-[10px] rv:text-overline font-semibold uppercase tracking-[2.4px] text-[var(--ink4)]">
+              Administration · IAM v1 · gated on admin:access
+            </div>
+            <h1 className="font-heading text-[27px] rv:text-heading-lg font-bold tracking-[-.8px] text-[var(--qink)]">Admin</h1>
+            {subtitle && <p className="mt-1 text-[12px] rv:text-body-sm text-[var(--ink4)]">{subtitle}</p>}
           </div>
-          <h1 className="font-heading text-[27px] rv:text-heading-lg font-bold tracking-[-.8px] text-[var(--qink)]">Admin</h1>
-          {subtitle && <p className="mt-1 text-[12px] rv:text-body-sm text-[var(--ink4)]">{subtitle}</p>}
+          {action}
         </div>
-        {action}
-      </div>
+      )}
       <TabStrip
         label="Admin sections"
         active={TABS.find((t) => path === t.href || path.startsWith(`${t.href}/`))?.href ?? ""}

@@ -1,4 +1,5 @@
 import "server-only";
+import { containsText } from "@/lib/list-query";
 import { z } from "zod";
 import { can } from "@/lib/rbac";
 import { withTenant, type TenantContext } from "@/lib/tenant";
@@ -22,7 +23,7 @@ export interface SearchHit {
 const PER_KIND = 6;
 
 export async function search(ctx: TenantContext, q: string): Promise<SearchHit[]> {
-  const like = { contains: q, mode: "insensitive" as const };
+  const like = containsText(q); // wildcards escaped: "%" searches for a literal %
   const canProjects = can(ctx, "project:read");
   const canPortfolios = can(ctx, "portfolio:read");
   return withTenant(ctx, async (tx) => {

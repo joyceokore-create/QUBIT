@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
@@ -9,6 +10,8 @@ import { derivedGroups, USER_GROUPS } from "@/lib/personas";
 import { PROJECT_ROLES, projectRoleCategory } from "@/lib/roles";
 import { mfaRequired } from "@/lib/mfa-policy";
 import { ssoEnabled } from "@/lib/sso";
+import { pageInfo, type PageInfo } from "@/lib/list-state";
+import { containsText } from "@/lib/list-query";
 
 export const CreateUserInput = z.object({
   name: z.string().min(1),
@@ -91,6 +94,43 @@ export interface AdminUserSummary {
   derivedGroups: string[];
 }
 
+// One include + mapping for every directory read, so the paged list and the full list can
+// never disagree about what a row shows.
+const SUMMARY_INCLUDE = {
+  roles: true,
+  department: { select: { name: true } },
+  manager: { select: { name: true } },
+  projectAllocations: { select: { role: true } },
+  projectsLed: { select: { id: true }, take: 1 },
+  _count: { select: { teamMemberships: true, projectAllocations: true } },
+} satisfies Prisma.UserInclude;
+
+function toSummary(u: Prisma.UserGetPayload<{ include: typeof SUMMARY_INCLUDE }>): AdminUserSummary {
+  return {
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    status: u.status,
+    roles: u.roles.map((r) => r.role),
+    departmentId: u.departmentId,
+    departmentName: u.department?.name ?? null,
+    managerId: u.managerId,
+    managerName: u.manager?.name ?? null,
+    createdAt: u.createdAt,
+    lastLoginAt: u.lastLoginAt,
+    mfaEnabled: u.mfaSecret !== null,
+    teamCount: u._count.teamMemberships,
+    projectCount: u._count.projectAllocations,
+    userGroups: u.userGroups,
+    primaryGroup: u.primaryGroup,
+    derivedGroups: derivedGroups({
+      membershipCategories: u.projectAllocations.map((m) => projectRoleCategory(m.role)),
+      tenantRoles: u.roles.map((r) => r.role),
+      leadsProjects: u.projectsLed.length > 0,
+    }),
+  };
+}
+
 export async function listUsers(
   ctx: TenantContext,
   opts: { includeDeleted?: boolean } = {},
@@ -98,40 +138,118 @@ export async function listUsers(
   return withTenant(ctx, async (tx) => {
     const users = await tx.user.findMany({
       where: opts.includeDeleted ? undefined : { status: { not: "DELETED" } },
-      include: {
-        roles: true,
-        department: { select: { name: true } },
-        manager: { select: { name: true } },
-        projectAllocations: { select: { role: true } },
-        projectsLed: { select: { id: true }, take: 1 },
-        _count: { select: { teamMemberships: true, projectAllocations: true } },
-      },
+      include: SUMMARY_INCLUDE,
       orderBy: { name: "asc" },
     });
-    return users.map((u) => ({
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      status: u.status,
-      roles: u.roles.map((r) => r.role),
-      departmentId: u.departmentId,
-      departmentName: u.department?.name ?? null,
-      managerId: u.managerId,
-      managerName: u.manager?.name ?? null,
-      createdAt: u.createdAt,
-      lastLoginAt: u.lastLoginAt,
-      mfaEnabled: u.mfaSecret !== null,
-      teamCount: u._count.teamMemberships,
-      projectCount: u._count.projectAllocations,
-      userGroups: u.userGroups,
-      primaryGroup: u.primaryGroup,
-      derivedGroups: derivedGroups({
-        membershipCategories: u.projectAllocations.map((m) => projectRoleCategory(m.role)),
-        tenantRoles: u.roles.map((r) => r.role),
-        leadsProjects: u.projectsLed.length > 0,
-      }),
-    }));
+    return users.map(toSummary);
   });
+}
+
+// ── UX5 (L4): server-paged directory ───────────────────────────────────────────
+
+/** Statuses the Users list can filter on (DELETED rows never list). */
+export const USER_LIST_STATUSES = ["ACTIVE", "INVITED", "SUSPENDED"] as const;
+/** Onboarding gaps the overview tiles filter on. */
+export const USER_ONBOARDING_FILTERS = ["not-signed-in", "unplaced"] as const;
+
+/**
+ * The validated query for one page of the directory. The page parses the URL with
+ * `parseListParams` (allow-lists); this schema re-checks the shape at the engine boundary so
+ * no caller can ask for more than 100 rows or smuggle an unexpected value into `where`.
+ */
+export const UserListQuery = z.object({
+  q: z.string().trim().max(100).default(""),
+  page: z.number().int().min(1).max(1_000_000).default(1),
+  size: z.number().int().min(1).max(100),
+  role: z.string().min(1).max(100).optional(),
+  /** A department id, or "none" for users with no department. */
+  department: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
+  mfa: z.enum(["on", "off"]).optional(),
+  status: z.enum(USER_LIST_STATUSES).optional(),
+  onboarding: z.enum(USER_ONBOARDING_FILTERS).optional(),
+});
+export type UserListQuery = z.input<typeof UserListQuery>;
+
+function userListWhere(q: z.output<typeof UserListQuery>): Prisma.UserWhereInput {
+  const and: Prisma.UserWhereInput[] = [{ status: q.status ?? { not: "DELETED" } }];
+  if (q.q) and.push({ OR: [{ name: containsText(q.q) }, { email: containsText(q.q) }] });
+  if (q.role) and.push({ roles: { some: { role: q.role } } });
+  if (q.department) and.push({ departmentId: q.department === "none" ? null : q.department });
+  if (q.mfa) and.push({ mfaSecret: q.mfa === "on" ? { not: null } : null });
+  if (q.onboarding === "not-signed-in") and.push({ lastLoginAt: null });
+  if (q.onboarding === "unplaced") and.push({ teamMemberships: { none: {} }, projectAllocations: { none: {} } });
+  return { AND: and };
+}
+
+/**
+ * One page of the directory: search (name or email), filters and paging all in SQL, under
+ * the tenant's RLS context. The count and the page read run in the same transaction; an
+ * out-of-range page clamps to the last page.
+ */
+export async function listUsersPaged(
+  ctx: TenantContext,
+  input: UserListQuery,
+): Promise<{ rows: AdminUserSummary[]; info: PageInfo }> {
+  const q = UserListQuery.parse(input);
+  const where = userListWhere(q);
+  return withTenant(ctx, async (tx) => {
+    const total = await tx.user.count({ where });
+    const info = pageInfo(total, q.page, q.size);
+    const users = total
+      ? await tx.user.findMany({ where, include: SUMMARY_INCLUDE, orderBy: [{ name: "asc" }, { id: "asc" }], skip: info.skip, take: info.size })
+      : [];
+    return { rows: users.map(toSummary), info };
+  });
+}
+
+/** Whole-directory counts for the Users overview tiles and the admin insights. */
+export interface UserDirectoryStats {
+  /** Every non-deleted user. */
+  all: number;
+  /** ACTIVE and never signed in. */
+  notSignedIn: number;
+  /** ACTIVE without app-level TOTP. */
+  noMfa: number;
+  /** ACTIVE and on no team or project. */
+  unplaced: number;
+  suspended: number;
+  /** ACTIVE, signed in, placed — and (without SSO) MFA enrolled. */
+  onboarded: number;
+  /** Non-deleted Super Admins without MFA. */
+  noMfaAdmins: number;
+  /** Non-deleted users with no department. */
+  noDepartment: number;
+  /** ACTIVE Super Admins. */
+  activeAdmins: number;
+}
+
+export async function userDirectoryStats(ctx: TenantContext, opts: { sso: boolean }): Promise<UserDirectoryStats> {
+  const live: Prisma.UserWhereInput = { status: { not: "DELETED" } };
+  const active: Prisma.UserWhereInput = { status: "ACTIVE" };
+  const admin: Prisma.UserWhereInput = { roles: { some: { role: SUPER_ADMIN_ROLE } } };
+  const placed: Prisma.UserWhereInput = { OR: [{ teamMemberships: { some: {} } }, { projectAllocations: { some: {} } }] };
+  return withTenant(ctx, async (tx) => {
+    const count = (where: Prisma.UserWhereInput) => tx.user.count({ where });
+    const [all, notSignedIn, noMfa, unplaced, suspended, onboarded, noMfaAdmins, noDepartment, activeAdmins] = await Promise.all([
+      count(live),
+      count({ ...active, lastLoginAt: null }),
+      count({ ...active, mfaSecret: null }),
+      count({ ...active, teamMemberships: { none: {} }, projectAllocations: { none: {} } }),
+      count({ status: "SUSPENDED" }),
+      count({ AND: [active, { lastLoginAt: { not: null } }, placed, ...(opts.sso ? [] : [{ mfaSecret: { not: null } }])] }),
+      count({ AND: [live, admin, { mfaSecret: null }] }),
+      count({ ...live, departmentId: null }),
+      count({ AND: [active, admin] }),
+    ]);
+    return { all, notSignedIn, noMfa, unplaced, suspended, onboarded, noMfaAdmins, noDepartment, activeAdmins };
+  });
+}
+
+/** Lightweight id + name for every non-deleted user — the manager picker in Edit department. */
+export async function listUserOptions(ctx: TenantContext): Promise<{ id: string; name: string }[]> {
+  return withTenant(ctx, (tx) =>
+    tx.user.findMany({ where: { status: { not: "DELETED" } }, select: { id: true, name: true }, orderBy: [{ name: "asc" }, { id: "asc" }] }),
+  );
 }
 
 /** Edit DECLARED dashboard groups (docs/17 §1.3) — presentation only; RBAC untouched. */

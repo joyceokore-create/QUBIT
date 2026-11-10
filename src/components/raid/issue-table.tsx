@@ -1,123 +1,84 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { SeverityPill } from "@/components/raid/severity-pill";
 import { IssueRowActions } from "@/components/raid/issue-row-actions";
-import { ISSUE_STATUSES, type IssueListItem } from "@/server/issues";
+import { RaidTh, RAID_ROW, RAID_THEAD } from "@/components/raid/raid-table-parts";
+import type { IssueListItem } from "@/server/issues";
 import type { AdminUserSummary } from "@/server/users";
+import { cn } from "@/lib/utils";
 
-const FILTER_CHIPS: { label: string; value: string | null }[] = [
-  { label: "All", value: null },
-  ...ISSUE_STATUSES.map((s) => ({ label: s, value: s })),
-];
-
+/**
+ * UX5 — one server-sliced page of issues (src/server/issues.ts listIssuesPage). Search,
+ * filters and paging live in the URL; this only renders the rows it is given.
+ */
 interface IssueTableProps {
   issues: IssueListItem[];
   users: AdminUserSummary[];
   canUpdate: boolean;
 }
 
-export function IssueTable({ issues, users, canUpdate }: IssueTableProps) {
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return issues.filter((i) => {
-      if (statusFilter && i.status !== statusFilter) return false;
-      if (q && !i.title.toLowerCase().includes(q)) return false;
-      return true;
-    });
-  }, [issues, statusFilter, query]);
-
+export function IssueStatus({ status }: { status: string }) {
+  const done = status === "Closed" || status === "Resolved";
   return (
-    <div className="overflow-hidden rounded-[10px] border border-ink-4 bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-background p-3">
-        <div className="flex flex-wrap gap-1.5">
-          {FILTER_CHIPS.map((chip) => (
-            <Button
-              key={chip.label}
-              type="button"
-              size="sm"
-              variant={statusFilter === chip.value ? "default" : "outline"}
-              onClick={() => setStatusFilter(chip.value)}
-            >
-              {chip.label}
-            </Button>
-          ))}
-        </div>
-        <div className="relative w-full max-w-[240px]">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-ink-3" />
-          <Input
-            placeholder="Search issues…"
-            className="pl-8"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
-      </div>
+    <span
+      className={cn(
+        "inline-block rounded-[4px] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.4px]",
+        done ? "bg-[var(--surface-2)] text-[var(--ink3)]" : "bg-status-blue-bg text-status-blue",
+      )}
+    >
+      {status}
+    </span>
+  );
+}
 
-      {/* Artifact-style table (the dashboard's .sgt look) — see .sgt-app in globals.css. */}
-      <div className="overflow-x-auto px-3 pt-1 pb-3">
-        <table className="sgt-app">
-          <thead>
-            <tr>
-              <th>Title</th>
-              <th>Project</th>
-              <th>Severity</th>
-              <th>Owner</th>
-              <th>Status</th>
-              <th>Origin</th>
-              {canUpdate && <th className="r">Actions</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((issue) => (
-              <tr key={issue.id}>
-                <td>
-                  <span className="name">{issue.title}</span>
-                </td>
-                <td className="text-ink-2">{issue.projectCode ?? "—"}</td>
-                <td>
-                  <SeverityPill severity={issue.severity} />
-                </td>
-                <td className="text-ink-2">{issue.ownerName ?? "—"}</td>
-                <td>
-                  <Badge variant={issue.status === "Closed" ? "outline" : "secondary"}>{issue.status}</Badge>
-                </td>
-                <td className="text-ink-3">
-                  {issue.originRiskTitle ? (
-                    <span className="text-[11px]">
-                      <span className="mr-1 rounded-[3px] bg-background px-1.5 py-0.5 text-[9px] font-semibold text-ink-3 uppercase">
-                        From risk
-                      </span>
-                      {issue.originRiskTitle}
-                    </span>
-                  ) : (
-                    <span className="text-[11px] text-ink-4">No prior risk</span>
-                  )}
-                </td>
-                {canUpdate && (
-                  <td className="r">
-                    <IssueRowActions issue={issue} users={users} />
-                  </td>
-                )}
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={canUpdate ? 7 : 6} className="text-center text-ink-3">
-                  No issues match this filter.
-                </td>
-              </tr>
+export function IssueTable({ issues, users, canUpdate }: IssueTableProps) {
+  return (
+    <table className="w-full min-w-[880px] text-left text-[13px]">
+      <thead className={RAID_THEAD}>
+        <tr>
+          <RaidTh className="pl-4">Issue</RaidTh>
+          <RaidTh>Project</RaidTh>
+          <RaidTh>Severity</RaidTh>
+          <RaidTh>Owner</RaidTh>
+          <RaidTh>Status</RaidTh>
+          <RaidTh>Origin</RaidTh>
+          {canUpdate && (
+            <RaidTh className="w-[56px] pr-4 text-right">
+              <span className="sr-only">Actions</span>
+            </RaidTh>
+          )}
+        </tr>
+      </thead>
+      <tbody>
+        {issues.map((issue) => (
+          <tr key={issue.id} className={RAID_ROW}>
+            <td className="max-w-[340px] py-2.5 pl-4 pr-3 font-semibold text-[var(--qink)]">{issue.title}</td>
+            <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[11.5px] text-[var(--ink3)]">{issue.projectCode ?? "—"}</td>
+            <td className="whitespace-nowrap px-3 py-2.5">
+              <SeverityPill severity={issue.severity} />
+            </td>
+            <td className="whitespace-nowrap px-3 py-2.5 text-[var(--ink2)]">{issue.ownerName ?? "Unowned"}</td>
+            <td className="whitespace-nowrap px-3 py-2.5">
+              <IssueStatus status={issue.status} />
+            </td>
+            <td className="max-w-[260px] px-3 py-2.5 text-[12px] text-[var(--ink3)]">
+              {issue.originRiskTitle ? (
+                <span className="line-clamp-1">
+                  <span className="mr-1 rounded-[3px] bg-[var(--surface-2)] px-1.5 py-0.5 text-[9px] font-semibold uppercase">From risk</span>
+                  {issue.originRiskTitle}
+                </span>
+              ) : (
+                "No prior risk"
+              )}
+            </td>
+            {canUpdate && (
+              <td className="py-2.5 pl-3 pr-4 text-right">
+                <IssueRowActions issue={issue} users={users} />
+              </td>
             )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }

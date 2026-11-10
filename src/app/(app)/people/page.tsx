@@ -1,29 +1,26 @@
-import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { withTenant } from "@/lib/tenant";
 import { listWorkload } from "@/server/resources";
 import { listResourceRequests } from "@/server/staffing";
+import { getTenantTimeZone } from "@/server/preferences";
 import { ExportButton } from "@/components/export-button";
 import { Forbidden } from "@/components/forbidden";
+import { PageHeader } from "@/components/list/page-header";
+import { TabStrip } from "@/components/ui/tab-strip";
+import { PeopleDirectory } from "@/components/people/people-directory";
 import { RecordLeaveDialog } from "@/components/people/record-leave-dialog";
 import { StaffingClient } from "../staffing/staffing-client";
 
-// Same bespoke table treatment as the admin surfaces (Teams/Audit): elevated card
-// + grid rows, uppercase overline header, divider rows.
-const CARD =
-  "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]";
-const ROW =
-  "grid grid-cols-[minmax(0,1.4fr)_160px_minmax(0,1.8fr)_150px] items-start gap-3.5 p-[12px_18px]";
-
 type TabKey = "directory" | "requests";
-
-const fmtDate = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
 // DM1.73 — People + Staffing merged into one page: tab "Directory" (workload table)
 // and tab "Staffing requests" (the former /staffing surface, gated on project:create).
 // The directory doubles as the data behind the Q copilot's per-resource report
 // (MVP1 Phase B).
+//
+// UX5 (L1–L5): shared header (Record leave + Export top right), U1 tabs, and the
+// Directory as a browser-paged list with search and Department · Team · Workload filters.
 export default async function PeoplePage({
   searchParams,
 }: {
@@ -61,116 +58,70 @@ export default async function PeoplePage({
       : [];
 
   return (
-    <div className="flex w-full flex-1 flex-col gap-4 p-[26px]">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-heading text-[21px] rv:text-heading-md font-bold tracking-[-0.5px] text-foreground">People</h1>
-          <p className="mt-[3px] text-xs rv:text-body-sm text-ink-3">
-            {tab === "requests"
-              ? "Resource requests — ask for a shape; the Head fills it from the bench."
-              : "Resource allocation across projects"}
-          </p>
-        </div>
-        {tab === "directory" && (
-          <div className="flex items-center gap-2">
-            {canRecordLeave && <RecordLeaveDialog people={leavePeople} />}
-            <ExportButton href="/api/export?kind=allocations" />
-          </div>
-        )}
-      </div>
+    <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
+      <PageHeader
+        eyebrow={session.user.tenantName}
+        title="People"
+        description={
+          tab === "requests"
+            ? "Resource requests — ask for a shape; the Head fills it from the bench."
+            : "Resource allocation across projects. Allocation is leave-aware over the next fortnight."
+        }
+        actions={
+          tab === "directory" && (
+            <>
+              {canRecordLeave && <RecordLeaveDialog people={leavePeople} />}
+              <ExportButton href="/api/export?kind=allocations" />
+            </>
+          )
+        }
+      />
 
       {tabs.length > 1 && (
-        <nav className="flex flex-wrap items-center gap-1.5">
-          {tabs.map((t) => (
-            <Link
-              key={t.key}
-              href={`/people?tab=${t.key}`}
-              aria-current={t.key === tab ? "page" : undefined}
-              className={`rounded-full px-3 py-1.5 font-mono text-[9.5px] font-bold uppercase tracking-[.8px] transition-colors ${
-                t.key === tab
-                  ? "bg-[var(--brand)] text-[var(--onbrand)]"
-                  : "border border-[var(--w07)] text-[var(--ink4)] hover:text-[var(--qink)]"
-              }`}
-            >
-              {t.label}
-            </Link>
-          ))}
-        </nav>
+        <TabStrip
+          label="People views"
+          active={tab}
+          tabs={tabs.map((t) => ({ key: t.key, label: t.label, href: t.key === "directory" ? "/people" : `/people?tab=${t.key}` }))}
+        />
       )}
 
       {tab === "directory" ? <DirectoryTab ctx={ctx} /> : <RequestsTab ctx={ctx} />}
-    </div>
+    </main>
   );
 }
 
 type Ctx = { tenantId: string; userId: string; roles: string[]; permissions?: string[] };
 
-/** The workload directory — everyone with their project allocations. DM1.73: shows the
- * leave-aware effectivePct alongside the booked totalPct, badges people away today, and
- * sorts by effectivePct descending so over-allocated people surface first. */
+/** The workload directory. Team names come from one RLS-scoped read of team memberships
+ * (listWorkload stays as it is — it feeds exports, Q and the Brief too). */
 async function DirectoryTab({ ctx }: { ctx: Ctx }) {
-  const people = (await listWorkload(ctx)).sort((a, b) => b.effectivePct - a.effectivePct);
+  const [people, memberships, timeZone] = await Promise.all([
+    listWorkload(ctx),
+    withTenant(ctx, (tx) => tx.teamMember.findMany({ select: { userId: true, team: { select: { name: true } } } })),
+    getTenantTimeZone(ctx),
+  ]);
+  const teamsByUser = new Map<string, string[]>();
+  for (const m of memberships) {
+    const list = teamsByUser.get(m.userId) ?? [];
+    list.push(m.team.name);
+    teamsByUser.set(m.userId, list);
+  }
 
   return (
-    <div className={`overflow-hidden ${CARD}`} style={{ background: "var(--cardbg)" }}>
-      <div className="overflow-x-auto">
-        <div className="min-w-[820px]">
-          <div className={`${ROW} items-center border-b border-[var(--hair)] font-mono rv:font-sans text-[9px] rv:text-overline font-semibold uppercase tracking-[1.6px] text-[var(--ink4)]`}>
-            <span>Person</span>
-            <span>Department</span>
-            <span>Projects</span>
-            <span className="justify-self-end">Allocation</span>
-          </div>
-          {people.map((p) => (
-            <div key={p.userId} className={`${ROW} border-b border-[var(--hair2)] transition-colors last:border-0 hover:bg-[var(--wash)]`}>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-[13px] rv:text-body-sm font-semibold text-[var(--qink)]">{p.name}</span>
-                  {p.onLeaveUntil && (
-                    <span className="flex-none rounded-full bg-[color-mix(in_oklab,var(--warn)_12%,transparent)] px-2 py-0.5 text-[10px] rv:text-body-xs font-semibold text-[var(--warn)]">
-                      on leave until {fmtDate(p.onLeaveUntil)}
-                    </span>
-                  )}
-                </div>
-                <div className="truncate text-[11px] rv:text-body-xs text-[var(--ink4)]">{p.email}</div>
-              </div>
-              <span className="text-[12px] rv:text-body-sm text-[var(--ink3)]">{p.departmentName ?? "—"}</span>
-              <div className="min-w-0">
-                {p.allocations.length === 0 ? (
-                  <span className="text-[12px] text-[var(--ink4)]">—</span>
-                ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    {p.allocations.map((a) => (
-                      <span key={a.projectCode} className="rounded-full bg-[var(--wash2)] px-2.5 py-0.5 text-[11px] rv:text-body-xs text-[var(--ink2)]" title={`${a.role}${a.allocationPct != null ? ` · ${a.allocationPct}%` : ""}`}>
-                        {a.projectName} · {a.role}
-                        {a.allocationPct != null ? ` (${a.allocationPct}%)` : ""}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="justify-self-end text-right">
-                <span
-                  className="text-[13px] rv:text-body-sm font-semibold tabular-nums"
-                  style={{ color: p.effectivePct > 100 ? "var(--bad)" : "var(--ink2)" }}
-                  title={p.effectivePct > 100 ? "Over-allocated (leave-aware)" : "Effective allocation over the next fortnight, leave-aware"}
-                >
-                  {p.effectivePct}%
-                </span>
-                {p.effectivePct !== p.totalPct && (
-                  <div className="text-[10.5px] rv:text-body-xs tabular-nums text-[var(--ink4)]" title="Booked allocation before leave is applied">
-                    {p.totalPct}% booked
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-          {people.length === 0 && (
-            <div className="p-8 text-center text-[12px] rv:text-body-sm text-[var(--ink5)]">No people yet.</div>
-          )}
-        </div>
-      </div>
-    </div>
+    <PeopleDirectory
+      timeZone={timeZone}
+      people={people.map((p) => ({
+        userId: p.userId,
+        name: p.name,
+        email: p.email,
+        departmentName: p.departmentName,
+        teams: (teamsByUser.get(p.userId) ?? []).sort((a, b) => a.localeCompare(b)),
+        totalPct: p.totalPct,
+        effectivePct: p.effectivePct,
+        onLeaveUntil: p.onLeaveUntil ? p.onLeaveUntil.toISOString() : null,
+        allocations: p.allocations,
+      }))}
+    />
   );
 }
 

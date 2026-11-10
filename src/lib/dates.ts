@@ -37,6 +37,9 @@ function parts(d: DateInput, tz: string | null | undefined, opts: Intl.DateTimeF
   for (const p of new Intl.DateTimeFormat("en-GB", { ...opts, timeZone: zone(tz) }).formatToParts(toDate(d))) {
     out[p.type] = p.value;
   }
+  // Newer ICU data abbreviates September as "Sept" in en-GB; keep three letters everywhere
+  // (and the same text on server and browser, whatever ICU each one ships).
+  if (out.month === "Sept") out.month = "Sep";
   return out;
 }
 

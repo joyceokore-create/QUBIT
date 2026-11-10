@@ -24,7 +24,8 @@ import type { AdminUserSummary } from "@/server/users";
 interface EditDepartmentDialogProps {
   user: AdminUserSummary;
   departments: DepartmentSummary[];
-  users: AdminUserSummary[];
+  /** Everyone who can be picked as manager (id + name) — not just the directory page shown. */
+  users: { id: string; name: string }[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }

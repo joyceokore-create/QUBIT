@@ -101,16 +101,16 @@ export function UserMenu({
       {variant === "chip" ? (
         <DropdownMenuTrigger
           aria-label="Account menu"
-          className="flex items-center gap-2 rounded-full py-1 pl-1.5 pr-3 text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+          className="flex items-center gap-2 rounded-full py-1 pl-1.5 pr-1.5 text-white sm:pr-3 transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
         >
           <span className="flex size-[34px] flex-none items-center justify-center rounded-full border border-[var(--tbchipbd)] bg-[var(--tbchipbg)] text-[11.5px] font-bold text-[var(--tbink)]">
             {getInitials(name)}
           </span>
-          <span className="flex min-w-0 flex-col items-start leading-tight">
+          <span className="flex min-w-0 flex-col items-start leading-tight max-sm:hidden">
             <span className="max-w-[160px] truncate text-[13px] font-semibold">{name || "Account"}</span>
             {role && <span className="max-w-[160px] truncate text-[11px] font-normal text-white/70">{role}</span>}
           </span>
-          <ChevronDown className="size-[13px] flex-none opacity-70" />
+          <ChevronDown className="size-[13px] flex-none opacity-70 max-sm:hidden" />
         </DropdownMenuTrigger>
       ) : (
         <DropdownMenuTrigger

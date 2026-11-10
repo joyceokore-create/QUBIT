@@ -62,6 +62,11 @@ describe("UX3 viewing as + search", () => {
     await expect(setViewRole(multi, "PlatformSuperAdmin")).rejects.toBeInstanceOf(ViewRoleError);
   });
 
+  it("treats % and _ as literal text, not wildcards", async () => {
+    expect(await search(bCtx, "%%")).toEqual([]);
+    expect(await search(bCtx, "__")).toEqual([]);
+  });
+
   it("RLS: search never returns another tenant's records", async () => {
     const hitsA = await search(multi, "Zebrafish");
     expect(hitsA.some((h) => h.id === bProjectId)).toBe(false);
