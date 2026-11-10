@@ -6,10 +6,18 @@ import { forTenant } from "@/server/tenant-db";
 import { Forbidden } from "@/components/forbidden";
 import { ProjectsClient } from "./projects-client";
 import { getCockpitData, stageOf } from "@/server/dashboard-cockpit";
+import { gateTrackRow, healthOf, type GateViewRow } from "@/lib/project-gate-view";
 
 // Riverbank's primary surface: a flat, filterable list of all projects (no subsidiary
 // heatmap). Replaces the old /portfolios ComingSoon stub for MVP1. QUBIT App v3 language.
-export default async function ProjectsPage() {
+//
+// UX8 — two views: List (default) and Gate view (`?view=gates`), the stage-gate tracker on
+// the same cockpit load (no second estate query).
+type SearchParams = Record<string, string | string[] | undefined>;
+
+export default async function ProjectsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const sp = await searchParams;
+  const view = sp.view === "gates" ? "gates" : "list";
   const session = await auth();
   if (!session?.user) return null;
   const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
@@ -31,8 +39,35 @@ export default async function ProjectsPage() {
   // "Mine" = the viewer leads it or is allocated to it (per Joyce: filter mine everywhere).
   const mineIds = new Set([...myMemberships.map((m) => m.projectId), ...myLeads.map((p) => p.id)]);
 
+  // UX8: the Gate view's rows — only shaped (and sent) when that view is open.
+  const gateRows: GateViewRow[] =
+    view === "gates"
+      ? projects.map((p) => {
+          const c = cockpit.get(p.id);
+          return {
+            id: p.id,
+            code: p.code,
+            name: p.name,
+            priority: p.priority,
+            pm: c?.pmName ?? null,
+            health: healthOf(checkins.get(p.id) ?? null),
+            track: c
+              ? gateTrackRow({
+                  gates: c.gates,
+                  currentGate: c.currentGate,
+                  buildTrack: c.buildTrack,
+                  pct: c.pct,
+                  markets: c.markets.map((m) => ({ code: m.code, name: m.market, pct: m.pct, gates: m.gates })),
+                })
+              : gateTrackRow({ gates: { brd: "none", proto: "none", mvp1: "none", sit: "none", uat: "none", golive: "none" }, currentGate: null, buildTrack: false, pct: p.avgProgress, markets: [] }),
+          };
+        })
+      : [];
+
   return (
     <ProjectsClient
+      view={view}
+      gateRows={gateRows}
       tenantName={session.user.tenantName}
       projects={projects.map((p) => ({
         id: p.id,

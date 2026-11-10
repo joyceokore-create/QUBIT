@@ -4,23 +4,27 @@ import type { ViewRole } from "@/lib/view-roles";
  * The sidebar menu per role (UX plan D6, from the approved artifact). Roles pick the
  * layout; permissions hide items (D2): an item is shown only when the viewer holds its
  * permission, so no link ever leads to a Forbidden page, and a group left empty is
- * dropped. Pages that don't exist yet (Approvals, Decisions) join in their own phases.
+ * dropped. Pages that don't exist yet (Decisions) join in their own phases.
  * Pure and client-safe; `icon` names map to lucide icons in the shell.
  */
 export type MenuIcon =
   | "home" | "board" | "inbox" | "layers" | "folder" | "bulb" | "alert" | "users" | "chart"
   | "shield" | "filter" | "user" | "key" | "building" | "compass" | "history";
 
-export interface MenuItem {
+/**
+ * What the page itself checks: ONE permission (`perm`), or — for a page that opens to
+ * holders of any of several (UX8 Approvals: idea:triage OR staffing:manage) — `anyPerm`.
+ */
+export type MenuGate = { perm: string; anyPerm?: never } | { perm?: never; anyPerm: readonly string[] };
+
+export type MenuItem = MenuGate & {
   key: string;
   label: string;
   href: string;
   icon: MenuIcon;
-  /** The permission the page itself checks. */
-  perm: string;
   /** App-module code (src/lib/catalogue.ts) for module allowedRoles gating. */
   module?: string;
-}
+};
 export interface MenuGroup {
   label: string;
   items: MenuItem[];
@@ -28,6 +32,8 @@ export interface MenuGroup {
 
 const I = {
   home: { key: "home", label: "Home", href: "/dashboard", icon: "home", perm: "dashboard:read", module: "DASHBOARD" },
+  // UX8 (D5): ideas and staffing requests waiting for a decision; the page opens to either.
+  approvals: { key: "approvals", label: "Approvals", href: "/approvals", icon: "inbox", anyPerm: ["idea:triage", "staffing:manage"] },
   board: { key: "board", label: "My Board", href: "/board", icon: "board", perm: "dashboard:read", module: "PROJECTS" },
   portfolios: { key: "portfolios", label: "Portfolios", href: "/portfolios", icon: "layers", perm: "portfolio:read", module: "PORTFOLIOS" },
   projects: { key: "projects", label: "Projects", href: "/projects", icon: "folder", perm: "project:read", module: "PROJECTS" },
@@ -52,13 +58,13 @@ const I = {
 
 export const ROLE_MENUS: Record<ViewRole, MenuGroup[]> = {
   PlatformSuperAdmin: [
-    { label: "Work", items: [I.home, I.accessRequests] },
+    { label: "Work", items: [I.home, I.approvals, I.accessRequests] },
     { label: "Delivery", items: [I.portfolios, I.projects, I.risks, I.people] },
     { label: "Administration", items: [I.users, I.teams, I.roles, I.departments, I.organisation, I.configs, I.audit] },
     { label: "Reports", items: [I.reports] },
   ],
   HeadOfProjects: [
-    { label: "Work", items: [I.home, I.board] },
+    { label: "Work", items: [I.home, I.approvals, I.board] },
     { label: "Delivery", items: [I.portfolios, I.projects, I.ideas, I.risks] },
     { label: "Team", items: [I.people] },
     { label: "Reports", items: [I.reports] },
@@ -97,13 +103,19 @@ export interface MenuViewer {
   moduleAllowedRoles?: Record<string, readonly string[]>;
 }
 
+/** The item's own gate: its one `perm`, or any of its `anyPerm` (an empty list opens to no one). */
+export function canOpenItem(item: MenuGate, viewer: Pick<MenuViewer, "can">): boolean {
+  if (item.anyPerm) return item.anyPerm.some((p) => viewer.can(p));
+  return viewer.can(item.perm);
+}
+
 /** The role's menu with every item the viewer can't open removed, and empty groups dropped. */
 export function menuFor(viewRole: ViewRole, viewer: MenuViewer): MenuGroup[] {
   return ROLE_MENUS[viewRole]
     .map((g) => ({
       label: g.label,
       items: g.items.filter((item) => {
-        if (!viewer.can(item.perm)) return false;
+        if (!canOpenItem(item, viewer)) return false;
         const allowed = item.module ? viewer.moduleAllowedRoles?.[item.module] : undefined;
         if (allowed && allowed.length > 0 && !viewer.roles.some((r) => allowed.includes(r))) return false;
         return true;

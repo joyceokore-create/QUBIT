@@ -72,7 +72,7 @@ export async function getBriefExtras(ctx: Ctx, role: ViewRole, projects: Cockpit
     jobs.push(
       withTenant(ctx, (tx) =>
         Promise.all([
-          reads.ideas ? tx.idea.aggregate({ where: { status: "New" }, _count: { _all: true }, _min: { createdAt: true } }) : null,
+          reads.ideas ? tx.idea.aggregate({ where: { status: { in: ["New", "Reviewing"] } }, _count: { _all: true }, _min: { createdAt: true } }) : null,
           reads.staffing ? tx.resourceRequest.aggregate({ where: { status: "Open" }, _count: { _all: true }, _min: { createdAt: true } }) : null,
         ]),
       ).then(([ideas, staffing]) => {

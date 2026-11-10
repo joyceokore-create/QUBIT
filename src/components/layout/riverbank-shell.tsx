@@ -33,6 +33,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { activeMenuKey, type MenuGroup, type MenuIcon } from "@/lib/role-menus";
+import { APPROVALS_CHANGED } from "@/lib/approvals";
 import type { UiMode } from "@/lib/ui-mode";
 import type { ViewRole } from "@/lib/view-roles";
 import { ViewingAs } from "./viewing-as";
@@ -205,6 +206,25 @@ export function RiverbankShell({
       live = false;
     };
   }, [hasAccessItem]);
+  // UX8 — the Approvals item carries its waiting count the same way; refetched on navigation
+  // and when a decision is made on /approvals (the page dispatches APPROVALS_CHANGED).
+  const hasApprovalsItem = Boolean(newNav?.groups.some((g) => g.items.some((i) => i.key === "approvals")));
+  const [approvalsCount, setApprovalsCount] = useState(0);
+  useEffect(() => {
+    if (!hasApprovalsItem) return;
+    let live = true;
+    const load = () =>
+      fetch("/api/approvals/count")
+        .then((r) => (r.ok ? r.json() : { waiting: 0 }))
+        .then((d) => live && setApprovalsCount(d.waiting ?? 0))
+        .catch(() => {});
+    void load();
+    window.addEventListener(APPROVALS_CHANGED, load);
+    return () => {
+      live = false;
+      window.removeEventListener(APPROVALS_CHANGED, load);
+    };
+  }, [hasApprovalsItem, pathname]);
   const activeHref = activeNavHref(pathname, items);
   // Labels show when expanded on desktop, or always inside the mobile drawer.
   const labelled = open || mobileOpen;
@@ -276,7 +296,12 @@ export function RiverbankShell({
                   {g.items.map((item) => {
                     const active = item.key === activeMenu;
                     const Icon = MENU_ICONS[item.icon];
-                    const count = item.key === "access-requests" && accessCount > 0 ? accessCount : null;
+                    const count =
+                      item.key === "access-requests" && accessCount > 0
+                        ? accessCount
+                        : item.key === "approvals" && approvalsCount > 0
+                          ? approvalsCount
+                          : null;
                     return (
                       <li key={item.key}>
                         <Link

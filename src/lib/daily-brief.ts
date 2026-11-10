@@ -59,6 +59,7 @@ export interface BriefExtras {
   accessRequests?: { count: number; oldestAt: Date | null };
   usersWithoutMfa?: number;
   expiredInvites?: number;
+  /** Ideas waiting for triage (New or Reviewing) — the same set Approvals lists. */
   ideasNew?: { count: number; oldestAt: Date | null };
   staffingOpen?: { count: number; oldestAt: Date | null };
   overbooked?: { name: string; pct: number }[];

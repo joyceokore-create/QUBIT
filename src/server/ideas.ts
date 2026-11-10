@@ -170,6 +170,32 @@ export async function getIdeaBoard(ctx: TenantContext): Promise<IdeaBoard> {
   });
 }
 
+const OPEN_STATUSES: IdeaStatus[] = ["New", "Reviewing"];
+
+/** UX8 — whether the viewer may run triage (the engine's own gate, also asserted by every
+ * triage action). Callers pair it with `can(ctx, "idea:triage")`, the route's gate. */
+export function canTriageIdeas(ctx: TenantContext): boolean {
+  return canTriage(ctx);
+}
+
+/**
+ * UX8 (Approvals) — the open triage queue: New + Reviewing, oldest first, uncapped (unlike
+ * the board's 200, which could drop the longest-waiting ideas). Empty for a non-triager.
+ */
+export async function listOpenIdeas(ctx: TenantContext): Promise<IdeaView[]> {
+  if (!canTriage(ctx)) return [];
+  return withTenant(ctx, async (tx) => {
+    const rows = await tx.idea.findMany({ where: { status: { in: OPEN_STATUSES } }, include: INCLUDE, orderBy: { createdAt: "asc" } });
+    return rows.map((r) => toView(r, ctx.userId));
+  });
+}
+
+/** UX8 — how many ideas wait for triage (the Approvals badge). 0 for a non-triager. */
+export async function countOpenIdeas(ctx: TenantContext): Promise<number> {
+  if (!canTriage(ctx)) return 0;
+  return withTenant(ctx, (tx) => tx.idea.count({ where: { status: { in: OPEN_STATUSES } } }));
+}
+
 /** Head-only: move an idea between the two open lanes (New ⇄ Reviewing). */
 export async function setIdeaReviewing(ctx: TenantContext, ideaId: string, reviewing: boolean): Promise<IdeaView> {
   assertTriage(ctx);

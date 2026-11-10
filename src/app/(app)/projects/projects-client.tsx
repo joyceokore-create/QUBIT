@@ -15,6 +15,9 @@ import { matchesSearch, paginate } from "@/lib/list-state";
 import { COCKPIT_PHASES } from "@/lib/cockpit-gates";
 import { RAG_TOKEN } from "@/lib/surface";
 import { healthWord } from "@/lib/status-words";
+import { TabStrip } from "@/components/ui/tab-strip";
+import { HEALTH_LABEL, HEALTH_ORDER, healthOf, type GateViewRow, type HealthBucket } from "@/lib/project-gate-view";
+import { ProjectsGateView } from "./projects-gate-view";
 
 // docs/38 milestone 2 — a project's STATUS is its confirmed weekly check-in, not the typed
 // lifecycle field. No confirmed report this week reads "No report" (neutral), never a
@@ -22,9 +25,8 @@ import { healthWord } from "@/lib/status-words";
 //
 // UX5 (L1–L5): the shared header / toolbar / always-visible pagination, all state in the URL.
 // ~40 bounded rows, health is worked out in code, so it loads once and pages in the browser.
-const HEALTH_ORDER = ["Red", "Amber", "Green", "None"] as const;
-type HealthBucket = (typeof HEALTH_ORDER)[number];
-const HEALTH_LABEL: Record<HealthBucket, string> = { Green: "On track", Amber: "At risk", Red: "Off track", None: "No report" };
+//
+// UX8 — List · Gate view tabs share this header; the Gate view lives in projects-gate-view.tsx.
 
 interface ProjectRow {
   id: string;
@@ -55,13 +57,62 @@ const options = (values: (string | null)[], noneLabel: string): FilterOption[] =
   return set.map((v) => ({ value: v, label: v === NONE ? noneLabel : v }));
 };
 
-export function ProjectsClient({ projects, canCreate, tenantName }: { projects: ProjectRow[]; canCreate: boolean; tenantName: string }) {
+export function ProjectsClient({
+  projects,
+  canCreate,
+  tenantName,
+  view,
+  gateRows,
+}: {
+  projects: ProjectRow[];
+  canCreate: boolean;
+  tenantName: string;
+  view: "list" | "gates";
+  gateRows: GateViewRow[];
+}) {
+  return (
+    <main className="mx-auto flex w-full min-w-0 max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
+      <PageHeader
+        eyebrow={tenantName}
+        title="Projects"
+        description={
+          view === "gates"
+            ? `${projects.length} projects. Gates come from checkpoint records; a project in several markets shows its furthest-behind market.`
+            : `${projects.length} projects. Health is this week's confirmed check-in.`
+        }
+        actions={
+          <>
+            <ExportButton href="/api/export?kind=projects" />
+            {canCreate && (
+              <Button nativeButton={false} render={<Link href="/projects/new" />}>
+                <Plus /> New project
+              </Button>
+            )}
+          </>
+        }
+      />
+
+      <TabStrip
+        label="Project views"
+        active={view}
+        tabs={[
+          { key: "list", label: "List", href: "/projects" },
+          { key: "gates", label: "Gate view", href: "/projects?view=gates" },
+        ]}
+      />
+
+      {view === "gates" ? <ProjectsGateView rows={gateRows} canCreate={canCreate} /> : <ProjectsListView projects={projects} canCreate={canCreate} />}
+    </main>
+  );
+}
+
+function ProjectsListView({ projects, canCreate }: { projects: ProjectRow[]; canCreate: boolean }) {
   const { openProject } = usePanel();
   const list = useListUrl("projects", 10);
   const f = Object.fromEntries(FILTER_KEYS.map((k) => [k, list.get(k)])) as Record<(typeof FILTER_KEYS)[number], string>;
 
   // A row's health: the CONFIRMED check-in's RAG, else "None" (no report yet).
-  const health = (p: ProjectRow): HealthBucket => (p.checkin?.confirmed ? p.checkin.rag : "None");
+  const health = (p: ProjectRow): HealthBucket => healthOf(p.checkin);
 
   const opts = useMemo(
     () => ({
@@ -104,23 +155,7 @@ export function ProjectsClient({ projects, canCreate, tenantName }: { projects: 
   const mineCount = projects.filter((p) => p.isMine).length;
 
   return (
-    <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
-      <PageHeader
-        eyebrow={tenantName}
-        title="Projects"
-        description={`${projects.length} projects. Health is this week's confirmed check-in.`}
-        actions={
-          <>
-            <ExportButton href="/api/export?kind=projects" />
-            {canCreate && (
-              <Button nativeButton={false} render={<Link href="/projects/new" />}>
-                <Plus /> New project
-              </Button>
-            )}
-          </>
-        }
-      />
-
+    <>
       <div className="flex flex-col gap-2">
         <ListToolbar>
           <SearchField value={list.q} onChange={(q) => list.set({ q })} placeholder="Search projects, codes or PMs" label="Search projects" />
@@ -226,6 +261,6 @@ export function ProjectsClient({ projects, canCreate, tenantName }: { projects: 
           </table>
         )}
       </TableCard>
-    </main>
+    </>
   );
 }

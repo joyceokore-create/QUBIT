@@ -1,6 +1,6 @@
 // UX plan D2/D6 — roles pick the menu; permissions hide items; empty groups vanish.
 import { describe, expect, it } from "vitest";
-import { activeMenuKey, menuFor, ROLE_MENUS } from "@/lib/role-menus";
+import { activeMenuKey, canOpenItem, menuFor, ROLE_MENUS } from "@/lib/role-menus";
 import { can } from "@/lib/rbac";
 
 const viewer = (roles: string[], extra: { moduleAllowedRoles?: Record<string, string[]> } = {}) => ({
@@ -19,7 +19,7 @@ describe("menuFor", () => {
 
   it("a Head sees their whole menu with the default permissions", () => {
     expect(labels(menuFor("HeadOfProjects", viewer(["HeadOfProjects"])))).toEqual([
-      "Work: Home, My Board",
+      "Work: Home, Approvals, My Board",
       "Delivery: Portfolios, Projects, Ideas, Risks & Issues",
       "Team: People",
       "Reports: Reports",
@@ -59,6 +59,35 @@ describe("menuFor", () => {
   it("respects module allowedRoles from the registry", () => {
     const groups = menuFor("HeadOfProjects", viewer(["HeadOfProjects"], { moduleAllowedRoles: { IDEAS: ["Executive"] } }));
     expect(groups.flatMap((g) => g.items.map((i) => i.key))).not.toContain("ideas");
+  });
+});
+
+describe("UX8 Approvals and anyPerm", () => {
+  it("anyPerm opens the item when the viewer holds ANY of the listed permissions", () => {
+    const item = { anyPerm: ["idea:triage", "staffing:manage"] };
+    expect(canOpenItem(item, { can: (p) => p === "idea:triage" })).toBe(true);
+    expect(canOpenItem(item, { can: (p) => p === "staffing:manage" })).toBe(true);
+    expect(canOpenItem(item, { can: () => false })).toBe(false);
+    // An empty list opens to no one; a single perm still works as before.
+    expect(canOpenItem({ anyPerm: [] }, { can: () => true })).toBe(false);
+    expect(canOpenItem({ perm: "x:y" }, { can: (p) => p === "x:y" })).toBe(true);
+  });
+
+  it("the Head and Super Admin get Approvals right after Home; other roles don't", () => {
+    expect(labels(menuFor("PlatformSuperAdmin", viewer(["PlatformSuperAdmin"])))[0]).toBe("Work: Home, Approvals, Access requests");
+    for (const role of ["HeadOfQA", "Executive", "ProjectManager", "Member"] as const) {
+      expect(ROLE_MENUS[role].flatMap((g) => g.items).some((i) => i.key === "approvals"), role).toBe(false);
+    }
+  });
+
+  it("Approvals is hidden from a Head-menu viewer without idea:triage or staffing:manage, shown with either", () => {
+    const keys = (perms: string[]) =>
+      menuFor("HeadOfProjects", { can: (p) => perms.includes(p), roles: ["HeadOfProjects"] }).flatMap((g) => g.items.map((i) => i.key));
+    expect(keys(["dashboard:read"])).not.toContain("approvals");
+    expect(keys(["dashboard:read", "idea:triage"])).toContain("approvals");
+    expect(keys(["dashboard:read", "staffing:manage"])).toContain("approvals");
+    // A Head-of-QA or PM holds neither, so a Super Admin previewing the Head menu with PM rights loses it.
+    expect(menuFor("HeadOfProjects", viewer(["ProjectManager"])).flatMap((g) => g.items.map((i) => i.key))).not.toContain("approvals");
   });
 });
 

@@ -7,6 +7,7 @@ import { CockpitPage } from "@/components/dashboard/cockpit/cockpit-page";
 import { Forbidden } from "@/components/forbidden";
 import { MyWorkPage } from "@/components/my-work/my-work-page";
 import { PmTodayPage } from "@/components/pm-today/pm-today-page";
+import { HeadHealthPage } from "@/components/head-health/head-health-page";
 
 // The dashboard is the RBAC-level Delivery Cockpit (docs/17 rework). The level is resolved
 // from the viewer's highest canonical role; a ?level= override (validated against what the
@@ -38,6 +39,8 @@ export default async function DashboardPage({
   if (newUi && !deepLink && view.viewRole === "Member") return <MyWorkPage ctx={ctx} />;
   // UX7: the PM's home is "Today".
   if (newUi && !deepLink && view.viewRole === "ProjectManager") return <PmTodayPage ctx={ctx} />;
+  // UX8: the Head's home is "Delivery health".
+  if (newUi && !deepLink && view.viewRole === "HeadOfProjects") return <HeadHealthPage ctx={ctx} />;
   const level = newUi && !deepLink ? VIEW_ROLE_LEVEL[view.viewRole] : resolveRequestedLevel(ctx.roles, requestedLevel);
 
   return <CockpitPage ctx={ctx} level={level} roles={ctx.roles} viewerId={ctx.userId} viewerName={session.user.name ?? undefined} scope={scope} period={period} newUi={newUi} briefRole={newUi ? view.viewRole : undefined} />;

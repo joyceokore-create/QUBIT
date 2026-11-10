@@ -51,6 +51,8 @@ export interface CockpitRisk {
 
 export interface CockpitMarket {
   market: string;
+  /** The market's short code (e.g. "KE") — the Gate view's market tag (UX8). */
+  code: string;
   pct: number;
   status: string;
   gates: GateMap;
@@ -178,7 +180,7 @@ export async function getCockpitData(ctx: TenantContext, now = new Date(), trend
         members: { where: { role: "Project Manager" }, select: { userId: true, user: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
         pmScope: true,
         portfolio: { select: { name: true, category: true } },
-        orgStatuses: { where: { retiredAt: null }, select: { orgUnitId: true, progress: true, status: true, leadUserId: true, orgUnit: { select: { name: true } } } },
+        orgStatuses: { where: { retiredAt: null }, select: { orgUnitId: true, progress: true, status: true, leadUserId: true, orgUnit: { select: { name: true, code: true } } } },
         milestonesV2: {
           where: { status: "Pending" },
           orderBy: { dueDate: "asc" },
@@ -283,7 +285,7 @@ export async function getCockpitData(ctx: TenantContext, now = new Date(), trend
       .filter((o) => o.orgUnit)
       .map((o) => {
         const track = gateTrackOf(checkpoints, statesFor(o.orgUnitId), o.status === "Overdue");
-        return { market: o.orgUnit!.name, pct: track.progress ?? o.progress, status: o.status, gates: track.gates };
+        return { market: o.orgUnit!.name, code: o.orgUnit!.code, pct: track.progress ?? o.progress, status: o.status, gates: track.gates };
       });
 
     return {
