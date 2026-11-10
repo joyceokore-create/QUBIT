@@ -1,24 +1,11 @@
-import type { CockpitData, CockpitProject, GateKey } from "@/server/dashboard-cockpit";
-import { GATE_KEYS } from "@/server/dashboard-cockpit";
+import type { CockpitData } from "@/server/dashboard-cockpit";
+import { COCKPIT_PHASES as PHASES, stageOf } from "@/server/dashboard-cockpit";
 import { briefLines } from "./ask-q-brief";
 import { ExecV3, type ExecV3Props, type ExecRow } from "./exec-v3";
 
 // Server wrapper for the Executive view — maps real tenant data into the approved
 // artifact's shape (exec-v3.tsx renders its exact markup).
 
-const STAGE_OF: Record<GateKey, { phase: string; stage: string }> = {
-  brd: { phase: "Planning", stage: "BRD" },
-  proto: { phase: "Planning", stage: "Prototype" },
-  mvp1: { phase: "Execution", stage: "Build / MVP1" },
-  sit: { phase: "Execution", stage: "SIT" },
-  uat: { phase: "Execution", stage: "UAT" },
-  golive: { phase: "Transition", stage: "Go-Live" },
-};
-const PHASES = ["Planning", "Execution", "Transition", "Closure"];
-function stageOf(p: CockpitProject): { phase: string; stage: string } {
-  for (const k of GATE_KEYS) if (p.gates[k] !== "done") return STAGE_OF[k];
-  return { phase: "Closure", stage: "Production" };
-}
 const fmt = (d: Date | string | null) =>
   d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" }) : "—";
 
@@ -120,8 +107,8 @@ export function ExecCockpit({ data }: { data: CockpitData }) {
       prioGroups={PRIO_GROUPS}
       rows={rows}
       trendRep={data.trend}
-      // Calculated-RAG history isn't snapshotted yet — the reported series stands in until it is.
-      trendCalc={data.trend}
+      // UX1: each week's check-in computed RAG (signals before any PM override).
+      trendCalc={data.trendComputed}
       decisions={decisionProjects.map((p) => ({
         id: p.id,
         owner: p.pmName ?? "—",

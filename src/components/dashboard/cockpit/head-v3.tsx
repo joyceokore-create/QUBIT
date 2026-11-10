@@ -96,7 +96,7 @@ export function TrendChart({ title, weeks, series, muted }: { title: string; wee
           })}
         </svg>
       ) : (
-        <span className="hint">Trend builds as nightly snapshots accrue.</span>
+        <span className="hint">Trend builds as weekly check-ins accrue.</span>
       )}
     </div>
   );
@@ -330,8 +330,8 @@ export function HeadV3(props: HeadV3Props) {
                 </div>
               </section>
               <section className="panel c6">
-                <div className="panel-h"><h2>Calculated RAG · approved portfolio · 8 weeks</h2></div>
-                <TrendChart title="Projects by calculated RAG" weeks={props.trend.weeks} series={props.trend.series} />
+                <div className="panel-h"><h2>Weekly status · 8 weeks</h2></div>
+                <TrendChart title="Projects by weekly status" weeks={props.trend.weeks} series={props.trend.series} />
               </section>
             </div>
           </div>

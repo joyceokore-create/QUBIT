@@ -26,6 +26,7 @@ const eslintConfig = [
       "node_modules/**",
       "**/.next/**", // top-level + nested build output (e.g. .claude/worktrees/*/.next)
       ".claude/**", // agent worktrees, transcripts, generated artifacts — never source
+      "mwashukes-desk/**", // git-ignored personal notes and capture scripts — never source
       "out/**",
       "build/**",
       "next-env.d.ts",

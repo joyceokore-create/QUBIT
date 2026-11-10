@@ -15,19 +15,10 @@ import { evaluateGate, type GateRule } from "@/server/gate-rules";
  * (§2). The slide's hand-maintained percentages become computed and therefore current.
  */
 
-export const CHECKPOINT_STATES = ["NotStarted", "InProgress", "Done", "Blocked"] as const;
-export type CheckpointState = (typeof CHECKPOINT_STATES)[number];
-
-/** Done counts fully, InProgress counts half; Blocked and NotStarted count nothing —
- * a blocked gate is honest about being stuck, not half-credited (§2 "weighted count"). */
-const WEIGHT: Record<CheckpointState, number> = { Done: 1, InProgress: 0.5, Blocked: 0, NotStarted: 0 };
-
-/** Derived completion for one track. Pure, so the maths is unit-testable. */
-export function derivedProgress(states: CheckpointState[]): number {
-  if (states.length === 0) return 0;
-  const earned = states.reduce((sum, s) => sum + (WEIGHT[s] ?? 0), 0);
-  return Math.round((earned / states.length) * 100);
-}
+// The states and the derived-% rule are pure and client-safe; they live in src/lib so the
+// cockpit's client components can share them (UX1). Re-exported for existing callers.
+import { CHECKPOINT_STATES, derivedProgress, type CheckpointState } from "@/lib/checkpoint-progress";
+export { CHECKPOINT_STATES, derivedProgress, type CheckpointState } from "@/lib/checkpoint-progress";
 
 export interface CheckpointRow {
   checkpointId: string;

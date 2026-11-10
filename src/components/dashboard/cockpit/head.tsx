@@ -1,23 +1,11 @@
-import type { CockpitData, CockpitProject, GateKey } from "@/server/dashboard-cockpit";
-import { GATE_KEYS, GATE_LABELS } from "@/server/dashboard-cockpit";
+import type { CockpitData, CockpitProject } from "@/server/dashboard-cockpit";
+import { GATE_KEYS, GATE_LABELS, stageOf } from "@/server/dashboard-cockpit";
 import { briefLines } from "./ask-q-brief";
 import { HeadV3, type HeadV3Props, type HeadRow } from "./head-v3";
 
 // Server wrapper for the Head view — maps real tenant data into the approved
 // artifact's shape (head-v3.tsx renders its exact markup).
 
-const STAGE_OF: Record<GateKey, { phase: string; stage: string }> = {
-  brd: { phase: "Planning", stage: "BRD" },
-  proto: { phase: "Planning", stage: "Prototype" },
-  mvp1: { phase: "Execution", stage: "Build / MVP1" },
-  sit: { phase: "Execution", stage: "SIT" },
-  uat: { phase: "Execution", stage: "UAT" },
-  golive: { phase: "Transition", stage: "Go-Live" },
-};
-function stageOf(p: CockpitProject): { phase: string; stage: string } {
-  for (const k of GATE_KEYS) if (p.gates[k] !== "done") return STAGE_OF[k];
-  return { phase: "Closure", stage: "Production" };
-}
 const fmt = (d: Date | string | null) =>
   d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" }) : "—";
 const initialsOf = (name: string | null) =>

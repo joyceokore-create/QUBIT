@@ -1,6 +1,11 @@
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { pmIdsOf } from "@/lib/ownership";
-import type { Rag } from "@/server/health";
+import { isoWeekId, isoWeekMonday, shiftIsoWeek, weekWindow } from "@/lib/iso-week";
+import { projectRag, type Rag } from "@/server/health";
+import { effectiveRag } from "@/server/checkins";
+import type { CheckpointState } from "@/lib/checkpoint-progress";
+import { gateTrackOf, type GateMap } from "@/lib/cockpit-gates";
+import { requirementCoveragePct } from "@/server/dashboard-qa";
 import { deriveDimensions, ragPair, isDispute, type DimensionMap, type DimRag } from "@/server/rag-dimensions";
 
 // One assembler for the whole Delivery Cockpit. It loads every tenant project once (RLS-scoped)
@@ -8,32 +13,34 @@ import { deriveDimensions, ragPair, isDispute, type DimensionMap, type DimRag } 
 // shape: reported vs calculated RAG, the six derived dimensions, gate progress, freshness, next
 // milestone, risks and the rollout matrix. Each level preset consumes the same CockpitProject[]
 // and aggregates it differently, exactly as the reference's PM/Head/Exec views do.
+//
+// UX1 (2026-11-10) — reconnected to the engines every other surface already uses, so the
+// cockpit can never disagree with the estate, the workspace or the reports:
+//  - gates are the project's REAL checkpoint states (per market too), not a guess from %;
+//  - % complete is checkpointProgressByProject's derived number when the project is gated;
+//  - "reported" is the estate's display RAG: the week's check-in (override-aware), else the
+//    typed status — the value rag-parity-chain.test.ts pins across the reporting chain;
+//  - requirement coverage is the QA dashboard's traceability rule;
+//  - the trend counts one weekly check-in per project per week (as the Reports grid does),
+//    not every nightly snapshot.
 
 const OPEN_BLOCKER = { status: "Open" as const };
 const RED_ISSUE_SEV = ["High", "Critical"];
 
-// Fixed delivery gates (the reference's columns). QUBIT's checkpoints are tenant-defined, so
-// gate state is DERIVED from overall progress as a monotonic BRD→Go-Live progression — an
-// honest approximation that reproduces the reference's gate columns from real % complete.
-export type GateState = "done" | "prog" | "late" | "block" | "none";
-export const GATE_KEYS = ["brd", "proto", "mvp1", "sit", "uat", "golive"] as const;
-export type GateKey = (typeof GATE_KEYS)[number];
-export const GATE_LABELS: Record<GateKey, string> = { brd: "BRD", proto: "Proto", mvp1: "MVP1", sit: "SIT", uat: "UAT", golive: "Go-Live" };
-const GATE_DONE_AT: Record<GateKey, number> = { brd: 15, proto: 25, mvp1: 45, sit: 65, uat: 85, golive: 100 };
-export type GateMap = Record<GateKey, GateState>;
-
-function deriveGates(pct: number, targetPassed: boolean, gatesBlocked: number): GateMap {
-  const out = {} as GateMap;
-  let currentSet = false;
-  for (const k of GATE_KEYS) {
-    if (pct >= GATE_DONE_AT[k]) out[k] = "done";
-    else if (!currentSet) {
-      out[k] = gatesBlocked > 0 ? "block" : targetPassed ? "late" : "prog";
-      currentSet = true;
-    } else out[k] = "none";
-  }
-  return out;
-}
+// Gate columns, the state → cell mapping and stageOf are pure and live in src/lib so the
+// cockpit's client components can import them without server code (UX1).
+export {
+  COCKPIT_PHASES,
+  GATE_KEYS,
+  GATE_LABELS,
+  gateKeyOf,
+  gateTrackOf,
+  stageOf,
+  type GateKey,
+  type GateMap,
+  type GateState,
+  type GateTrack,
+} from "@/lib/cockpit-gates";
 
 export interface CockpitRisk {
   id: string;
@@ -63,7 +70,10 @@ export interface CockpitProject {
   pmIds: string[];
   status: string; // raw delivery status
   priority: string; // High | Med | Low | New | Strat | Paused
+  /** The estate's display RAG: this week's check-in (override-aware), else the typed status. */
   reported: DimRag;
+  /** True when `reported` is the PM's confirmed check-in for this week. */
+  reportedConfirmed: boolean;
   calculated: DimRag;
   dispute: boolean;
   dims: DimensionMap;
@@ -77,6 +87,12 @@ export interface CockpitProject {
   redRisks: number;
   overdueTasks: number;
   gates: GateMap;
+  /** First gate not yet Done on the project's own track; "Complete"; null = no template. */
+  currentGate: string | null;
+  /** The project's template is the "Product build" shape the gate columns show. */
+  buildTrack: boolean;
+  /** Requirement coverage percent (QA traceability rule); null = no requirements. */
+  coveragePct: number | null;
   risks: CockpitRisk[];
   markets: CockpitMarket[];
   update: string | null; // latest narrative (status note)
@@ -87,33 +103,49 @@ export interface CockpitData {
   projects: CockpitProject[];
   /** distinct PMs (project leads) with their project ids, for the Head roll-up. */
   pms: { id: string; name: string; projectIds: string[] }[];
-  /** 8-week RAG trend from nightly ProjectSnapshots (empty until snapshots accrue). */
+  /** Weekly status trend: per ISO week, [Green, Amber, Red] counts of that week's check-ins
+   * (one per project, override-aware at the week's end). Empty until check-ins exist. */
   trend: { weeks: string[]; series: [number, number, number][] };
+  /** The same weeks read from each check-in's COMPUTED RAG (signals, before any override). */
+  trendComputed: { weeks: string[]; series: [number, number, number][] };
   generatedAt: Date;
 }
 
-function buildTrend(snaps: { rag: string; createdAt: Date }[], now: Date, weeks: number): CockpitData["trend"] {
-  // `weeks` weekly buckets ending this week; each is [Green, Amber, Red] counts.
-  const weekMs = 7 * 86_400_000;
-  const buckets: { label: string; g: number; a: number; r: number }[] = [];
-  for (let i = weeks - 1; i >= 0; i--) {
-    const end = new Date(now.getTime() - i * weekMs);
-    buckets.push({ label: end.toLocaleDateString("en-GB", { day: "numeric", month: "short" }), g: 0, a: 0, r: 0 });
+interface TrendCheckIn {
+  isoWeek: string;
+  status: string;
+  computedRag: string;
+  ragOverride: string | null;
+  overrideExpiresAt: Date | null;
+}
+
+/** The instant a week's RAG is read at: now for the current week, else that week's end —
+ * so a signed override still reads as signed after its 7-day expiry (reports-week rule). */
+function evalAt(isoWeek: string, now: Date): Date {
+  const end = weekWindow(isoWeekMonday(isoWeek)).end;
+  return now < end ? now : end;
+}
+
+/** Pure: the `weeks` ISO weeks ending this week, each counting one check-in per project. */
+export function trendFromCheckIns(
+  checkIns: TrendCheckIn[],
+  now: Date,
+  weeks: number,
+  read: "effective" | "computed" = "effective",
+): CockpitData["trend"] {
+  const current = isoWeekId(now);
+  const ids = Array.from({ length: weeks }, (_, i) => shiftIsoWeek(current, i - (weeks - 1)));
+  const index = new Map(ids.map((w, i) => [w, i]));
+  const series = ids.map(() => [0, 0, 0] as [number, number, number]);
+  for (const ci of checkIns) {
+    const i = index.get(ci.isoWeek);
+    if (i === undefined) continue;
+    const rag = read === "computed" ? (ci.computedRag as Rag) : effectiveRag(ci, evalAt(ci.isoWeek, now));
+    series[i]![rag === "Green" ? 0 : rag === "Amber" ? 1 : 2]++;
   }
-  const start = now.getTime() - weeks * weekMs;
-  for (const s of snaps) {
-    const t = s.createdAt.getTime();
-    if (t < start) continue;
-    const idx = Math.min(weeks - 1, Math.floor((t - start) / weekMs));
-    const b = buckets[idx];
-    if (!b) continue;
-    if (s.rag === "Green") b.g++;
-    else if (s.rag === "Amber") b.a++;
-    else if (s.rag === "Red") b.r++;
-  }
-  const hasData = buckets.some((b) => b.g + b.a + b.r > 0);
-  if (!hasData) return { weeks: [], series: [] };
-  return { weeks: buckets.map((b) => b.label), series: buckets.map((b) => [b.g, b.a, b.r]) };
+  if (!series.some((s) => s[0] + s[1] + s[2] > 0)) return { weeks: [], series: [] };
+  const label = (w: string) => isoWeekMonday(w).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+  return { weeks: ids.map(label), series };
 }
 
 // Period → trend window (weeks). "4w" · "8w" (default) · "13w" (quarter).
@@ -123,13 +155,11 @@ const short: Record<Rag, DimRag> = { Green: "G", Amber: "A", Red: "R" };
 const daysBetween = (a: Date, b: Date) => Math.round((a.getTime() - b.getTime()) / 86_400_000);
 
 export async function getCockpitData(ctx: TenantContext, now = new Date(), trendWeeks = 8): Promise<CockpitData> {
-  const since = new Date(now.getTime() - trendWeeks * 7 * 86_400_000);
-  const { rows, userNames, snaps } = await withTenant(ctx, async (tx) => {
+  const thisWeek = isoWeekId(now);
+  const trendWeekIds = Array.from({ length: trendWeeks }, (_, i) => shiftIsoWeek(thisWeek, i - (trendWeeks - 1)));
+  const { rows, userNames, lastCheckIn } = await withTenant(ctx, async (tx) => {
     const users = await tx.user.findMany({ select: { id: true, name: true } });
-    const snapRows = await tx.projectSnapshot.findMany({
-      where: { createdAt: { gte: since } },
-      select: { rag: true, createdAt: true },
-    });
+    const latest = await tx.checkIn.groupBy({ by: ["projectId"], _max: { createdAt: true } });
     const projectRows = await tx.project.findMany({
       select: {
         id: true,
@@ -146,7 +176,7 @@ export async function getCockpitData(ctx: TenantContext, now = new Date(), trend
         members: { where: { role: "Project Manager" }, select: { userId: true, user: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
         pmScope: true,
         portfolio: { select: { name: true, category: true } },
-        orgStatuses: { where: { retiredAt: null }, select: { progress: true, status: true, leadUserId: true, orgUnit: { select: { name: true } } } },
+        orgStatuses: { where: { retiredAt: null }, select: { orgUnitId: true, progress: true, status: true, leadUserId: true, orgUnit: { select: { name: true } } } },
         milestonesV2: {
           where: { status: "Pending" },
           orderBy: { dueDate: "asc" },
@@ -154,10 +184,16 @@ export async function getCockpitData(ctx: TenantContext, now = new Date(), trend
         },
         risks: { where: { status: "Open" }, select: { id: true, title: true, ownerId: true } },
         issues: { where: { status: "Open" }, select: { id: true, title: true, severity: true, ownerId: true } },
-        requirements: { where: { status: "Accepted" }, select: { id: true } },
-        checkIns: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
+        requirements: { where: { status: "Accepted" }, select: { taskLinks: { select: { task: { select: { approvalStatus: true } } } } } },
+        // The trend window's check-ins; the current week's one is also the reported RAG.
+        checkIns: {
+          where: { isoWeek: { in: trendWeekIds } },
+          select: { isoWeek: true, status: true, computedRag: true, ragOverride: true, overrideExpiresAt: true },
+        },
         statusUpdates: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
-        checkpointStatuses: { where: { orgUnitId: null }, select: { state: true } },
+        checkpointTemplate: { select: { checkpoints: { select: { id: true, name: true }, orderBy: { orderIndex: "asc" } } } },
+        // The project's own track (orgUnitId null) and each market's (orgUnitId set).
+        checkpointStatuses: { where: { moduleId: null }, select: { checkpointId: true, orgUnitId: true, state: true } },
         _count: {
           select: {
             blockers: { where: OPEN_BLOCKER },
@@ -169,18 +205,39 @@ export async function getCockpitData(ctx: TenantContext, now = new Date(), trend
       },
       orderBy: { name: "asc" },
     });
-    return { rows: projectRows, userNames: new Map(users.map((u) => [u.id, u.name])), snaps: snapRows };
+    return {
+      rows: projectRows,
+      userNames: new Map(users.map((u) => [u.id, u.name])),
+      lastCheckIn: new Map(latest.map((l) => [l.projectId, l._max.createdAt])),
+    };
   });
 
   const ownerName = (id: string | null) => (id ? (userNames.get(id) ?? "—") : "—");
 
   const projects: CockpitProject[] = rows.map((p) => {
+    const checkpoints = p.checkpointTemplate?.checkpoints ?? [];
+    const statesFor = (orgUnitId: string | null) =>
+      new Map(
+        p.checkpointStatuses
+          .filter((s) => s.orgUnitId === orgUnitId)
+          .map((s) => [s.checkpointId, s.state as CheckpointState]),
+      );
+    const ownStates = statesFor(null);
+
+    const targetPassed = Boolean(
+      p.dueDate && p.dueDate < now && p.status !== "Completed" && p.status !== "Cancelled",
+    );
+    const own = gateTrackOf(checkpoints, ownStates, targetPassed);
+
+    // docs/18 §2 — a gated project's % is derived from its checkpoints (the same number
+    // checkpointProgressByProject gives the estate); otherwise the per-market rollup.
     const orgProgress = p.orgStatuses.map((o) => o.progress);
-    const pct = orgProgress.length ? Math.round(orgProgress.reduce((a, b) => a + b, 0) / orgProgress.length) : 0;
+    const pct =
+      own.progress ?? (orgProgress.length ? Math.round(orgProgress.reduce((a, b) => a + b, 0) / orgProgress.length) : 0);
 
     const openBlockers = p._count.blockers;
     const overdueTasks = p._count.projectTasks;
-    const gatesBlocked = p.checkpointStatuses.filter((c) => c.state === "Blocked").length;
+    const gatesBlocked = [...ownStates.values()].filter((s) => s === "Blocked").length;
     const nextMs = p.milestonesV2[0] ?? null;
     const milestonesSlipped = p.milestonesV2.filter((m) => m.dueDate && m.dueDate < now).length;
 
@@ -189,12 +246,13 @@ export async function getCockpitData(ctx: TenantContext, now = new Date(), trend
     const redRisks = redIssues.length;
 
     const signals = { status: p.status, overdueTasks, openBlockers, milestonesSlipped, gatesBlocked };
-    const { reported, calculated } = ragPair(signals);
+    const { calculated } = ragPair(signals);
+    // T5 — the same display RAG as the estate (pipeline.ts): the week's check-in, else status.
+    const weekCheckIn = p.checkIns.find((c) => c.isoWeek === thisWeek);
+    const reported = short[weekCheckIn ? effectiveRag(weekCheckIn, now) : projectRag(p.status)];
 
-    const targetPassed = Boolean(
-      p.dueDate && p.dueDate < now && p.status !== "Completed" && p.status !== "Cancelled",
-    );
     const scheduleSlipDays = p.dueDate ? Math.max(0, daysBetween(now, p.dueDate)) : 0;
+    const coveragePct = requirementCoveragePct(p.requirements);
 
     const dims = deriveDimensions({
       status: p.status,
@@ -203,14 +261,14 @@ export async function getCockpitData(ctx: TenantContext, now = new Date(), trend
       openRisks,
       redRisks,
       openBlockers,
-      requirementCoverage: p.requirements.length ? Math.min(1, pct / 100) : null,
+      requirementCoverage: coveragePct === null ? null : coveragePct / 100,
       openDefects: null, // no QA defect signal captured on projects yet → "not rated"
       hasBudgetData: Boolean(p.budget),
     });
 
-    const latestActivity = [p.checkIns[0]?.createdAt, p.statusUpdates[0]?.createdAt]
-      .filter(Boolean)
-      .sort((a, b) => (b as Date).getTime() - (a as Date).getTime())[0] as Date | undefined;
+    const latestActivity = [lastCheckIn.get(p.id), p.statusUpdates[0]?.createdAt]
+      .filter((d): d is Date => Boolean(d))
+      .sort((a, b) => b.getTime() - a.getTime())[0];
     const freshnessDays = latestActivity ? Math.max(0, daysBetween(now, latestActivity)) : 999;
 
     const risks: CockpitRisk[] = [
@@ -218,14 +276,13 @@ export async function getCockpitData(ctx: TenantContext, now = new Date(), trend
       ...p.risks.slice(0, 4).map((r) => ({ id: r.id.slice(0, 8), title: r.title, severity: "A" as DimRag, owner: ownerName(r.ownerId) })),
     ].slice(0, 6);
 
+    // docs/38 — each live market's own gate track on the project's template.
     const markets: CockpitMarket[] = p.orgStatuses
       .filter((o) => o.orgUnit)
-      .map((o) => ({
-        market: o.orgUnit!.name,
-        pct: o.progress,
-        status: o.status,
-        gates: deriveGates(o.progress, o.status === "Overdue", 0),
-      }));
+      .map((o) => {
+        const track = gateTrackOf(checkpoints, statesFor(o.orgUnitId), o.status === "Overdue");
+        return { market: o.orgUnit!.name, pct: track.progress ?? o.progress, status: o.status, gates: track.gates };
+      });
 
     return {
       id: p.id,
@@ -240,6 +297,7 @@ export async function getCockpitData(ctx: TenantContext, now = new Date(), trend
       status: p.status,
       priority: p.priority,
       reported,
+      reportedConfirmed: weekCheckIn?.status === "Confirmed",
       calculated,
       dispute: isDispute(reported, calculated),
       dims,
@@ -254,7 +312,10 @@ export async function getCockpitData(ctx: TenantContext, now = new Date(), trend
       openRisks,
       redRisks,
       overdueTasks,
-      gates: deriveGates(pct, targetPassed, gatesBlocked),
+      gates: own.gates,
+      currentGate: own.currentGate,
+      buildTrack: own.buildTrack,
+      coveragePct,
       risks,
       markets: markets.length > 1 ? markets : [], // a single-market project isn't a rollout
       update: p.statusNote ?? null,
@@ -270,7 +331,14 @@ export async function getCockpitData(ctx: TenantContext, now = new Date(), trend
     pmMap.set(p.pmId, entry);
   }
 
-  return { projects, pms: [...pmMap.values()], trend: buildTrend(snaps, now, trendWeeks), generatedAt: now };
+  const weekly = rows.flatMap((r) => r.checkIns);
+  return {
+    projects,
+    pms: [...pmMap.values()],
+    trend: trendFromCheckIns(weekly, now, trendWeeks),
+    trendComputed: trendFromCheckIns(weekly, now, trendWeeks, "computed"),
+    generatedAt: now,
+  };
 }
 
 /** RAG count of a project list by calculated RAG (cockpit tiles/bars). */
