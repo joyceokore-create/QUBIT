@@ -1,6 +1,9 @@
 // Milestone B — who sees which /reports view, which tabs it has, and how the three URL
 // params (week · as · tab) compose. Pure and client-safe; mirrors src/lib/dashboard-level.ts.
 
+import { can } from "@/lib/rbac";
+import type { TenantContext } from "@/lib/tenant";
+
 export type ReportsView = "pm" | "head" | "exec";
 
 export const VIEW_LABEL: Record<ReportsView, string> = { pm: "PM", head: "Head", exec: "Executive" };
@@ -62,3 +65,15 @@ export function reportsHref(
   const s = q.toString();
   return s ? `/reports?${s}` : "/reports";
 }
+
+/**
+ * UX6 (UX plan D13) — a viewer without reports:read (a Member, by default) gets a Reports
+ * page with Custom reports only, offering just the "My …" datasets; the weekly views
+ * (This week, History, roll-ups) are never loaded for them. Decided on REAL permissions,
+ * so a tenant that grants a Member reports:read gives them the full PM view.
+ */
+export function customReportsOnly(ctx: TenantContext): boolean {
+  return !can(ctx, "reports:read");
+}
+
+export const CUSTOM_ONLY_TABS: { key: string; label: string }[] = [{ key: "custom", label: "Custom reports" }];

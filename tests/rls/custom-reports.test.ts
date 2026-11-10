@@ -38,10 +38,11 @@ describe("custom reports engine", () => {
     }
   });
 
-  it("allowedDatasetKeys follows permissions (wildcard sees all; bare session sees workload only)", () => {
+  it("allowedDatasetKeys follows permissions (wildcard sees all; bare session sees only self-scoped sets)", () => {
     expect(allowedDatasetKeys(rbCtx).sort()).toEqual(REPORT_DATASETS.map((d) => d.key).sort());
     const bare: TenantContext = { tenantId: riverbankId, userId: "u", roles: [], permissions: [] };
-    expect(allowedDatasetKeys(bare)).toEqual(["workload"]);
+    // workload (own row) + the UX6 "My …" sets — each builder scopes rows to the caller.
+    expect(allowedDatasetKeys(bare)).toEqual(["workload", "myTasks", "myProjects", "myBlockers"]);
   });
 
   it("returns only the requested columns, in registry order", async () => {

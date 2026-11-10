@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { REPORT_DATASETS, REPORT_DATASET_KEYS, reportDataset } from "@/lib/report-catalogue";
+import { MY_DATASET_KEYS, myProjectRole, REPORT_DATASETS, REPORT_DATASET_KEYS, reportDataset } from "@/lib/report-catalogue";
 
 // The registry is the allow-list the server validates against — its integrity IS the
 // column-level security boundary, so it gets its own tests.
@@ -54,5 +54,34 @@ describe("report catalogue registry", () => {
       expect(d.moduleLabel.trim()).not.toBe("");
       expect(d.description.trim()).not.toBe("");
     }
+  });
+});
+
+describe("UX6 — the My … datasets", () => {
+  it("are registered, grouped under My work, with the agreed labels", () => {
+    expect(MY_DATASET_KEYS.map((k) => reportDataset(k).label)).toEqual(["My tasks", "My projects", "Blockers I raised"]);
+    for (const k of MY_DATASET_KEYS) expect(reportDataset(k).moduleLabel).toBe("My work");
+  });
+
+  it("carry the columns the plan names", () => {
+    const keys = (k: (typeof MY_DATASET_KEYS)[number]) => reportDataset(k).columns.map((c) => c.key);
+    expect(keys("myTasks")).toEqual(expect.arrayContaining(["title", "key", "project", "status", "dueDate", "estimate", "priority", "type", "blocked"]));
+    expect(keys("myProjects")).toEqual(expect.arrayContaining(["code", "name", "role", "status", "dueDate", "openTasks"]));
+    expect(keys("myBlockers")).toEqual(expect.arrayContaining(["description", "project", "task", "status", "dateRaised", "owner", "resolutionNotes"]));
+  });
+
+  it("dates go through the date cell type", () => {
+    for (const [k, col] of [["myTasks", "dueDate"], ["myProjects", "dueDate"], ["myBlockers", "dateRaised"]] as const) {
+      expect(reportDataset(k).columns.find((c) => c.key === col)?.type).toBe("date");
+    }
+  });
+});
+
+describe("myProjectRole", () => {
+  it("leads with Project lead, then membership roles, de-duplicated", () => {
+    expect(myProjectRole(true, [])).toBe("Project lead");
+    expect(myProjectRole(false, ["Developer"])).toBe("Developer");
+    expect(myProjectRole(true, ["project lead", "Analyst", "Analyst "])).toBe("Project lead, Analyst");
+    expect(myProjectRole(false, [" ", ""])).toBeNull();
   });
 });

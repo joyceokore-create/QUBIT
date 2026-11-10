@@ -1,11 +1,15 @@
+import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { can } from "@/lib/rbac";
 import { taskVisibleTo, type LensTask } from "@/lib/board-lens";
 import { projectRoleCategory, type ProjectRoleCategory } from "@/lib/roles";
 import {
+  MY_DATASET_KEYS,
+  myProjectRole,
   reportDataset,
   type ReportDatasetKey,
 } from "@/lib/report-catalogue";
+import { customReportsOnly } from "@/lib/reports-view";
 import { ownerNamesById } from "@/server/raid-shared";
 import { listRisks } from "@/server/risks";
 import { listIssues } from "@/server/issues";
@@ -41,14 +45,31 @@ export const DATASET_PERMISSION: Record<ReportDatasetKey, string | null> = {
   issues: "issue:read",
   tasks: "task:read",
   workload: null,
+  // UX6 — any signed-in user; each builder filters to ctx.userId's OWN rows, so these can
+  // never widen what anyone sees (the tenant-wide sets above keep their own gates).
+  myTasks: null,
+  myProjects: null,
+  myBlockers: null,
 };
 
-/** Datasets this viewer may run — drives which options the builder offers. */
+/** Datasets this viewer may run (the route-level gate; the API door honours exactly this). */
 export function allowedDatasetKeys(ctx: TenantContext): ReportDatasetKey[] {
   return (Object.keys(DATASET_PERMISSION) as ReportDatasetKey[]).filter((k) => {
     const perm = DATASET_PERMISSION[k];
     return perm === null || can(ctx, perm);
   });
+}
+
+/**
+ * Datasets the builder OFFERS (UX plan D13). A viewer without reports:read (a Member) is
+ * offered only the "My …" datasets, even though BASE read permissions would let them run
+ * the tenant-wide ones through the API (unchanged behaviour). Report readers get every
+ * dataset they may run, the "My …" ones included.
+ */
+export function offeredDatasetKeys(ctx: TenantContext): ReportDatasetKey[] {
+  const allowed = allowedDatasetKeys(ctx);
+  if (!customReportsOnly(ctx)) return allowed;
+  return allowed.filter((k) => (MY_DATASET_KEYS as readonly string[]).includes(k));
 }
 
 async function projectRows(ctx: TenantContext): Promise<ReportRow[]> {
@@ -288,6 +309,135 @@ async function workloadRows(ctx: TenantContext): Promise<ReportRow[]> {
   }));
 }
 
+// ── UX6: the "My …" datasets ─────────────────────────────────────────────────────────
+// Every query below is filtered to ctx.userId inside withTenant, so a row is returned only
+// when it is BOTH in the caller's tenant (RLS) AND the caller's own (the where clause).
+
+/** Tasks assigned to me — Published only (Drafts never reach reports), done ones included. */
+async function myTaskRows(ctx: TenantContext): Promise<ReportRow[]> {
+  const tasks = await withTenant(ctx, (tx) =>
+    tx.projectTask.findMany({
+      where: { assigneeId: ctx.userId, approvalStatus: "Published" },
+      select: {
+        taskKey: true,
+        externalKey: true,
+        title: true,
+        type: true,
+        status: true,
+        priority: true,
+        phase: true,
+        estimate: true,
+        dueDate: true,
+        lastActivityAt: true,
+        milestone: { select: { name: true } },
+        project: { select: { code: true } },
+        // "Blocked" is a flag: an Open blocker pointing at the task (or the legacy status).
+        blockers: { where: { status: "Open" }, select: { id: true }, take: 1 },
+      },
+      orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { lastActivityAt: "desc" }],
+    }),
+  );
+  return tasks.map((t) => ({
+    title: t.title,
+    key: t.taskKey ?? t.externalKey,
+    project: t.project.code,
+    status: t.status,
+    dueDate: t.dueDate,
+    estimate: t.estimate,
+    priority: t.priority,
+    type: t.type,
+    blocked: t.status === "Blocked" || t.blockers.length > 0,
+    phase: t.phase,
+    milestone: t.milestone?.name ?? null,
+    lastActivityAt: t.lastActivityAt,
+  }));
+}
+
+/** Projects I am a member of or lead, with my role(s) and my open (not Completed) tasks. */
+async function myProjectRows(ctx: TenantContext): Promise<ReportRow[]> {
+  const projects = await withTenant(ctx, (tx) =>
+    tx.project.findMany({
+      where: { OR: [{ leadUserId: ctx.userId }, { members: { some: { userId: ctx.userId } } }] },
+      select: {
+        code: true,
+        name: true,
+        status: true,
+        priority: true,
+        dueDate: true,
+        leadUserId: true,
+        lead: { select: { name: true } },
+        portfolio: { select: { name: true } },
+        members: { where: { userId: ctx.userId }, select: { role: true } },
+        _count: {
+          select: {
+            projectTasks: { where: { assigneeId: ctx.userId, approvalStatus: "Published", status: { not: "Completed" } } },
+          },
+        },
+      },
+      orderBy: { name: "asc" },
+    }),
+  );
+  return projects.map((p) => ({
+    code: p.code,
+    name: p.name,
+    role: myProjectRole(p.leadUserId === ctx.userId, p.members.map((m) => m.role)),
+    status: p.status,
+    dueDate: p.dueDate,
+    openTasks: p._count.projectTasks,
+    lead: p.lead?.name ?? null,
+    portfolio: p.portfolio?.name ?? null,
+    priority: p.priority,
+  }));
+}
+
+/**
+ * Blockers I raised. The rule:
+ *   - raisedById = me (every blocker raised since UX6 records its raiser); or
+ *   - for rows raised BEFORE UX6 (raisedById IS NULL — the raiser was never stored), the
+ *     best honest proxy: ownerId = me AND the blocked task is assigned to me (the old
+ *     "flag my own task as blocked" flow made the assignee the owner).
+ * A legacy row owned by me on someone else's task, or with no task, is NOT counted — it
+ * was most likely raised AT me, not BY me. Machine-raised blockers stay NULL and only
+ * match through that same fallback.
+ */
+export function myBlockersWhere(userId: string): Prisma.BlockerWhereInput {
+  return {
+    OR: [{ raisedById: userId }, { raisedById: null, ownerId: userId, task: { is: { assigneeId: userId } } }],
+  };
+}
+
+async function myBlockerRows(ctx: TenantContext): Promise<ReportRow[]> {
+  const blockers = await withTenant(ctx, (tx) =>
+    tx.blocker.findMany({
+      where: myBlockersWhere(ctx.userId),
+      select: {
+        description: true,
+        severity: true,
+        status: true,
+        dateRaised: true,
+        resolutionNotes: true,
+        project: { select: { code: true } },
+        task: { select: { taskKey: true, externalKey: true, title: true } },
+        owner: { select: { name: true } },
+      },
+      orderBy: { dateRaised: "desc" },
+    }),
+  );
+  return blockers.map((b) => {
+    const taskKey = b.task ? (b.task.taskKey ?? b.task.externalKey) : null;
+    return {
+      description: b.description,
+      project: b.project.code,
+      task: b.task ? (taskKey ? `${taskKey} ${b.task.title}` : b.task.title) : null,
+      severity: b.severity,
+      status: b.status,
+      dateRaised: b.dateRaised,
+      owner: b.owner?.name ?? null,
+      resolutionNotes: b.resolutionNotes,
+    };
+  });
+}
+
 const BUILDERS: Record<ReportDatasetKey, (ctx: TenantContext) => Promise<ReportRow[]>> = {
   projects: projectRows,
   portfolios: portfolioRows,
@@ -296,6 +446,9 @@ const BUILDERS: Record<ReportDatasetKey, (ctx: TenantContext) => Promise<ReportR
   issues: issueRows,
   tasks: taskRows,
   workload: workloadRows,
+  myTasks: myTaskRows,
+  myProjects: myProjectRows,
+  myBlockers: myBlockerRows,
 };
 
 export interface CustomReportResult {

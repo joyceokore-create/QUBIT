@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canPreview, ownView, reportsHref, resolveReportsView, resolveTab } from "@/lib/reports-view";
+import { canPreview, CUSTOM_ONLY_TABS, customReportsOnly, ownView, reportsHref, resolveReportsView, resolveTab } from "@/lib/reports-view";
 
 describe("reports view resolution", () => {
   it("maps roles to views — Head beats Executive, QA head reads as an executive, others are PMs", () => {
@@ -37,5 +37,25 @@ describe("reports view resolution", () => {
     expect(reportsHref({ week: "2026-W40" }, d)).toBe("/reports?week=2026-W40");
     expect(reportsHref({ as: "pm", tab: "custom" }, d)).toBe("/reports?as=pm&tab=custom");
     expect(reportsHref({ as: "head" }, d)).toBe("/reports");
+  });
+});
+
+describe("UX6 — Custom reports only", () => {
+  const ctx = (roles: string[], permissions?: string[]) => ({ tenantId: "t", userId: "u", roles, permissions });
+
+  it("applies to viewers without reports:read (a Member by default), never to report readers", () => {
+    expect(customReportsOnly(ctx(["Member"]))).toBe(true);
+    for (const r of ["ProjectManager", "HeadOfProjects", "HeadOfQA", "Executive", "PlatformSuperAdmin"]) {
+      expect(customReportsOnly(ctx([r]))).toBe(false);
+    }
+  });
+
+  it("follows effective permissions, so a tenant override can grant a Member the full page", () => {
+    expect(customReportsOnly(ctx(["Member"], ["dashboard:read", "reports:read"]))).toBe(false);
+    expect(customReportsOnly(ctx(["ProjectManager"], ["dashboard:read"]))).toBe(true);
+  });
+
+  it("has exactly one tab: Custom reports", () => {
+    expect(CUSTOM_ONLY_TABS).toEqual([{ key: "custom", label: "Custom reports" }]);
   });
 });

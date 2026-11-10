@@ -238,6 +238,7 @@ model User {
   authoredCommitLinks      TaskCommitLink[]         @relation("CommitAuthor")
   inviteTokens             InviteToken[]            @relation("UserInviteTokens")
   ownedBlockers            Blocker[]                @relation("BlockerOwner")
+  raisedBlockers           Blocker[]                @relation("BlockerRaiser")
   authoredDocuments        ProjectDocument[]        @relation("DocumentAuthor")
   statusUpdatesPosted      ProjectStatusUpdate[]    @relation("StatusAuthor")
   notifications            Notification[]           @relation("UserNotifications")
@@ -534,6 +535,10 @@ model Blocker {
   status             String             @default("Open") // Open | Resolved
   ownerId            String?            @map("owner_id")
   owner              User?              @relation("BlockerOwner", fields: [ownerId], references: [id])
+  // UX6 — who raised it (the owner is who can unblock it). NULL on rows raised before UX6
+  // and on machine-raised blockers (commit #blocked), never guessed.
+  raisedById         String?            @map("raised_by_id")
+  raisedBy           User?              @relation("BlockerRaiser", fields: [raisedById], references: [id], onDelete: SetNull)
   // Optional link to the task this blocker stalls (Phase 6.1 blocked-as-flag). A task is
   // "blocked" while an Open blocker points at it. Survives task deletion (SetNull).
   taskId             String?            @map("task_id")
@@ -546,6 +551,7 @@ model Blocker {
 
   @@index([tenantId, projectId])
   @@index([projectId, orgUnitId])
+  @@index([tenantId, raisedById])
   @@map("blocker")
 }
 

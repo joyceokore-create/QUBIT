@@ -2,13 +2,14 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { isoWeekId, isValidIsoWeek } from "@/lib/iso-week";
-import { canPreview, ownView, reportsHref, resolveReportsView, resolveTab, TABS, VIEW_LABEL, type ReportsView } from "@/lib/reports-view";
+import { MY_DATASET_KEYS } from "@/lib/report-catalogue";
+import { canPreview, CUSTOM_ONLY_TABS, customReportsOnly, ownView, reportsHref, resolveReportsView, resolveTab, TABS, VIEW_LABEL, type ReportsView } from "@/lib/reports-view";
 import { getReportsWeek } from "@/server/reports-week";
-import { getViewState } from "@/server/preferences";
+import { getTenantTimeZone, getViewState } from "@/server/preferences";
 import { isPreviewing, VIEW_ROLE_REPORTS } from "@/lib/view-roles";
 import { listRollups } from "@/server/portfolio-reports";
 import { listShares } from "@/server/q/shares";
-import { allowedDatasetKeys } from "@/server/custom-reports";
+import { offeredDatasetKeys } from "@/server/custom-reports";
 import { isSubscribed } from "@/server/report-subscriptions";
 import { emailEnabled } from "@/server/mail/mailer";
 import { ReportTabs } from "@/components/reports/report-tabs";
@@ -31,6 +32,10 @@ import { pdfAvailable } from "@/server/pdf/render";
  *    Custom reports.
  * The URL is the state: ?week= (any past week), ?tab=, and ?as= (Heads previewing another
  * role, read-only). /my-week redirects here; old ?tab= keys keep landing somewhere sane.
+ *
+ * UX6 (D13) — a viewer WITHOUT reports:read (a Member) gets Custom reports only, offering
+ * just My tasks · My projects · Blockers I raised. That branch returns before any weekly
+ * loader (getReportsWeek, recipients, roll-ups) runs, whatever ?tab= / ?as= / ?week= say.
  */
 
 const SUBTITLE: Record<ReportsView, (n: number) => string> = {
@@ -50,11 +55,34 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   // The walkthrough's "update all at once" door moved to its own page.
   if (sp.upload === "1") redirect("/reports/update?upload=1");
 
+  // UX6 (D13): Member → Custom reports only. That's everyone without reports:read, and in the
+  // new layout anyone "Viewing as" Member (presentation only: it offers just the My datasets
+  // and never widens what the API allows). A ?as= deep link keeps the old preview behaviour.
+  const viewState = await getViewState(ctx);
+  const memberLayout = viewState.uiMode === "new" && viewState.viewRole === "Member" && !sp.as;
+  if (customReportsOnly(ctx) || memberLayout) {
+    const [canPdf, timeZone] = await Promise.all([pdfAvailable(), getTenantTimeZone(ctx)]);
+    const offered = offeredDatasetKeys(ctx).filter((k) => !memberLayout || (MY_DATASET_KEYS as readonly string[]).includes(k));
+    return (
+      <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-5 p-[22px_24px_90px]">
+        <div className="min-w-0 [animation:rise_.5s_cubic-bezier(.22,1,.36,1)_both]">
+          <h1 className="font-heading text-[26px] rv:text-heading-lg font-bold tracking-[-.7px] text-[var(--qink)]">Reports</h1>
+          <p className="mt-1 text-[13.5px] text-[var(--ink3)] [text-wrap:pretty]">Build a report from your work.</p>
+        </div>
+        <div className="[animation:rise_.5s_cubic-bezier(.22,1,.36,1)_.06s_both]">
+          <ReportTabs tabs={CUSTOM_ONLY_TABS} active="custom" hrefFor={() => "/reports"} />
+        </div>
+        <div className="[animation:rise_.5s_cubic-bezier(.22,1,.36,1)_.1s_both]">
+          <CustomReportBuilder allowedDatasets={offered} pdfAvailable={canPdf} timeZone={timeZone} />
+        </div>
+      </main>
+    );
+  }
+
   const currentWeek = isoWeekId(new Date());
   const week = sp.week && isValidIsoWeek(sp.week) && sp.week <= currentWeek ? sp.week : currentWeek;
   // UX3 (D2a): in the new layout "Viewing as" picks the view, and the in-page preview
   // switch goes. A ?as= deep link (the product tour) still works for those who may preview.
-  const viewState = await getViewState(ctx);
   const newUi = viewState.uiMode === "new";
   const asDeepLink = Boolean(sp.as) && canPreview(ctx.roles);
   const view: ReportsView = newUi && !asDeepLink ? VIEW_ROLE_REPORTS[viewState.viewRole] : resolveReportsView(ctx.roles, sp.as);
@@ -69,7 +97,11 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const data = await getReportsWeek(ctx, { isoWeek: week, view, previewing });
   const rowCount = data.kind === "pm" ? data.rows.length : 0;
   // Milestone D — exports + email: who the roll-up goes to, and whether this box can render PDFs.
-  const [recipients, canPdf] = await Promise.all([can(ctx, "reports:read") ? listRecipients(ctx) : Promise.resolve([]), pdfAvailable()]);
+  const [recipients, canPdf, timeZone] = await Promise.all([
+    can(ctx, "reports:read") ? listRecipients(ctx) : Promise.resolve([]),
+    pdfAvailable(),
+    getTenantTimeZone(ctx),
+  ]);
 
   return (
     <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-5 p-[22px_24px_90px]">
@@ -93,7 +125,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
 
       <div className="[animation:rise_.5s_cubic-bezier(.22,1,.36,1)_.1s_both]">
         {tab === "custom" ? (
-          <CustomReportBuilder allowedDatasets={allowedDatasetKeys(ctx)} pdfAvailable={canPdf} />
+          <CustomReportBuilder allowedDatasets={offeredDatasetKeys(ctx)} pdfAvailable={canPdf} timeZone={timeZone} />
         ) : data.kind === "pm" ? (
           tab === "history" ? (
             <StatusGrid

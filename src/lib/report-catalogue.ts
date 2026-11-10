@@ -19,7 +19,12 @@ export type ReportDatasetKey =
   | "risks"
   | "issues"
   | "tasks"
-  | "workload";
+  | "workload"
+  // UX6 (UX plan D13) — the "My …" datasets: always scoped to the signed-in person's own
+  // rows, so they are the whole of a Member's Reports page (Members hold no reports:read).
+  | "myTasks"
+  | "myProjects"
+  | "myBlockers";
 
 export type ReportColumnType = "text" | "number" | "date" | "enum" | "boolean";
 
@@ -48,6 +53,8 @@ const TASK_STATUSES = ["NotStarted", "InProgress", "Blocked", "Completed"] as co
 const TASK_TYPES = ["Feature", "Bug", "Chore", "Spike", "Improvement"] as const;
 const TASK_PRIORITIES = ["Low", "Medium", "High", "Critical"] as const;
 const CATEGORIES = ["Approved", "Exploring", "Shelved"] as const;
+const BLOCKER_STATUSES = ["Open", "Resolved"] as const;
+const BLOCKER_SEVERITIES = ["Low", "Medium", "Critical"] as const;
 
 export const REPORT_DATASETS: ReportDataset[] = [
   {
@@ -190,7 +197,77 @@ export const REPORT_DATASETS: ReportDataset[] = [
     ],
     defaults: ["name", "department", "projects", "allocatedPct", "effectivePct"],
   },
+  {
+    key: "myTasks",
+    label: "My tasks",
+    moduleLabel: "My work",
+    description: "One row per published task assigned to you, done ones included.",
+    columns: [
+      { key: "title", label: "Task", type: "text" },
+      { key: "key", label: "Key", type: "text" },
+      { key: "project", label: "Project", type: "text" },
+      { key: "status", label: "Status", type: "enum", values: TASK_STATUSES },
+      { key: "dueDate", label: "Due", type: "date" },
+      { key: "estimate", label: "Estimate", type: "text" },
+      { key: "priority", label: "Priority", type: "enum", values: TASK_PRIORITIES },
+      { key: "type", label: "Type", type: "enum", values: TASK_TYPES },
+      { key: "blocked", label: "Blocked", type: "boolean" },
+      { key: "phase", label: "Phase", type: "text" },
+      { key: "milestone", label: "Milestone", type: "text" },
+      { key: "lastActivityAt", label: "Last activity", type: "date" },
+    ],
+    defaults: ["title", "key", "project", "status", "dueDate", "priority", "blocked"],
+  },
+  {
+    key: "myProjects",
+    label: "My projects",
+    moduleLabel: "My work",
+    description: "One row per project you are a member of or lead.",
+    columns: [
+      { key: "code", label: "Code", type: "text" },
+      { key: "name", label: "Project", type: "text" },
+      { key: "role", label: "Your role", type: "text" },
+      { key: "status", label: "Status", type: "enum", values: PROJECT_STATUSES },
+      { key: "dueDate", label: "Target date", type: "date" },
+      { key: "openTasks", label: "Open tasks of mine", type: "number" },
+      { key: "lead", label: "Project lead", type: "text" },
+      { key: "portfolio", label: "Portfolio", type: "text" },
+      { key: "priority", label: "Priority", type: "enum", values: PROJECT_PRIORITIES },
+    ],
+    defaults: ["code", "name", "role", "status", "dueDate", "openTasks"],
+  },
+  {
+    key: "myBlockers",
+    label: "Blockers I raised",
+    moduleLabel: "My work",
+    description: "One row per blocker you raised, open and resolved.",
+    columns: [
+      { key: "description", label: "Blocker", type: "text" },
+      { key: "project", label: "Project", type: "text" },
+      { key: "task", label: "Task", type: "text" },
+      { key: "severity", label: "Severity", type: "enum", values: BLOCKER_SEVERITIES },
+      { key: "status", label: "Status", type: "enum", values: BLOCKER_STATUSES },
+      { key: "dateRaised", label: "Raised", type: "date" },
+      { key: "owner", label: "Who can unblock", type: "text" },
+      { key: "resolutionNotes", label: "Resolved notes", type: "text" },
+    ],
+    defaults: ["description", "project", "task", "status", "dateRaised", "owner"],
+  },
 ];
+
+/** The "My …" datasets (UX6): the only ones offered to a viewer without reports:read. */
+export const MY_DATASET_KEYS = ["myTasks", "myProjects", "myBlockers"] as const satisfies readonly ReportDatasetKey[];
+
+/** My projects' "Your role": "Project lead" when I lead it, then my membership role(s),
+ * de-duplicated case-insensitively, in order; null when neither (never expected). */
+export function myProjectRole(isLead: boolean, memberRoles: string[]): string | null {
+  const out: string[] = isLead ? ["Project lead"] : [];
+  for (const r of memberRoles) {
+    const role = r.trim();
+    if (role && !out.some((o) => o.toLowerCase() === role.toLowerCase())) out.push(role);
+  }
+  return out.length ? out.join(", ") : null;
+}
 
 export const REPORT_DATASET_KEYS = REPORT_DATASETS.map((d) => d.key);
 

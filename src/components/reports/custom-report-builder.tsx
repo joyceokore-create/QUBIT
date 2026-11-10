@@ -1,18 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   REPORT_DATASETS,
   type ReportColumn,
   type ReportDatasetKey,
 } from "@/lib/report-catalogue";
 import { ExportButton } from "@/components/export-button";
+import { ListToolbar, SearchField } from "@/components/list/list-toolbar";
+import { ListEmpty, TableCard, TableFooter } from "@/components/list/table-footer";
+import { formatDate } from "@/lib/dates";
+import { matchesSearch, paginate, parseSize, type PageSize } from "@/lib/list-state";
 import { CARD } from "@/lib/surface";
 
 // Custom Reports builder — pick a dataset, tick the columns, PREVIEW, then export. The
 // full column list per dataset comes straight from the client-safe registry; the server
 // re-validates every key, so this UI is a convenience, never the control. The preview
-// table renders the JSON route's rows (capped at PREVIEW_ROWS until expanded); Export CSV
+// table renders the JSON route's rows with search and pagination (UX6, D13 + L1–L3: browser
+// paging over the rows the route returned; search narrows the preview only); Export CSV
 // links the same URL with format=csv and only appears once a preview is on screen, so
 // what gets downloaded is always something the user has looked at first (the
 // export-button rule: no client-side data path that could drift from the screen).
@@ -20,7 +25,17 @@ import { CARD } from "@/lib/surface";
 // (/api/reports/export?template=table) — or opens as a print view where no PDF engine exists.
 
 const STORAGE_KEY = "qubit.reports.custom.v1";
-const PREVIEW_ROWS = 20;
+// Same per-table key shape as useListUrl, so the remembered rows-per-page follows L3.
+const SIZE_KEY = "qubit.list.size.custom-report";
+const DEFAULT_SIZE: PageSize = 10;
+
+function readStoredSize(): PageSize {
+  try {
+    return parseSize(window.localStorage.getItem(SIZE_KEY), DEFAULT_SIZE);
+  } catch {
+    return DEFAULT_SIZE;
+  }
+}
 
 interface SavedSetup {
   dataset?: ReportDatasetKey;
@@ -41,19 +56,27 @@ function readSaved(): SavedSetup {
   }
 }
 
-function formatCell(value: string | number | boolean | null, type: string): string {
+function formatCell(value: string | number | boolean | null, type: string, timeZone?: string): string {
   if (value === null || value === undefined || value === "") return "—";
   if (type === "boolean") return value ? "Yes" : "No";
   if (type === "date") {
     const d = new Date(String(value));
-    return Number.isNaN(d.getTime())
-      ? String(value)
-      : d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    // U5: one date format, in the tenant's time zone (never the browser's default).
+    return Number.isNaN(d.getTime()) ? String(value) : formatDate(d, timeZone);
   }
   return String(value);
 }
 
-export function CustomReportBuilder({ allowedDatasets, pdfAvailable = false }: { allowedDatasets: ReportDatasetKey[]; pdfAvailable?: boolean }) {
+export function CustomReportBuilder({
+  allowedDatasets,
+  pdfAvailable = false,
+  timeZone,
+}: {
+  allowedDatasets: ReportDatasetKey[];
+  pdfAvailable?: boolean;
+  /** The tenant's IANA zone, for date cells (U5). */
+  timeZone?: string;
+}) {
   const datasets = useMemo(
     () => REPORT_DATASETS.filter((d) => allowedDatasets.includes(d.key)),
     [allowedDatasets],
@@ -61,7 +84,9 @@ export function CustomReportBuilder({ allowedDatasets, pdfAvailable = false }: {
   const [dataset, setDataset] = useState<ReportDatasetKey>(datasets[0]?.key ?? "projects");
   const [selected, setSelected] = useState<string[]>(datasets[0]?.defaults ?? []);
   const [result, setResult] = useState<ReportResult | null>(null);
-  const [showAll, setShowAll] = useState(false);
+  const [q, setQ] = useState("");
+  const [page, setPage] = useState(1);
+  const [size, setSize] = useState<PageSize>(DEFAULT_SIZE);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,8 +102,24 @@ export function CustomReportBuilder({ allowedDatasets, pdfAvailable = false }: {
       const cols = saved.columnsByDataset?.[savedDataset]?.filter((k) => ds.columns.some((c) => c.key === k));
       setSelected(cols?.length ? cols : ds.defaults);
     }
+    setSize(readStoredSize());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const search = useCallback((next: string) => {
+    setQ(next);
+    setPage(1);
+  }, []);
+
+  function changeSize(next: PageSize) {
+    setSize(next);
+    setPage(1);
+    try {
+      window.localStorage.setItem(SIZE_KEY, String(next));
+    } catch {
+      // storage blocked — the choice still holds for this visit
+    }
+  }
 
   function persist(nextDataset: ReportDatasetKey, nextColumns: string[]) {
     const saved = readSaved();
@@ -128,7 +169,8 @@ export function CustomReportBuilder({ allowedDatasets, pdfAvailable = false }: {
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error?.message ?? "The report could not be generated.");
       setResult(body as ReportResult);
-      setShowAll(false);
+      setQ("");
+      setPage(1);
       persist(dataset, selected);
     } catch (e) {
       setResult(null);
@@ -146,15 +188,22 @@ export function CustomReportBuilder({ allowedDatasets, pdfAvailable = false }: {
   const pdfHref = result
     ? `/api/reports/export?template=table&dataset=${dataset}&columns=${result.columns.map((c) => c.key).join(",")}`
     : "";
-  const previewRows = result ? (showAll ? result.rows : result.rows.slice(0, PREVIEW_ROWS)) : [];
-  const hiddenRows = result ? result.rowCount - previewRows.length : 0;
+  // Search runs over every row as the person sees it (formatted cells), then pages (L1/L3).
+  const matching = useMemo(
+    () =>
+      result
+        ? result.rows.filter((row) => matchesSearch(q, ...result.columns.map((c) => formatCell(row[c.key], c.type, timeZone))))
+        : [],
+    [result, q, timeZone],
+  );
+  const { rows: previewRows, info } = paginate(matching, page, size);
   const stale = result ? selected.join(",") !== result.columns.map((c) => c.key).join(",") : false;
   const enumHint = (c: ReportColumn) => (c.values ? `Values: ${c.values.join(" · ")}` : undefined);
 
   if (!datasets.length) return null;
 
   return (
-    <>
+    <div className="flex flex-col gap-5">
       <div className={CARD} style={{ background: "var(--cardbg)" }}>
         <div className="flex flex-wrap items-center gap-3 border-b border-[var(--hair)] p-[12px_16px]">
           <span className="font-heading text-[13.5px] font-bold text-[var(--qink)]">Build a report</span>
@@ -221,8 +270,8 @@ export function CustomReportBuilder({ allowedDatasets, pdfAvailable = false }: {
       </div>
 
       {result && (
-        <div className={CARD} style={{ background: "var(--cardbg)" }}>
-          <div className="flex flex-wrap items-center gap-2 border-b border-[var(--hair)] p-[12px_16px]">
+        <section aria-label={`${meta.label} preview`} className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="font-heading text-[13.5px] font-bold text-[var(--qink)]">{meta.label}</span>
             <span className="rounded-[5px] bg-[color-mix(in_oklab,var(--brand)_10%,transparent)] px-1.5 py-0.5 font-mono text-[8.5px] font-bold uppercase tracking-[.6px] text-[var(--brand)]">
               Preview
@@ -249,57 +298,53 @@ export function CustomReportBuilder({ allowedDatasets, pdfAvailable = false }: {
                   Print view
                 </a>
               )}
-              <ExportButton href={csvHref} label={`Export CSV (${result.rowCount} rows)`} />
+              <ExportButton href={csvHref} label={`Export CSV (${result.rowCount} ${result.rowCount === 1 ? "row" : "rows"})`} />
             </span>
           </div>
-          {result.rowCount === 0 ? (
-            <p className="p-[12px_16px] text-[12px] text-[var(--ink5)]">No rows in scope.</p>
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left">
-                  <thead>
-                    <tr>
+
+          {result.rowCount > 0 && (
+            <ListToolbar label="Search the preview">
+              <SearchField value={q} onChange={search} placeholder="Search any column" label={`Search ${meta.label.toLowerCase()}`} />
+              {q && (
+                <span className="text-[11.5px] text-[var(--ink4)]">
+                  Search narrows the preview only — exports include all {result.rowCount} rows.
+                </span>
+              )}
+            </ListToolbar>
+          )}
+
+          <TableCard footer={<TableFooter info={info} onPage={setPage} onSize={changeSize} noun="rows" />}>
+            {result.rowCount === 0 ? (
+              <ListEmpty filtered={false} noun="rows" hint="Nothing in scope for this report yet." />
+            ) : matching.length === 0 ? (
+              <ListEmpty filtered noun="rows" onClear={() => search("")} />
+            ) : (
+              <table className="w-full border-collapse text-left">
+                <thead>
+                  <tr>
+                    {result.columns.map((c) => (
+                      <th key={c.key} className="whitespace-nowrap border-b border-[var(--hair)] p-[8px_16px] font-mono text-[9px] font-bold uppercase tracking-[1.2px] text-[var(--ink4)]">
+                        {c.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {previewRows.map((row, i) => (
+                    <tr key={info.skip + i} className="border-b border-[var(--hair2)] last:border-0">
                       {result.columns.map((c) => (
-                        <th key={c.key} className="whitespace-nowrap border-b border-[var(--hair)] p-[8px_16px] font-mono text-[9px] font-bold uppercase tracking-[1.2px] text-[var(--ink4)]">
-                          {c.label}
-                        </th>
+                        <td key={c.key} className="max-w-[36ch] truncate p-[8px_16px] text-[12px] text-[var(--ink2)]" title={row[c.key] === null ? undefined : String(row[c.key])}>
+                          {formatCell(row[c.key], c.type, timeZone)}
+                        </td>
                       ))}
                     </tr>
-                  </thead>
-                  <tbody>
-                    {previewRows.map((row, i) => (
-                      <tr key={i} className="border-b border-[var(--hair2)] last:border-0">
-                        {result.columns.map((c) => (
-                          <td key={c.key} className="max-w-[36ch] truncate p-[8px_16px] text-[12px] text-[var(--ink2)]" title={row[c.key] === null ? undefined : String(row[c.key])}>
-                            {formatCell(row[c.key], c.type)}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {(hiddenRows > 0 || showAll) && result.rowCount > PREVIEW_ROWS && (
-                <div className="flex flex-wrap items-center gap-2 border-t border-[var(--hair)] p-[10px_16px]">
-                  <span className="text-[11.5px] text-[var(--ink4)]">
-                    {showAll
-                      ? `Showing all ${result.rowCount} rows.`
-                      : `Showing the first ${previewRows.length} of ${result.rowCount} rows — the CSV export includes every row.`}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setShowAll((v) => !v)}
-                    className="rounded-[7px] border border-[var(--w07)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)]"
-                  >
-                    {showAll ? `Show first ${PREVIEW_ROWS}` : `Show all ${result.rowCount}`}
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </TableCard>
+        </section>
       )}
-    </>
+    </div>
   );
 }

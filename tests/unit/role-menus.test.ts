@@ -28,12 +28,26 @@ describe("menuFor", () => {
   });
 
   it("hides an item the person can't open, and drops a group left empty", () => {
-    // A Member viewing… their own menu: no reports:read by default → the Reports group goes.
-    const member = labels(menuFor("Member", viewer(["Member"])));
-    expect(member).toEqual(["Work: Home, My Board", "Delivery: Projects"]);
     // A Super Admin-style menu viewed with Member permissions: no admin item survives.
     const asMember = menuFor("PlatformSuperAdmin", viewer(["Member"]));
     expect(asMember.some((g) => g.label === "Administration")).toBe(false);
+    // …and its Reports item stays on reports:read, which a Member lacks → the group goes.
+    expect(asMember.some((g) => g.label === "Reports")).toBe(false);
+    // A permission-less viewer loses even the Member's Reports item (dashboard:read).
+    const nobody = { can: () => false, roles: [] as string[] };
+    expect(menuFor("Member", nobody)).toEqual([]);
+  });
+
+  it("UX6: a Member keeps Reports (Custom reports over their own work) without reports:read", () => {
+    const member = labels(menuFor("Member", viewer(["Member"])));
+    expect(member).toEqual(["Work: Home, My Board", "Delivery: Projects", "Reports: Reports"]);
+    const item = ROLE_MENUS.Member.flatMap((g) => g.items).find((i) => i.href === "/reports");
+    expect(item?.perm).toBe("dashboard:read");
+    // Every other role's Reports item stays on reports:read.
+    for (const role of ["PlatformSuperAdmin", "HeadOfProjects", "HeadOfQA", "Executive", "ProjectManager"] as const) {
+      const other = ROLE_MENUS[role].flatMap((g) => g.items).find((i) => i.href === "/reports");
+      expect(other?.perm).toBe("reports:read");
+    }
   });
 
   it("menus follow REAL permissions, not the role being viewed", () => {

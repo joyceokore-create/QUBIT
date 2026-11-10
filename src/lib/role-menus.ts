@@ -35,6 +35,9 @@ const I = {
   risks: { key: "risks", label: "Risks & Issues", href: "/risks", icon: "alert", perm: "risk:read", module: "RISKS" },
   people: { key: "people", label: "People", href: "/people", icon: "users", perm: "project:read", module: "TEAMS" },
   reports: { key: "reports", label: "Reports", href: "/reports", icon: "chart", perm: "reports:read", module: "REPORTS" },
+  // UX6 (D13): a Member's Reports page is Custom reports over their own work only, so it is
+  // gated on a permission every Member holds; the weekly views stay behind reports:read.
+  myReports: { key: "reports", label: "Reports", href: "/reports", icon: "chart", perm: "dashboard:read", module: "REPORTS" },
   admin: { key: "admin", label: "Admin", href: "/admin", icon: "shield", perm: "admin:access", module: "ADMIN_IAM" },
   configs: { key: "configs", label: "Configs", href: "/configs", icon: "filter", perm: "admin:access" },
   // Super Admin's Administration group: the admin sections promoted into the sidebar.
@@ -82,7 +85,7 @@ export const ROLE_MENUS: Record<ViewRole, MenuGroup[]> = {
   Member: [
     { label: "Work", items: [I.home, I.board] },
     { label: "Delivery", items: [I.projects] },
-    { label: "Reports", items: [I.reports] },
+    { label: "Reports", items: [I.myReports] },
   ],
 };
 
