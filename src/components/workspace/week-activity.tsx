@@ -165,11 +165,11 @@ export function WeekActivity({ projectId, canNudge }: { projectId: string; canNu
 
   return (
     <section className={`${CARD} overflow-hidden`} style={CARD_BG} aria-labelledby="week-activity">
-      <header className="flex flex-wrap items-center gap-x-3 gap-y-2 p-[12px_16px]">
-        <h2 id="week-activity" className="font-heading text-[14px] rv:text-heading-xs font-bold text-[var(--qink)]">
-          What moved this week
+      <header className="flex flex-wrap items-center gap-x-3 gap-y-2 px-[18px] py-4">
+        <h2 id="week-activity" className="text-[16px] font-bold text-[var(--ds-ink)]">
+          Board This Week
         </h2>
-        <span className="text-[11px]" style={{ color: `var(${source.tok})` }} title={badge?.label}>
+        <span className="text-[12px]" style={{ color: `var(${source.tok})` }} title={badge?.label}>
           {source.text}
         </span>
         <div className="ml-auto flex flex-wrap gap-1.5">

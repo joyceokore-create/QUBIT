@@ -2,199 +2,135 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Clock, FileDown } from "lucide-react";
+import { FileDown, MoreHorizontal, Upload, Users } from "lucide-react";
 import { EditProjectDialog } from "@/components/panels/edit-project-dialog";
-import { AskQAbout } from "@/components/q/ask-q-about";
+import { useQ } from "@/components/q/q-provider";
+import { QubitLogo } from "@/components/brand/qubit-logo";
 import { RequestToJoinButton } from "@/components/workspace/request-to-join-button";
-import { FOCUS, ragChipStyle, ragFill } from "@/lib/surface";
-import { formatDayMonth } from "@/lib/dates";
-import { healthWord } from "@/lib/status-words";
+import { PageHeader } from "@/components/list/page-header";
+import { FilterSelect, type FilterOption } from "@/components/list/list-toolbar";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Chip, HealthPill } from "@/components/ui/status-pill";
+import { FOCUS, SECONDARY } from "@/lib/surface";
+import { cn } from "@/lib/utils";
 import type { ProjectPanelJson } from "@/components/panels/project-panel-json";
 import type { Rag } from "@/server/health";
 
-// Milestone A (docs handoff §2) — the workspace header: no hero card, no gradient. The
-// project's facts read as one block: breadcrumb, name + the two track chips, the
-// description, a facts line, and the team on the right. Chips are server-computed
-// (ProjectPanelJson.checkin) so they render with the page.
+/**
+ * Tier 3 (design spec v2 `wsHead`) — the project workspace header: "Projects › name" crumb,
+ * the name, a meta line of ONE status chip · stage · % complete · PM, and the actions on the
+ * right: the Market filter chip and Upload Status Report. Ask Q, Export PDF and Team fold
+ * into the overflow menu; the project's edit control sits beside them.
+ */
 
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? "")
-    .join("");
-}
-
-/** "Due 28 Oct · 23 days" split into parts so the relative bit can be bold / red. */
-export function timelineParts(dueDate: string | null, now = new Date()): { date: string; rel: string; overdue: boolean } | null {
-  if (!dueDate) return null;
-  const due = new Date(dueDate);
-  const days = Math.round((due.getTime() - now.getTime()) / 86_400_000);
-  // UX7 (U5): one zone on server and browser, so the header can't hydrate differently.
-  const date = formatDayMonth(due);
-  if (days > 0) return { date, rel: `${days} ${days === 1 ? "day" : "days"}`, overdue: false };
-  if (days === 0) return { date, rel: "today", overdue: false };
-  return { date, rel: `${-days} ${days === -1 ? "day" : "days"} overdue`, overdue: true };
-}
-
-function RagChip({ label, rag }: { label: string; rag: Rag | null }) {
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[12px] font-semibold"
-      style={rag ? ragChipStyle(rag) : { color: "var(--ink4)", background: "var(--wash2)" }}
-    >
-      <span className="size-[7px] rounded-full" style={rag ? ragFill(rag) : { background: "var(--ink5)" }} aria-hidden />
-      {label} · {rag ? healthWord(rag) : "No check-in"}
-    </span>
-  );
-}
+const MENU_ITEM = "gap-2 rounded-[8px] px-[9px] py-[7px] text-[12.5px]";
 
 export function WorkspaceHeader({
   data,
-  members,
+  status,
+  stage,
+  pmName,
+  marketOptions,
+  market,
+  onMarket,
+  instanceOptions,
+  instance,
+  onInstance,
+  selectedLabel,
   onTeam,
-  instanceSwitch = null,
-  selectedInstance = null,
-  selectedNamed = null,
 }: {
-  /** docs/38 — the market / instance switches (under the title), the selected market and the selected named instance. */
-  instanceSwitch?: React.ReactNode;
-  selectedNamed?: { code: string; name: string } | null;
-  selectedInstance?: { code: string; name: string; flag: string | null; rag: "Green" | "Amber" | "Red"; leadName: string | null; progress: number } | null;
   data: ProjectPanelJson;
-  members: { name: string }[];
+  /** The one status chip: this week's overall status, or the selected market's. */
+  status: Rag | null;
+  /** Where the project stands (its current gate, else its pipeline stage). */
+  stage: string;
+  pmName: string | null;
+  marketOptions: FilterOption[];
+  /** "" = every market. */
+  market: string;
+  onMarket: (orgUnitId: string) => void;
+  instanceOptions: FilterOption[];
+  instance: string;
+  onInstance: (id: string) => void;
+  /** The selected market / instance, named in the meta line. */
+  selectedLabel: string | null;
   onTeam: () => void;
 }) {
   const router = useRouter();
-  const ci = data.checkin ?? null;
-  const markets = data.marketTracks ?? [];
-  const tl = timelineParts(data.dueDate);
-  const pct = data.avgProgress;
-  const barTok = data.status === "Overdue" ? "--bad" : data.status === "AtRisk" ? "--warn" : "--brand";
-  const extra = Math.max(0, members.length - 3);
+  const { openQWith } = useQ();
 
   return (
-    <header className="flex flex-col gap-3.5">
-      <nav aria-label="Breadcrumb">
-        <ol className="flex flex-wrap items-center gap-1.5 text-[12.5px] text-[var(--ink4)]">
-          <li>
-            <Link href="/projects" className={`rounded-[4px] transition-colors hover:text-[var(--qink)] ${FOCUS}`}>
-              Projects
+    <PageHeader
+      eyebrow={
+        <nav aria-label="Breadcrumb">
+          <ol className="flex flex-wrap items-center gap-1">
+            <li>
+              <Link href="/projects" className={cn("rounded-[4px] hover:text-[var(--ds-ink)]", FOCUS)}>
+                Projects
+              </Link>
+            </li>
+            {data.portfolioName && data.portfolioId && (
+              <>
+                <li aria-hidden>›</li>
+                <li>
+                  <Link href={`/portfolios/${data.portfolioId}`} className={cn("rounded-[4px] hover:text-[var(--ds-ink)]", FOCUS)}>
+                    {data.portfolioName}
+                  </Link>
+                </li>
+              </>
+            )}
+            <li aria-hidden>›</li>
+            <li aria-current="page">{data.name}</li>
+          </ol>
+        </nav>
+      }
+      title={data.name}
+      description={
+        <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+          {status ? <HealthPill value={status} /> : <Chip>No check-in</Chip>}
+          {selectedLabel && <span className="text-[12.5px] font-semibold text-[var(--ds-ink2)]">{selectedLabel}</span>}
+          <span className="text-[12.5px]">{stage}</span>
+          <span className="text-[12.5px] tabular-nums">{data.avgProgress}% complete</span>
+          <span className="text-[12.5px]">{pmName ? `PM ${pmName}` : "No PM yet"}</span>
+          {data.setup && data.setup.done < data.setup.total && (
+            <span className="text-[12.5px]" title="Delivery gates, documents, team, YouTrack, this week's update: the PM sets these up">
+              Setup {data.setup.done} of {data.setup.total}
+            </span>
+          )}
+        </span>
+      }
+      actions={
+        <>
+          {data.canEdit && <EditProjectDialog project={data} onUpdated={() => router.refresh()} />}
+          <DropdownMenu>
+            <DropdownMenuTrigger aria-label="More project actions" className={cn(SECONDARY, "w-[var(--ds-control-h)] px-0")}>
+              <MoreHorizontal className="size-4" aria-hidden />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[220px] rounded-[12px] bg-[var(--ds-card)] p-1.5 text-[var(--ds-ink)] shadow-[var(--ds-shadow-menu)] ring-1 ring-[var(--ds-line)]">
+              <DropdownMenuItem className={MENU_ITEM} onClick={() => openQWith({ type: "project", targetId: data.id, label: "Ask Q about this project" })}>
+                <QubitLogo square={4} gap={1} radius={1} color="var(--ds-brand)" />
+                Ask Q About This Project
+              </DropdownMenuItem>
+              <DropdownMenuItem className={MENU_ITEM} render={<a href={`/api/reports/export?template=auto&project=${data.id}`} download />}>
+                <FileDown aria-hidden />
+                Export PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem className={MENU_ITEM} onClick={onTeam}>
+                <Users aria-hidden />
+                Team
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {!data.isMember && <RequestToJoinButton projectId={data.id} />}
+          {marketOptions.length > 0 && <FilterSelect label="Market" allLabel="All markets" value={market} options={marketOptions} onChange={onMarket} />}
+          {instanceOptions.length > 0 && <FilterSelect label="Instance" allLabel="The product" value={instance} options={instanceOptions} onChange={onInstance} />}
+          {data.canSetUp && (
+            <Link href="/reports/update?upload=1" className={SECONDARY}>
+              <Upload className="size-3.5" aria-hidden /> Upload Status Report
             </Link>
-          </li>
-          {data.portfolioName && data.portfolioId && (
-            <>
-              <li aria-hidden className="text-[var(--ink5)]">/</li>
-              <li>
-                <Link href={`/portfolios/${data.portfolioId}`} className={`rounded-[4px] transition-colors hover:text-[var(--qink)] ${FOCUS}`}>
-                  {data.portfolioName}
-                </Link>
-              </li>
-            </>
           )}
-          <li aria-hidden className="text-[var(--ink5)]">/</li>
-          <li aria-current="page" className="font-medium text-[var(--qink)]">
-            {data.code}
-          </li>
-        </ol>
-      </nav>
-
-      {/* The facts column keeps at least 320px, so on a phone the team/actions column wraps
-          beneath it instead of squeezing the title into a sliver. */}
-      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-        <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-2">
-          <div className="flex min-h-[36px] flex-wrap items-center gap-2.5">
-            <h1 className="font-heading text-[26px] rv:text-heading-lg font-bold leading-[1.25] tracking-[-.6px] text-[var(--qink)]">{data.name}</h1>
-            {ci && !selectedInstance && <RagChip label="Build" rag={ci.buildRag} />}
-            {ci && !selectedInstance && markets.length > 0 && <RagChip label="In market" rag={ci.marketRag} />}
-            {selectedInstance && <RagChip label={`${selectedInstance.flag ? `${selectedInstance.flag} ` : ""}${selectedInstance.code}`} rag={selectedInstance.rag} />}
-            {selectedNamed && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--qink)] bg-[var(--qink)] px-2.5 py-0.5 text-[11.5px] font-semibold text-[var(--qcard)]" title="Named instance">
-                {selectedNamed.name}
-              </span>
-            )}
-            {data.canEdit && <EditProjectDialog project={data} onUpdated={() => router.refresh()} />}
-          </div>
-          {instanceSwitch}
-          {data.description && (
-            <p className="max-w-[620px] text-[13.5px] rv:text-body-sm leading-[1.5] text-[var(--ink3)]">{data.description}</p>
-          )}
-          <div className="flex flex-wrap items-center gap-x-[18px] gap-y-1.5 text-[12.5px] text-[var(--ink3)]">
-            <span className="flex items-center gap-2" role="img" aria-label={`Progress ${pct}%`}>
-              <span className="h-[6px] w-[160px] max-w-full overflow-hidden rounded-full bg-[var(--wash2)]">
-                <span className="block h-full rounded-full" style={{ width: `${pct}%`, background: `var(${barTok})` }} />
-              </span>
-              <b className="tabular-nums text-[var(--qink)]">{pct}%</b>
-            </span>
-            {tl && (
-              <span className="flex items-center gap-1.5" style={tl.overdue ? { color: "var(--bad)" } : undefined}>
-                <Clock className="size-3.5" aria-hidden /> Due {tl.date} · <b className={tl.overdue ? "" : "text-[var(--qink)]"}>{tl.rel}</b>
-              </span>
-            )}
-            {data.programmeName && <span>{data.programmeName}</span>}
-            {selectedInstance && (
-              <span>
-                {selectedInstance.name} · <b className="text-[var(--qink)]">{selectedInstance.progress}%</b>
-                {selectedInstance.leadName && (
-                  <>
-                    {" "}
-                    · lead <b className="text-[var(--qink)]">{selectedInstance.leadName}</b>
-                  </>
-                )}
-              </span>
-            )}
-            <span>
-              Priority <b className="text-[var(--qink)]">{data.priority}</b>
-            </span>
-            {data.setup && data.setup.done < data.setup.total && (
-              <span title="Delivery gates, documents, team, YouTrack, this week's update — the PM sets these up">
-                Setup <b className="text-[var(--qink)]">{data.setup.done} of {data.setup.total}</b>
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="flex flex-none flex-col items-start gap-2 sm:items-end">
-          <div className="flex items-center gap-2.5">
-            <div className="flex -space-x-1.5" role="group" aria-label={`${members.length} ${members.length === 1 ? "member" : "members"}`}>
-              {members.slice(0, 3).map((m, i) => (
-                <span
-                  key={i}
-                  className="flex size-[30px] items-center justify-center rounded-full border-2 border-[var(--qbg)] text-[10px] font-bold"
-                  style={{ background: "color-mix(in oklab, var(--brand) 14%, transparent)", color: "var(--brand)" }}
-                  title={m.name}
-                >
-                  {initials(m.name)}
-                </span>
-              ))}
-              {extra > 0 && (
-                <span className="flex size-[30px] items-center justify-center rounded-full border-2 border-[var(--qbg)] bg-[var(--wash2)] text-[10px] font-bold text-[var(--ink3)]">
-                  +{extra}
-                </span>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={onTeam}
-              className={`rounded-[4px] text-[12.5px] font-semibold text-[var(--ink3)] transition-colors hover:text-brand ${FOCUS}`}
-            >
-              Team
-            </button>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <AskQAbout type="project" targetId={data.id} label="Ask Q about this project" />
-            {!data.isMember && <RequestToJoinButton projectId={data.id} />}
-            {/* Milestone D — the one-pager; the template follows the project's tracks (handoff §5). */}
-            <a
-              href={`/api/reports/export?template=auto&project=${data.id}`}
-              download
-              className={`inline-flex items-center gap-1.5 rounded-[4px] text-[12.5px] font-semibold text-[var(--ink3)] transition-colors hover:text-brand ${FOCUS}`}
-            >
-              <FileDown className="size-3.5" aria-hidden /> Export PDF
-            </a>
-          </div>
-        </div>
-      </div>
-    </header>
+        </>
+      }
+    />
   );
 }

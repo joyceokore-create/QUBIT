@@ -3,32 +3,34 @@
 import { dispatchTourEvent } from "@/components/tour/tour-events";
 
 import { useEffect, useState } from "react";
-import { CheckCheck, Clock, Send, ShieldAlert } from "lucide-react";
-import { weekRange } from "@/lib/iso-week";
-import { lineTone, TONE_TOKEN } from "@/lib/status-lines";
-import { CARD_GLASS as CARD, CARD_BG, FOCUS, PRIMARY, QUIET, RAG_TOKEN, SECONDARY, ragChipStyle, ragFill } from "@/lib/surface";
+import { Send } from "lucide-react";
+import { Choice, DrawerError, DrawerSection, Field, FIELD_TEXTAREA, Kv } from "@/components/ui/drawer";
+import { Chip, HealthPill } from "@/components/ui/status-pill";
+import { TextButton } from "@/components/ui/text-link";
+import { RAG_TONE, RAG_WORD, RAGS, RATING_REASON_MIN } from "@/components/reports/status-workspace-model";
+import { CARD, PRIMARY, SECONDARY } from "@/lib/surface";
+import { cn } from "@/lib/utils";
 import type { CheckInJson } from "@/components/panels/project-panel-json";
 import type { Rag } from "@/server/health";
 
 /**
- * Milestone A (docs handoff §2) — THE status update: one card, one action. The system
- * drafts the week from the board; the PM reads the bullets, writes one line, picks the
- * Build RAG (computed value pre-selected, an override needs a reason — existing rule) and
- * presses "Confirm & send to Head". Confirm and send are the same act. "Save draft" keeps
- * the line without sending. Replaces the old check-in card's chain rail, "rolls up from"
- * panel and separate send button. Everyone else sees the same card read-only.
+ * Tier 3 (design spec v2, PM "This week") — THE status update: one card, one action. The
+ * key/value panel says where the build is and what QUBIT computes; the PM picks the status
+ * (computed value pre-selected), writes the line for the Head and presses "Confirm & Send to
+ * Head". Choosing a status other than the computed one needs a reason (at least
+ * RATING_REASON_MIN characters — the same rule as Reports › Weekly Update), and the override
+ * expires in 7 days. "Save Draft" keeps it without sending. Everyone else sees it read-only.
  */
 
-const RAGS = ["Green", "Amber", "Red"] as const;
-const LABEL = "text-[11.5px] font-semibold text-[var(--ink4)]";
+const NARRATIVE_MAX = 500;
 
 /** Friday 17:00 local is the weekly deadline (docs/19 M3 — the nudger escalates past it).
  * Computed after mount: QUBIT is used across time zones and SSR would guess the wrong day. */
-function dueState(now: Date): { text: string; tok: "--warn" | "--bad" } {
+function dueText(now: Date): string {
   const dow = now.getDay(); // Sun 0 … Sat 6
-  if (dow >= 1 && dow <= 4) return { text: "Not sent · due Friday 5pm", tok: "--warn" };
-  if (dow === 5 && now.getHours() < 17) return { text: "Not sent · due today 5pm", tok: "--warn" };
-  return { text: "Not sent · was due Friday 5pm", tok: "--bad" };
+  if (dow >= 1 && dow <= 4) return "due Friday 5pm";
+  if (dow === 5 && now.getHours() < 17) return "due today 5pm";
+  return "was due Friday 5pm";
 }
 
 function fmtSent(iso: string) {
@@ -38,13 +40,17 @@ function fmtSent(iso: string) {
 export function StatusUpdateCard({
   projectId,
   ci,
+  buildStatus,
   onChange,
-  onGoToDelivery,
+  onGoToMarkets,
 }: {
   projectId: string;
   ci: CheckInJson;
+  /** "SIT · 3 of 8 gates done" — where the build track stands. */
+  buildStatus: string;
   onChange: (ci: CheckInJson) => void;
-  onGoToDelivery: () => void;
+  /** Opens the market check-ins (the header's Market filter). */
+  onGoToMarkets: () => void;
 }) {
   const sent = Boolean(ci.submittedToHeadAt);
   const confirmed = ci.status === "Confirmed";
@@ -62,15 +68,15 @@ export function StatusUpdateCard({
   useEffect(() => setMounted(true), []);
 
   const overridden = rag !== ci.computedRag;
-  const reasonOk = !overridden || reason.trim().length >= 5;
+  const reasonOk = !overridden || reason.trim().length >= RATING_REASON_MIN;
   const canSend = narrative.trim().length > 0 && reasonOk;
   const activeOverride = Boolean(ci.ragOverride && ci.overrideExpiresAt && new Date(ci.overrideExpiresAt) > new Date());
-  const weekNo = ci.isoWeek.split("-W")[1] ?? ci.isoWeek;
-  const due = mounted ? dueState(new Date()) : null;
+  const weekNo = Number(ci.isoWeek.split("-W")[1] ?? 0) || ci.isoWeek;
+  const checkedIn = ci.markets.filter((m) => m.checkedIn).length;
 
   const body = () => JSON.stringify({ narrative: narrative.trim(), ...(overridden ? { ragOverride: rag, overrideReason: reason.trim() } : {}) });
 
-  /** docs/38 — the product line from this week's market check-ins (worst RAG, one clause
+  /** docs/38 — the product line from this week's market check-ins (worst status, one clause
    * per market), saved as the draft when the week isn't sent yet; prefilled otherwise. */
   const composeFromMarkets = async () => {
     setBusy("compose");
@@ -105,7 +111,7 @@ export function StatusUpdateCard({
       setSavedAt(null);
       dispatchTourEvent("update-sent");
     } else {
-      setError(d?.error?.message ?? "Could not send the update — try again.");
+      setError(d?.error?.message ?? "Could not send the update. Try again.");
     }
   };
 
@@ -123,7 +129,7 @@ export function StatusUpdateCard({
       onChange(d.data as CheckInJson);
       setSavedAt(new Date());
     } else {
-      setError(d?.error?.message ?? "Could not save the draft — try again.");
+      setError(d?.error?.message ?? "Could not save the draft. Try again.");
     }
   };
 
@@ -135,7 +141,7 @@ export function StatusUpdateCard({
     setBusy(null);
     const d = await res.json().catch(() => null);
     if (res.ok && d?.data?.submittedToHeadAt) onChange({ ...ci, submittedToHeadAt: d.data.submittedToHeadAt });
-    else setError(d?.error?.message ?? "Could not send — try again.");
+    else setError(d?.error?.message ?? "Could not send. Try again.");
   };
 
   const startEdit = () => {
@@ -148,226 +154,143 @@ export function StatusUpdateCard({
   };
 
   const editing = mode === "edit" && ci.canConfirm;
+  const chip = sent ? <Chip tone="ok">Sent</Chip> : legacyUnsent ? <Chip tone="warn">Confirmed, not sent</Chip> : <Chip tone="info">Draft</Chip>;
+
+  const kv: [string, React.ReactNode][] = [
+    ["Build Status", buildStatus],
+    ["Computed Status", <HealthPill key="computed" value={ci.computedRag} />],
+  ];
+  if (ci.markets.length > 0) kv.push(["In Market", ci.marketRag ? <HealthPill key="market" value={ci.marketRag} /> : <Chip key="market">No check-in</Chip>]);
+  kv.push(
+    sent && ci.submittedToHeadAt
+      ? ["Sent", mounted ? `${fmtSent(ci.submittedToHeadAt)} · ${ci.confirmedByName ?? "the PM"}` : "Sent"]
+      : ["Sent", mounted ? `Not yet · ${dueText(new Date())}` : "Not yet"],
+  );
 
   return (
-    <section className={`${CARD} overflow-hidden`} style={CARD_BG} aria-labelledby="status-update" data-tour="status-update">
-      {/* Header */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-[var(--hair2)] p-[12px_16px]">
-        <h2 id="status-update" className="font-heading text-[14px] rv:text-heading-xs font-bold text-[var(--qink)]">
-          Status update
+    <section className={cn(CARD, "flex min-w-0 flex-col gap-3 px-[18px] py-4")} style={{ background: "var(--ds-card)" }} aria-labelledby="status-update" data-tour="status-update">
+      <div className="flex items-center justify-between gap-2.5">
+        <h2 id="status-update" className="text-[16px] font-bold text-[var(--ds-ink)]">
+          Status Update · Week {weekNo}
         </h2>
-        <span className="text-[11.5px] text-[var(--ink4)]">
-          Week {weekNo} · {weekRange(new Date())}
-        </span>
-        <span className="ml-auto inline-flex min-h-[26px] items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-semibold" style={sentPillStyle(sent, legacyUnsent, due)}>
-          {sent ? (
-            <>
-              <CheckCheck className="size-3.5" aria-hidden /> Sent to Head · in this week&apos;s roll-up
-            </>
-          ) : legacyUnsent ? (
-            <>
-              <Clock className="size-3.5" aria-hidden /> Confirmed · not yet sent
-            </>
-          ) : due ? (
-            <>
-              <Clock className="size-3.5" aria-hidden /> {due.text}
-            </>
-          ) : null}
-        </span>
+        {chip}
       </div>
 
-      {/* Body */}
-      <div className="grid grid-cols-1 gap-x-6 gap-y-4 p-4 sm:grid-cols-[minmax(0,1fr)_auto]">
-        <div className="flex min-w-0 flex-col gap-3.5">
-          <div>
-            <div className={`mb-1.5 ${LABEL}`}>Drafted from the board</div>
-            <ul className="flex flex-col gap-1">
-              {ci.lines.map((line, i) => (
-                <li key={i} className="flex items-start gap-2 text-[12.5px] leading-[1.5] text-[var(--ink2)]">
-                  <span className="mt-[7px] size-1.5 flex-none rounded-full" style={{ background: `var(${TONE_TOKEN[lineTone(line)]})` }} aria-hidden />
-                  {line}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <label htmlFor="su-line" className={`mb-1.5 block ${LABEL}`}>
-              Your line for leadership
-            </label>
-            {editing ? (
-              <input
-                id="su-line"
-                value={narrative}
-                onChange={(e) => setNarrative(e.target.value)}
-                maxLength={500}
-                placeholder="One line in your own words — what should leadership take away this week?"
-                className={`h-10 w-full rounded-[8px] border border-[var(--input)] bg-background px-3 text-[13px] text-foreground placeholder:text-[var(--ink4)] transition-colors focus:border-brand ${FOCUS}`}
-              />
-            ) : ci.narrative ? (
-              <>
-                <blockquote className="text-[13px] leading-[1.5] text-[var(--qink)]">“{ci.narrative}”</blockquote>
-                {activeOverride && ci.overrideReason && ci.overrideExpiresAt && (
-                  <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-[var(--warn)]">
-                    <ShieldAlert className="size-3" aria-hidden /> Override: {ci.overrideReason} — expires{" "}
-                    {new Date(ci.overrideExpiresAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                  </p>
-                )}
-              </>
-            ) : (
-              <p className="text-[11.5px] text-[var(--ink4)]">Awaiting the PM&apos;s update — computed status shown.</p>
-            )}
-          </div>
+      <Kv rows={kv} />
+
+      <DrawerSection title="Your Status">
+        <Choice
+          label="Your status"
+          rag
+          disabled={!editing}
+          value={editing ? rag : ci.buildRag}
+          options={RAGS.map((r) => ({ value: r, label: RAG_WORD[r], tone: RAG_TONE[r] }))}
+          onChange={(r) => setRag(r)}
+        />
+        {!editing && activeOverride && ci.overrideReason && ci.overrideExpiresAt && (
+          <p className="text-[12px] text-[var(--ds-ink3)]">
+            Changed from {RAG_WORD[ci.computedRag].toLowerCase()}: {ci.overrideReason}. Expires {new Date(ci.overrideExpiresAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}.
+          </p>
+        )}
+      </DrawerSection>
+
+      {editing ? (
+        <>
+          <Field label="Line for the Head" htmlFor={`su-line-${projectId}`}>
+            <textarea
+              id={`su-line-${projectId}`}
+              value={narrative}
+              onChange={(e) => setNarrative(e.target.value)}
+              maxLength={NARRATIVE_MAX}
+              rows={3}
+              placeholder="One line in your own words: what should the Head take away this week?"
+              className={cn(FIELD_TEXTAREA, "resize-y")}
+            />
+          </Field>
+          <Field
+            label="Reason"
+            htmlFor={`su-reason-${projectId}`}
+            hint={
+              overridden
+                ? reasonTouched && !reasonOk
+                  ? <span className="font-semibold text-[var(--ds-bad-text)]">Give at least {RATING_REASON_MIN} characters.</span>
+                  : `Needed because QUBIT calculates ${RAG_WORD[ci.computedRag].toLowerCase()}. At least ${RATING_REASON_MIN} characters; the change expires in 7 days.`
+                : "Only if you change the computed status."
+            }
+          >
+            <textarea
+              id={`su-reason-${projectId}`}
+              value={overridden ? reason : ""}
+              onChange={(e) => setReason(e.target.value)}
+              onBlur={() => setReasonTouched(true)}
+              disabled={!overridden}
+              maxLength={300}
+              rows={2}
+              placeholder="Why the status differs from the computed one"
+              className={cn(FIELD_TEXTAREA, "resize-y disabled:cursor-not-allowed disabled:bg-[var(--ds-surface2)]")}
+            />
+          </Field>
+        </>
+      ) : (
+        <div className="flex flex-col gap-[5px]">
+          <span className="text-[11.5px] font-semibold text-[var(--ds-ink3)]">Line for the Head</span>
+          {ci.narrative ? <p className="text-[13px] leading-[1.55] text-[var(--ds-ink)]">{ci.narrative}</p> : <p className="text-[12.5px] text-[var(--ds-ink3)]">No line yet. The computed status is shown until the PM sends one.</p>}
         </div>
+      )}
 
-        {/* RAG column */}
-        <div className="flex min-w-[150px] flex-col gap-2 sm:w-[170px]">
-          <div className="flex items-baseline justify-between gap-2.5">
-            <span className="text-[11.5px] font-semibold text-[var(--qink)]">Build</span>
-            <span className="text-[10.5px] text-[var(--ink5)]">gates + board</span>
-          </div>
-          {editing ? (
-            <fieldset className="flex flex-col gap-1">
-              <legend className="sr-only">Build status</legend>
-              {RAGS.map((opt) => {
-                const checked = rag === opt;
-                const tok = RAG_TOKEN[opt];
-                return (
-                  <label
-                    key={opt}
-                    className="flex cursor-pointer items-center gap-2 rounded-[8px] border px-2.5 py-1.5 text-[12px] font-semibold transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--brand)] has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-[var(--cardbg)]"
-                    style={
-                      checked
-                        ? { ...ragChipStyle(opt), borderColor: `color-mix(in oklab, var(${tok}) 35%, transparent)` }
-                        : { borderColor: "var(--border)", color: "var(--ink3)" }
-                    }
-                  >
-                    <input type="radio" name={`build-rag-${projectId}`} value={opt} checked={checked} onChange={() => setRag(opt)} className="sr-only" />
-                    <span className="size-2 rounded-full" style={ragFill(opt)} aria-hidden />
-                    {opt}
-                    {opt === ci.computedRag && <span className="ml-auto text-[10px] font-medium text-[var(--ink5)]">computed</span>}
-                  </label>
-                );
-              })}
-              {overridden && (
-                <div className="mt-1 flex flex-col gap-1">
-                  <input
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    onBlur={() => setReasonTouched(true)}
-                    maxLength={300}
-                    aria-label="Why differ from computed?"
-                    placeholder="Why differ from computed?"
-                    className={`h-8 w-full rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12px] text-foreground placeholder:text-[var(--ink4)] focus:border-brand ${FOCUS}`}
-                  />
-                  <span className="text-[10.5px] text-[var(--ink5)]">Required · the override expires in 7 days</span>
-                  {reasonTouched && !reasonOk && <span className="text-[10.5px] text-[var(--bad)]">Give at least 5 characters.</span>}
-                </div>
-              )}
-            </fieldset>
-          ) : (
-            <span className="inline-flex items-center gap-2 rounded-[8px] border px-2.5 py-1.5 text-[12px] font-semibold" style={{ ...ragChipStyle(ci.buildRag), borderColor: `color-mix(in oklab, var(${RAG_TOKEN[ci.buildRag]}) 35%, transparent)` }}>
-              <span className="size-2 rounded-full" style={ragFill(ci.buildRag)} aria-hidden />
-              {ci.buildRag}
-              {ci.buildRag === ci.computedRag && <span className="ml-auto text-[10px] font-medium opacity-80">computed</span>}
-            </span>
+      {ci.markets.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <TextButton onClick={onGoToMarkets} arrow>
+            Market Check-ins ({checkedIn} of {ci.markets.length})
+          </TextButton>
+          {ci.canConfirm && checkedIn > 0 && (
+            <TextButton onClick={() => void composeFromMarkets()}>{busy === "compose" ? "Drafting…" : "Draft the Line from Market Check-ins"}</TextButton>
           )}
-
-          {ci.markets.length > 0 && (
-            <>
-              <div className="mt-2 flex items-baseline justify-between gap-2.5">
-                <span className="text-[11.5px] font-semibold text-[var(--qink)]">In market</span>
-                <span className="text-[10.5px] text-[var(--ink5)]">market check-ins</span>
-              </div>
-              <span
-                className="inline-flex items-center gap-2 rounded-[8px] border px-2.5 py-1.5 text-[12px] font-semibold"
-                style={
-                  ci.marketRag
-                    ? { ...ragChipStyle(ci.marketRag), borderColor: `color-mix(in oklab, var(${RAG_TOKEN[ci.marketRag]}) 35%, transparent)` }
-                    : { color: "var(--ink4)", borderColor: "var(--border)" }
-                }
-              >
-                <span className="size-2 rounded-full" style={ci.marketRag ? ragFill(ci.marketRag) : { background: "var(--ink5)" }} aria-hidden />
-                {ci.marketRag ?? "No check-in"}
-                <span className="ml-auto text-[10px] font-medium opacity-80">{ci.markets.map((m) => m.code).join(", ")}</span>
-              </span>
-              <button type="button" onClick={onGoToDelivery} className={`self-start text-[11.5px] font-semibold text-[var(--brand)] ${FOCUS} rounded-[4px]`}>
-                Edit market check-ins →
-              </button>
-              {ci.canConfirm && (
-                <button
-                  type="button"
-                  onClick={() => void composeFromMarkets()}
-                  disabled={busy !== null || !ci.markets.some((m) => m.checkedIn)}
-                  title={ci.markets.some((m) => m.checkedIn) ? "Worst market RAG and one clause per market, for you to edit and send" : "No market has checked in this week yet"}
-                  className={`self-start text-[11.5px] font-semibold text-[var(--brand)] disabled:text-[var(--ink5)] ${FOCUS} rounded-[4px]`}
-                >
-                  {busy === "compose" ? "Drafting…" : `Draft the line from market check-ins (${ci.markets.filter((m) => m.checkedIn).length} of ${ci.markets.length})`}
-                </button>
-              )}
-              {composed && <span className="text-[10.5px] text-[var(--ink4)]">Drafted from {composed}.</span>}
-            </>
-          )}
+          {composed && <span className="text-[12px] text-[var(--ds-ink3)]">Drafted from {composed}.</span>}
         </div>
-      </div>
+      )}
 
-      {/* Footer */}
+      {error && <DrawerError>{error}</DrawerError>}
+
       {ci.canConfirm && (
-        <div className="flex flex-wrap items-center gap-2.5 border-t border-[var(--hair2)] bg-[var(--card2)] p-[10px_16px]">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {editing ? (
             <>
-              <button type="button" onClick={() => void send()} disabled={busy !== null || !canSend} className={`${PRIMARY} w-full sm:w-auto`}>
-                <Send className="size-3.5" aria-hidden /> {busy === "send" ? "Sending…" : "Confirm & send to Head"}
-              </button>
-              {!confirmed && (
-                <button type="button" onClick={() => void saveDraft()} disabled={busy !== null} className={SECONDARY}>
-                  {busy === "draft" ? "Saving…" : "Save draft"}
-                </button>
-              )}
-              {confirmed && (
-                <button type="button" onClick={() => setMode("view")} className={QUIET}>
+              <span className="mr-auto text-[12px] text-[var(--ds-ink3)]">
+                {savedAt && mounted ? `Draft saved ${savedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}` : `Lands in the Head's week ${weekNo} roll-up.`}
+              </span>
+              {confirmed ? (
+                <button type="button" onClick={() => setMode("view")} className={SECONDARY}>
                   Cancel
                 </button>
+              ) : (
+                <button type="button" onClick={() => void saveDraft()} disabled={busy !== null} className={SECONDARY}>
+                  {busy === "draft" ? "Saving…" : "Save Draft"}
+                </button>
               )}
-              <span className="text-[11px] text-[var(--ink4)]">
-                {savedAt && mounted
-                  ? `Draft saved ${savedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`
-                  : `One step — this lands in the Head's Week ${weekNo} roll-up.`}
-              </span>
+              <button type="button" onClick={() => void send()} disabled={busy !== null || !canSend} className={PRIMARY}>
+                <Send className="size-3.5" aria-hidden /> {busy === "send" ? "Sending…" : "Confirm & Send to Head"}
+              </button>
             </>
           ) : legacyUnsent ? (
             <>
-              <span className="text-[11.5px] text-[var(--ink3)]">
-                Confirmed{ci.confirmedAt && mounted ? ` ${fmtSent(ci.confirmedAt)}` : ""} by {ci.confirmedByName ?? "the PM"} · not yet sent
+              <span className="mr-auto text-[12px] text-[var(--ds-ink3)]">
+                Confirmed{ci.confirmedAt && mounted ? ` ${fmtSent(ci.confirmedAt)}` : ""} by {ci.confirmedByName ?? "the PM"}, not sent yet.
               </span>
-              <button type="button" onClick={() => void resend()} disabled={busy !== null} className={`${PRIMARY} ml-auto`}>
-                <Send className="size-3.5" aria-hidden /> {busy === "resend" ? "Sending…" : "Send to Head"}
+              <button type="button" onClick={startEdit} className={SECONDARY}>
+                Edit &amp; Resend
               </button>
-              <button type="button" onClick={startEdit} className={QUIET}>
-                Edit &amp; resend
+              <button type="button" onClick={() => void resend()} disabled={busy !== null} className={PRIMARY}>
+                <Send className="size-3.5" aria-hidden /> {busy === "resend" ? "Sending…" : "Send to Head"}
               </button>
             </>
           ) : (
-            <>
-              <span className="text-[11.5px] text-[var(--ink3)]">
-                Sent{ci.submittedToHeadAt && mounted ? ` ${fmtSent(ci.submittedToHeadAt)}` : ""} by {ci.confirmedByName ?? "the PM"}.
-              </span>
-              <button type="button" onClick={startEdit} className={`${QUIET} ml-auto`}>
-                Edit &amp; resend
-              </button>
-            </>
-          )}
-          {error && (
-            <p role="alert" className="flex w-full items-center gap-1.5 text-[11px] text-[var(--bad)]">
-              <ShieldAlert className="size-3" aria-hidden /> {error}
-            </p>
+            <button type="button" onClick={startEdit} className={SECONDARY}>
+              Edit &amp; Resend
+            </button>
           )}
         </div>
       )}
     </section>
   );
-}
-
-function sentPillStyle(sent: boolean, legacyUnsent: boolean, due: { tok: "--warn" | "--bad" } | null): React.CSSProperties {
-  const tok = sent ? "--ok" : legacyUnsent ? "--warn" : (due?.tok ?? "--warn");
-  return { color: `var(${tok})`, background: `color-mix(in oklab, var(${tok}) 10%, transparent)` };
 }

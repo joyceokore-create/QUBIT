@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { isoWeekId } from "@/lib/iso-week";
+import { healthWord } from "@/lib/status-words";
 import { CARD_GLASS as CARD, CARD_BG, FOCUS, RAG_TOKEN, ragFill } from "@/lib/surface";
 
 // Past weeks' confirmed status updates for one project — the trail the current week sits
@@ -50,10 +51,10 @@ export function ReportHistory({ projectId }: { projectId: string }) {
   const rows = history ? (expanded ? history : history.slice(0, SHOWN)) : [];
 
   return (
-    <section className={`${CARD} flex flex-col gap-3 p-4`} style={CARD_BG} aria-labelledby="report-history">
+    <section className={`${CARD} flex flex-col gap-3 px-[18px] py-4`} style={CARD_BG} aria-labelledby="report-history">
       <div className="flex flex-wrap items-center gap-3">
-        <h2 id="report-history" className="text-[13px] font-semibold text-foreground">
-          Previous weeks
+        <h2 id="report-history" className="text-[16px] font-bold text-[var(--ds-ink)]">
+          Previous Weeks
         </h2>
         {history !== null && (
           <ol className="flex items-center gap-[3px]" aria-label="Last eight weeks">
@@ -64,8 +65,8 @@ export function ReportHistory({ projectId }: { projectId: string }) {
                   key={w.isoWeek}
                   className="size-[18px] rounded-[4px]"
                   style={w.rag ? ragFill(w.rag) : { border: "1px solid var(--input)", background: "transparent" }}
-                  title={w.rag ? `W${n} ${w.rag}` : `W${n} · no check-in`}
-                  aria-label={w.rag ? `Week ${n}: ${w.rag}` : `Week ${n}: no check-in`}
+                  title={w.rag ? `W${n} · ${healthWord(w.rag).toLowerCase()}` : `W${n} · no check-in`}
+                  aria-label={w.rag ? `Week ${n}: ${healthWord(w.rag).toLowerCase()}` : `Week ${n}: no check-in`}
                 />
               );
             })}
@@ -78,7 +79,7 @@ export function ReportHistory({ projectId }: { projectId: string }) {
             onClick={() => setExpanded((v) => !v)}
             className={`ml-auto rounded-[4px] text-[12px] font-semibold text-[var(--ink3)] transition-colors hover:text-brand ${FOCUS}`}
           >
-            {expanded ? "Show fewer" : "All weeks"}
+            {expanded ? "Show Fewer" : "All Weeks"}
           </button>
         )}
       </div>
@@ -91,7 +92,7 @@ export function ReportHistory({ projectId }: { projectId: string }) {
           {rows.map((r) => (
             <li key={r.id} className="flex items-baseline gap-2.5 border-t border-[var(--hair2)] py-2 text-xs">
               <span className="w-[36px] flex-none font-mono text-[10.5px] font-semibold tabular-nums text-[var(--ink4)]">W{r.isoWeek.split("-W")[1]}</span>
-              <span className="size-2 flex-none translate-y-[-1px] rounded-full" style={{ background: `var(${RAG_TOKEN[r.rag]})` }} role="img" aria-label={`Status ${r.rag}`} />
+              <span className="size-2 flex-none translate-y-[-1px] rounded-full" style={{ background: `var(${RAG_TOKEN[r.rag]})` }} role="img" aria-label={healthWord(r.rag)} />
               <span className="min-w-0 flex-1 text-[var(--ink2)]">{r.narrative ?? "—"}</span>
               {r.submittedToHeadAt && (
                 <span className="flex-none rounded-full px-2 py-0.5 text-[9.5px] font-bold" style={{ color: "var(--ok)", background: "color-mix(in oklab, var(--ok) 10%, transparent)" }}>

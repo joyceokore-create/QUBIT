@@ -14,6 +14,8 @@ import { marketRagsForProject } from "@/server/rollout";
 import { registerOpenCount } from "@/server/project-register";
 import { getProjectSetup } from "@/server/project-setup";
 import { listProjectInstances } from "@/server/project-instances";
+import { getTenantTimeZone } from "@/server/preferences";
+import { buildGateGrid } from "@/lib/gate-grid";
 import { Forbidden } from "@/components/forbidden";
 import { ProjectWorkspace } from "@/components/workspace/project-workspace";
 import type { CheckInJson, ProjectPanelJson } from "@/components/panels/project-panel-json";
@@ -76,7 +78,7 @@ export default async function ProjectWorkspacePage({
   // rollout cell rule, so each track carries this week's RAG (header chip, status card,
   // Markets aside all read the same value).
   const isoWeek = isoWeekId(new Date());
-  const [marketTracks, instanceRows, instanceCheckIns] = await withTenant(ctx, (tx) =>
+  const [marketTracks, instanceRows, instanceCheckIns, template, gateStatuses] = await withTenant(ctx, (tx) =>
     Promise.all([
       marketRagsForProject(tx, id, isoWeek),
       // docs/38 — the markets the product ships to (any org-unit kind) with lead and note.
@@ -85,6 +87,10 @@ export default async function ProjectWorkspacePage({
         select: { orgUnitId: true, status: true, leadUserId: true, note: true, lead: { select: { name: true } }, orgUnit: { select: { code: true, name: true, flag: true, kind: true } } },
       }),
       tx.marketCheckIn.findMany({ where: { projectId: id, isoWeek }, select: { orgUnitId: true, narrative: true, rag: true, isoWeek: true } }),
+      // Tier 3 — the Delivery tab's "Gates by Market" grid: the template's gates and every
+      // track's states (product + each market; module rows excluded), read once here.
+      tx.project.findUnique({ where: { id }, select: { checkpointTemplate: { select: { checkpoints: { select: { id: true, name: true }, orderBy: { orderIndex: "asc" } } } } } }),
+      tx.checkpointStatus.findMany({ where: { projectId: id, moduleId: null }, select: { orgUnitId: true, checkpointId: true, state: true, source: true, updatedAt: true } }),
     ]),
   );
   if (!p) notFound();
@@ -106,6 +112,14 @@ export default async function ProjectWorkspacePage({
       checkIn: checkInByUnit.get(r.orgUnitId) ?? null,
     }))
     .sort((a, b) => a.code.localeCompare(b.code));
+  const gateGrid = buildGateGrid({
+    gates: (template?.checkpointTemplate?.checkpoints ?? []).map((c) => ({ checkpointId: c.id, name: c.name })),
+    statuses: gateStatuses,
+    markets: markets.map((m) => ({ orgUnitId: m.orgUnitId, name: m.name, flag: m.flag })),
+    productLabel: "Product",
+    now: new Date(),
+    timeZone: await getTenantTimeZone(ctx),
+  });
   const initialMarket = sp.market && markets.some((i) => i.orgUnitId === sp.market) ? sp.market : null;
   // docs/38 — the product's named instances with their state per market.
   const [namedInstances, modules] = await Promise.all([listProjectInstances(ctx, id, "instance"), listProjectInstances(ctx, id, "module")]);
@@ -157,6 +171,8 @@ export default async function ProjectWorkspacePage({
   return (
     <ProjectWorkspace
       data={data}
+      gateGrid={gateGrid}
+      pmName={p.leadName}
       members={members.map((m) => ({ name: m.name }))}
       viewerId={ctx.userId}
       initialTab={sp.tab}

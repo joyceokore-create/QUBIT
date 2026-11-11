@@ -11,7 +11,8 @@ import type { CheckpointState, ProjectCheckpoints, TemplateOption } from "@/serv
 // percentage underneath is derived and never typed — that's the whole point of moving
 // the slide's hand-maintained numbers into the system.
 
-import { CHECKPOINT_STATE_TOK as STATE_TOK, CHECKPOINT_STATE_LABEL as STATE_LABEL } from "@/lib/checkpoint-view";
+import { CHECKPOINT_STATE_LABEL as STATE_LABEL } from "@/lib/checkpoint-view";
+import { GateSquare } from "@/components/workspace/gates-by-market";
 
 const STATES: CheckpointState[] = ["NotStarted", "InProgress", "Done", "Blocked"];
 
@@ -111,9 +112,9 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-[9px] font-bold uppercase tracking-[1.2px] text-[var(--ink4)]">Checkpoints</span>
+        <span className="text-[12px] font-semibold text-[var(--ds-ink3)]">Progress</span>
         {data.templateId && (
-          <span className="font-mono text-[9.5px] font-bold tabular-nums text-[var(--qink)]">{data.progress}%</span>
+          <span className="text-[12px] font-semibold tabular-nums text-[var(--ds-ink)]">{data.progress}%</span>
         )}
         {data.canGovern && !data.testingOnly && !orgUnitId ? (
           <span data-tour="gate-template" className="ml-auto inline-flex">
@@ -136,13 +137,13 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
           </span>
         ) : (
           data.templateName && (
-            <span className="ml-auto font-mono text-[9px] uppercase tracking-[.8px] text-[var(--ink5)]">{data.templateName}</span>
+            <span className="ml-auto text-[12px] text-[var(--ds-ink3)]">{data.templateName}</span>
           )
         )}
       </div>
 
       {!data.templateId ? (
-        <p className="text-[11.5px] text-[var(--ink5)]">
+        <p className="text-[12px] text-[var(--ds-ink3)]">
           No checkpoint template yet — progress falls back to the per-subsidiary rollup until one is chosen.
         </p>
       ) : (
@@ -154,12 +155,8 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
           <ol className="flex flex-col">
             {data.rows.map((row) => (
               <li key={row.checkpointId} className="flex items-center gap-2 border-b border-[var(--hair2)] py-1.5 last:border-0">
-                <span
-                  className="size-2 flex-none rounded-full"
-                  style={{ background: `var(${STATE_TOK[row.state]})` }}
-                  aria-hidden
-                />
-                <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink2)]">{row.name}</span>
+                <GateSquare state={row.state} size={12} />
+                <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--ds-ink)]">{row.name}</span>
                 {busy === row.checkpointId && <Loader2 className="size-3 animate-spin text-[var(--ink4)]" />}
                 {row.source && (
                   <span
@@ -196,7 +193,7 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
                     </SelectContent>
                   </Select>
                 ) : (
-                  <span className="font-mono text-[9px] font-bold uppercase tracking-[.6px]" style={{ color: `var(${STATE_TOK[row.state]})` }}>
+                  <span className="text-[12px] font-semibold text-[var(--ds-ink2)]">
                     {STATE_LABEL[row.state]}
                   </span>
                 )}
@@ -256,9 +253,8 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
             </div>
           )}
           {/* Blocked needs a linked blocker (§2) — say so rather than silently rejecting. */}
-          <p className="font-mono text-[8.5px] uppercase tracking-[.8px] text-[var(--ink5)]">
-            % is derived from these states · Blocked needs an open blocker · gates check their
-            requirements before closing
+          <p className="text-[12px] text-[var(--ds-ink3)]">
+            Progress is derived from these states. Blocked needs an open blocker; gates check their requirements before closing.
           </p>
         </>
       )}
