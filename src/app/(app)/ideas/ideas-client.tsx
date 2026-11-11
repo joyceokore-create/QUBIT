@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -100,7 +100,9 @@ export function IdeasClient({
   const router = useRouter();
   const list = useListUrl("ideas", 10);
   const [board, setBoard] = useState<Board>(initial);
-  const [newOpen, setNewOpen] = useState(false);
+  // The top bar's "+ New › Idea" lands here with ?new=1 (UX fidelity F1).
+  const searchParams = useSearchParams();
+  const [newOpen, setNewOpen] = useState(searchParams.get("new") === "1");
   const [pending, setPending] = useState<{ mode: "park" | "merge"; idea: IdeaRow } | null>(null);
   const row = useAdminMutation();
 
@@ -177,8 +179,8 @@ export function IdeasClient({
           <FilterSelect label="Sponsor" allLabel="All sponsors" value={f.sponsor} options={opts.sponsor} onChange={(v) => list.set({ sponsor: v })} />
           <FilterSelect label="Stage" allLabel="All stages" value={f.stage} options={opts.stage} onChange={(v) => list.set({ stage: v })} />
           <FilterSelect label="Submitted" allLabel="Any time" value={f.submitted} options={opts.submitted} onChange={(v) => list.set({ submitted: v })} />
+          <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={() => list.clear([...FILTER_KEYS])} />
         </ListToolbar>
-        <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={() => list.clear([...FILTER_KEYS])} />
       </div>
 
       <TableCard footer={<TableFooter info={info} noun="ideas" onPage={list.setPage} onSize={list.setSize} />}>

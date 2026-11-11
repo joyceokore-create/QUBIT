@@ -23,7 +23,7 @@ interface Hit {
 const KIND_LABEL: Record<Hit["kind"], string> = { page: "Pages", project: "Projects", portfolio: "Portfolios", person: "People" };
 const KIND_ICON = { page: FileText, project: FolderKanban, portfolio: Briefcase, person: User } as const;
 
-export function CommandPalette({ menu }: { menu: MenuGroup[] }) {
+export function CommandPalette({ menu, variant = "dark" }: { menu: MenuGroup[]; variant?: "dark" | "light" }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -124,17 +124,21 @@ export function CommandPalette({ menu }: { menu: MenuGroup[] }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="hidden h-[var(--control-h)] w-[min(280px,28vw)] items-center gap-2 rounded-[var(--control-r)] border border-white/20 bg-white/[.08] px-3 text-left text-[13px] text-white/75 outline-none transition-colors hover:bg-white/[.14] focus-visible:ring-2 focus-visible:ring-white/70 md:flex"
+        className={
+          variant === "light"
+            ? "hidden h-[var(--ds-control-h)] max-w-[420px] flex-1 items-center gap-2 rounded-[var(--ds-radius-control)] border border-[var(--ds-line)] bg-[var(--ds-surface2)] px-2.5 text-left text-[12.5px] text-[var(--ds-ink3)] outline-none transition-colors hover:bg-[var(--ds-card)] focus-visible:ring-2 focus-visible:ring-[var(--ds-brand)] md:flex"
+            : "hidden h-[var(--control-h)] w-[min(280px,28vw)] items-center gap-2 rounded-[var(--control-r)] border border-white/20 bg-white/[.08] px-3 text-left text-[13px] text-white/75 outline-none transition-colors hover:bg-white/[.14] focus-visible:ring-2 focus-visible:ring-white/70 md:flex"
+        }
       >
-        <Search className="size-4 flex-none" aria-hidden />
+        <Search className={variant === "light" ? "size-3.5 flex-none" : "size-4 flex-none"} aria-hidden />
         <span className="flex-1 truncate">Search pages, projects, people</span>
-        <kbd className="rounded border border-white/25 px-1.5 font-sans text-[11px] text-white/70">⌘K</kbd>
+        <kbd className={variant === "light" ? "rounded-[5px] border border-[var(--ds-line)] px-[5px] font-sans text-[10.5px] text-[var(--ds-ink3)]" : "rounded border border-white/25 px-1.5 font-sans text-[11px] text-white/70"}>⌘K</kbd>
       </button>
       <button
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Search"
-        className="grid size-[34px] place-items-center rounded-full text-white/85 hover:bg-white/10 md:hidden"
+        className={variant === "light" ? "grid size-[var(--ds-control-h)] place-items-center rounded-[var(--ds-radius-control)] border border-[var(--ds-line)] bg-[var(--ds-card)] text-[var(--ds-ink2)] md:hidden" : "grid size-[34px] place-items-center rounded-full text-white/85 hover:bg-white/10 md:hidden"}
       >
         <Search className="size-[18px]" aria-hidden />
       </button>

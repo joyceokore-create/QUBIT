@@ -56,7 +56,7 @@ describe("UX6 — Custom reports only", () => {
   });
 
   it("has exactly one tab: Custom reports", () => {
-    expect(CUSTOM_ONLY_TABS).toEqual([{ key: "custom", label: "Custom reports" }]);
+    expect(CUSTOM_ONLY_TABS).toEqual([{ key: "custom", label: "Custom Reports" }]);
   });
 });
 

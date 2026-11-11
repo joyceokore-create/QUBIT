@@ -34,6 +34,8 @@ export interface PmToday {
   projects: PmTodayProject[];
   overdueMilestones: { id: string; name: string; dueDate: Date; projectId: string; projectName: string }[];
   milestonesNext7: number;
+  /** Milestones due on each of the next 7 days, today first (KPI bars). */
+  milestonesNext7PerDay: number[];
   blockers: {
     id: string;
     description: string;
@@ -171,7 +173,7 @@ export function buildTodo(t: PmToday, now: Date): TodoItem[] {
       items.push({
         id: `rk-${p.id}-${i}`,
         kind: "risk",
-        title: `Red: ${r.title}`,
+        title: `Red risk: ${r.title}`,
         sub: `${p.name}${r.owner && r.owner !== "—" ? ` · ${r.owner}` : ""}`,
         chip: { tone: "bad", label: "Red" },
         when: "",
@@ -184,28 +186,28 @@ export function buildTodo(t: PmToday, now: Date): TodoItem[] {
   return items.sort((a, b) => a.rank - b.rank || a.title.localeCompare(b.title));
 }
 
-export const TODO_TABS = ["all", "overdue", "updates", "gates", "disputes", "risks", "blockers"] as const;
+// Design spec v2 (PM › Today): All · Overdue · Gates · Updates · Risks. A status dispute is
+// part of the weekly update, so it sits under Updates; a team blocker under Risks.
+export const TODO_TABS = ["all", "overdue", "gates", "updates", "risks"] as const;
 export type TodoTab = (typeof TODO_TABS)[number];
-const TAB_KIND: Record<Exclude<TodoTab, "all">, TodoKind> = {
-  overdue: "overdue",
-  updates: "update",
-  gates: "gate",
-  disputes: "dispute",
-  risks: "risk",
-  blockers: "blocker",
+const TAB_KINDS: Record<Exclude<TodoTab, "all">, TodoKind[]> = {
+  overdue: ["overdue"],
+  gates: ["gate"],
+  updates: ["update", "dispute"],
+  risks: ["risk", "blocker"],
 };
-const TAB_LABEL: Record<TodoTab, string> = { all: "All", overdue: "Overdue", updates: "Updates", gates: "Gates", disputes: "Disputes", risks: "Risks", blockers: "Blockers" };
+const TAB_LABEL: Record<TodoTab, string> = { all: "All", overdue: "Overdue", gates: "Gates", updates: "Updates", risks: "Risks" };
 
 export function todoTabs(items: TodoItem[]): { key: TodoTab; label: string; count: number }[] {
   return TODO_TABS.map((key) => ({
     key,
     label: TAB_LABEL[key],
-    count: key === "all" ? items.length : items.filter((i) => i.kind === TAB_KIND[key]).length,
+    count: key === "all" ? items.length : items.filter((i) => TAB_KINDS[key].includes(i.kind)).length,
   }));
 }
 
 export function itemsForTab(items: TodoItem[], tab: TodoTab): TodoItem[] {
-  return tab === "all" ? items : items.filter((i) => i.kind === TAB_KIND[tab]);
+  return tab === "all" ? items : items.filter((i) => TAB_KINDS[tab].includes(i.kind));
 }
 
 export interface PmKpis {
@@ -215,6 +217,8 @@ export interface PmKpis {
   overdueMilestones: number;
   overdueTasks: number;
   updatesSent: number;
+  updatesDrafted: number;
+  dueNext7PerDay: number[];
 }
 
 export function pmKpis(t: PmToday): PmKpis {
@@ -232,5 +236,7 @@ export function pmKpis(t: PmToday): PmKpis {
     overdueMilestones: t.overdueMilestones.length,
     overdueTasks: t.projects.reduce((s, p) => s + p.overdueTasks, 0),
     updatesSent: t.projects.filter((p) => p.update === "sent").length,
+    updatesDrafted: t.projects.filter((p) => p.update === "draft" || p.update === "confirmed").length,
+    dueNext7PerDay: t.milestonesNext7PerDay ?? [],
   };
 }

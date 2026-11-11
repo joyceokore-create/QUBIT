@@ -85,8 +85,8 @@ export function PeopleDirectory({ people, timeZone }: { people: DirectoryPerson[
           <FilterSelect label="Department" allLabel="All departments" value={f.department} options={opts.department} onChange={(v) => list.set({ department: v })} />
           {(hasTeams || f.team) && <FilterSelect label="Team" allLabel="All teams" value={f.team} options={opts.team} onChange={(v) => list.set({ team: v })} />}
           <FilterSelect label="Workload" allLabel="Any workload" value={f.workload} options={opts.workload} onChange={(v) => list.set({ workload: v })} />
+          <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={() => list.clear([...FILTER_KEYS])} />
         </ListToolbar>
-        <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={() => list.clear([...FILTER_KEYS])} />
       </div>
 
       <TableCard footer={<TableFooter info={info} noun="people" onPage={list.setPage} onSize={list.setSize} />}>

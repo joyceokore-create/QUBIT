@@ -47,6 +47,7 @@ import { SetupNudge } from "@/components/tour/setup-nudge";
 import { AskQButton } from "./ask-q-button";
 import { NotificationBell } from "./notification-bell";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { NewMenu, type NewMenuItem } from "./new-menu";
 
 interface RiverbankShellProps {
   canAccessAdmin: boolean;
@@ -70,6 +71,8 @@ interface RiverbankShellProps {
     options: ViewRole[];
     showSwitch: boolean;
     superAdmin: boolean;
+    /** UX fidelity F1: what the top bar's "+ New" offers (permission-filtered on the server). */
+    create?: NewMenuItem[];
   };
   children: React.ReactNode;
 }
@@ -255,13 +258,13 @@ export function RiverbankShell({
           "fixed left-0 top-0 z-50 flex h-full flex-col text-white transition-[width,transform] duration-300 [transition-timing-function:cubic-bezier(.22,1,.36,1)]",
           "motion-reduce:transition-none",
           mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
-          "w-64",
-          open ? "md:w-64" : "md:w-20",
+          newNav ? "w-[var(--ds-sidebar-w)]" : "w-64",
+          open ? (newNav ? "md:w-[var(--ds-sidebar-w)]" : "md:w-64") : "md:w-20",
         ].join(" ")}
-        style={{ background: "var(--rv-sidebar)" }}
+        style={{ background: newNav ? "var(--ds-side)" : "var(--rv-sidebar)" }}
       >
         {/* Header: logo + collapse/close toggle */}
-        <div className={`flex h-[62px] flex-shrink-0 items-center border-b border-white/10 px-4 ${labelled ? "justify-between" : "justify-center"}`}>
+        <div className={`flex flex-shrink-0 items-center px-4 ${newNav ? "h-[var(--ds-topbar-h)]" : "h-[62px] border-b border-white/10"} ${labelled ? "justify-between" : "justify-center"}`}>
           {labelled && (
             <Link href="/dashboard" className="flex items-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-white/70" onClick={() => setMobileOpen(false)}>
               <BrandLogo variant="white" className="h-7 w-auto" />
@@ -284,15 +287,15 @@ export function RiverbankShell({
 
         {/* UX3 (D6): the role's menu, grouped by job; items the person can't open are hidden. */}
         {newNav && (
-          <nav aria-label="Main" className="flex-1 overflow-y-auto p-3">
+          <nav aria-label="Main" className="flex-1 overflow-y-auto px-3 pb-3 pt-4">
             {newNav.groups.map((g) => (
-              <div key={g.label} className="mb-3 last:mb-0">
+              <div key={g.label} className="mb-4 last:mb-0">
                 {labelled ? (
-                  <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-[.08em] text-white/60">{g.label}</p>
+                  <p className="px-2.5 pb-1 text-[10.5px] font-bold uppercase tracking-[.09em] text-[var(--ds-side-dim)]">{g.label}</p>
                 ) : (
                   <div className="mx-auto my-1.5 h-px w-8 bg-white/10" aria-hidden />
                 )}
-                <ul className="space-y-1">
+                <ul className="flex flex-col gap-0.5">
                   {g.items.map((item) => {
                     const active = item.key === activeMenu;
                     const Icon = MENU_ICONS[item.icon];
@@ -310,17 +313,21 @@ export function RiverbankShell({
                           title={labelled ? undefined : item.label}
                           onClick={() => setMobileOpen(false)}
                           className={[
-                            "relative flex items-center rounded-lg transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white/70",
-                            labelled ? "gap-3 px-3 py-2" : "mx-auto h-11 w-11 justify-center",
-                            active ? "font-semibold text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
+                            "relative flex items-center rounded-[10px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white/70",
+                            labelled ? "h-9 gap-2.5 px-2.5" : "mx-auto h-11 w-11 justify-center",
+                            active ? "font-semibold text-white" : "font-medium text-[var(--ds-side-ink)] hover:bg-white/10 hover:text-white",
                           ].join(" ")}
-                          style={active ? { background: "var(--rv-active)" } : undefined}
+                          style={active ? { background: "var(--ds-side-active)" } : undefined}
                         >
-                          <Icon className="size-[18px] flex-shrink-0" strokeWidth={1.75} aria-hidden />
-                          {labelled && <span className="flex-1 text-[13.5px] font-medium">{item.label}</span>}
+                          <Icon className="size-4 flex-shrink-0" strokeWidth={1.75} aria-hidden />
+                          {labelled && <span className="flex-1 text-[13px]">{item.label}</span>}
                           {count !== null &&
                             (labelled ? (
-                              <span className="rounded-full bg-white/15 px-1.5 text-[11px] font-bold leading-[18px] text-white">{count}</span>
+                              <span
+                                className={`grid h-[18px] min-w-5 place-items-center rounded-full px-1.5 text-[10.5px] font-bold ${active ? "bg-white text-[var(--ds-side-active)]" : "bg-[var(--ds-side-count)] text-white"}`}
+                              >
+                                {count}
+                              </span>
                             ) : (
                               <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-white" aria-label={`${count} waiting`} />
                             ))}
@@ -423,28 +430,72 @@ export function RiverbankShell({
         {/* User footer — identity only. DM1.73: the ONE account menu (with sign-out and
             tenant switching) is the header chip; the sidebar's duplicate menu and the
             standalone sign-out row were dropped. */}
-        <div className="flex-shrink-0 border-t border-white/10 p-3">
-          <div className={`flex items-center gap-2.5 ${labelled ? "" : "justify-center"}`}>
-            <span
-              aria-hidden
-              className="flex size-[34px] flex-none items-center justify-center rounded-full border border-[var(--w10)] text-[11.5px] font-bold text-[var(--ink3)]"
-              style={{ background: "linear-gradient(135deg, var(--av1), var(--av2))" }}
-            >
-              {getInitials(userName)}
-            </span>
-            {labelled && (
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] rv:text-body-sm font-semibold">{userName || "—"}</p>
-                <p className="truncate text-[11px] rv:text-body-xs text-white/60">{userEmail}</p>
-              </div>
-            )}
+        {newNav ? (
+          <div className="mx-3 flex-shrink-0 border-t border-[var(--ds-side-rule)] px-2 pb-3 pt-2.5">
+            <div className={`flex items-center gap-2.5 ${labelled ? "" : "justify-center"}`}>
+              <span aria-hidden className="grid size-[30px] flex-none place-items-center rounded-full bg-white/[.18] text-[11px] font-bold text-white">
+                {getInitials(userName)}
+              </span>
+              {labelled && (
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[12.5px] font-semibold text-white">{userName || "Account"}</p>
+                  <p className="truncate text-[11.5px] text-[var(--ds-side-dim)]">{userRole}</p>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex-shrink-0 border-t border-white/10 p-3">
+            <div className={`flex items-center gap-2.5 ${labelled ? "" : "justify-center"}`}>
+              <span
+                aria-hidden
+                className="flex size-[34px] flex-none items-center justify-center rounded-full border border-[var(--w10)] text-[11.5px] font-bold text-[var(--ink3)]"
+                style={{ background: "linear-gradient(135deg, var(--av1), var(--av2))" }}
+              >
+                {getInitials(userName)}
+              </span>
+              {labelled && (
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] rv:text-body-sm font-semibold">{userName || "—"}</p>
+                  <p className="truncate text-[11px] rv:text-body-xs text-white/60">{userEmail}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </aside>
 
       {/* Content column, offset by the sidebar on desktop */}
-      <div className={`flex min-h-screen flex-col transition-[margin] duration-300 motion-reduce:transition-none ${open ? "md:ml-64" : "md:ml-20"}`}>
-        {/* Top header */}
+      <div className={`flex min-h-screen flex-col transition-[margin] duration-300 motion-reduce:transition-none ${open ? (newNav ? "md:ml-[var(--ds-sidebar-w)]" : "md:ml-64") : "md:ml-20"}`}>
+        {newNav ? (
+          /* Design spec v2 top bar: white, 58px — search, "+ New", Ask Q, bell, account. */
+          <header className="sticky top-0 z-30 flex h-[var(--ds-topbar-h)] items-center gap-2.5 border-b border-[var(--ds-line)] bg-[var(--ds-card)] px-4 md:px-[22px]">
+            <button
+              type="button"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Open menu"
+              className="-ml-1 grid size-[var(--ds-control-h)] place-items-center rounded-[var(--ds-radius-control)] text-[var(--ds-ink2)] hover:bg-[var(--ds-surface2)] md:hidden"
+            >
+              <Menu className="size-5" />
+            </button>
+            <CommandPalette menu={newNav.groups} variant="light" />
+            <span className="flex-1" aria-hidden />
+            <SetupNudge />
+            {newNav.create && newNav.create.length > 0 && <NewMenu items={newNav.create} />}
+            <AskQButton variant="secondary" />
+            <NotificationBell variant="light" />
+            <UserMenu
+              variant="light"
+              name={userName}
+              email={userEmail}
+              role={userRole}
+              tenants={tenants}
+              canSwitchTenant={canSwitchTenant}
+              currentSlug={tenantSlug}
+              uiMode={uiMode}
+            />
+          </header>
+        ) : (
         <header
           className="sticky top-0 z-30 flex h-[62px] items-center gap-3 px-4 text-white shadow-sm md:px-6"
           style={{ background: "var(--rv-topbar)" }}
@@ -460,7 +511,6 @@ export function RiverbankShell({
           <h1 className="min-w-0 flex-1 truncate font-heading rv:text-heading-sm text-[17px] font-bold tracking-[-.3px]">
             {tenantName}
           </h1>
-          {newNav && <CommandPalette menu={newNav.groups} />}
           <div className="flex items-center gap-1.5">
             <SetupNudge />
             <NotificationBell />
@@ -478,6 +528,7 @@ export function RiverbankShell({
             <AskQButton />
           </div>
         </header>
+        )}
 
         <main id="main-content" className="flex flex-1 flex-col">
           {children}

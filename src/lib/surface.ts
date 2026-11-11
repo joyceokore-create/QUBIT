@@ -4,14 +4,15 @@
 // Pure strings/maps — safe in server and client components alike.
 import type { Rag } from "@/server/health";
 
-/** The standard card surface. Pair with `CARD_BG` for the filled variant. */
-export const CARD = "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)]";
+/** The standard card surface (design spec v2, docs/08): radius 18, the --ds-bd hairline and
+ * the soft two-layer --ds-shadow. Pair with `CARD_BG` for the fill. */
+export const CARD = "rounded-[var(--ds-radius-card)] border border-[var(--ds-bd)] shadow-[var(--ds-shadow)]";
 
-/** The glass variant used by the dashboard's floating panels. */
-export const CARD_GLASS = `${CARD} backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]`;
+/** Legacy alias kept for the classic dashboard's floating panels (no glass in spec v2). */
+export const CARD_GLASS = CARD;
 
 /** Inline background for a card — `style={CARD_BG}` (a var, so themes still drive it). */
-export const CARD_BG = { background: "var(--cardbg)" } as const;
+export const CARD_BG = { background: "var(--ds-card)" } as const;
 
 /** RAG → CSS custom-property name. The one mapping; everything else derives from it. */
 export const RAG_TOKEN: Record<string, string> = { Green: "--ok", Amber: "--warn", Red: "--bad" };
@@ -40,33 +41,39 @@ export function ragTokenOf(rag: Rag): string {
 /** The one keyboard-focus treatment for controls on a card: brand ring, offset off the
  * card surface. Append to any button/link/input className. */
 export const FOCUS =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--cardbg)]";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-brand)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--ds-card)]";
 
-// ── The three button voices and the tab look (UX plan U1/U3), shared by the workspace
-// status card, the /reports views, admin and every new surface. One source so the
-// vocabulary can't drift. Buttons use the control tokens: 36px tall, 10px radius.
-export const PRIMARY = `inline-flex h-[var(--control-h)] items-center justify-center gap-2 rounded-[var(--control-r)] bg-[var(--brand)] px-4 text-[13px] font-bold text-[var(--onbrand)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`;
-export const SECONDARY = `inline-flex h-[var(--control-h)] items-center justify-center gap-2 rounded-[var(--control-r)] border border-[var(--input)] bg-background px-3.5 text-[13px] font-semibold text-[var(--ink2)] transition-colors hover:text-[var(--qink)] disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`;
-export const QUIET = `rounded-[6px] px-1.5 py-1 text-[12.5px] font-semibold text-[var(--ink3)] transition-colors hover:text-brand ${FOCUS}`;
+// ── Buttons, tabs, inputs and table headers — design spec v2 (docs/08 § Components).
+// Controls are 36px with a 10px radius; compact (in-row) controls 28px / 8px. The primary
+// keeps the brand fill in both themes (deviation 4) and darkens on hover, never lightens.
+const PRIMARY_FILL = "bg-[var(--ds-brand)] text-[var(--ds-on-brand)] hover:bg-[color-mix(in_oklab,var(--ds-brand)_86%,black)]";
+export const PRIMARY = `inline-flex h-[var(--ds-control-h)] items-center justify-center gap-1 whitespace-nowrap rounded-[var(--ds-radius-control)] px-3.5 text-[12.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${PRIMARY_FILL} ${FOCUS}`;
+export const SECONDARY = `inline-flex h-[var(--ds-control-h)] items-center justify-center gap-1 whitespace-nowrap rounded-[var(--ds-radius-control)] border border-[var(--ds-line)] bg-[var(--ds-card)] px-3.5 text-[12.5px] font-semibold text-[var(--ds-ink)] transition-colors hover:bg-[var(--ds-surface2)] disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`;
+export const QUIET = `rounded-[6px] px-1.5 py-1 text-[12.5px] font-semibold text-[var(--ds-ink3)] transition-colors hover:text-[var(--ds-brand-ink)] ${FOCUS}`;
 
 /**
  * U1 tabs: no full-width line under the strip. Each tab is its own block with rounded top
  * corners; the active one gets a fill and a 2px brand border under THAT tab only. The fill
- * is the card colour when the strip sits on the grey page, and --surface-2 when it sits
- * inside a white card (`TAB_ACTIVE_ON_CARD`). Inactive tabs are plain text.
+ * is the card colour when the strip sits on the grey page, and --ds-surface2 inside a card
+ * (`TAB_ACTIVE_ON_CARD`). The active tab's count turns brand-wash / brand-ink.
  */
 export const TABS_ROW = "flex flex-wrap items-end gap-1";
-export const TAB = `relative inline-flex h-[var(--control-h)] flex-none items-center gap-2 whitespace-nowrap rounded-t-[var(--control-r)] border-b-2 border-transparent px-3.5 text-[13px] font-semibold text-[var(--ink3)] transition-colors hover:text-[var(--qink)] ${FOCUS}`;
-export const TAB_ACTIVE = "border-[var(--brand)] bg-[var(--qcard)] text-[var(--qink)]";
-export const TAB_ACTIVE_ON_CARD = "border-[var(--brand)] bg-[var(--surface-2)] text-[var(--qink)]";
-/** The count after a tab label ("Waiting 3"). */
-export const TAB_COUNT = "inline-flex min-w-[20px] items-center justify-center rounded-full bg-[var(--surface-2)] px-1.5 text-[11px] font-bold tabular-nums text-[var(--ink3)]";
+export const TAB = `relative inline-flex h-[var(--ds-control-h)] flex-none items-center gap-1.5 whitespace-nowrap rounded-t-[var(--ds-radius-control)] border-b-2 border-transparent px-3.5 text-[12.5px] font-semibold text-[var(--ds-ink3)] transition-colors hover:text-[var(--ds-ink)] ${FOCUS}`;
+const TAB_COUNT_ON = "[&_.tab-count]:bg-[var(--ds-brand-wash)] [&_.tab-count]:text-[var(--ds-brand-ink)]";
+export const TAB_ACTIVE = `border-[var(--ds-brand)] bg-[var(--ds-card)] text-[var(--ds-ink)] ${TAB_COUNT_ON}`;
+export const TAB_ACTIVE_ON_CARD = `border-[var(--ds-brand)] bg-[var(--ds-surface2)] text-[var(--ds-ink)] ${TAB_COUNT_ON}`;
+/** The count after a tab label ("Waiting 3"); turns brand-wash inside an active tab. */
+export const TAB_COUNT = "tab-count inline-flex min-w-[20px] items-center justify-center rounded-full bg-[var(--ds-mutedw)] px-1.5 text-[10.5px] font-bold leading-[17px] tabular-nums text-[var(--ds-ink2)]";
 
 /** U3 — the compact 28px button, ONLY for actions inside table rows and list items. */
-export const COMPACT = `inline-flex h-[var(--control-h-compact)] items-center justify-center gap-1.5 whitespace-nowrap rounded-[8px] border border-[var(--input)] bg-[var(--qcard)] px-2.5 text-[12px] font-semibold text-[var(--ink2)] transition-colors hover:text-[var(--qink)] disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`;
-/** The compact primary (an in-row "Confirm & send"). */
-export const COMPACT_PRIMARY = `inline-flex h-[var(--control-h-compact)] items-center justify-center gap-1.5 whitespace-nowrap rounded-[8px] bg-[var(--brand)] px-2.5 text-[12px] font-bold text-[var(--onbrand)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`;
+export const COMPACT = `inline-flex h-[var(--ds-control-h-compact)] items-center justify-center gap-1 whitespace-nowrap rounded-[var(--ds-radius-compact)] border border-[var(--ds-line)] bg-[var(--ds-card)] px-[11px] text-[12px] font-semibold text-[var(--ds-ink)] transition-colors hover:bg-[var(--ds-surface2)] disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`;
+/** The compact primary (an in-row "Confirm & Send"). */
+export const COMPACT_PRIMARY = `inline-flex h-[var(--ds-control-h-compact)] items-center justify-center gap-1 whitespace-nowrap rounded-[var(--ds-radius-compact)] px-[11px] text-[12px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${PRIMARY_FILL} ${FOCUS}`;
 /** U3 — a text input / select at the control size and radius. */
-export const INPUT = `h-[var(--control-h)] rounded-[var(--control-r)] border border-[var(--input)] bg-background px-3 text-[13px] text-foreground placeholder:text-[var(--ink4)] focus:border-brand ${FOCUS}`;
-/** The standard list-table header row (sentence-case words in small caps, never mono). */
-export const THEAD = "border-b border-[var(--border)] text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--ink3)]";
+export const INPUT = `h-[var(--ds-control-h)] rounded-[var(--ds-radius-control)] border border-[var(--ds-line)] bg-[var(--ds-card)] px-3 text-[13px] text-[var(--ds-ink)] placeholder:text-[var(--ds-placeholder)] focus:border-[var(--ds-brand)] ${FOCUS}`;
+/** Table header row (put on <thead>): a grey band with rounded ends, 11px/700 Title Case
+ * labels — not uppercase (design `.sgt`). */
+export const THEAD =
+  "[&_th]:bg-[var(--ds-surface2)] [&_th]:px-2.5 [&_th]:py-2 [&_th]:text-left [&_th]:text-[11px] [&_th]:font-bold [&_th]:tracking-[.03em] [&_th]:text-[var(--ds-ink3)] [&_th:first-child]:rounded-l-[8px] [&_th:last-child]:rounded-r-[8px]";
+/** Body rows of a spec table: 10px cells, dotted rules, none after the last row. */
+export const TROW = "[&>td]:border-b [&>td]:border-dotted [&>td]:border-[var(--ds-line)] [&>td]:p-2.5 [&>td]:align-middle last:[&>td]:border-b-0";

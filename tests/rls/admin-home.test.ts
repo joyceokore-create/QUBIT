@@ -87,11 +87,15 @@ describe("UX11 Admin home", () => {
     expect(rbAfter.attention.suspendedInTeams).toBe(rbBefore.attention.suspendedInTeams);
     expect(rbAfter.attention.expiredInvites).toBe(rbBefore.attention.expiredInvites);
     expect(rbAfter.kpis.roleChanges.granted).toBe(rbBefore.kpis.roleChanges.granted);
+    // UX fidelity F1: the KPI spark series is tenant-scoped too.
+    expect(rbAfter.kpis.roleChanges.perDay).toEqual(rbBefore.kpis.roleChanges.perDay);
     expect(rbAfter.kpis.activeUsers.active).toBe(rbBefore.kpis.activeUsers.active);
 
     expect(bAfter.attention.suspendedInTeams).toBe(bBefore.attention.suspendedInTeams + 1);
     expect(bAfter.attention.expiredInvites).toBe(bBefore.attention.expiredInvites + 1);
     expect(bAfter.kpis.roleChanges.granted).toBe(bBefore.kpis.roleChanges.granted + 1);
+    expect(bAfter.kpis.roleChanges.perDay.reduce((a, n) => a + n, 0)).toBeGreaterThan(bBefore.kpis.roleChanges.perDay.reduce((a, n) => a + n, 0));
+    expect(bAfter.kpis.roleChanges.perDay).toHaveLength(7);
     expect(bAfter.kpis.activeUsers.active).toBe(bBefore.kpis.activeUsers.active - 1); // b1 suspended
 
     // The feed: B's grant shows for B, never for Riverbank.

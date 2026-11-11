@@ -69,8 +69,8 @@ export function QualityByProject({ rows: all }: { rows: QualityRow[] }) {
             options={[{ value: "testing", label: "In testing" }]}
             onChange={(v) => list.set({ [FILTER_KEY]: v })}
           />
+          <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={() => list.clear([FILTER_KEY])} />
         </ListToolbar>
-        <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={() => list.clear([FILTER_KEY])} />
       </div>
 
       <TableCard footer={<TableFooter info={info} noun="projects" onPage={list.setPage} onSize={list.setSize} />}>

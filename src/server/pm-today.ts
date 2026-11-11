@@ -36,7 +36,7 @@ export async function getPmToday(ctx: TenantContext, cockpit: CockpitProject[], 
               orderBy: { dueDate: "asc" },
               take: 100,
             }),
-            tx.projectMilestone.count({ where: { projectId: { in: ids }, status: { not: "Done" }, dueDate: { gte: todayStart, lt: weekAhead } } }),
+            tx.projectMilestone.findMany({ where: { projectId: { in: ids }, status: { not: "Done" }, dueDate: { gte: todayStart, lt: weekAhead } }, select: { dueDate: true }, take: 500 }),
             tx.checkIn.findMany({
               where: { projectId: { in: ids }, isoWeek: isoWeekId(now) },
               select: { projectId: true, status: true, submittedToHeadAt: true },
@@ -60,7 +60,7 @@ export async function getPmToday(ctx: TenantContext, cockpit: CockpitProject[], 
           ]);
           return { overdue, upcoming, checkIns, blockers, members };
         })
-      : Promise.resolve({ overdue: [], upcoming: 0, checkIns: [], blockers: [], members: [] }),
+      : Promise.resolve({ overdue: [], upcoming: [] as { dueDate: Date | null }[], checkIns: [], blockers: [], members: [] }),
     ids.length ? listWorkload(ctx, now).catch(() => []) : Promise.resolve([]),
   ]);
 
@@ -95,7 +95,12 @@ export async function getPmToday(ctx: TenantContext, cockpit: CockpitProject[], 
     timeZone,
     projects,
     overdueMilestones: data.overdue.map((m) => ({ id: m.id, name: m.name, dueDate: m.dueDate!, projectId: m.projectId, projectName: name.get(m.projectId) ?? "" })),
-    milestonesNext7: data.upcoming,
+    milestonesNext7: data.upcoming.length,
+    // KPI bars: milestones due on each of the next 7 tenant-local days (today first).
+    milestonesNext7PerDay: Array.from({ length: 7 }, (_, i) => {
+      const k = dayKey(new Date(now.getTime() + i * 86_400_000), timeZone);
+      return data.upcoming.filter((m) => m.dueDate && dayKey(m.dueDate, timeZone) === k).length;
+    }),
     blockers: data.blockers.map((b) => ({
       id: b.id,
       description: b.description,

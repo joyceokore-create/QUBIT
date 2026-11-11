@@ -37,8 +37,8 @@ export function PastUpdates({ rows, timeZone }: { rows: PastUpdateRow[]; timeZon
           <SearchField value={list.q} onChange={(v) => list.set({ q: v })} placeholder="Search your updates" label="Search past updates" />
           <FilterSelect label="Project" allLabel="All projects" value={project} options={projects.map(([value, label]) => ({ value, label }))} onChange={(v) => list.set({ puproject: v })} />
           <FilterSelect label="Week" allLabel="All weeks" value={week} options={weeks.map((w) => ({ value: w, label: `Week ${w.split("-W")[1]} · ${w.split("-W")[0]}` }))} onChange={(v) => list.set({ puweek: v })} />
+          <FilterChips filters={chips} onRemove={(k) => list.set({ [k]: null })} onClearAll={() => list.clear(["puproject", "puweek"])} />
         </ListToolbar>
-        <FilterChips filters={chips} onRemove={(k) => list.set({ [k]: null })} onClearAll={() => list.clear(["puproject", "puweek"])} />
       </div>
       <TableCard footer={<TableFooter info={info} noun="updates" onPage={list.setPage} onSize={list.setSize} />}>
         {page.length === 0 ? (

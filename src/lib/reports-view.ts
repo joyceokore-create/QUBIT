@@ -28,19 +28,19 @@ export function resolveReportsView(roles: string[], requested?: string | null): 
 
 export const TABS: Record<ReportsView, { key: string; label: string }[]> = {
   pm: [
-    { key: "week", label: "This week" },
+    { key: "week", label: "This Week" },
     { key: "history", label: "History" },
-    { key: "custom", label: "Custom reports" },
+    { key: "custom", label: "Custom Reports" },
   ],
   head: [
-    { key: "week", label: "This week" },
-    { key: "rollups", label: "Past roll-ups" },
-    { key: "custom", label: "Custom reports" },
+    { key: "week", label: "This Week" },
+    { key: "rollups", label: "Past Roll-Ups" },
+    { key: "custom", label: "Custom Reports" },
   ],
   exec: [
-    { key: "week", label: "This week" },
-    { key: "past", label: "Past weeks" },
-    { key: "custom", label: "Custom reports" },
+    { key: "week", label: "This Week" },
+    { key: "past", label: "Past Weeks" },
+    { key: "custom", label: "Custom Reports" },
   ],
 };
 
@@ -109,4 +109,4 @@ export function customReportsOnly(ctx: TenantContext): boolean {
   return !can(ctx, "reports:read");
 }
 
-export const CUSTOM_ONLY_TABS: { key: string; label: string }[] = [{ key: "custom", label: "Custom reports" }];
+export const CUSTOM_ONLY_TABS: { key: string; label: string }[] = [{ key: "custom", label: "Custom Reports" }];

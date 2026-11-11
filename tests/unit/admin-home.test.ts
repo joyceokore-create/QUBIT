@@ -49,11 +49,11 @@ describe("access-request tabs, ages and chips", () => {
   });
 
   it("colours a waiting request by age; reviewed and dismissed are calm", () => {
-    expect(requestChip("NEW", 0)).toEqual({ label: "Waiting", tone: "info" });
+    expect(requestChip("NEW", 0)).toEqual({ label: "New", tone: "info" });
     expect(requestChip("NEW", 2)).toEqual({ label: "Waiting", tone: "warn" });
     expect(requestChip("NEW", 5)).toEqual({ label: "Waiting", tone: "bad" });
-    expect(requestChip("REVIEWED", 9)).toEqual({ label: "Reviewed", tone: "ok" });
-    expect(requestChip("DISMISSED", 9)).toEqual({ label: "Dismissed", tone: "muted" });
+    expect(requestChip("REVIEWED", 9)).toEqual({ label: "Approved", tone: "ok" });
+    expect(requestChip("DISMISSED", 9)).toEqual({ label: "Declined", tone: "muted" });
   });
 
   it("flags the roles that would need a Head's approval (not built yet)", () => {

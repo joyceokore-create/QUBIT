@@ -29,6 +29,7 @@ const today = (over: Partial<PmToday> = {}): PmToday => ({
   projects: [],
   overdueMilestones: [],
   milestonesNext7: 0,
+  milestonesNext7PerDay: [0, 0, 0, 0, 0, 0, 0],
   blockers: [],
   clashes: [],
   ...over,
@@ -82,17 +83,17 @@ describe("the To do list", () => {
     expect(todoTabs(items).map((x) => [x.key, x.count])).toEqual([
       ["all", 7],
       ["overdue", 2],
-      ["updates", 1],
       ["gates", 1],
-      ["disputes", 1],
-      ["risks", 1],
-      ["blockers", 1],
+      ["updates", 2],
+      ["risks", 2],
     ]);
+    expect(itemsForTab(items, "updates").map((i) => i.kind).sort()).toEqual(["dispute", "update"]);
+    expect(itemsForTab(items, "risks").map((i) => i.kind).sort()).toEqual(["blocker", "risk"]);
     expect(itemsForTab(items, "gates").map((i) => i.id)).toEqual(["gt-p1-sit"]);
   });
 
   it("works out the KPI figures", () => {
-    expect(pmKpis(t)).toEqual({ projects: 2, byHealth: { ok: 2, warn: 0, bad: 0, none: 0 }, dueNext7: 0, overdueMilestones: 2, overdueTasks: 0, updatesSent: 1 });
+    expect(pmKpis(t)).toEqual({ projects: 2, byHealth: { ok: 2, warn: 0, bad: 0, none: 0 }, dueNext7: 0, overdueMilestones: 2, overdueTasks: 0, updatesSent: 1, updatesDrafted: 1, dueNext7PerDay: [0, 0, 0, 0, 0, 0, 0] });
   });
 });
 

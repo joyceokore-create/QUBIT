@@ -29,12 +29,12 @@ export const VIEW_ROLE_LABEL: Record<ViewRole, string> = {
 
 /** What each view role lands on (the home pages arrive in UX4–UX11). */
 export const VIEW_ROLE_HOME: Record<ViewRole, string> = {
-  PlatformSuperAdmin: "Admin home",
-  Executive: "Portfolio home",
-  HeadOfProjects: "Delivery health",
-  HeadOfQA: "Quality home",
+  PlatformSuperAdmin: "Admin Home",
+  Executive: "Portfolio Home",
+  HeadOfProjects: "Delivery Health",
+  HeadOfQA: "Quality Home",
   ProjectManager: "Today",
-  Member: "My work",
+  Member: "My Work",
 };
 
 const isBusiness = (r: string): r is BusinessRole => (BUSINESS_ROLES as readonly string[]).includes(r);

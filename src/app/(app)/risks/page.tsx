@@ -76,7 +76,8 @@ export default async function RisksPage({ searchParams }: { searchParams: Promis
     canCreateRisk ? listProjects(ctx) : Promise.resolve([]),
   ]);
 
-  const newRisk = canCreateRisk ? <NewRiskDialog users={users} projects={projects.map((p) => ({ id: p.id, code: p.code, name: p.name }))} /> : undefined;
+  // The top bar's "+ New › Risk" lands here with ?new=1 (UX fidelity F1).
+  const newRisk = canCreateRisk ? <NewRiskDialog users={users} projects={projects.map((p) => ({ id: p.id, code: p.code, name: p.name }))} defaultOpen={sp.new === "1"} /> : undefined;
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   const description =
     tab === "risks"

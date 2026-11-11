@@ -187,8 +187,8 @@ export function UsersClient({
           <FilterSelect label="Department" allLabel="All departments" value={f.department} options={departmentOptions} onChange={(v) => list.set({ department: v })} />
           {!sso && !nomfaTab && <FilterSelect label="MFA" allLabel="MFA: any" value={f.mfa} options={mfaOptions} onChange={(v) => list.set({ mfa: v })} />}
           {!nomfaTab && <FilterSelect label="Status" allLabel="All statuses" value={f.status} options={statusOptions} onChange={(v) => list.set({ status: v })} />}
+          <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={clearFilters} />
         </ListToolbar>
-        <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={clearFilters} />
       </div>
 
       <div className="grid grid-cols-1 items-start gap-[18px] lg:grid-cols-[minmax(0,1fr)_300px] [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.12s_both]">

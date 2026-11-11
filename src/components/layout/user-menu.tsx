@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ChevronDown, Compass, LogOut, ShieldCheck, ClipboardCheck, LayoutDashboard, Rows3, Sparkles } from "lucide-react";
+import { Check, ChevronDown, Compass, LogOut, Monitor, Moon, ShieldCheck, ClipboardCheck, LayoutDashboard, Rows3, Sparkles, Sun } from "lucide-react";
+import { useTheme } from "next-themes";
 import type { UiMode } from "@/lib/ui-mode";
 import { DENSITY_EVENT, DENSITY_KEY } from "@/lib/density";
 import { useTour } from "@/components/tour/tour-provider";
@@ -15,6 +16,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -42,7 +45,7 @@ interface UserMenuProps {
    * "chip" — a profile pill with avatar + name + chevron, for the branded
    *          Riverbank header where it stands in for the old tenant chip.
    */
-  variant?: "avatar" | "chip";
+  variant?: "avatar" | "chip" | "light";
   /** UX3 (D11): the person's layout. Offers the switch back (or forward) and, in the new
    * layout, the density setting that used to sit on the dashboard. */
   uiMode?: UiMode;
@@ -65,6 +68,7 @@ export function UserMenu({
 }: UserMenuProps) {
   const tour = useTour();
   const router = useRouter();
+  const { theme, setTheme } = useTheme();
   const showSwitch = canSwitchTenant && tenants.length > 0;
   const [compact, setCompact] = useState(false);
   useEffect(() => {
@@ -112,6 +116,13 @@ export function UserMenu({
           </span>
           <ChevronDown className="size-[13px] flex-none opacity-70 max-sm:hidden" />
         </DropdownMenuTrigger>
+      ) : variant === "light" ? (
+        <DropdownMenuTrigger
+          aria-label="Account menu"
+          className="flex size-[var(--ds-control-h)] flex-none items-center justify-center rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface2)] text-[11px] font-bold text-[var(--ds-ink2)] transition-colors hover:border-[var(--ds-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-brand)]"
+        >
+          {getInitials(name)}
+        </DropdownMenuTrigger>
       ) : (
         <DropdownMenuTrigger
           aria-label="Account menu"
@@ -148,6 +159,23 @@ export function UserMenu({
 
         {uiMode === "new" && (
           <>
+            <DropdownMenuSeparator />
+            {/* UX fidelity F1 (D-F9): Light / Dark / System, default Light. */}
+            <DropdownMenuLabel className="text-[11px] font-semibold text-[var(--ds-ink3)]">Theme</DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={theme ?? "light"} onValueChange={(v) => setTheme(String(v))}>
+              <DropdownMenuRadioItem value="light">
+                <Sun />
+                Light
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="dark">
+                <Moon />
+                Dark
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="system">
+                <Monitor />
+                System
+              </DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
             <DropdownMenuSeparator />
             <DropdownMenuCheckboxItem checked={compact} onCheckedChange={(v) => toggleCompact(Boolean(v))}>
               <Rows3 />

@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
+import { Drawer, DrawerHeader } from "@/components/ui/drawer";
 import { BRIEF_CARD_LINES, BRIEF_EMPTY, BRIEF_GROUP_LABEL, BRIEF_GROUPS, type BriefGroup, type BriefItem } from "@/lib/daily-brief";
-import { PRIMARY, SECONDARY } from "@/lib/surface";
+import { COMPACT, COMPACT_PRIMARY } from "@/lib/surface";
 import { cn } from "@/lib/utils";
 
 /**
@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
  */
 
 const SOURCE = "from status updates, gate records and RAID items. Check before acting.";
-const GROUP_DOT: Record<BriefGroup, string> = { now: "bg-[var(--bad-ink)]", wait: "bg-[var(--warn-ink)]", fyi: "bg-[var(--stage-exploring)]" };
+const GROUP_DOT: Record<BriefGroup, string> = { now: "bg-[var(--ds-bad)]", wait: "bg-[var(--ds-warn)]", fyi: "bg-[var(--ds-info)]" };
 
 export function DailyBrief({ items, generatedAt }: { items: BriefItem[]; generatedAt: string }) {
   const [open, setOpen] = useState(false);
@@ -72,7 +72,7 @@ export function DailyBrief({ items, generatedAt }: { items: BriefItem[]; generat
                 href={item.action.href}
                 className="whitespace-nowrap rounded-sm text-[12px] font-semibold text-white underline decoration-white/50 underline-offset-[3px] outline-none hover:decoration-white focus-visible:ring-2 focus-visible:ring-white"
               >
-                {item.action.label} <span aria-hidden>→</span>
+                {item.action.label}
               </Link>
             </li>
           ))}
@@ -113,51 +113,39 @@ function BriefDrawer({
   }, [open, focusId]);
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-[440px]">
-        <div className="border-b border-[var(--border)] px-5 py-4 pr-12">
-          <SheetTitle className="flex items-center gap-1.5 text-[16px] font-bold text-[var(--qink)]">
-            <Sparkles className="size-4 text-[var(--brand)]" aria-hidden />
-            Daily Brief
-          </SheetTitle>
-          <SheetDescription className="mt-0.5 text-[12px] text-[var(--ink3)]">
-            {items.length} {items.length === 1 ? "item" : "items"} · generated {generatedAt} today
-          </SheetDescription>
-        </div>
+    <Drawer open={open} onClose={() => onOpenChange(false)}>
+      <div className="flex h-full flex-col">
+        <DrawerHeader brief icon={<Sparkles className="size-4" aria-hidden />} title="Daily Brief" subtitle={`${items.length} ${items.length === 1 ? "item" : "items"} · generated ${generatedAt} today`} />
 
         <div ref={bodyRef} className="flex flex-1 flex-col gap-3.5 overflow-y-auto px-5 pb-4 pt-2">
-          {items.length === 0 && <p className="py-6 text-center text-[13px] text-[var(--ink3)]">{BRIEF_EMPTY}</p>}
+          {items.length === 0 && <p className="py-6 text-center text-[13px] text-[var(--ds-ink3)]">{BRIEF_EMPTY}</p>}
           {BRIEF_GROUPS.map((group) => {
             const list = items.filter((i) => i.group === group);
             if (!list.length) return null;
             return (
               <section key={group} aria-label={BRIEF_GROUP_LABEL[group]}>
-                <h3 className="flex items-center gap-1.5 pb-1 pt-2.5 text-[11px] font-bold uppercase tracking-[.07em] text-[var(--ink3)]">
-                  <span className={cn("size-2 rounded-full", GROUP_DOT[group])} aria-hidden />
+                <h3 className="flex items-center gap-1 pb-1 pt-2.5 text-[11px] font-bold uppercase tracking-[.07em] text-[var(--ds-ink3)]">
+                  <span className={cn("mr-0.5 size-2 rounded-full", GROUP_DOT[group])} aria-hidden />
                   {BRIEF_GROUP_LABEL[group]}
-                  <span className="ml-1 rounded-full bg-[var(--surface-2)] px-1.5 tracking-normal text-[var(--ink2)]">{list.length}</span>
+                  <span className="ml-1 rounded-full bg-[var(--ds-mutedw)] px-1.5 tracking-normal text-[var(--ds-ink2)]">{list.length}</span>
                 </h3>
-                <ul>
+                <ul className="m-0 list-none p-0">
                   {list.map((item) => (
                     <li
                       key={item.id}
                       data-brief-id={item.id}
                       className={cn(
-                        "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-dotted border-[var(--border)] py-2.5 last:border-b-0",
-                        focusId === item.id && "-mx-2 rounded-[8px] bg-[var(--surface-2)] px-2",
+                        "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-dotted border-[var(--ds-line)] py-2.5 last:border-b-0",
+                        focusId === item.id && "-mx-2 rounded-[8px] bg-[var(--ds-surface2)] px-2",
                       )}
                     >
                       <div className="min-w-0">
-                        <b className="block text-[13px] font-semibold text-[var(--qink)]">{item.emphasis}</b>
-                        <span className="text-[12px] text-[var(--ink2)]">{item.detail}</span>
+                        <b className="block text-[13px] font-semibold text-[var(--ds-ink)]">{item.emphasis}</b>
+                        <span className="text-[12px] text-[var(--ds-ink3)]">{item.detail}</span>
                       </div>
-                      <Link
-                        href={item.action.href}
-                        onClick={() => onOpenChange(false)}
-                        className={cn(group === "now" ? PRIMARY : SECONDARY, "whitespace-nowrap")}
-                      >
+                      <Link href={item.action.href} onClick={() => onOpenChange(false)} className={group === "now" ? COMPACT_PRIMARY : COMPACT}>
                         {item.action.label}
-                        <ArrowRight className="size-3.5" aria-hidden />
+                        <ArrowRight className="size-3" aria-hidden />
                       </Link>
                     </li>
                   ))}
@@ -167,8 +155,8 @@ function BriefDrawer({
           })}
         </div>
 
-        <p className="border-t border-[var(--border)] px-5 py-3 text-[11.5px] text-[var(--ink3)]">Generated {SOURCE}</p>
-      </SheetContent>
-    </Sheet>
+        <p className="border-t border-[var(--ds-line)] px-5 py-3 text-[11.5px] text-[var(--ds-ink3)]">Generated {SOURCE}</p>
+      </div>
+    </Drawer>
   );
 }

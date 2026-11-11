@@ -56,8 +56,8 @@ export function RollupArchiveList({ rows, isHead, timeZone }: { rows: ArchiveLis
             ]}
             onChange={(v) => list.set({ rastatus: v })}
           />
+          <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={() => list.clear(["rastatus"])} />
         </ListToolbar>
-        <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={() => list.clear(["rastatus"])} />
       </div>
       <TableCard footer={<TableFooter info={info} noun="roll-ups" onPage={list.setPage} onSize={list.setSize} />}>
         {page.length === 0 ? (

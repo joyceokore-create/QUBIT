@@ -75,6 +75,9 @@ describe("UX7 PM Today", () => {
     expect(t.projects.map((p) => p.id)).toEqual([mine]);
     expect(t.overdueMilestones.map((m) => m.name)).toEqual(["Fixture dry run"]);
     expect(t.milestonesNext7).toBe(1);
+    // UX fidelity F1: the KPI bars are the same milestones, one bucket per day.
+    expect(t.milestonesNext7PerDay).toHaveLength(7);
+    expect(t.milestonesNext7PerDay.reduce((a, n) => a + n, 0)).toBe(1);
     expect(t.projects[0].update).toBe("none");
   });
 
@@ -83,6 +86,7 @@ describe("UX7 PM Today", () => {
     expect(cockpit.projects.some((p) => p.id === bProject)).toBe(false);
     const t = await getPmToday({ ...bCtx, userId: pm.userId }, (await getCockpitData(bCtx, now)).projects, now);
     expect(t.overdueMilestones).toEqual([]);
+    expect(t.milestonesNext7PerDay.every((n) => n === 0)).toBe(true);
   });
 
   it("refuses a past date, a date over two years out, and a done milestone", async () => {

@@ -28,9 +28,9 @@ interface NewRiskDialogProps {
   projects: { id: string; code: string; name: string }[];
 }
 
-export function NewRiskDialog({ users, projects }: NewRiskDialogProps) {
+export function NewRiskDialog({ users, projects, defaultOpen = false }: NewRiskDialogProps & { defaultOpen?: boolean }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [probability, setProbability] = useState("3");

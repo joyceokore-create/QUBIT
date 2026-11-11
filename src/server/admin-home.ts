@@ -5,8 +5,9 @@ import { withTenant, type TenantContext } from "@/lib/tenant";
 import { can } from "@/lib/rbac";
 import { flagEnabled } from "@/lib/flags";
 import { ssoEnabled } from "@/lib/sso";
+import { dayKey } from "@/lib/dates";
 import { accessRequestStatusCounts, listAccessRequestsPaged, oldestNewAccessRequestAt } from "@/server/access-requests";
-import { activityLine, AR_TAB_SORT, AR_TAB_STATUS, collapseActivity, weekStartInZone, type ActivityRow, type AdminActivity, type AdminHomeData, type ArTab, type IntegrationRow } from "@/lib/admin-home";
+import { activityLine, AR_TAB_SORT, AR_TAB_STATUS, collapseActivity, dailySeries, weekStartInZone, type ActivityRow, type AdminActivity, type AdminHomeData, type ArTab, type IntegrationRow } from "@/lib/admin-home";
 
 /**
  * UX11 — Super Admin › Admin home, the reads (UX plan D3/D4, UX11). Every tenant-owned read
@@ -46,6 +47,7 @@ export async function getAdminHome(
   const mayInvite = can(ctx, "users:invite");
   const since30 = new Date(now.getTime() - ACTIVE_WINDOW_DAYS * 86_400_000);
   const weekStart = weekStartInZone(now, tz);
+  const since7 = new Date(now.getTime() - 8 * 86_400_000);
 
   // System-table reads (no tenant scope) — behind iam:manage only.
   const systemReads = mayReview
@@ -53,11 +55,13 @@ export async function getAdminHome(
         accessRequestStatusCounts(),
         oldestNewAccessRequestAt(),
         listAccessRequestsPaged({ page: opts.page, size: opts.size, status: AR_TAB_STATUS[opts.tab], sort: AR_TAB_SORT[opts.tab] }),
+        // KPI bars: requests received per day, last 7 days (timestamps only — no request PII).
+        prisma.accessRequest.findMany({ where: { createdAt: { gte: since7 } }, select: { createdAt: true }, take: 5000 }),
       ])
     : Promise.resolve(null);
 
   const tenantReads = withTenant(ctx, async (tx) => {
-    const [active, active30, noMfa, granted, removed, expiredInvites, suspendedInTeams, tenantIntegrations, projectGroups, failingGroups, audits, departments, teams] = await Promise.all([
+    const [active, active30, noMfa, granted, removed, expiredInvites, suspendedInTeams, tenantIntegrations, projectGroups, failingGroups, audits, departments, teams, roleStamps] = await Promise.all([
       tx.user.count({ where: { status: "ACTIVE" } }),
       tx.user.count({ where: { status: "ACTIVE", lastLoginAt: { gte: since30 } } }),
       sso ? Promise.resolve(null) : tx.user.count({ where: { status: "ACTIVE", mfaSecret: null } }),
@@ -91,6 +95,8 @@ export async function getAdminHome(
         : Promise.resolve([]),
       mayInvite ? tx.department.findMany({ select: { id: true, name: true }, orderBy: [{ name: "asc" }, { id: "asc" }] }) : Promise.resolve([]),
       mayInvite ? tx.team.findMany({ select: { id: true, name: true }, orderBy: [{ name: "asc" }, { id: "asc" }] }) : Promise.resolve([]),
+      // KPI spark: role grants + removals per day, last 7 days.
+      tx.auditLog.findMany({ where: { action: { in: ["role_grant", "role_revoke"] }, createdAt: { gte: since7 } }, select: { createdAt: true }, take: 5000 }),
     ]);
 
     // Names for the feed: actors and user targets, looked up under RLS (another tenant's
@@ -104,7 +110,7 @@ export async function getAdminHome(
       ? await tx.user.findMany({ where: { id: { in: [...userIds] } }, select: { id: true, name: true } })
       : [];
 
-    return { active, active30, noMfa, granted, removed, expiredInvites, suspendedInTeams, tenantIntegrations, projectGroups, failingGroups, audits, departments, teams, names: new Map(people.map((p) => [p.id, p.name])) };
+    return { active, active30, noMfa, granted, removed, expiredInvites, suspendedInTeams, tenantIntegrations, projectGroups, failingGroups, audits, departments, teams, roleStamps, names: new Map(people.map((p) => [p.id, p.name])) };
   });
 
   const [sys, t] = await Promise.all([systemReads, tenantReads]);
@@ -165,10 +171,10 @@ export async function getAdminHome(
     timeZone: tz,
     sso,
     kpis: {
-      waiting: sys ? { count: sys[0].NEW, oldestAt: sys[1]?.toISOString() ?? null } : null,
+      waiting: sys ? { count: sys[0].NEW, oldestAt: sys[1]?.toISOString() ?? null, perDay: dailySeries(sys[3].map((r) => r.createdAt), now, tz, 7, dayKey) } : null,
       activeUsers: { active30: t.active30, active: t.active, since: since30.toISOString() },
       noMfa: t.noMfa,
-      roleChanges: { granted: t.granted, removed: t.removed, since: weekStart.toISOString() },
+      roleChanges: { granted: t.granted, removed: t.removed, since: weekStart.toISOString(), perDay: dailySeries(t.roleStamps.map((r) => r.createdAt), now, tz, 7, dayKey) },
     },
     requests,
     attention: { noMfa: t.noMfa, expiredInvites: t.expiredInvites, suspendedInTeams: t.suspendedInTeams },

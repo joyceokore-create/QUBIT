@@ -1,22 +1,25 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Search, X } from "lucide-react";
+import { Check, ChevronDown, Search, X } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { FOCUS } from "@/lib/surface";
 import { cn } from "@/lib/utils";
 
 /**
- * UX5 (L1/L2, U3) — the list toolbar: search on the left, the page's common filters next to
- * it, nothing else (actions live in the page header). Every control is the 36px control size
- * with the input radius; filters are not pills. Active filters show below as removable chips,
- * with "Clear all" last.
+ * UX5 (L1/L2) + design spec v2 (docs/08 § Toolbar): search on the left, then the page's
+ * filters as chip dropdowns, then "Clear all" inline — one row, gap 10 (filters gap 6).
+ * Actions live in the page header. A closed filter chip reads its dimension ("Severity ⌄");
+ * an active one reads "Severity: Critical" in brand-wash with an × that clears it.
  */
 
-const CONTROL = `h-[var(--control-h)] rounded-[var(--control-r)] border border-[var(--input)] bg-[var(--qcard)] text-[13px] text-[var(--qink)] ${FOCUS}`;
+const CHIP_BASE = "inline-flex h-[var(--ds-control-h)] items-center gap-[5px] rounded-[var(--ds-radius-control)] border text-[12.5px] font-semibold";
+const CHIP_OFF = "border-[var(--ds-line)] bg-[var(--ds-card)] text-[var(--ds-ink2)] hover:bg-[var(--ds-surface2)]";
+const CHIP_ON = "border-transparent bg-[var(--ds-brand-wash)] text-[var(--ds-brand-ink)]";
 
 export function ListToolbar({ children, label = "Search and filters" }: { children: ReactNode; label?: string }) {
   return (
-    <div role="search" aria-label={label} className="flex flex-wrap items-center gap-2">
+    <div role="search" aria-label={label} className="flex flex-wrap items-center gap-x-2.5 gap-y-2 [&>[data-filter]+[data-filter]]:-ml-1">
       {children}
     </div>
   );
@@ -60,7 +63,7 @@ export function SearchField({
 
   return (
     <div className={cn("relative w-full sm:w-[280px]", className)}>
-      <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--ink3)]" aria-hidden />
+      <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[var(--ds-ink3)]" aria-hidden />
       <input
         type="search"
         value={draft}
@@ -68,7 +71,10 @@ export function SearchField({
         placeholder={placeholder}
         aria-label={label}
         maxLength={100}
-        className={cn(CONTROL, "w-full pl-9 pr-3 placeholder:text-[var(--ink3)]")}
+        className={cn(
+          "h-[var(--ds-control-h)] w-full rounded-[var(--ds-radius-control)] border border-[var(--ds-line)] bg-[var(--ds-card)] pl-[30px] pr-3 text-[12.5px] text-[var(--ds-ink)] placeholder:text-[var(--ds-placeholder)]",
+          FOCUS,
+        )}
       />
     </div>
   );
@@ -79,7 +85,8 @@ export interface FilterOption {
   label: string;
 }
 
-/** One filter. The empty value is "all" and reads e.g. "All severities". */
+/** One filter as a chip dropdown. The empty value is "all" (`allLabel`, e.g. "All
+ * severities", the first menu option). `label` is the dimension in Title Case ("Severity"). */
 export function FilterSelect({
   label,
   allLabel,
@@ -87,45 +94,54 @@ export function FilterSelect({
   options,
   onChange,
 }: {
-  /** Accessible name, e.g. "Severity". */
   label: string;
   allLabel: string;
   value: string;
   options: FilterOption[];
   onChange: (value: string) => void;
 }) {
+  const current = options.find((o) => o.value === value);
+  const on = !!value;
   return (
-    <select
-      aria-label={label}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={cn(CONTROL, "max-w-[220px] px-3 pr-8", value && "border-[color-mix(in_oklab,var(--brand)_45%,var(--input))] font-semibold")}
-    >
-      <option value="">{allLabel}</option>
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+    <span data-filter className={cn(CHIP_BASE, on ? CHIP_ON : CHIP_OFF, "pr-0")}>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          aria-label={on ? `${label}: ${current?.label ?? value}. Change filter` : `Filter by ${label}`}
+          className={cn("inline-flex h-full max-w-[240px] items-center gap-[5px] rounded-[var(--ds-radius-control)] pl-3", on ? "pr-1" : "pr-3", FOCUS)}
+        >
+          <span className="truncate">{on ? `${label}: ${current?.label ?? value}` : label}</span>
+          {!on && <ChevronDown className="size-[11px] flex-none" aria-hidden />}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="min-w-[200px] rounded-[12px] bg-[var(--ds-card)] p-1.5 text-[var(--ds-ink)] shadow-[var(--ds-shadow-menu)] ring-1 ring-[var(--ds-line)]">
+          <DropdownMenuRadioGroup value={value} onValueChange={(v) => onChange(String(v ?? ""))}>
+            {[{ value: "", label: allLabel }, ...options].map((o) => (
+              <DropdownMenuRadioItem
+                key={o.value || "__all"}
+                value={o.value}
+                className="rounded-[8px] px-[9px] py-[7px] pr-8 text-[12.5px] data-checked:bg-[var(--ds-brand-wash)] data-checked:font-bold data-checked:text-[var(--ds-brand-ink)]"
+              >
+                {o.label}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {on && (
+        <button type="button" aria-label={`Clear ${label} filter`} onClick={() => onChange("")} className={cn("mr-1 grid size-6 place-items-center rounded-[6px] hover:bg-[color-mix(in_oklab,var(--ds-brand)_12%,transparent)]", FOCUS)}>
+          <X className="size-3.5" aria-hidden />
+        </button>
+      )}
+    </span>
   );
 }
 
-/** A plain on/off filter (e.g. "Mine"), same size as the other controls. */
+/** A plain on/off filter (e.g. "Mine"), a chip like the others; on = brand-wash. */
 export function FilterToggle({ label, pressed, onChange, count }: { label: string; pressed: boolean; onChange: (on: boolean) => void; count?: number }) {
   return (
-    <button
-      type="button"
-      aria-pressed={pressed}
-      onClick={() => onChange(!pressed)}
-      className={cn(
-        CONTROL,
-        "inline-flex items-center gap-1.5 px-3 font-semibold",
-        pressed ? "border-[var(--brand)] bg-[color-mix(in_oklab,var(--brand)_8%,var(--qcard))] text-[var(--qink)]" : "text-[var(--ink2)]",
-      )}
-    >
+    <button type="button" data-filter aria-pressed={pressed} onClick={() => onChange(!pressed)} className={cn(CHIP_BASE, pressed ? CHIP_ON : CHIP_OFF, "px-3", FOCUS)}>
+      {pressed && <Check className="size-3.5" aria-hidden />}
       {label}
-      {count !== undefined && <span className="text-[11px] font-bold tabular-nums text-[var(--ink3)]">{count}</span>}
+      {count !== undefined && <span className="text-[11px] font-bold tabular-nums opacity-80">{count}</span>}
     </button>
   );
 }
@@ -136,31 +152,18 @@ export interface ActiveFilter {
   label: string;
 }
 
-/** Removable chips for the active filters; "Clear all" sits last when more than one is on. */
-export function FilterChips({ filters, onRemove, onClearAll }: { filters: ActiveFilter[]; onRemove: (key: string) => void; onClearAll: () => void }) {
-  if (!filters.length) return null;
+/** "Clear all", inline at the end of the toolbar row — shown when more than one filter is on.
+ * (Each active filter chip clears itself with its ×.) Place it inside `ListToolbar`. */
+export function FilterChips({ filters, onClearAll }: { filters: ActiveFilter[]; onRemove?: (key: string) => void; onClearAll: () => void }) {
+  if (filters.length < 2) return null;
   return (
-    <ul aria-label="Active filters" className="flex flex-wrap items-center gap-1.5">
-      {filters.map((f) => (
-        <li key={f.key}>
-          <button
-            type="button"
-            onClick={() => onRemove(f.key)}
-            aria-label={`Remove filter ${f.label}`}
-            className={`inline-flex h-7 items-center gap-1 rounded-[var(--control-r)] bg-[var(--surface-2)] pl-2.5 pr-1.5 text-[12px] font-semibold text-[var(--ink2)] hover:text-[var(--qink)] ${FOCUS}`}
-          >
-            {f.label}
-            <X className="size-3.5" aria-hidden />
-          </button>
-        </li>
-      ))}
-      {filters.length > 1 && (
-        <li>
-          <button type="button" onClick={onClearAll} className={`h-7 rounded-[6px] px-1.5 text-[12px] font-semibold text-[var(--ink3)] underline-offset-2 hover:text-[var(--qink)] hover:underline ${FOCUS}`}>
-            Clear all
-          </button>
-        </li>
-      )}
-    </ul>
+    <button
+      type="button"
+      onClick={onClearAll}
+      aria-label={`Clear all ${filters.length} filters`}
+      className={cn("mr-1 rounded-[4px] text-[12px] font-semibold text-[var(--ds-brand-ink)] underline-offset-2 hover:underline", FOCUS)}
+    >
+      Clear All
+    </button>
   );
 }

@@ -109,8 +109,8 @@ export function RisksClient({
           <span title={`${copy.noun[0].toUpperCase()}${copy.noun.slice(1)} you own`}>
             <FilterToggle label="Mine" count={facets.mine} pressed={f.owner === viewerId} onChange={(on) => list.set({ owner: on ? viewerId : null })} />
           </span>
+          <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={clearAll} />
         </ListToolbar>
-        <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={clearAll} />
       </div>
 
       <TableCard footer={<TableFooter info={info} noun={copy.noun} onPage={list.setPage} onSize={list.setSize} />}>

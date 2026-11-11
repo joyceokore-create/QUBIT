@@ -137,8 +137,8 @@ export function ApprovalsClient({
           <SearchField value={list.q} onChange={(q) => list.set({ q })} placeholder={searchLabel} label="Search approvals" className="sm:w-[320px]" />
           {feed.can.staffing && <FilterSelect label="Project" allLabel="All projects" value={f.project} options={opts.project} onChange={(v) => list.set({ project: v })} />}
           <FilterSelect label="Age" allLabel="Any age" value={f.age} options={opts.age} onChange={(v) => list.set({ age: v })} />
+          <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={clearAll} />
         </ListToolbar>
-        <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={clearAll} />
       </div>
 
       <TableCard footer={<TableFooter info={info} noun="approvals" onPage={list.setPage} onSize={list.setSize} />}>

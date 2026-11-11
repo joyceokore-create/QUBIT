@@ -73,8 +73,8 @@ describe("UX8 Approvals and anyPerm", () => {
     expect(canOpenItem({ perm: "x:y" }, { can: (p) => p === "x:y" })).toBe(true);
   });
 
-  it("the Head and Super Admin get Approvals right after Home; other roles don't", () => {
-    expect(labels(menuFor("PlatformSuperAdmin", viewer(["PlatformSuperAdmin"])))[0]).toBe("Work: Home, Approvals, Access requests");
+  it("the Head gets Approvals right after Home; Super Admin (design) and other roles don't", () => {
+    expect(labels(menuFor("PlatformSuperAdmin", viewer(["PlatformSuperAdmin"])))[0]).toBe("Work: Home, Access Requests");
     for (const role of ["HeadOfQA", "Executive", "ProjectManager", "Member"] as const) {
       expect(ROLE_MENUS[role].flatMap((g) => g.items).some((i) => i.key === "approvals"), role).toBe(false);
     }

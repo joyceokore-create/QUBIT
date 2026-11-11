@@ -73,6 +73,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           options: view.options,
           showSwitch: view.showSwitch,
           superAdmin: ctx.roles.includes(SUPER_ADMIN),
+          // UX fidelity F1: the top bar's "+ New" offers only what this person may create.
+          create: [
+            ...(can(ctx, "project:create") ? [{ key: "project", label: "Project", hint: "Start the project wizard", href: "/projects/new" }] : []),
+            ...(can(ctx, "idea:create") ? [{ key: "idea", label: "Idea", hint: "Submit an idea for triage", href: "/ideas?new=1" }] : []),
+            ...(can(ctx, "risk:create") ? [{ key: "risk", label: "Risk", hint: "Add a risk to the register", href: "/risks?new=1" }] : []),
+          ],
         }
       : undefined;
 

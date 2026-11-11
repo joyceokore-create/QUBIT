@@ -82,8 +82,8 @@ export function AuditClient({
               className={cn(DATE_CONTROL, range.to && "border-[color-mix(in_oklab,var(--brand)_45%,var(--input))]")}
             />
           </label>
+          <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={() => list.clear([...FILTER_KEYS])} />
         </ListToolbar>
-        <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={() => list.clear([...FILTER_KEYS])} />
       </div>
 
       <TableCard footer={<TableFooter info={info} noun="audit events" onPage={list.setPage} onSize={list.setSize} />}>

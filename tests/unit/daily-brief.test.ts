@@ -130,7 +130,7 @@ describe("Project Manager", () => {
         ],
       }),
     );
-    expect(brief.items.map((i) => i.emphasis)).toEqual(["Project p2 has an open red risk.", "Project p1 is reported Green but calculates Amber."]);
+    expect(brief.items.map((i) => i.emphasis)).toEqual(["Project p2 has an open red risk.", "Project p1 is reported on track but calculates at risk."]);
     expect(brief.items[0].detail).toMatch(/^Vendor SLA unsigned\. /);
   });
 
@@ -223,7 +223,7 @@ describe("Head of Projects", () => {
       }),
     );
     expect(brief.items[0]).toMatchObject({ group: "now", emphasis: "2 projects need escalating upward." });
-    expect(brief.items[0].detail).toBe("Project p1 and Project p2: each has a red risk, or is past target and not Green.");
+    expect(brief.items[0].detail).toBe("Project p1 and Project p2: each has a red risk, or is past target and not on track.");
   });
 
   it("never mentions the triage queue when it wasn't read (no permission)", () => {

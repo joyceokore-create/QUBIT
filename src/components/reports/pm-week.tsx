@@ -173,12 +173,12 @@ export function PmWeek({ isCurrent, rows: initial, canUpload = false }: { isoWee
             ]}
             onChange={(v) => list.set({ pwstatus: v })}
           />
+          <FilterChips
+            filters={statusFilter ? [{ key: "pwstatus", label: `Status: ${statusFilter === "sent" ? "Sent" : "To send"}` }] : []}
+            onRemove={(k) => list.set({ [k]: null })}
+            onClearAll={() => list.clear(["pwstatus"])}
+          />
         </ListToolbar>
-        <FilterChips
-          filters={statusFilter ? [{ key: "pwstatus", label: `Status: ${statusFilter === "sent" ? "Sent" : "To send"}` }] : []}
-          onRemove={(k) => list.set({ [k]: null })}
-          onClearAll={() => list.clear(["pwstatus"])}
-        />
       </div>
       {pageRows.length === 0 && (
         <ListEmpty filtered={filtersOn} noun="projects" onClear={() => list.clear(["pwstatus"])} hint={filtersOn ? undefined : "Projects you run appear here each week, drafted from the board and the markets."} />

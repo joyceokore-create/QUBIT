@@ -47,19 +47,19 @@ const I = {
   admin: { key: "admin", label: "Admin", href: "/admin", icon: "shield", perm: "admin:access", module: "ADMIN_IAM" },
   configs: { key: "configs", label: "Configs", href: "/configs", icon: "filter", perm: "admin:access" },
   // Super Admin's Administration group: the admin sections promoted into the sidebar.
-  accessRequests: { key: "access-requests", label: "Access requests", href: "/admin/access-requests", icon: "inbox", perm: "iam:manage", module: "ADMIN_IAM" },
+  accessRequests: { key: "access-requests", label: "Access Requests", href: "/admin/access-requests", icon: "inbox", perm: "iam:manage", module: "ADMIN_IAM" },
   users: { key: "users", label: "Users", href: "/admin/users", icon: "user", perm: "admin:access", module: "ADMIN_IAM" },
   teams: { key: "teams", label: "Teams", href: "/admin/teams", icon: "users", perm: "admin:access", module: "ADMIN_IAM" },
-  roles: { key: "roles", label: "Roles & permissions", href: "/admin/roles", icon: "key", perm: "admin:access", module: "ADMIN_IAM" },
+  roles: { key: "roles", label: "Roles & Permissions", href: "/admin/roles", icon: "key", perm: "admin:access", module: "ADMIN_IAM" },
   departments: { key: "departments", label: "Departments", href: "/admin/departments", icon: "building", perm: "admin:access", module: "ADMIN_IAM" },
   organisation: { key: "organisation", label: "Organisation", href: "/admin/organisation", icon: "compass", perm: "admin:access", module: "ADMIN_IAM" },
-  audit: { key: "audit", label: "Audit log", href: "/admin/audit", icon: "history", perm: "iam:manage", module: "ADMIN_IAM" },
+  audit: { key: "audit", label: "Audit Log", href: "/admin/audit", icon: "history", perm: "iam:manage", module: "ADMIN_IAM" },
   settings: { key: "settings", label: "Settings", href: "/admin/settings", icon: "filter", perm: "iam:manage", module: "ADMIN_IAM" },
 } satisfies Record<string, MenuItem>;
 
 export const ROLE_MENUS: Record<ViewRole, MenuGroup[]> = {
   PlatformSuperAdmin: [
-    { label: "Work", items: [I.home, I.approvals, I.accessRequests] },
+    { label: "Work", items: [I.home, I.accessRequests] }, // design: no Approvals for Super Admin (UX fidelity F1)
     { label: "Delivery", items: [I.portfolios, I.projects, I.risks, I.people] },
     { label: "Administration", items: [I.users, I.teams, I.roles, I.departments, I.organisation, I.configs, I.audit, I.settings] },
     { label: "Reports", items: [I.reports] },

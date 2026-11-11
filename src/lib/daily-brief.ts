@@ -81,7 +81,8 @@ export interface BriefInput {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────────
 
-const RAG_WORD: Record<string, string> = { G: "Green", A: "Amber", R: "Red", N: "not rated" };
+// Status words, never RAG colours (plan D8a / UX fidelity D-F2).
+const RAG_WORD: Record<string, string> = { G: "on track", A: "at risk", R: "off track", N: "not rated" };
 const DAY_MS = 86_400_000;
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
@@ -202,8 +203,8 @@ function headItems({ projects, extras, now, timeZone: tz }: BriefInput): BriefIt
       emphasis: `${count(escalate.length, "project needs", "projects need")} escalating upward.`,
       detail:
         escalate.length === 1
-          ? `${escalate[0].name}: ${escalate[0].redRisks > 0 ? "it has an open red risk" : "it is past its target date and not Green"}.`
-          : `${nameList(escalate.map((p) => p.name))}: each has a red risk, or is past target and not Green.`,
+          ? `${escalate[0].name}: ${escalate[0].redRisks > 0 ? "it has an open red risk" : "it is past its target date and not on track"}.`
+          : `${nameList(escalate.map((p) => p.name))}: each has a red risk, or is past target and not on track.`,
       action: escalate.length === 1 ? { label: "Open project", href: projectHref(escalate[0].id, "Register") } : { label: "See projects", href: "/projects" },
     });
   }

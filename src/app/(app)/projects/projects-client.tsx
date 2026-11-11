@@ -167,8 +167,8 @@ function ProjectsListView({ projects, canCreate }: { projects: ProjectRow[]; can
           <span data-tour="mine" title="Projects you lead or are allocated to">
             <FilterToggle label="Mine" count={mineCount} pressed={f.mine === "1"} onChange={(on) => list.set({ mine: on ? "1" : null })} />
           </span>
+          <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={() => list.clear([...FILTER_KEYS])} />
         </ListToolbar>
-        <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={() => list.clear([...FILTER_KEYS])} />
       </div>
 
       <TableCard footer={<TableFooter info={info} noun="projects" onPage={list.setPage} onSize={list.setSize} />}>

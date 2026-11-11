@@ -15,7 +15,9 @@ const DAY_MS = 86_400_000;
 
 export const AR_TABS = ["waiting", "reviewed", "dismissed"] as const;
 export type ArTab = (typeof AR_TABS)[number];
-export const AR_TAB_LABEL: Record<ArTab, string> = { waiting: "Waiting", reviewed: "Reviewed", dismissed: "Dismissed" };
+// Design spec v2: Waiting · Approved · Declined. URL keys stay "reviewed"/"dismissed" (a
+// reviewed request is one whose account was created; a dismissed one was declined).
+export const AR_TAB_LABEL: Record<ArTab, string> = { waiting: "Waiting", reviewed: "Approved", dismissed: "Declined" };
 export type ArStatus = "NEW" | "REVIEWED" | "DISMISSED";
 export const AR_TAB_STATUS: Record<ArTab, ArStatus> = { waiting: "NEW", reviewed: "REVIEWED", dismissed: "DISMISSED" };
 /** Waiting: oldest first. Reviewed / Dismissed: most recently reviewed first. */
@@ -54,11 +56,31 @@ export function ageLabel(days: number): string {
   return days === 1 ? "1 day" : `${days} days`;
 }
 
-/** The status chip: a waiting request turns amber at 2 days and red at 5. */
+/** Row meta, as the design words it: "Today", "1 day ago", "2 days ago". */
+export function agoLabel(days: number): string {
+  return days <= 0 ? "Today" : `${ageLabel(days)} ago`;
+}
+
+/** Row chip (design: "New"). A request is New for its first two days, then Waiting —
+ * amber from day 2, red from day 5. Decided requests read Approved / Declined. */
 export function requestChip(status: ArStatus, days: number): { label: string; tone: Tone } {
-  if (status === "REVIEWED") return { label: "Reviewed", tone: "ok" };
-  if (status === "DISMISSED") return { label: "Dismissed", tone: "muted" };
-  return { label: "Waiting", tone: days >= 5 ? "bad" : days >= 2 ? "warn" : "info" };
+  if (status === "REVIEWED") return { label: "Approved", tone: "ok" };
+  if (status === "DISMISSED") return { label: "Declined", tone: "muted" };
+  if (days < 2) return { label: "New", tone: "info" };
+  return { label: "Waiting", tone: days >= 5 ? "bad" : "warn" };
+}
+
+/** Bucket timestamps into the last `days` tenant-local calendar days, oldest first (the
+ * KPI bar and spark charts). Only real history — never a projected value. */
+export function dailySeries(stamps: (string | Date)[], now: Date, tz: string, days = 7, keyOf: (d: Date | string, tz: string) => string): number[] {
+  const keys: string[] = [];
+  for (let i = days - 1; i >= 0; i--) keys.push(keyOf(new Date(now.getTime() - i * 86_400_000), tz));
+  const counts = new Map(keys.map((k) => [k, 0]));
+  for (const s of stamps) {
+    const k = keyOf(s, tz);
+    if (counts.has(k)) counts.set(k, counts.get(k)! + 1);
+  }
+  return keys.map((k) => counts.get(k)!);
 }
 
 /** KPI context for "Access requests waiting". */
@@ -244,11 +266,11 @@ export interface AdminHomeData {
   sso: boolean;
   kpis: {
     /** null when the viewer can't review access requests (no iam:manage). */
-    waiting: { count: number; oldestAt: string | null } | null;
+    waiting: { count: number; oldestAt: string | null; perDay: number[] } | null;
     activeUsers: { active30: number; active: number; since: string };
     /** null under SSO — MFA lives at the identity provider, which the app can't see. */
     noMfa: number | null;
-    roleChanges: { granted: number; removed: number; since: string };
+    roleChanges: { granted: number; removed: number; since: string; perDay: number[] };
   };
   requests: {
     tab: ArTab;
