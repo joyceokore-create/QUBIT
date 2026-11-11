@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { can, CANONICAL_ROLES, primaryRoleLabel } from "@/lib/rbac";
 import { ssoEnabled } from "@/lib/sso";
 import { parseListParams } from "@/lib/list-state";
-import { listUserOptions, listUsersPaged, userDirectoryStats, USER_LIST_STATUSES, USER_ONBOARDING_FILTERS, type UserDirectoryStats, type UserListTab } from "@/server/users";
+import { listUserOptions, listUsersPaged, userDirectoryStats, USER_LIST_STATUSES, USER_LIST_TABS, USER_ONBOARDING_FILTERS, type UserListTab } from "@/server/users";
 import { listAssignableRoles } from "@/server/role-permissions";
 import { listDepartments } from "@/server/departments";
 import { listTeams } from "@/server/teams";
@@ -12,50 +12,9 @@ import { Forbidden } from "@/components/forbidden";
 import { TabStrip } from "@/components/ui/tab-strip";
 import { AdminHeader } from "../admin-header";
 import { NewUserDialog } from "./new-user-dialog";
-import { UsersClient, type AdminInsight } from "./users-client";
+import { UsersClient } from "./users-client";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
-
-// Grounded "Q" admin insights — deterministic facts about who needs attention, from
-// whole-directory counts (UX5: the page no longer loads every user to work them out).
-function buildInsights(s: UserDirectoryStats, sso: boolean): AdminInsight[] {
-  const out: AdminInsight[] = [];
-  if (s.notSignedIn)
-    out.push({
-      color: "amber",
-      // Under SSO there are no invites or temporary credentials — sign-in is via Microsoft.
-      text: sso
-        ? `${s.notSignedIn} ${s.notSignedIn === 1 ? "user hasn’t" : "users haven’t"} signed in with Microsoft yet.`
-        : `${s.notSignedIn} invited ${s.notSignedIn === 1 ? "user hasn’t" : "users haven’t"} signed in yet — resend their temporary credentials.`,
-    });
-  // App-level TOTP only applies without SSO; with SSO, MFA is enforced at the identity
-  // provider (Entra), which the app can't see — so this insight would always misfire.
-  if (!sso && s.noMfaAdmins)
-    out.push({
-      color: "red",
-      text: `${s.noMfaAdmins} admin ${s.noMfaAdmins === 1 ? "account has" : "accounts have"} no MFA — enforce TOTP for privileged roles.`,
-    });
-  if (s.suspended)
-    out.push({
-      color: "amber",
-      text: `${s.suspended} suspended ${s.suspended === 1 ? "account" : "accounts"} — review whether access is still needed.`,
-    });
-  if (s.noDepartment)
-    out.push({
-      color: "amber",
-      text: `${s.noDepartment} ${s.noDepartment === 1 ? "user has" : "users have"} no org unit — assign one so reporting lines stay complete.`,
-    });
-  if (s.activeAdmins <= 1)
-    out.push({ color: "amber", text: `Only ${s.activeAdmins} active system admin — add a second to avoid a single point of failure.` });
-  if (out.length === 0)
-    out.push({
-      color: "green",
-      text: sso
-        ? "Everyone has signed in, with an org unit and a role — nothing needs attention."
-        : "Everyone has signed in, with MFA, an org unit and a role — nothing needs attention.",
-    });
-  return out;
-}
 
 // UX5 (L1–L5): the directory grows without limit, so it pages, searches and filters on the
 // server (L4) under the tenant's RLS context; the URL carries q / page / size / filters and
@@ -91,7 +50,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: S
   // MFA tab is the NO_MFA_WHERE base set (ACTIVE, no TOTP); it doesn't exist under SSO, where
   // MFA lives at the identity provider — a stale ?tab=nomfa then reads as All users.
   const rawTab = Array.isArray(sp.tab) ? sp.tab[0] : sp.tab;
-  const tab: UserListTab = !sso && rawTab === "nomfa" ? "nomfa" : "all";
+  const tab: UserListTab = (USER_LIST_TABS as readonly string[]).includes(rawTab ?? "") && !(sso && rawTab === "nomfa") ? (rawTab as UserListTab) : "all";
 
   const params = parseListParams(sp, {
     defaultSize: 10,
@@ -115,7 +74,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: S
     role: f.role,
     department: f.department,
     mfa: !nomfa && (f.mfa === "on" || f.mfa === "off") ? f.mfa : undefined,
-    status: nomfa ? undefined : USER_LIST_STATUSES.find((s) => s === f.status),
+    status: tab !== "all" ? undefined : USER_LIST_STATUSES.find((s) => s === f.status),
     onboarding: USER_ONBOARDING_FILTERS.find((o) => o === f.onboarding),
     tab,
   });
@@ -125,7 +84,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: S
       <AdminHeader
         canManageIam={can(ctx, "iam:manage")}
         title="Users"
-        description={`${stats.all} ${stats.all === 1 ? "user" : "users"} · directory, roles & access for ${session.user.tenantName}`}
+        description={`${stats.all} ${stats.all === 1 ? "person" : "people"} in ${session.user.tenantName}`}
         action={
           canInvite ? (
             <NewUserDialog
@@ -144,16 +103,17 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: S
         // Hidden under SSO, like the MFA tile and filter. Each tab is a plain link, so
         // switching tab drops the other tab's search, filters and page.
         tabs={
-          sso ? undefined : (
-            <TabStrip
-              label="User views"
-              active={tab}
-              tabs={[
-                { key: "all", label: "All users", href: "/admin/users", count: stats.all },
-                { key: "nomfa", label: "No MFA", href: "/admin/users?tab=nomfa", count: stats.noMfa },
-              ]}
-            />
-          )
+          <TabStrip
+            label="User views"
+            active={tab}
+            tabs={[
+              { key: "all", label: "All", href: "/admin/users", count: stats.all },
+              { key: "active", label: "Active", href: "/admin/users?tab=active", count: stats.active },
+              { key: "invited", label: "Invited", href: "/admin/users?tab=invited", count: stats.invited },
+              ...(sso ? [] : [{ key: "nomfa", label: "No MFA", href: "/admin/users?tab=nomfa", count: stats.noMfa }]),
+              { key: "suspended", label: "Suspended", href: "/admin/users?tab=suspended", count: stats.suspended },
+            ]}
+          />
         }
         users={rows}
         info={info}
@@ -163,7 +123,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: S
         managerOptions={managerOptions}
         roleOptions={assignableRoles.map((r) => ({ value: r, label: primaryRoleLabel([r]) }))}
         currentUserId={session.user.id}
-        insights={buildInsights(stats, sso)}
+        canInviteImport={canInvite}
         canManage={canManageUsers}
         canGrantSuperAdmin={canGrantSuperAdmin}
         canResetPassword={canResetPassword}

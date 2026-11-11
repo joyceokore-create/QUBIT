@@ -162,13 +162,13 @@ export function NewUserDialog({
   return (
     <Dialog open={open} onOpenChange={(nx) => { setOpen(nx); if (!nx) reset(); }}>
       <DialogTrigger render={<Button />}>
-        <Plus /> Create a user
+        <Plus /> Invite User
       </DialogTrigger>
       <DialogContent className="sm:max-w-[480px]">
         {phase === "wizard" ? (
           <>
             <DialogHeader>
-              <DialogTitle>Create a user</DialogTitle>
+              <DialogTitle>Invite a User</DialogTitle>
               <DialogDescription>
                 {sso
                   ? "Three quick steps — once created, they sign in with Microsoft. No invite link."
@@ -285,7 +285,7 @@ export function NewUserDialog({
                 {step < STEPS.length - 1 ? (
                   <Button type="button" onClick={next}>Next <ArrowRight className="size-4" /></Button>
                 ) : (
-                  <Button type="submit" disabled={busy}>{busy ? "Creating…" : "Create user"}</Button>
+                  <Button type="submit" disabled={busy}>{busy ? "Inviting…" : "Invite User"}</Button>
                 )}
               </div>
             </form>

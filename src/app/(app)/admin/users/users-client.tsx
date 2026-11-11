@@ -1,38 +1,18 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { formatDayMonth } from "@/lib/dates";
+import { useState, type ReactNode } from "react";
+import { dayKey, formatDayMonth } from "@/lib/dates";
 import type { AdminUserSummary, UserDirectoryStats, UserListTab } from "@/server/users";
 import type { DepartmentSummary } from "@/server/departments";
 import type { PageInfo } from "@/lib/list-state";
 import { FilterChips, FilterSelect, ListToolbar, SearchField, type ActiveFilter, type FilterOption } from "@/components/list/list-toolbar";
 import { ListEmpty, TableCard, TableFooter } from "@/components/list/table-footer";
 import { useListUrl } from "@/components/list/use-list-url";
-import { UserRowActions } from "./user-row-actions";
-import { CARD_GLASS as CARD, FOCUS } from "@/lib/surface";
+import { UserEditDrawer } from "./user-edit-drawer";
+import { Chip } from "@/components/ui/status-pill";
+import { COMPACT, SECONDARY, THEAD, TROW } from "@/lib/surface";
 import { PeopleImportPanel } from "@/components/admin/people-import-panel";
 
-export interface AdminInsight {
-  text: string;
-  color: "amber" | "blue" | "green" | "red";
-}
-const DOT: Record<AdminInsight["color"], string> = { amber: "--warn", blue: "--qinfo", green: "--ok", red: "--bad" };
-
-function initials(name: string): string {
-  return name.split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("");
-}
-
-// Onboarding is "complete" when a user has signed in and been placed on a team or project —
-// plus, WITHOUT SSO, enrolled app-level TOTP. With SSO, MFA is enforced at the identity
-// provider (which the app can't observe), so the MFA signal is dropped. Each remaining step
-// is a dot in the directory + a filter in the overview strip.
-function steps(u: AdminUserSummary) {
-  return {
-    signedIn: u.lastLoginAt !== null,
-    mfa: u.mfaEnabled,
-    placed: u.teamCount + u.projectCount > 0,
-  };
-}
 
 // UX5 (L1–L5): the server pages, searches and filters the directory (see page.tsx); this
 // component renders the overview tiles, the toolbar, the current page and the always-visible
@@ -52,16 +32,6 @@ const STATUS_LABEL: Record<string, string> = { ACTIVE: "Active", INVITED: "Invit
 const MFA_LABEL: Record<string, string> = { on: "MFA set", off: "MFA not set" };
 const ONBOARDING_LABEL: Record<string, string> = { "not-signed-in": "Never signed in", unplaced: "Not on a team or project" };
 
-/** A tile = an exact combination of the status / mfa / onboarding filters. */
-type Segment = "all" | "invited" | "nomfa" | "unassigned" | "suspended";
-const SEGMENT_FILTERS: Record<Segment, Record<"status" | "mfa" | "onboarding", string | null>> = {
-  all: { status: null, mfa: null, onboarding: null },
-  invited: { status: "ACTIVE", mfa: null, onboarding: "not-signed-in" },
-  nomfa: { status: "ACTIVE", mfa: "off", onboarding: null },
-  unassigned: { status: "ACTIVE", mfa: null, onboarding: "unplaced" },
-  suspended: { status: "SUSPENDED", mfa: null, onboarding: null },
-};
-
 export function UsersClient({
   tab = "all",
   tabs,
@@ -73,12 +43,12 @@ export function UsersClient({
   managerOptions,
   roleOptions,
   currentUserId,
-  insights,
   canManage,
   canGrantSuperAdmin = false,
   canResetPassword = false,
   customRoles = [],
   sso = false,
+  canInviteImport = false,
 }: {
   /** The active base set (UX11). */
   tab?: UserListTab;
@@ -97,7 +67,6 @@ export function UsersClient({
   /** The tenant's assignable roles (canonical + active custom) — the Role filter. */
   roleOptions: FilterOption[];
   currentUserId: string;
-  insights: AdminInsight[];
   /** Full user CRUD (roles/suspend/delete) — PlatformSuperAdmin only. Heads see a read-only
    * directory (the row-action menu collapses to department membership). */
   canManage: boolean;
@@ -110,10 +79,15 @@ export function UsersClient({
   /** SSO configured — MFA is enforced at the identity provider, not app-level TOTP, so the
    *  onboarding widget and the MFA filter drop the app-level MFA signal. */
   sso?: boolean;
+  /** users:invite — offers "Import People" (bulk invite) in the toolbar. */
+  canInviteImport?: boolean;
 }) {
   const list = useListUrl("admin-users", 10);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [showImport, setShowImport] = useState(false);
   const nomfaTab = tab === "nomfa";
-  const filterKeys: readonly FilterKey[] = nomfaTab ? NOMFA_FILTER_KEYS : FILTER_KEYS;
+  // The tab fixes status (Active / Invited / Suspended / No MFA); only "All" offers it as a filter.
+  const filterKeys: readonly FilterKey[] = nomfaTab ? NOMFA_FILTER_KEYS : tab === "all" ? FILTER_KEYS : FILTER_KEYS.filter((k) => k !== "status");
   // A key the tab doesn't use reads as unset, so it shows no chip (the server ignores it too).
   const f = Object.fromEntries(FILTER_KEYS.map((k) => [k, filterKeys.includes(k) ? list.get(k) : ""])) as Record<FilterKey, string>;
 
@@ -135,171 +109,112 @@ export function UsersClient({
   const filtered = (nomfaTab || stats.all > 0) && (active.length > 0 || !!list.q);
   const clearFilters = () => list.clear([...filterKeys]);
 
-  // A tile reflects the whole directory, so it only lights up on the All users tab.
-  const segment = nomfaTab ? undefined : (Object.keys(SEGMENT_FILTERS) as Segment[]).find((k) => {
-    const want = SEGMENT_FILTERS[k];
-    return (want.status ?? "") === f.status && (want.mfa ?? "") === f.mfa && (want.onboarding ?? "") === f.onboarding;
-  });
-
-  const tiles: { key: Segment; label: string; value: number; token: string }[] = [
-    { key: "all", label: "All users", value: stats.all, token: "--qink" },
-    { key: "invited", label: "Never signed in", value: stats.notSignedIn, token: "--warn" },
-    // App-level MFA doesn't apply under SSO (enforced at the identity provider), so hide it.
-    ...(sso ? [] : [{ key: "nomfa" as const, label: "No MFA", value: stats.noMfa, token: "--bad" }]),
-    { key: "unassigned", label: "Unassigned", value: stats.unplaced, token: "--qinfo" },
-    { key: "suspended", label: "Suspended", value: stats.suspended, token: "--ink4" },
-  ];
+  const roleLabel = (r: string) => roleOptions.find((o) => o.value === r)?.label ?? r;
+  const editing = editId ? (users.find((u) => u.id === editId) ?? null) : null;
 
   return (
     <div className="flex flex-col gap-4">
-      {/* DM1.72 — bulk invite, relocated here when the org-setup wizard retired. */}
-      <PeopleImportPanel />
-      {/* Onboarding overview — each tile sets the matching directory filters */}
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6 [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.06s_both]">
-        <div className={`${CARD} p-[14px_16px]`} style={{ background: "radial-gradient(300px 120px at 50% -40%, color-mix(in oklab, var(--ok) 16%, transparent), transparent 65%), var(--cardbg)" }}>
-          <div className="font-heading rv:font-data text-[24px] rv:text-data-lg font-bold tabular-nums text-[var(--ok)]">{stats.onboarded}</div>
-          <div className="font-mono rv:font-sans text-[9px] rv:text-overline uppercase tracking-[1.2px] text-[var(--ink4)]">Fully onboarded</div>
-        </div>
-        {tiles.map((t) => {
-          const on = segment === t.key;
-          return (
-            <button
-              key={t.key}
-              type="button"
-              aria-pressed={on}
-              onClick={() => list.set({ ...SEGMENT_FILTERS[t.key], tab: null })}
-              className={`${CARD} p-[14px_16px] text-left transition-colors ${FOCUS}`}
-              style={{ borderColor: on ? "var(--brand)" : "var(--cardbd)", background: on ? "color-mix(in oklab, var(--brand) 8%, transparent)" : "var(--cardbg)" }}
-            >
-              <div className="font-heading rv:font-data text-[24px] rv:text-data-lg font-bold tabular-nums" style={{ color: `var(${t.token})` }}>{t.value}</div>
-              <div className="font-mono rv:font-sans text-[9px] rv:text-overline uppercase tracking-[1.2px] text-[var(--ink4)]">{t.label}</div>
-            </button>
-          );
-        })}
-      </div>
+      {tabs}
+      <ListToolbar>
+        <SearchField value={list.q} onChange={(q) => list.set({ q })} placeholder="Search users by name, email or department" label="Search users" />
+        <FilterSelect label="Role" allLabel="All roles" value={f.role} options={roleOptions} onChange={(v) => list.set({ role: v })} />
+        <FilterSelect label="Department" allLabel="All departments" value={f.department} options={departmentOptions} onChange={(v) => list.set({ department: v })} />
+        {!sso && !nomfaTab && <FilterSelect label="MFA" allLabel="MFA: any" value={f.mfa} options={mfaOptions} onChange={(v) => list.set({ mfa: v })} />}
+        {tab === "all" && <FilterSelect label="Status" allLabel="All statuses" value={f.status} options={statusOptions} onChange={(v) => list.set({ status: v })} />}
+        <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={clearFilters} />
+        {canInviteImport && (
+          <button type="button" aria-expanded={showImport} onClick={() => setShowImport((o) => !o)} className={`${SECONDARY} ml-auto`}>
+            Import People
+          </button>
+        )}
+      </ListToolbar>
+      {showImport && <PeopleImportPanel />}
 
-      {/* Toolbar outside the table card, above the directory and its rail (L2) */}
-      <div className="flex flex-col gap-2">
-        {tabs}
-        <ListToolbar>
-          <SearchField value={list.q} onChange={(q) => list.set({ q })} placeholder="Search names or emails" label="Search users" />
-          <FilterSelect label="Role" allLabel="All roles" value={f.role} options={roleOptions} onChange={(v) => list.set({ role: v })} />
-          <FilterSelect label="Department" allLabel="All departments" value={f.department} options={departmentOptions} onChange={(v) => list.set({ department: v })} />
-          {!sso && !nomfaTab && <FilterSelect label="MFA" allLabel="MFA: any" value={f.mfa} options={mfaOptions} onChange={(v) => list.set({ mfa: v })} />}
-          {!nomfaTab && <FilterSelect label="Status" allLabel="All statuses" value={f.status} options={statusOptions} onChange={(v) => list.set({ status: v })} />}
-          <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={clearFilters} />
-        </ListToolbar>
-      </div>
-
-      <div className="grid grid-cols-1 items-start gap-[18px] lg:grid-cols-[minmax(0,1fr)_300px] [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.12s_both]">
-        {/* Directory: the card holds only the table, its empty state and the footer (L2) */}
-        <div className="min-w-0">
-          <TableCard footer={<TableFooter info={info} noun="users" onPage={list.setPage} onSize={list.setSize} />}>
-            {users.length === 0 && nomfaTab && !filtered ? (
-              <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
-                <p className="text-[14px] font-semibold text-[var(--qink)]">Everyone has MFA set up.</p>
-                <p className="max-w-[48ch] text-[12.5px] text-[var(--ink3)]">Active users who haven’t turned on two-factor sign-in appear here.</p>
-              </div>
-            ) : users.length === 0 ? (
-              <ListEmpty filtered={filtered} noun="users" onClear={clearFilters} hint={filtered ? undefined : "Use “Create a user” to add the first person."} />
-            ) : (
-              <table className="relative w-full min-w-[780px] text-left text-[13px]">
-                <thead className="border-b border-[var(--border)] text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--ink3)]">
-                  <tr>
-                    <th scope="col" className="px-4 py-2.5 font-semibold">User</th>
-                    <th scope="col" className="px-3 py-2.5 font-semibold">Roles</th>
-                    <th scope="col" className="px-3 py-2.5 font-semibold">Department</th>
-                    <th scope="col" className="w-[120px] whitespace-nowrap px-3 py-2.5 font-semibold" title={sso ? "Signed in · placed on a team or project" : "Signed in · MFA · placed on a team or project"}>
-                      Onboarding
-                    </th>
-                    <th scope="col" className="whitespace-nowrap px-3 py-2.5 font-semibold">Last active</th>
-                    <th scope="col" className="w-10 px-2">
-                      <span className="sr-only">Actions</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((u) => {
-                    const s = steps(u);
-                    // SSO drops the MFA step from the checklist (enforced at the IdP).
-                    const stepFlags = sso ? [s.signedIn, s.placed] : [s.signedIn, s.mfa, s.placed];
-                    const okCount = stepFlags.filter(Boolean).length;
-                    return (
-                      <tr key={u.id} className="border-b border-[var(--border)] transition-colors last:border-0 hover:bg-[var(--surface-2)]">
-                        <td className="px-4 py-2.5">
-                          <span className="flex min-w-0 items-center gap-2.5">
-                            <span className="flex size-[30px] flex-none items-center justify-center rounded-full text-[10px] font-bold" style={{ background: "color-mix(in oklab, var(--brand) 14%, transparent)", color: "var(--brand)" }}>
-                              {initials(u.name)}
-                            </span>
-                            <span className="min-w-0">
-                              <span className="flex items-center gap-1.5">
-                                <span className="block max-w-[260px] truncate font-semibold text-[var(--qink)]">{u.name}</span>
-                                {u.status === "SUSPENDED" && <span className="rounded px-1 py-0.5 font-mono text-[8px] font-bold uppercase tracking-[.5px]" style={{ color: "var(--bad)", background: "color-mix(in oklab, var(--bad) 14%, transparent)" }}>Susp</span>}
-                                {u.status === "INVITED" && <span className="rounded px-1 py-0.5 font-mono text-[8px] font-bold uppercase tracking-[.5px]" style={{ color: "var(--qinfo)", background: "color-mix(in oklab, var(--qinfo) 14%, transparent)" }}>Invited</span>}
-                              </span>
-                              <span className="block max-w-[260px] truncate text-[12px] text-[var(--ink3)]">{u.email}</span>
-                            </span>
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <span className="flex flex-wrap gap-1">
-                            {u.roles.slice(0, 3).map((r) => (
-                              <span key={r} className="rounded-[5px] bg-[var(--wash2)] px-1.5 py-0.5 font-mono text-[9.5px] tracking-[.3px] text-[var(--ink3)]">{r}</span>
-                            ))}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5 text-[var(--ink2)]">
-                          <span className="block max-w-[180px] truncate">{u.departmentName ?? <span className="text-[var(--ink3)]">—</span>}</span>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <span className="flex items-center gap-1.5">
-                            <Dot on={s.signedIn} label="Signed in" />
-                            {!sso && <Dot on={s.mfa} label="MFA enabled" />}
-                            <Dot on={s.placed} label="Placed on a team/project" />
-                            <span className="ml-1 font-mono rv:font-data text-[9px] rv:text-data-sm text-[var(--ink5)]">{okCount}/{sso ? 2 : 3}</span>
-                          </span>
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-2.5 text-[12px] tabular-nums text-[var(--ink3)]">
-                          {u.lastLoginAt ? formatDayMonth(u.lastLoginAt, timeZone) : <span className="font-semibold text-[var(--warn)]">Never</span>}
-                        </td>
-                        <td className="px-2 py-2.5">
-                          <span className="flex justify-end">
-                            <UserRowActions user={u} currentUserId={currentUserId} departments={departments} users={managerOptions} canManage={canManage} canGrantSuperAdmin={canGrantSuperAdmin} canResetPassword={canResetPassword} customRoles={customRoles} />
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </TableCard>
-        </div>
-
-        {/* Rail — Q admin insights */}
-        <aside className="flex flex-col gap-3.5">
-          <div className={`overflow-hidden ${CARD}`} style={{ background: "radial-gradient(380px 180px at 50% -60%, color-mix(in oklab, var(--brand) 16%, transparent), transparent 65%), var(--cardbg)" }}>
-            <div className="border-b border-[var(--hair)] p-[13px_16px] font-heading text-[13px] rv:text-heading-xs font-bold text-[var(--qink)]">Insights</div>
-            <div className="flex flex-col">
-              {insights.map((i, idx) => (
-                <div key={idx} className="flex gap-2.5 border-b border-[var(--hair2)] p-[11px_16px] last:border-0">
-                  <span className="mt-[5px] size-[7px] flex-none rounded-full" style={{ background: `var(${DOT[i.color]})` }} />
-                  <span className="text-[12px] rv:text-body-sm leading-[1.5] text-[var(--ink2)]">{i.text}</span>
-                </div>
+      <TableCard footer={<TableFooter info={info} noun="users" onPage={list.setPage} onSize={list.setSize} />}>
+        {users.length === 0 && nomfaTab && !filtered ? (
+          <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
+            <p className="text-[14px] font-semibold text-[var(--ds-ink)]">Everyone has MFA set up.</p>
+            <p className="max-w-[48ch] text-[12.5px] text-[var(--ds-ink3)]">Active users who haven’t turned on two-factor sign-in appear here.</p>
+          </div>
+        ) : users.length === 0 ? (
+          <ListEmpty filtered={filtered} noun="users" onClear={clearFilters} hint={filtered ? undefined : "Use “Invite User” to add the first person."} />
+        ) : (
+          <table className="w-full min-w-[760px] border-separate border-spacing-0 text-left text-[12.5px]">
+            <thead className={THEAD}>
+              <tr>
+                <th scope="col">User</th>
+                <th scope="col">Role</th>
+                <th scope="col">Department</th>
+                {!sso && <th scope="col">MFA</th>}
+                <th scope="col">Last Active</th>
+                <th scope="col">
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id} className={TROW}>
+                  <td>
+                    <b className="block max-w-[260px] truncate font-semibold text-[var(--ds-ink)]">{u.name}</b>
+                    <span className="block max-w-[260px] truncate text-[12px] text-[var(--ds-ink3)]">{u.email}</span>
+                  </td>
+                  <td className="text-[var(--ds-ink2)]">{u.roles.map(roleLabel).join(", ") || "None"}</td>
+                  <td className="text-[var(--ds-ink2)]">
+                    <span className="block max-w-[180px] truncate">{u.departmentName ?? "None"}</span>
+                  </td>
+                  {!sso && (
+                    <td>
+                      {u.status === "SUSPENDED" ? (
+                        <Chip>Suspended</Chip>
+                      ) : u.status === "INVITED" ? (
+                        <Chip tone="info">Invite sent</Chip>
+                      ) : u.mfaEnabled ? (
+                        <Chip tone="ok">On</Chip>
+                      ) : (
+                        <Chip tone="bad">Off</Chip>
+                      )}
+                    </td>
+                  )}
+                  <td className="whitespace-nowrap tabular-nums text-[var(--ds-ink3)]">{u.lastLoginAt ? lastActive(u.lastLoginAt, timeZone) : "Never"}</td>
+                  <td className="text-right">
+                    {u.status !== "DELETED" && (
+                      <button type="button" onClick={() => setEditId(u.id)} className={COMPACT}>
+                        {u.status === "INVITED" ? "Resend" : "Edit"}
+                      </button>
+                    )}
+                  </td>
+                </tr>
               ))}
-            </div>
-          </div>
-          <div className="rounded-[14px] border border-dashed border-[var(--hair)] p-[14px_16px] text-[11.5px] rv:text-body-xs leading-[1.55] text-[var(--ink4)]">
-            {sso
-              ? "A user is ready once they’ve signed in with Microsoft and joined a team or project. MFA is enforced by your identity provider. Use the tiles above to find who’s stuck, and “Create a user” to add someone."
-              : "A user is ready once they’ve signed in, enabled MFA, and joined a team or project. Use the tiles above to find who’s stuck, and “Create a user” to add someone."}
-          </div>
-        </aside>
-      </div>
+            </tbody>
+          </table>
+        )}
+      </TableCard>
+
+      <UserEditDrawer
+        user={editing}
+        onClose={() => setEditId(null)}
+        currentUserId={currentUserId}
+        timeZone={timeZone}
+        departments={departments}
+        managerOptions={managerOptions}
+        roleLabel={roleLabel}
+        canManage={canManage}
+        canGrantSuperAdmin={canGrantSuperAdmin}
+        canResetPassword={canResetPassword}
+        customRoles={customRoles}
+        sso={sso}
+      />
     </div>
   );
 }
 
-function Dot({ on, label }: { on: boolean; label: string }) {
-  return <span className="size-2 rounded-[2px]" style={{ background: on ? "var(--ok)" : "var(--w14)" }} title={`${label}: ${on ? "done" : "pending"}`} />;
+/** "Today", "Yesterday", "3 days ago", then the date. */
+function lastActive(d: Date | string, tz: string): string {
+  const days = Math.round((Date.parse(`${dayKey(new Date(), tz)}T00:00:00Z`) - Date.parse(`${dayKey(d, tz)}T00:00:00Z`)) / 86_400_000);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days} days ago`;
+  return formatDayMonth(d, tz);
 }
+

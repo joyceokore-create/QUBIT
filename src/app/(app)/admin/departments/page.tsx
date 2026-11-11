@@ -5,15 +5,18 @@ import { listUsers } from "@/server/users";
 import { AdminHeader } from "../admin-header";
 import { DepartmentDialog } from "./department-dialog";
 import { DepartmentRowActions } from "./department-row-actions";
-import { CARD_GLASS as CARD } from "@/lib/surface";
+import { CARD, THEAD, TROW } from "@/lib/surface";
 
-const ROW = "grid grid-cols-[minmax(0,1.4fr)_140px_140px_140px_70px_40px] items-center gap-3.5 p-[10px_18px]";
-
+// UX fidelity D-F7: Heads see departments but may only edit the ones they head
+// (canManageDepartment, src/lib/access.ts); creating needs departments:manage. Before this,
+// "New Department" showed for Heads and the API refused it (403).
 export default async function AdminDepartmentsPage() {
   const session = await auth();
   if (!session?.user) return null;
 
   const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
+  const canCreate = can(ctx, "departments:manage");
+  const manageAll = ctx.roles.includes("PlatformSuperAdmin");
   const [departments, orgUnits, users] = await Promise.all([
     listDepartments(ctx),
     listOrgUnitOptions(ctx),
@@ -22,49 +25,61 @@ export default async function AdminDepartmentsPage() {
   const departmentById = new Map(departments.map((d) => [d.id, d]));
 
   return (
-    <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
-      <AdminHeader canManageIam={can(ctx, "iam:manage")}
-        subtitle={`${departments.length} ${departments.length === 1 ? "department" : "departments"} · org structure ships empty by design (no seeded PII)`}
-        action={<DepartmentDialog mode="create" departments={departments} orgUnits={orgUnits} users={users} />}
+    <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_22px_90px]">
+      <AdminHeader
+        canManageIam={can(ctx, "iam:manage")}
+        title="Departments"
+        description={`${departments.length} ${departments.length === 1 ? "department" : "departments"}. Edit a department to change its head, parent or org unit.`}
+        action={canCreate ? <DepartmentDialog mode="create" departments={departments} orgUnits={orgUnits} users={users} /> : undefined}
       />
 
-      {departments.length === 0 ? (
-        <div className="flex min-h-[240px] flex-col items-center justify-center gap-3 rounded-[16px] border border-dashed border-[var(--hair)] p-10 text-center [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.06s_both]">
-          <span aria-hidden className="grid grid-cols-2 grid-rows-2 gap-1 opacity-35">
-            <span className="size-3.5 rounded-[4px] bg-[var(--ink4)]" />
-            <span className="size-3.5 rounded-[4px]" style={{ background: "color-mix(in oklab, var(--ink4) 45%, transparent)" }} />
-            <span className="size-3.5 rounded-[4px]" style={{ background: "color-mix(in oklab, var(--ink4) 45%, transparent)" }} />
-            <span className="size-3.5 rounded-[4px] bg-[var(--ink4)]" />
-          </span>
-          <div className="text-[13px] font-semibold text-[var(--qink)]">No departments yet</div>
-          <p className="max-w-[380px] text-[12px] rv:text-body-sm leading-[1.55] text-[var(--ink4)]">
-            Real departments are entered by hand — the hierarchy is cycle-checked on every update, and the head field is
-            informational (it never grants the DepartmentHead role).
-          </p>
-        </div>
-      ) : (
-        <div className={`overflow-hidden [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.06s_both] ${CARD}`} style={{ background: "var(--cardbg)" }}>
-          <div className="overflow-x-auto">
-            <div className="min-w-[720px]">
-              <div className={`${ROW} border-b border-[var(--hair)] font-mono rv:font-sans text-[9px] rv:text-overline font-semibold uppercase tracking-[1.6px] text-[var(--ink4)]`}>
-                <span>Name</span><span>Parent</span><span>Org unit</span><span>Head</span><span>Members</span><span className="text-right">·</span>
-              </div>
-              {departments.map((d) => (
-                <div key={d.id} className={`${ROW} border-b border-[var(--hair2)] transition-colors last:border-0 hover:bg-[var(--wash)]`}>
-                  <span className="truncate text-[13px] font-semibold text-[var(--qink)]">{d.name}</span>
-                  <span className="truncate text-[12px] rv:text-body-sm text-[var(--ink3)]">{d.parentId ? (departmentById.get(d.parentId)?.name ?? "—") : "—"}</span>
-                  <span className="truncate text-[12px] rv:text-body-sm text-[var(--ink3)]">{d.orgUnitName ?? "—"}</span>
-                  <span className="truncate text-[12px] rv:text-body-sm text-[var(--ink3)]">{d.headUserName ?? "—"}</span>
-                  <span className="font-mono rv:font-data text-[11px] rv:text-data-sm text-[var(--ink4)]">{d.memberCount}</span>
-                  <span className="flex justify-end">
-                    <DepartmentRowActions department={d} departments={departments} orgUnits={orgUnits} users={users} />
-                  </span>
-                </div>
-              ))}
-            </div>
+      <TableCardStatic>
+        {departments.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
+            <p className="text-[14px] font-semibold text-[var(--ds-ink)]">No departments yet</p>
+            <p className="max-w-[48ch] text-[12.5px] text-[var(--ds-ink3)]">Departments are entered by hand. The hierarchy is checked for loops on every change, and the head field never grants a role.</p>
           </div>
-        </div>
-      )}
+        ) : (
+          <table className="w-full min-w-[720px] border-separate border-spacing-0 text-left text-[12.5px]">
+            <thead className={THEAD}>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Parent</th>
+                <th scope="col">Org Unit</th>
+                <th scope="col">Head</th>
+                <th scope="col">Members</th>
+                <th scope="col">
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {departments.map((d) => (
+                <tr key={d.id} className={TROW}>
+                  <td>
+                    <b className="font-semibold text-[var(--ds-ink)]">{d.name}</b>
+                  </td>
+                  <td className="text-[var(--ds-ink2)]">{d.parentId ? (departmentById.get(d.parentId)?.name ?? "None") : "None"}</td>
+                  <td className="text-[var(--ds-ink2)]">{d.orgUnitName ?? "None"}</td>
+                  <td className="text-[var(--ds-ink2)]">{d.headUserName ?? "None"}</td>
+                  <td className="tabular-nums text-[var(--ds-ink2)]">{d.memberCount}</td>
+                  <td className="text-right">
+                    {(manageAll || d.headUserId === ctx.userId) && <DepartmentRowActions department={d} departments={departments} orgUnits={orgUnits} users={users} />}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </TableCardStatic>
     </main>
+  );
+}
+
+function TableCardStatic({ children }: { children: React.ReactNode }) {
+  return (
+    <section className={`${CARD} overflow-x-auto px-[18px] py-4`} style={{ background: "var(--ds-card)" }}>
+      {children}
+    </section>
   );
 }

@@ -152,8 +152,9 @@ export async function listUsers(
 
 /** Statuses the Users list can filter on (DELETED rows never list). */
 export const USER_LIST_STATUSES = ["ACTIVE", "INVITED", "SUSPENDED"] as const;
-/** The Users page's tabs (UX11): the whole directory, or the No MFA base set. */
-export const USER_LIST_TABS = ["all", "nomfa"] as const;
+/** The Users page's tabs (UX11; design spec v2): All · Active · Invited · No MFA · Suspended.
+ * Each narrows the base set; search and the other filters still AND on top. */
+export const USER_LIST_TABS = ["all", "active", "invited", "nomfa", "suspended"] as const;
 export type UserListTab = (typeof USER_LIST_TABS)[number];
 
 /**
@@ -190,6 +191,9 @@ function userListWhere(q: z.output<typeof UserListQuery>): Prisma.UserWhereInput
   const and: Prisma.UserWhereInput[] = [{ status: q.status ?? { not: "DELETED" } }];
   // The tab narrows the base set; search and the other filters still AND on top of it.
   if (q.tab === "nomfa") and.push(NO_MFA_WHERE);
+  if (q.tab === "active") and.push({ status: "ACTIVE" });
+  if (q.tab === "invited") and.push({ status: "INVITED" });
+  if (q.tab === "suspended") and.push({ status: "SUSPENDED" });
   if (q.q) and.push({ OR: [{ name: containsText(q.q) }, { email: containsText(q.q) }] });
   if (q.role) and.push({ roles: { some: { role: q.role } } });
   if (q.department) and.push({ departmentId: q.department === "none" ? null : q.department });
@@ -226,6 +230,10 @@ export interface UserDirectoryStats {
   all: number;
   /** ACTIVE and never signed in. */
   notSignedIn: number;
+  /** ACTIVE (the Active tab). */
+  active: number;
+  /** INVITED — created, invite not yet accepted (the Invited tab). */
+  invited: number;
   /** ACTIVE without app-level TOTP. */
   noMfa: number;
   /** ACTIVE and on no team or project. */
@@ -248,7 +256,7 @@ export async function userDirectoryStats(ctx: TenantContext, opts: { sso: boolea
   const placed: Prisma.UserWhereInput = { OR: [{ teamMemberships: { some: {} } }, { projectAllocations: { some: {} } }] };
   return withTenant(ctx, async (tx) => {
     const count = (where: Prisma.UserWhereInput) => tx.user.count({ where });
-    const [all, notSignedIn, noMfa, unplaced, suspended, onboarded, noMfaAdmins, noDepartment, activeAdmins] = await Promise.all([
+    const [all, notSignedIn, noMfa, unplaced, suspended, onboarded, noMfaAdmins, noDepartment, activeAdmins, activeN, invited] = await Promise.all([
       count(live),
       count({ ...active, lastLoginAt: null }),
       count(NO_MFA_WHERE),
@@ -258,8 +266,10 @@ export async function userDirectoryStats(ctx: TenantContext, opts: { sso: boolea
       count({ AND: [live, admin, { mfaSecret: null }] }),
       count({ ...live, departmentId: null }),
       count({ AND: [active, admin] }),
+      count(active),
+      count({ status: "INVITED" }),
     ]);
-    return { all, notSignedIn, noMfa, unplaced, suspended, onboarded, noMfaAdmins, noDepartment, activeAdmins };
+    return { all, notSignedIn, active: activeN, invited, noMfa, unplaced, suspended, onboarded, noMfaAdmins, noDepartment, activeAdmins };
   });
 }
 

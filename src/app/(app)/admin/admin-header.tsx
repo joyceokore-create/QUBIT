@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { TabStrip } from "@/components/ui/tab-strip";
 import { usePathname } from "next/navigation";
 import { PageHeader } from "@/components/list/page-header";
@@ -14,18 +13,19 @@ import { PageHeader } from "@/components/list/page-header";
 const TABS = [
   { label: "Users", href: "/admin/users" },
   { label: "Teams", href: "/admin/teams" },
-  { label: "Roles", href: "/admin/roles" },
+  { label: "Roles & Permissions", href: "/admin/roles" },
   { label: "Departments", href: "/admin/departments" },
   { label: "Markets", href: "/admin/organisation" },
-  { label: "Audit", href: "/admin/audit", iamOnly: true },
-  { label: "Access requests", href: "/admin/access-requests", iamOnly: true },
+  { label: "Audit Log", href: "/admin/audit", iamOnly: true },
+  { label: "Access Requests", href: "/admin/access-requests", iamOnly: true },
   // UX11 (Q3): tenant settings — the time zone. Super Admin only.
   { label: "Settings", href: "/admin/settings", iamOnly: true },
 ];
 
-// UX5 (L2): a converted list page passes `title` (+ `description`), and the header becomes the
-// shared PageHeader — "Admin" eyebrow, the page's own title and description, its actions top
-// right — above the admin tab strip. Pages that don't pass `title` keep the old layout.
+// UX fidelity D-F7: Super Admin reaches every admin page from the sidebar, so no section tabs
+// are drawn for them. Heads and Head of QA reach Admin through one "Admin" item and keep the
+// tabs, limited to the pages they can use (iam:manage pages are hidden). Pages that don't pass
+// a title get their section's name as the title.
 export function AdminHeader({
   subtitle,
   action,
@@ -41,46 +41,18 @@ export function AdminHeader({
 }) {
   const path = usePathname();
 
-  const [newCount, setNewCount] = useState(0);
-  useEffect(() => {
-    let active = true;
-    fetch("/api/admin/access-requests/count")
-      .then((r) => (r.ok ? r.json() : { new: 0 }))
-      .then((d) => {
-        if (active) setNewCount(d.new ?? 0);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
-
+  const section = TABS.find((t) => path === t.href || path.startsWith(`${t.href}/`));
+  const showTabs = !canManageIam;
   return (
-    <div className="flex flex-col gap-3.5 [animation:rise_.5s_cubic-bezier(.22,1,.36,1)_both]">
-      {title ? (
-        <PageHeader eyebrow="Admin" title={title} description={description} actions={action} />
-      ) : (
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <div className="mb-1.5 font-mono rv:font-sans text-[10px] rv:text-overline font-semibold uppercase tracking-[2.4px] text-[var(--ink4)]">
-              Administration · IAM v1 · gated on admin:access
-            </div>
-            <h1 className="font-heading text-[27px] rv:text-heading-lg font-bold tracking-[-.8px] text-[var(--qink)]">Admin</h1>
-            {subtitle && <p className="mt-1 text-[12px] rv:text-body-sm text-[var(--ink4)]">{subtitle}</p>}
-          </div>
-          {action}
-        </div>
+    <div className="flex flex-col gap-4">
+      <PageHeader eyebrow={showTabs ? "Admin" : undefined} title={title ?? section?.label ?? "Admin"} description={description ?? subtitle} actions={action} />
+      {showTabs && (
+        <TabStrip
+          label="Admin sections"
+          active={section?.href ?? ""}
+          tabs={TABS.filter((t) => !t.iamOnly).map((t) => ({ key: t.href, label: t.label, href: t.href }))}
+        />
       )}
-      <TabStrip
-        label="Admin sections"
-        active={TABS.find((t) => path === t.href || path.startsWith(`${t.href}/`))?.href ?? ""}
-        tabs={TABS.filter((t) => canManageIam || !t.iamOnly).map((t) => ({
-          key: t.href,
-          label: t.label,
-          href: t.href,
-          count: t.href === "/admin/access-requests" && newCount > 0 ? newCount : undefined,
-        }))}
-      />
     </div>
   );
 }

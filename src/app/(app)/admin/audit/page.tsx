@@ -1,8 +1,9 @@
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
-import { parseListParams } from "@/lib/list-state";
 import { formatDateTime } from "@/lib/dates";
-import { dayRange } from "@/lib/list-query";
+import { auditActionOptions } from "@/lib/audit-view";
+import { SECONDARY } from "@/lib/surface";
+import { resolveAuditFilters } from "@/server/audit-filters";
 import { auditFilterOptions, listAuditLogPaged } from "@/server/audit";
 import { getTenantTimeZone } from "@/server/preferences";
 import { Forbidden } from "@/components/forbidden";
@@ -23,39 +24,43 @@ export default async function AdminAuditPage({ searchParams }: { searchParams: S
   if (!can(ctx, "iam:manage")) return <Forbidden />;
 
   const [options, tz] = await Promise.all([auditFilterOptions(ctx), getTenantTimeZone(ctx)]);
-  // Allow-lists: Action and Who must be values that exist in THIS tenant's log; from/to are
-  // short text here and validated as real calendar days by dayRange.
-  const params = parseListParams(await searchParams, {
-    defaultSize: 10,
-    filters: { action: options.actions, actor: options.actors.map((a) => a.id), from: "text", to: "text" },
-  });
-  const range = dayRange(params.filters.from, params.filters.to, tz);
-  const { rows, info } = await listAuditLogPaged(ctx, {
-    q: params.q,
-    page: params.page,
-    size: params.size,
-    action: params.filters.action,
-    actor: params.filters.actor,
-    from: range.gte,
-    to: range.lt,
-  });
+  const sp = await searchParams;
+  const { params, period, action, actor, range } = resolveAuditFilters(sp, options, tz);
+  const { rows, info } = await listAuditLogPaged(ctx, { q: params.q, page: params.page, size: params.size, action, actor, from: range.gte, to: range.lt });
+
+  // Export uses the same URL filters (minus paging).
+  const exportQs = new URLSearchParams();
+  for (const k of ["q", "action", "actor", "period", "from", "to"]) {
+    const v = sp[k];
+    if (typeof v === "string" && v) exportQs.set(k, v);
+  }
 
   return (
-    <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
-      <AdminHeader title="Audit log" description="Every change writes a row, at the same moment as the change. Times are in your organisation's time zone." />
+    <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_22px_90px]">
+      <AdminHeader
+        title="Audit Log"
+        description="Every change, who made it and when. Times are in your organisation's time zone."
+        action={
+          <a href={`/api/admin/audit/export${exportQs.size ? `?${exportQs}` : ""}`} className={SECONDARY}>
+            Export CSV
+          </a>
+        }
+      />
       <AuditClient
         info={info}
-        actions={options.actions}
+        actionOptions={auditActionOptions(options.actions)}
         actors={options.actors}
-        range={{ from: range.from ?? "", to: range.to ?? "" }}
+        period={period}
+        range={{ from: period ? "" : (range.from ?? ""), to: period ? "" : (range.to ?? "") }}
         anyEvents={options.actions.length > 0}
         rows={rows.map((r) => ({
           id: r.id,
           when: formatDateTime(r.createdAt, tz),
           createdAt: r.createdAt.toISOString(),
-          actor: r.actorName ?? r.actorId ?? "—",
-          action: r.action,
-          entity: `${r.entityType}:${r.entityId}`,
+          actor: r.actorName ?? "System",
+          action: r.actionLabel,
+          record: r.record,
+          change: r.change,
         }))}
       />
     </main>
