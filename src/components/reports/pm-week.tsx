@@ -11,6 +11,8 @@ import { lineTone, type LineTone } from "@/lib/status-lines";
 import { COMPACT, COMPACT_PRIMARY, FOCUS, PRIMARY, SECONDARY, THEAD, TROW } from "@/lib/surface";
 import { cn } from "@/lib/utils";
 import { FilterChips, FilterSelect, ListToolbar, SearchField } from "@/components/list/list-toolbar";
+import { InHeaderSlot } from "@/components/list/header-slot";
+import { PM_WEEK_HEADER_SLOT } from "@/lib/header-slots";
 import { ListEmpty, TableCard, TableFooter } from "@/components/list/table-footer";
 import { useListUrl } from "@/components/list/use-list-url";
 import { Panel } from "@/components/ui/panel";
@@ -170,9 +172,12 @@ export function PmWeek({ isCurrent, rows: initial, canUpload = false }: { isoWee
             </Link>
           )}
           {anyConfirmable && (
-            <button type="button" onClick={() => void sendAll()} disabled={sendingAll !== null || sendable.length === 0} className={PRIMARY} title={sendable.length ? `Sends ${sendable.length} drafted ${sendable.length === 1 ? "line" : "lines"} to the Head` : "No drafted line is waiting to send"}>
-              <Send className="size-3.5" aria-hidden /> {sendingAll ? `Sending ${Math.min(sendingAll.done + 1, sendingAll.total)} of ${sendingAll.total}…` : "Confirm & Send All"}
-            </button>
+            // UX fidelity Tier 3: the page's one primary lives in the Reports header (design).
+            <InHeaderSlot id={PM_WEEK_HEADER_SLOT}>
+              <button type="button" onClick={() => void sendAll()} disabled={sendingAll !== null || sendable.length === 0} className={PRIMARY} title={sendable.length ? `Sends ${sendable.length} drafted ${sendable.length === 1 ? "line" : "lines"} to the Head` : "No drafted line is waiting to send"}>
+                <Send className="size-3.5" aria-hidden /> {sendingAll ? `Sending ${Math.min(sendingAll.done + 1, sendingAll.total)} of ${sendingAll.total}…` : "Confirm & Send All"}
+              </button>
+            </InHeaderSlot>
           )}
         </div>
       </div>

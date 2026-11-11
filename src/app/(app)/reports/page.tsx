@@ -23,6 +23,8 @@ import { HeadInbox } from "@/components/reports/head-inbox";
 import { RollupRail } from "@/components/reports/rollup-rail";
 import { RecentRollups, RollupArchive } from "@/components/reports/rollup-archive";
 import { ExecWeek } from "@/components/reports/exec-week";
+import { HeaderSlot } from "@/components/list/header-slot";
+import { PM_WEEK_HEADER_SLOT } from "@/lib/header-slots";
 import { CustomReportBuilder } from "@/components/reports/custom-report-builder";
 import { QualityReport } from "@/components/reports/quality-report";
 import { listRecipients } from "@/server/rollup-recipients";
@@ -46,16 +48,14 @@ import { pdfAvailable } from "@/server/pdf/render";
  * reports. It reads "now", so the week switcher steps aside on that tab.
  */
 
+// UX fidelity Tier 3: the design's one-line descriptions.
 const SUBTITLE: Record<ReportsView, (n: number) => string> = {
-  pm: (n) =>
-    n === 0
-      ? "No projects to confirm this week — your work is reported from the board."
-      : `Your ${n} ${n === 1 ? "project" : "projects"} this week. Confirm each line and it goes straight to the Head's roll-up.`,
-  head: () => "Every project's update for the week, in one inbox. Approve the roll-up, then send or export it.",
-  exec: () => "The approved weekly roll-up — status, trend and the blockers that need you.",
+  pm: (n) => (n === 0 ? "No projects to confirm this week. Your work is reported from the board." : "Your projects this week."),
+  head: () => "Weekly reporting across all projects.",
+  exec: () => "The week across the approved portfolio.",
 };
 
-const QUALITY_SUBTITLE = "Quality across every active project — test coverage, critical issues and test work.";
+const QUALITY_SUBTITLE = "Quality across delivery.";
 
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ week?: string; as?: string; tab?: string; upload?: string }> }) {
   const session = await auth();
@@ -143,6 +143,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         actions={
           <>
             {tab !== "quality" && <WeekSwitcher isoWeek={week} range={data.week.range} prev={data.week.prev} next={data.week.next} currentWeek={currentWeek} hrefFor={(w) => href({ week: w })} />}
+            {view === "pm" && tab === "week" && <HeaderSlot id={PM_WEEK_HEADER_SLOT} />}
             {!newUi && canPreview(ctx.roles) && <PreviewSwitch view={view} hrefFor={(v) => href({ as: v, tab: tab === "custom" ? "custom" : "week" })} />}
           </>
         }
