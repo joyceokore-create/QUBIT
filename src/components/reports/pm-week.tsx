@@ -4,23 +4,29 @@ import { dispatchTourEvent } from "@/components/tour/tour-events";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CheckCheck, Send, ShieldAlert, Upload } from "lucide-react";
-import { RagTally, WeekMeter } from "@/components/reports/week-meter";
+import { Send, Upload } from "lucide-react";
+import { toast } from "sonner";
 import { LocalTime } from "@/components/reports/local-time";
-import { lineTone, TONE_TOKEN } from "@/lib/status-lines";
-import { CARD, CARD_BG, FOCUS, PRIMARY, QUIET, RAG_TOKEN, SECONDARY, ragChipStyle, ragFill } from "@/lib/surface";
+import { lineTone, type LineTone } from "@/lib/status-lines";
+import { COMPACT, COMPACT_PRIMARY, FOCUS, PRIMARY, SECONDARY, THEAD, TROW } from "@/lib/surface";
+import { cn } from "@/lib/utils";
 import { FilterChips, FilterSelect, ListToolbar, SearchField } from "@/components/list/list-toolbar";
-import { ListEmpty, TableFooter } from "@/components/list/table-footer";
+import { ListEmpty, TableCard, TableFooter } from "@/components/list/table-footer";
 import { useListUrl } from "@/components/list/use-list-url";
+import { Panel } from "@/components/ui/panel";
+import { Chip, HealthPill } from "@/components/ui/status-pill";
+import { TEXT_LINK, TextLink } from "@/components/ui/text-link";
+import { Choice, Drawer, DrawerError, DrawerFooter, DrawerFrame, DrawerHeader, DrawerSection, DrawerText, Field, FIELD_INPUT, FIELD_TEXTAREA } from "@/components/ui/drawer";
 import { matchesSearch, paginate } from "@/lib/list-state";
 import type { Rag } from "@/server/health";
 
 /**
- * Milestone B — the PM's week on /reports (the My week queue, re-homed): every project
- * you run, the draft to confirm against, one line, the RAG, one button. Confirming IS
- * sending (Milestone A). Sent rows sink to the bottom as the queue drains. Oct 2026: the
- * weekly status report (Word/Excel/PDF) can be uploaded to fill every draft at once, and
- * "Confirm & send all" sends the filled drafts in one go.
+ * Milestone B — the PM's week on /reports › This Week (design spec v2: toolbar above a table
+ * card — Project · Status · Line for the Head · Update). Every project you run, its line and
+ * whether it reached the Head. "Review & Send" opens the update in the shared drawer:
+ * confirming IS sending (Milestone A). Sent rows sink to the bottom as the queue drains.
+ * "Confirm & Send All" sends every drafted line in one go; "Update All My Projects" opens
+ * the weekly update workspace (cards + status report upload).
  */
 
 export interface PmRowJson {
@@ -45,16 +51,22 @@ export interface PmRowJson {
 }
 
 const RAGS = ["Green", "Amber", "Red"] as const;
+const RAG_WORD: Record<Rag, string> = { Green: "On track", Amber: "At risk", Red: "Off track" };
+const RAG_TONE: Record<Rag, "ok" | "warn" | "bad"> = { Green: "ok", Amber: "warn", Red: "bad" };
+const LINE_DOT: Record<LineTone, string> = { bad: "var(--ds-bad)", warn: "var(--ds-warn)", ok: "var(--ds-ok)", neutral: "var(--ds-ink4)" };
 const RANK: Record<Rag, number> = { Red: 0, Amber: 1, Green: 2 };
 const stage = (r: PmRowJson) => (!r.confirmed ? 0 : !r.sentToHead ? 1 : 2);
 const sortRows = (rows: PmRowJson[]) =>
   [...rows].sort((a, b) => stage(a) - stage(b) || RANK[a.effectiveRag] - RANK[b.effectiveRag] || a.name.localeCompare(b.name));
+const workspaceOf = (r: PmRowJson) => `/projects/${r.projectId}?tab=This%20week`;
 
 export function PmWeek({ isCurrent, rows: initial, canUpload = false }: { isoWeek: string; isCurrent: boolean; rows: PmRowJson[]; canUpload?: boolean }) {
-  const [rows, setRows] = useState<PmRowJson[]>(initial);
+  const [rows, setRows] = useState<PmRowJson[]>(() => sortRows(initial));
   const [sendingAll, setSendingAll] = useState<{ done: number; total: number } | null>(null);
   const [sendAllErrors, setSendAllErrors] = useState<string[]>([]);
-  const [openId, setOpenId] = useState<string | null>(() => initial.find((r) => !r.confirmed && r.canConfirm)?.projectId ?? null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [resending, setResending] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
 
   // The server re-renders after an upload fills the drafts (router.refresh) — the queue
   // must follow, or the filled lines never show without a hard reload.
@@ -62,44 +74,34 @@ export function PmWeek({ isCurrent, rows: initial, canUpload = false }: { isoWee
     setRows(sortRows(initial));
   }, [initial]);
 
-  const onChange = (next: PmRowJson) => {
-    setRows((prev) => sortRows(prev.map((p) => (p.projectId === next.projectId ? next : p))));
-    if (next.sentToHead) setOpenId(rows.find((r) => r.projectId !== next.projectId && !r.confirmed && r.canConfirm)?.projectId ?? null);
-  };
+  const onChange = (next: PmRowJson) => setRows((prev) => sortRows(prev.map((p) => (p.projectId === next.projectId ? next : p))));
 
   const list = useListUrl("pm-week", 10); // before the early return (rules of hooks)
 
   if (rows.length === 0) {
     return (
-      <div className={`${CARD} p-8 text-center`} style={CARD_BG} data-tour="pm-week">
-        <p className="text-[13px] font-semibold text-[var(--qink)]">You don&apos;t lead any projects this week — your work is reported from the board.</p>
-        <Link href="/board" className={`mt-2 inline-block ${QUIET}`}>
-          Open My Board →
-        </Link>
+      <div data-tour="pm-week">
+        <Panel>
+          <ListEmpty filtered={false} noun="projects this week" hint="You don't lead any projects this week. Your work is reported from the board." action={<TextLink href="/board">Open My Board</TextLink>} />
+        </Panel>
       </div>
     );
   }
 
   const sent = rows.filter((r) => r.sentToHead).length;
   const toSend = rows.length - sent;
-  const counts = { green: 0, amber: 0, red: 0 };
-  for (const r of rows) {
-    if (r.effectiveRag === "Green") counts.green++;
-    else if (r.effectiveRag === "Amber") counts.amber++;
-    else counts.red++;
-  }
 
   // Rows a bulk send can take as they are: drafted narrative, confirmable, not yet sent.
   const sendable = rows.filter((r) => isCurrent && r.canConfirm && !r.confirmed && (r.narrative ?? "").trim());
+  const anyConfirmable = isCurrent && rows.some((r) => r.canConfirm);
 
   // UX12 (L1–L3, D13): the list rules — search, a Status filter, always-visible pagination
   // (default 10, remembered). "pw*" keys so they never clash with /reports' own params.
   const statusFilter = list.get("pwstatus");
-  const shown = rows.filter(
-    (r) => matchesSearch(list.q, r.name, r.code) && (!statusFilter || (statusFilter === "sent" ? r.sentToHead : !r.sentToHead)),
-  );
+  const shown = rows.filter((r) => matchesSearch(list.q, r.name, r.code) && (!statusFilter || (statusFilter === "sent" ? r.sentToHead : !r.sentToHead)));
   const { rows: pageRows, info } = paginate(shown, list.page, list.size);
   const filtersOn = !!statusFilter || !!list.q;
+  const openRow = openId ? (rows.find((r) => r.projectId === openId) ?? null) : null;
 
   const sendAll = async () => {
     setSendingAll({ done: 0, total: sendable.length });
@@ -129,38 +131,21 @@ export function PmWeek({ isCurrent, rows: initial, canUpload = false }: { isoWee
     setSendingAll(null);
   };
 
+  /** A week confirmed before the one-step change: send it on as it is. */
+  const resend = async (r: PmRowJson) => {
+    setResending(r.projectId);
+    setRowError(null);
+    const res = await fetch(`/api/projects/${r.projectId}/checkin/submit`, { method: "POST" });
+    setResending(null);
+    const d = await res.json().catch(() => null);
+    if (res.ok && d?.data?.submittedToHeadAt) onChange({ ...r, sentToHead: true, sentAt: d.data.submittedToHeadAt });
+    else setRowError({ id: r.projectId, message: d?.error?.message ?? "Could not send. Try again." });
+  };
+
   return (
-    <section data-tour="pm-week" className={`${CARD} overflow-hidden`} style={CARD_BG} aria-labelledby="pm-week">
-      <h2 id="pm-week" className="sr-only">
-        This week&apos;s updates
-      </h2>
-      <WeekMeter
-        done={sent}
-        total={rows.length}
-        label={`${sent} of ${rows.length} sent`}
-        sub={!isCurrent ? "week closed" : toSend > 0 ? `${toSend} to send before Friday 5pm` : "all sent — the Head has this week"}
-        ariaLabel="Weekly reporting progress"
-      >
-        <div className="flex flex-wrap items-center gap-2" data-tour="pm-week-actions">
-          <RagTally counts={counts} />
-          {canUpload && isCurrent && (
-            <Link href="/reports/update" className={`${SECONDARY} gap-1.5`} title="Every project you run on one page: gates, channel states, market check-ins and the line — or prefill it from a status report">
-              <Upload className="size-3.5" aria-hidden /> Update all my projects
-            </Link>
-          )}
-          {sendable.length >= 2 && (
-            <button type="button" onClick={() => void sendAll()} disabled={sendingAll !== null} className={`${PRIMARY} gap-1.5`}>
-              <Send className="size-3.5" aria-hidden /> {sendingAll ? `Sending ${sendingAll.done + 1} of ${sendingAll.total}…` : `Confirm & send all ${sendable.length}`}
-            </button>
-          )}
-        </div>
-      </WeekMeter>
-      {sendAllErrors.length > 0 && (
-        <p role="alert" className="px-[18px] py-2 text-[12px] text-[var(--bad)]">
-          {sendAllErrors.join(" · ")}
-        </p>
-      )}
-      <div className="flex flex-col gap-2 border-b border-[var(--border)] px-[18px] py-3">
+    <div data-tour="pm-week" className="flex flex-col gap-4">
+      <h2 className="sr-only">This week&apos;s updates</h2>
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2">
         <ListToolbar>
           <SearchField value={list.q} onChange={(v) => list.set({ q: v })} placeholder="Search your projects or codes" label="Search this week's updates" />
           <FilterSelect
@@ -173,51 +158,132 @@ export function PmWeek({ isCurrent, rows: initial, canUpload = false }: { isoWee
             ]}
             onChange={(v) => list.set({ pwstatus: v })}
           />
-          <FilterChips
-            filters={statusFilter ? [{ key: "pwstatus", label: `Status: ${statusFilter === "sent" ? "Sent" : "To send"}` }] : []}
-            onRemove={(k) => list.set({ [k]: null })}
-            onClearAll={() => list.clear(["pwstatus"])}
-          />
+          <FilterChips filters={statusFilter ? [{ key: "pwstatus", label: `Status: ${statusFilter === "sent" ? "Sent" : "To send"}` }] : []} onRemove={(k) => list.set({ [k]: null })} onClearAll={() => list.clear(["pwstatus"])} />
         </ListToolbar>
+        <div className="flex flex-wrap items-center gap-2 sm:ml-auto" data-tour="pm-week-actions">
+          <span className="text-[12px] tabular-nums text-[var(--ds-ink3)]" aria-label="Weekly reporting progress">
+            {sent} of {rows.length} sent{!isCurrent ? " · week closed" : toSend > 0 ? ` · ${toSend} to send before Fri 17:00` : " · the Head has this week"}
+          </span>
+          {canUpload && isCurrent && (
+            <Link href="/reports/update" className={SECONDARY} title="Every project you run on one page: gates, channel states, market check-ins and the line, or prefill it from a status report">
+              <Upload className="size-3.5" aria-hidden /> Update All My Projects
+            </Link>
+          )}
+          {anyConfirmable && (
+            <button type="button" onClick={() => void sendAll()} disabled={sendingAll !== null || sendable.length === 0} className={PRIMARY} title={sendable.length ? `Sends ${sendable.length} drafted ${sendable.length === 1 ? "line" : "lines"} to the Head` : "No drafted line is waiting to send"}>
+              <Send className="size-3.5" aria-hidden /> {sendingAll ? `Sending ${Math.min(sendingAll.done + 1, sendingAll.total)} of ${sendingAll.total}…` : "Confirm & Send All"}
+            </button>
+          )}
+        </div>
       </div>
-      {pageRows.length === 0 && (
-        <ListEmpty filtered={filtersOn} noun="projects" onClear={() => list.clear(["pwstatus"])} hint={filtersOn ? undefined : "Projects you run appear here each week, drafted from the board and the markets."} />
+      {sendAllErrors.length > 0 && (
+        <p role="alert" className="text-[12.5px] font-semibold text-[var(--ds-bad-text)]">
+          {sendAllErrors.join(" · ")}
+        </p>
       )}
-      <ul>
-        {pageRows.map((r) => (
-          <PmRow
+
+      <TableCard footer={<TableFooter info={info} noun="projects" onPage={list.setPage} onSize={list.setSize} />}>
+        {pageRows.length === 0 ? (
+          <ListEmpty filtered={filtersOn} noun="projects" onClear={() => list.clear(["pwstatus"])} hint={filtersOn ? undefined : "Projects you run appear here each week, drafted from the board and the markets."} />
+        ) : (
+          <table className="w-full min-w-[680px] border-separate border-spacing-0 text-[12.5px]">
+            <thead className={THEAD}>
+              <tr>
+                <th scope="col">Project</th>
+                <th scope="col">Status</th>
+                <th scope="col">Line for the Head</th>
+                <th scope="col">Update</th>
+                <th scope="col">
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {pageRows.map((r) => {
+                const legacyUnsent = r.confirmed && !r.sentToHead;
+                const editable = r.canConfirm && isCurrent;
+                return (
+                  <tr key={r.projectId} className={TROW}>
+                    <td className="max-w-[240px]">
+                      <Link href={workspaceOf(r)} className={cn("block truncate rounded-[4px] text-[13px] font-semibold text-[var(--ds-ink)] hover:text-[var(--ds-brand-ink)]", FOCUS)}>
+                        {r.name}
+                      </Link>
+                      <span className="block truncate text-[12px] text-[var(--ds-ink3)]">
+                        {r.code} · {r.portfolioName}
+                      </span>
+                    </td>
+                    <td>
+                      <HealthPill value={r.confirmed ? r.effectiveRag : (r.ragOverride ?? r.effectiveRag)} />
+                    </td>
+                    <td className="max-w-[420px]">
+                      <span className="line-clamp-2 text-[var(--ds-ink2)]">{r.narrative ? r.narrative : <span className="text-[var(--ds-ink3)]">{isCurrent && r.canConfirm ? `Drafted: ${r.draftLines[0] ?? "no activity drafted yet"}` : "No line"}</span>}</span>
+                      {!r.canConfirm && isCurrent && !r.confirmed && <span className="block text-[11.5px] text-[var(--ds-ink3)]">Read-only: you don&apos;t run this project.</span>}
+                      {rowError?.id === r.projectId && (
+                        <span role="alert" className="block text-[11.5px] font-semibold text-[var(--ds-bad-text)]">
+                          {rowError.message}
+                        </span>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap">
+                      <UpdateChip r={r} isCurrent={isCurrent} />
+                    </td>
+                    <td className="whitespace-nowrap text-right">
+                      {editable && legacyUnsent ? (
+                        <button type="button" onClick={() => void resend(r)} disabled={resending !== null} className={COMPACT_PRIMARY}>
+                          {resending === r.projectId ? "Sending…" : "Send to Head"}
+                        </button>
+                      ) : editable ? (
+                        <button type="button" onClick={() => setOpenId(r.projectId)} className={COMPACT}>
+                          {r.sentToHead ? "Edit & Resend" : "Review & Send"}
+                        </button>
+                      ) : null}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </TableCard>
+
+      <Drawer open={openRow !== null} onClose={() => setOpenId(null)}>
+        {openRow && (
+          <PmUpdateForm
             // Re-seed the editor when the server hands us a different draft (an upload filled it).
-            key={`${r.projectId}:${r.status}:${r.narrative ?? ""}:${r.ragOverride ?? ""}`}
-            row={r}
-            open={openId === r.projectId}
-            isCurrent={isCurrent}
-            onOpen={() => setOpenId(r.projectId)}
-            onChange={onChange}
+            key={`${openRow.projectId}:${openRow.status}:${openRow.narrative ?? ""}:${openRow.ragOverride ?? ""}`}
+            row={openRow}
+            onSent={(next) => {
+              onChange(next);
+              setOpenId(null);
+              toast.success(`${next.name}: ${next.sentToHead ? "sent to the Head" : "confirmed"}`);
+            }}
+            onCancel={() => setOpenId(null)}
           />
-        ))}
-      </ul>
-      <TableFooter info={info} noun="projects" onPage={list.setPage} onSize={list.setSize} />
-    </section>
+        )}
+      </Drawer>
+    </div>
   );
 }
 
-function RagDot({ rag }: { rag: Rag }) {
-  return <span className="size-[9px] flex-none rounded-full" style={ragFill(rag)} role="img" aria-label={`Status ${rag}`} />;
+/** Update column: Sent (with when) · Draft · Not sent. */
+function UpdateChip({ r, isCurrent }: { r: PmRowJson; isCurrent: boolean }) {
+  if (r.sentToHead)
+    return (
+      <span className="inline-flex flex-col items-start gap-0.5">
+        <Chip tone="ok">Sent</Chip>
+        {r.sentAt && (
+          <span className="text-[11.5px] tabular-nums text-[var(--ds-ink3)]">
+            <LocalTime iso={r.sentAt} format="weekday-time" />
+          </span>
+        )}
+      </span>
+    );
+  if (!r.confirmed && r.status === "Draft" && (r.narrative ?? "").trim()) return <Chip tone="info">Draft</Chip>;
+  return <Chip tone={isCurrent ? "warn" : "muted"}>Not sent</Chip>;
 }
 
-function PmRow({
-  row: r,
-  open,
-  isCurrent,
-  onOpen,
-  onChange,
-}: {
-  row: PmRowJson;
-  open: boolean;
-  isCurrent: boolean;
-  onOpen: () => void;
-  onChange: (r: PmRowJson) => void;
-}) {
+/** Review & Send — the update in the shared drawer: status, the line, why it differs. */
+function PmUpdateForm({ row: r, onSent, onCancel }: { row: PmRowJson; onSent: (r: PmRowJson) => void; onCancel: () => void }) {
   const [narrative, setNarrative] = useState(r.narrative ?? r.draftLines[0] ?? "");
   const [rag, setRag] = useState<Rag>(r.ragOverride ?? r.effectiveRag);
   const [reason, setReason] = useState(r.overrideReason ?? "");
@@ -228,8 +294,6 @@ function PmRow({
   const [error, setError] = useState<string | null>(null);
   const overridden = rag !== r.computedRag;
   const reasonOk = !overridden || reason.trim().length >= 5;
-  const workspace = `/projects/${r.projectId}?tab=This%20week`;
-  const legacyUnsent = r.confirmed && !r.sentToHead;
 
   /** The product line from this week's market check-ins (worst RAG, a clause per market). */
   const draftFromMarkets = async () => {
@@ -248,7 +312,10 @@ function PmRow({
     setComposed(`${d.data.markets.length} of ${d.data.markets.length + d.data.missing.length} markets${d.data.missing.length ? ` · no check-in yet: ${d.data.missing.join(", ")}` : ""}`);
   };
 
-  const send = async () => {
+  const send = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setReasonTouched(true);
+    if (!narrative.trim() || !reasonOk) return;
     setBusy(true);
     setError(null);
     const res = await fetch(`/api/projects/${r.projectId}/checkin`, {
@@ -260,7 +327,7 @@ function PmRow({
     const d = await res.json().catch(() => null);
     if (res.ok && d?.data) {
       dispatchTourEvent("update-sent");
-      onChange({
+      onSent({
         ...r,
         confirmed: true,
         status: "Confirmed",
@@ -268,165 +335,66 @@ function PmRow({
         sentAt: d.data.submittedToHeadAt ?? null,
         narrative: d.data.narrative ?? narrative,
         effectiveRag: d.data.effectiveRag ?? r.effectiveRag,
+        ragOverride: overridden ? rag : null,
       });
     } else {
-      setError(d?.error?.message ?? "Could not send the update — try again.");
+      setError(d?.error?.message ?? "Could not send the update. Try again.");
     }
   };
 
-  const resend = async () => {
-    setBusy(true);
-    setError(null);
-    const res = await fetch(`/api/projects/${r.projectId}/checkin/submit`, { method: "POST" });
-    setBusy(false);
-    const d = await res.json().catch(() => null);
-    if (res.ok && d?.data?.submittedToHeadAt) onChange({ ...r, sentToHead: true, sentAt: d.data.submittedToHeadAt });
-    else setError(d?.error?.message ?? "Could not send — try again.");
-  };
-
-  // A sent week can be edited and resent (re-confirming IS resending — the Head is notified again).
-  const editing = open && r.canConfirm && isCurrent && !legacyUnsent;
-
   return (
-    <li className="flex flex-col gap-2.5 border-b border-[var(--hair2)] p-[12px_18px] last:border-0">
-      <div className="flex flex-wrap items-center gap-2.5">
-        <RagDot rag={r.confirmed ? r.effectiveRag : (r.ragOverride ?? r.effectiveRag)} />
-        <Link href={workspace} className={`rounded-[4px] text-[14px] font-semibold text-[var(--qink)] transition-colors hover:text-brand ${FOCUS}`}>
-          {r.name}
-        </Link>
-        <span className="whitespace-nowrap text-[12px] text-[var(--ink4)]">
-          {r.code} · {r.portfolioName}
-        </span>
-        {r.sentToHead && r.sentAt && (
-          <span className="ml-auto inline-flex items-center gap-1.5 whitespace-nowrap text-[12px] font-semibold text-[var(--ok)]">
-            <CheckCheck className="size-3.5" aria-hidden /> Sent <LocalTime iso={r.sentAt} format="weekday-time" />
-          </span>
-        )}
-        {!r.confirmed && r.canConfirm && isCurrent && !open && (
-          <button type="button" aria-expanded={false} onClick={onOpen} className={`ml-auto ${SECONDARY} px-3 py-1.5 text-[12.5px] text-[var(--qink)]`}>
-            Review &amp; send
+    <DrawerFrame
+      onSubmit={(e) => void send(e)}
+      header={<DrawerHeader step="Weekly Update" title={r.name} subtitle={`${r.code} · ${r.portfolioName}`} />}
+      footer={
+        <DrawerFooter note={r.sentToHead ? "Resending notifies the Head again." : undefined}>
+          <button type="button" onClick={onCancel} className={SECONDARY}>
+            Cancel
           </button>
-        )}
-        {r.sentToHead && r.canConfirm && isCurrent && !open && (
-          <button type="button" aria-expanded={false} onClick={onOpen} className={`${QUIET} px-2 text-[12px]`}>
-            Edit &amp; resend
+          <button type="submit" disabled={busy || !narrative.trim() || !reasonOk} className={PRIMARY}>
+            <Send className="size-3.5" aria-hidden /> {busy ? "Sending…" : r.confirmed ? "Confirm & Resend" : "Confirm & Send"}
           </button>
-        )}
-      </div>
-
-      {r.confirmed && r.narrative && !editing && <blockquote className="ml-[19px] text-[13px] leading-[1.5] text-[var(--ink3)]">“{r.narrative}”</blockquote>}
-      {!r.confirmed && !editing && (
-        <p className="ml-[19px] text-[12.5px] text-[var(--ink4)]">
-          {r.narrative ? (
-            <>
-              Draft{r.ragOverride ? ` · ${r.ragOverride}` : ""}: <span className="text-[var(--ink3)]">“{r.narrative}”</span>
-            </>
-          ) : isCurrent && r.canConfirm ? (
-            `Draft: ${r.draftLines[0] ?? "No activity drafted yet"}`
-          ) : (
-            <span className="italic text-[var(--ink5)]">Not sent</span>
-          )}
-        </p>
+        </DrawerFooter>
+      }
+    >
+      {r.draftLines.length > 0 && (
+        <DrawerSection title="Drafted From the Board">
+          <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+            {r.draftLines.slice(0, 4).map((line, i) => (
+              <li key={i} className="flex items-start gap-2 text-[13px] leading-[1.5] text-[var(--ds-ink2)]">
+                <span className="mt-[7px] size-1.5 flex-none rounded-full" style={{ background: LINE_DOT[lineTone(line)] }} aria-hidden />
+                {line}
+              </li>
+            ))}
+          </ul>
+        </DrawerSection>
       )}
-      {!r.canConfirm && isCurrent && !r.confirmed && <p className="ml-[19px] text-[11px] text-[var(--ink4)]">Read-only — you don&apos;t run this project.</p>}
-
-      {editing && (
-        <div className="ml-[19px] grid grid-cols-1 items-start gap-x-6 gap-y-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-          <div className="flex min-w-0 flex-col gap-2.5">
-            {r.draftLines.length > 0 && (
-              <ul className="flex flex-col gap-1">
-                {r.draftLines.slice(0, 2).map((line, i) => (
-                  <li key={i} className="flex items-start gap-2 text-[12.5px] leading-[1.5] text-[var(--ink3)]">
-                    <span className="mt-[7px] size-1.5 flex-none rounded-full" style={{ background: `var(${TONE_TOKEN[lineTone(line)]})` }} aria-hidden />
-                    {line}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <label htmlFor={`pm-line-${r.projectId}`} className="sr-only">
-              Your line for leadership
-            </label>
-            <input
-              id={`pm-line-${r.projectId}`}
-              value={narrative}
-              onChange={(e) => setNarrative(e.target.value)}
-              maxLength={500}
-              placeholder="Your line for leadership"
-              className={`h-[38px] w-full rounded-[8px] border border-[var(--input)] bg-background px-3 text-[13.5px] text-foreground placeholder:text-[var(--ink4)] focus:border-brand ${FOCUS}`}
-            />
-            {overridden && (
-              <div className="flex flex-col gap-1">
-                <input
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  onBlur={() => setReasonTouched(true)}
-                  maxLength={300}
-                  aria-label="Why differ from computed?"
-                  placeholder="Why differ from computed?"
-                  className={`h-8 w-full rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12px] text-foreground placeholder:text-[var(--ink4)] focus:border-brand ${FOCUS}`}
-                />
-                <span className="text-[10.5px] text-[var(--ink5)]">Required · the override expires in 7 days</span>
-                {reasonTouched && !reasonOk && <span className="text-[10.5px] text-[var(--bad)]">Give at least 5 characters.</span>}
-              </div>
-            )}
-            {r.marketsTotal > 0 && (
-              <p className="flex flex-wrap items-center gap-2 text-[11.5px] text-[var(--ink4)]">
-                <button type="button" onClick={() => void draftFromMarkets()} disabled={composing || r.marketsCheckedIn === 0} className={`${QUIET} text-[var(--brand)] disabled:text-[var(--ink5)]`} title={r.marketsCheckedIn === 0 ? "No market has checked in this week yet" : "Worst market RAG and one clause per market, for you to edit"}>
-                  {composing ? "Drafting…" : `Draft from market check-ins (${r.marketsCheckedIn} of ${r.marketsTotal})`}
-                </button>
-                {composed && <span>Drafted from {composed}</span>}
-              </p>
-            )}
-            <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={() => void send()} disabled={busy || !narrative.trim() || !reasonOk} className={`${PRIMARY} w-full sm:w-auto`}>
-                <Send className="size-3.5" aria-hidden /> {busy ? "Sending…" : r.confirmed ? "Resend" : "Confirm & send"}
-              </button>
-              <Link href={workspace} className={QUIET}>
-                Open workspace
-              </Link>
-            </div>
-          </div>
-          <fieldset className="flex flex-wrap gap-1">
-            <legend className="sr-only">Status</legend>
-            {RAGS.map((opt) => {
-              const checked = rag === opt;
-              const tok = RAG_TOKEN[opt];
-              return (
-                <label
-                  key={opt}
-                  title={opt === r.computedRag ? "Computed" : undefined}
-                  className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[8px] border px-2.5 py-1.5 text-[12px] font-semibold transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--brand)] has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-[var(--cardbg)]"
-                  style={checked ? { ...ragChipStyle(opt), borderColor: `color-mix(in oklab, var(${tok}) 35%, transparent)` } : { borderColor: "var(--border)", color: "var(--ink3)" }}
-                >
-                  <input type="radio" name={`pm-rag-${r.projectId}`} value={opt} checked={checked} onChange={() => setRag(opt)} className="sr-only" />
-                  <span className="size-[7px] rounded-full" style={ragFill(opt)} aria-hidden />
-                  {opt}
-                  {opt === r.computedRag && <span className="sr-only"> (computed)</span>}
-                </label>
-              );
-            })}
-          </fieldset>
+      <DrawerSection title="Status">
+        <Choice label="Status" rag value={rag} options={RAGS.map((o) => ({ value: o, label: RAG_WORD[o], tone: RAG_TONE[o] }))} onChange={setRag} />
+        <DrawerText hint>QUBIT calculates {RAG_WORD[r.computedRag].toLowerCase()}.</DrawerText>
+      </DrawerSection>
+      <Field label="Line for the Head" hint={`${narrative.length}/500`}>
+        <textarea value={narrative} onChange={(e) => setNarrative(e.target.value)} maxLength={500} rows={3} placeholder="What leadership should know this week" className={FIELD_TEXTAREA} />
+      </Field>
+      {r.marketsTotal > 0 && (
+        <div className="flex flex-col gap-1">
+          <button type="button" onClick={() => void draftFromMarkets()} disabled={composing || r.marketsCheckedIn === 0} className={cn(TEXT_LINK, "self-start disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50")}>
+            {composing ? "Drafting…" : `Draft From Market Check-ins (${r.marketsCheckedIn} of ${r.marketsTotal})`}
+          </button>
+          {r.marketsCheckedIn === 0 && <DrawerText hint>No market has checked in this week yet.</DrawerText>}
+          {composed && <DrawerText hint>Drafted from {composed}.</DrawerText>}
         </div>
       )}
-
-      {legacyUnsent && r.canConfirm && isCurrent && (
-        <div className="ml-[19px] flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => void resend()} disabled={busy} className={PRIMARY}>
-            <Send className="size-3.5" aria-hidden /> {busy ? "Sending…" : "Send to Head"}
-          </button>
-          <span className="text-[11px] text-[var(--ink4)]">Confirmed before the one-step change — send it on.</span>
-        </div>
+      {overridden && (
+        <Field label="Why Your Status Differs" hint="Required. The Head sees it; the override expires in 7 days.">
+          <input value={reason} onChange={(e) => setReason(e.target.value)} onBlur={() => setReasonTouched(true)} maxLength={300} placeholder="For example: the blocker clears on Monday" className={FIELD_INPUT} />
+        </Field>
       )}
-      {r.sentToHead && !editing && (
-        <Link href={workspace} className={`ml-[19px] self-start ${QUIET}`}>
-          Open workspace
-        </Link>
-      )}
-      {error && (
-        <p role="alert" className="ml-[19px] flex items-center gap-1.5 text-[11px] text-[var(--bad)]">
-          <ShieldAlert className="size-3" aria-hidden /> {error}
-        </p>
-      )}
-    </li>
+      {reasonTouched && !reasonOk && <DrawerError>Give a reason of at least 5 characters.</DrawerError>}
+      {error && <DrawerError>{error}</DrawerError>}
+      <TextLink href={workspaceOf(r)} className="self-start">
+        Open Workspace
+      </TextLink>
+    </DrawerFrame>
   );
 }
