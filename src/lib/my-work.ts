@@ -1,4 +1,5 @@
 import { dayKey } from "@/lib/dates";
+import type { ImplementorLensData, MemberLens } from "@/lib/member-lens";
 
 /**
  * UX6 — Member › My work, the pure part: types, the due-date groups, tabs and KPI figures.
@@ -62,6 +63,10 @@ export interface MyWork {
   done: { thisWeek: number; lastWeek: number };
   /** Open tasks on your projects whose YouTrack assignee matched no QUBIT account. */
   unmatched: { count: number; names: string[] };
+  /** Tier 3 — which Focus list this Member gets, from their project roles (src/lib/member-lens.ts). */
+  lens: MemberLens;
+  /** Go-lives, rollout issues and handover documents — read only for the Implementor lens. */
+  implementor: ImplementorLensData | null;
 }
 
 export const DUE_GROUPS = ["overdue", "today", "week", "later", "none"] as const;

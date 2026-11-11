@@ -6,6 +6,7 @@ import { projectRoleCategory } from "@/lib/roles";
 import { checkinSummaryByProject } from "@/server/checkins";
 import { getTenantTimeZone } from "@/server/preferences";
 import type { MyBlocker, MyProject, MyTask, MyWork } from "@/lib/my-work";
+import { chooseMemberLens, GO_LIVE_NAME, OPEN_ISSUE_STATUSES, sortGoLives, type ImplementorLensData } from "@/lib/member-lens";
 
 /**
  * UX6 — Member › My work (UX plan UX6). Tasks ASSIGNED to the person (the old "My work"
@@ -35,8 +36,10 @@ export async function getMyWork(ctx: TenantContext, now = new Date()): Promise<M
           take: 300,
         }),
         // QA: bugs this person reported that are still open (the "Issues I raised" tab).
+        // Unassigned ones count too: a bare NOT { assigneeId } is NULL-unsafe in SQL and
+        // silently dropped every unassigned bug.
         tx.projectTask.findMany({
-          where: { reporterId: ctx.userId, type: "Bug", approvalStatus: "Published", status: { not: "Completed" }, project: ACTIVE, NOT: { assigneeId: ctx.userId } },
+          where: { reporterId: ctx.userId, type: "Bug", approvalStatus: "Published", status: { not: "Completed" }, project: ACTIVE, OR: [{ assigneeId: null }, { assigneeId: { not: ctx.userId } }] },
           select: TASK_SELECT,
           orderBy: [{ updatedAt: "desc" }],
           take: 100,
@@ -153,6 +156,14 @@ export async function getMyWork(ctx: TenantContext, now = new Date()): Promise<M
   });
 
   const unmatchedNames = [...new Set(data.unmatched.map((u) => u.externalAssigneeName).filter((n): n is string => !!n))].sort();
+
+  // Tier 3 — the lens follows the person's project roles, weighed by where their open work is.
+  const workByProject = new Map<string, number>();
+  for (const t of [...data.openTasks, ...data.raisedBugs]) workByProject.set(t.projectId, (workByProject.get(t.projectId) ?? 0) + 1);
+  const lens = chooseMemberLens(data.memberships, workByProject);
+  const implProjectIds = data.memberships.filter((m) => projectRoleCategory(m.role) === "Implementor").map((m) => m.projectId);
+  const implementor = lens === "implementor" ? await getImplementorLens(ctx, implProjectIds) : null;
+
   return {
     timeZone,
     tasks,
@@ -161,7 +172,86 @@ export async function getMyWork(ctx: TenantContext, now = new Date()): Promise<M
     projects,
     done: { thisWeek: data.doneThis, lastWeek: data.doneLast },
     unmatched: { count: data.unmatched.length, names: unmatchedNames.slice(0, 5) },
+    lens,
+    implementor,
   };
+}
+
+/**
+ * Tier 3 — the Implementor lens: go-lives, rollout issues and handover documents on the
+ * projects where the person's project role is an Implementor one (the rules the retired
+ * Implementor preset used, src/server/dashboard-impl.ts, without its "seen" side effect).
+ *  - Go-lives: pending milestones named like a go-live (GO_LIVE_NAME) — dated or not — with
+ *    the gate count of the milestone's market track (or the project track when untagged).
+ *  - Rollout issues: Register issues still Open or Investigating.
+ *  - Handover: the current version of each Handover-kind document not yet Approved.
+ * Everything runs in one tenant transaction, so RLS scopes every row.
+ */
+export async function getImplementorLens(ctx: TenantContext, projectIds: string[]): Promise<ImplementorLensData> {
+  if (!projectIds.length) return { goLives: [], issues: [], handovers: [] };
+  const data = await withTenant(ctx, async (tx) => {
+    const [projects, milestones, issues, handovers, gateRows] = await Promise.all([
+      tx.project.findMany({
+        where: { id: { in: projectIds }, ...ACTIVE },
+        select: { id: true, name: true, checkpointTemplate: { select: { _count: { select: { checkpoints: true } } } } },
+      }),
+      tx.projectMilestone.findMany({
+        where: { projectId: { in: projectIds }, status: { not: "Done" }, project: ACTIVE },
+        select: { id: true, projectId: true, name: true, dueDate: true, orgUnitId: true, orgUnit: { select: { name: true } } },
+        orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { orderIndex: "asc" }],
+        take: 500,
+      }),
+      tx.issue.findMany({
+        where: { projectId: { in: projectIds }, status: { in: [...OPEN_ISSUE_STATUSES] }, project: ACTIVE },
+        select: { id: true, title: true, projectId: true, severity: true, status: true, ownerId: true, createdAt: true },
+        orderBy: { createdAt: "asc" },
+        take: 50,
+      }),
+      tx.projectDocument.findMany({
+        where: { projectId: { in: projectIds }, kind: "Handover", status: { not: "Approved" }, supersededBy: { none: {} }, project: ACTIVE },
+        select: { id: true, title: true, projectId: true, status: true, version: true, updatedAt: true, createdById: true },
+        orderBy: { updatedAt: "asc" },
+        take: 50,
+      }),
+      tx.checkpointStatus.findMany({ where: { projectId: { in: projectIds }, moduleId: null, state: "Done" }, select: { projectId: true, orgUnitId: true } }),
+    ]);
+    return { projects, milestones, issues, handovers, gateRows };
+  });
+
+  const projectName = new Map(data.projects.map((p) => [p.id, p.name]));
+  const gateTotal = new Map(data.projects.map((p) => [p.id, p.checkpointTemplate?._count.checkpoints ?? 0]));
+  const doneGates = new Map<string, number>();
+  for (const g of data.gateRows) {
+    const k = `${g.projectId}|${g.orgUnitId ?? ""}`;
+    doneGates.set(k, (doneGates.get(k) ?? 0) + 1);
+  }
+  const live = (projectId: string | null): projectId is string => !!projectId && projectName.has(projectId);
+
+  const goLives = sortGoLives(
+    data.milestones
+      .filter((m) => live(m.projectId) && GO_LIVE_NAME.test(m.name))
+      .map((m) => {
+        const total = gateTotal.get(m.projectId) ?? 0;
+        const done = Math.min(total, doneGates.get(`${m.projectId}|${m.orgUnitId ?? ""}`) ?? 0);
+        return {
+          id: m.id,
+          projectId: m.projectId,
+          projectName: projectName.get(m.projectId)!,
+          milestoneName: m.name,
+          marketId: m.orgUnitId,
+          marketName: m.orgUnit?.name ?? null,
+          dueDate: m.dueDate,
+          gates: total > 0 ? { open: total - done, total } : null,
+        };
+      }),
+  );
+  const issues = data.issues
+    .filter((i) => live(i.projectId))
+    .map((i) => ({ id: i.id, title: i.title, projectId: i.projectId!, projectName: projectName.get(i.projectId!)!, severity: i.severity, status: i.status, raisedAt: i.createdAt, mine: i.ownerId === ctx.userId }));
+  const handovers = data.handovers
+    .filter((d) => live(d.projectId))
+    .map((d) => ({ id: d.id, title: d.title, projectId: d.projectId, projectName: projectName.get(d.projectId)!, status: d.status, version: d.version, updatedAt: d.updatedAt, mine: d.createdById === ctx.userId }));
+  return { goLives, issues, handovers };
 }
 
 const TASK_SELECT = {

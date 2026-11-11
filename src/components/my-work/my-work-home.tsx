@@ -14,19 +14,8 @@ import { Choice, Drawer, DrawerError, DrawerFooter, DrawerFrame, DrawerHeader, D
 import { PageHeader } from "@/components/list/page-header";
 import { useListUrl } from "@/components/list/use-list-url";
 import { dayKey, formatDate, formatDayMonth } from "@/lib/dates";
-import {
-  DUE_GROUP_LABEL,
-  MY_TABS,
-  groupByDue,
-  myKpis,
-  myTabs,
-  taskStatusWord,
-  tasksForTab,
-  type MyProject,
-  type MyTab,
-  type MyTask,
-  type MyWork,
-} from "@/lib/my-work";
+import { myKpis, taskStatusWord, type MyProject, type MyTask, type MyWork } from "@/lib/my-work";
+import { goLiveChip, handoverChip, isReadyToRetest, issueChip, lensView, type LensGoLive, type LensHandover, type LensIssue, type LensRow, type MemberLens } from "@/lib/member-lens";
 import { COMPACT, FOCUS, PRIMARY, SECONDARY, TAB, TAB_ACTIVE_ON_CARD, TAB_COUNT, TABS_ROW } from "@/lib/surface";
 import { cn } from "@/lib/utils";
 
@@ -62,11 +51,8 @@ export function MyWorkHome({ work, brief, nowIso }: { work: MyWork; brief: React
   const now = useMemo(() => new Date(nowIso), [nowIso]);
   const tz = work.timeZone;
   const list = useListUrl("my-work", 10);
-  const tabs = myTabs(work, now, tz);
-  const rawTab = list.get("tab") as MyTab;
-  const tab: MyTab = MY_TABS.includes(rawTab) && tabs.some((t) => t.key === rawTab) ? rawTab : "all";
-  const shown = tasksForTab(work, tab, now, tz);
-  const groups = groupByDue(shown, now, tz);
+  // Tier 3: the Focus list follows the person's lens (developer default, QA, Implementor).
+  const { tabs, tab, groups } = lensView(work, list.get("tab"), now, tz);
   const k = myKpis(work, now, tz);
 
   const [openTask, setOpenTask] = useState<MyTask | null>(null);
@@ -124,13 +110,13 @@ export function MyWorkHome({ work, brief, nowIso }: { work: MyWork; brief: React
               </ul>
             </nav>
             {groups.length === 0 ? (
-              <EmptyTasks tab={tab} anyTasks={work.tasks.length > 0} unmatched={work.unmatched.count} />
+              <EmptyTasks lens={work.lens} tab={tab} anyRows={tabs[0].count > 0} unmatched={work.unmatched.count} />
             ) : (
               <ul className="m-0 flex list-none flex-col p-0">
                 {groups.map((g) => (
-                  <GroupRows key={g.group} label={`${DUE_GROUP_LABEL[g.group]} · ${g.tasks.length}`}>
-                    {g.tasks.map((t) => (
-                      <TaskRow key={t.id} t={t} tz={tz} overdue={g.group === "overdue"} onOpen={open} />
+                  <GroupRows key={g.key} label={`${g.label} · ${g.rows.length}`}>
+                    {g.rows.map((r) => (
+                      <LensRowItem key={`${r.kind}-${rowId(r)}`} row={r} tz={tz} now={now} overdue={g.overdue} onOpen={open} />
                     ))}
                   </GroupRows>
                 ))}
@@ -168,6 +154,7 @@ export function MyWorkHome({ work, brief, nowIso }: { work: MyWork; brief: React
         project={openTask ? work.projects.find((p) => p.id === openTask.projectId) : undefined}
         tz={tz}
         today={dayKey(now, tz)}
+        retest={!!openTask && work.lens === "qa" && isReadyToRetest(openTask) && !openTask.blocker}
         onClose={() => setOpenTask(null)}
       />
     </main>
@@ -193,9 +180,39 @@ function dueText(t: MyTask, tz: string, overdue: boolean): string {
   return overdue ? `was ${formatDayMonth(t.dueDate, tz)}` : formatDayMonth(t.dueDate, tz);
 }
 
-function TaskRow({ t, tz, overdue, onOpen }: { t: MyTask; tz: string; overdue: boolean; onOpen: (t: MyTask, m?: "task" | "blocker") => void }) {
+function rowId(r: LensRow): string {
+  switch (r.kind) {
+    case "task":
+      return r.task.id;
+    case "golive":
+      return r.goLive.id;
+    case "issue":
+      return r.issue.id;
+    case "handover":
+      return r.doc.id;
+  }
+}
+
+function LensRowItem({ row, tz, now, overdue, onOpen }: { row: LensRow; tz: string; now: Date; overdue: boolean; onOpen: (t: MyTask, m?: "task" | "blocker") => void }) {
+  switch (row.kind) {
+    case "task":
+      return <TaskRow t={row.task} tz={tz} overdue={overdue} retest={row.retest} onOpen={onOpen} />;
+    case "golive":
+      return <GoLiveRow g={row.goLive} tz={tz} now={now} />;
+    case "issue":
+      return <IssueRow i={row.issue} tz={tz} />;
+    case "handover":
+      return <HandoverRow d={row.doc} tz={tz} />;
+  }
+}
+
+function TaskRow({ t, tz, overdue, retest, onOpen }: { t: MyTask; tz: string; overdue: boolean; retest: boolean; onOpen: (t: MyTask, m?: "task" | "blocker") => void }) {
   const word = taskStatusWord(t.status, !!t.blocker);
-  const sub = [t.projectName, t.role, t.key, t.blocker ? `blocked since ${formatDayMonth(t.blocker.since, tz)}` : null].filter(Boolean).join(" · ");
+  // QA lens: a fixed bug back for verification says so, and its action is "Retest" (the
+  // result is recorded in YouTrack — D-F5, no write-back from QUBIT).
+  const sub = retest
+    ? [t.projectName, t.raisedByMe ? "issue you raised" : "fixed, back to you", t.key].filter(Boolean).join(" · ")
+    : [t.projectName, t.role, t.key, t.blocker ? `blocked since ${formatDayMonth(t.blocker.since, tz)}` : null].filter(Boolean).join(" · ");
   return (
     <ListRow
       title={
@@ -204,22 +221,121 @@ function TaskRow({ t, tz, overdue, onOpen }: { t: MyTask; tz: string; overdue: b
         </button>
       }
       sub={sub}
-      chip={<StatusChip word={word} />}
+      chip={retest && !t.blocker ? <Chip tone="ok">Ready to retest</Chip> : <StatusChip word={word} />}
       meta={<span className={overdue ? "font-semibold text-[var(--ds-bad-text)]" : undefined}>{dueText(t, tz, overdue)}</span>}
       action={
         <button type="button" className={COMPACT} onClick={() => onOpen(t)}>
-          {t.blocker ? "Update" : "Open"}
+          {t.blocker ? "Update" : retest ? "Retest" : "Open"}
         </button>
       }
     />
   );
 }
 
-function EmptyTasks({ tab, anyTasks, unmatched }: { tab: MyTab; anyTasks: boolean; unmatched: number }) {
+const ROW_LINK = cn("max-w-full truncate rounded-sm text-left hover:underline", FOCUS);
+
+/** Implementor lens: a go-live milestone; "Checklist" opens the gates for its market. */
+function GoLiveRow({ g, tz, now }: { g: LensGoLive; tz: string; now: Date }) {
+  const href = `/projects/${g.projectId}?tab=Delivery${g.marketId ? `&market=${g.marketId}` : ""}`;
+  const chip = goLiveChip(g.dueDate, now, tz);
+  const late = chip.tone === "bad";
+  const sub = [g.dueDate ? formatWeekdayDayMonth(g.dueDate, tz) : "Date not set", g.marketName ? g.milestoneName : null, g.gates ? `${g.gates.open} of ${g.gates.total} gates open` : null].filter(Boolean).join(" · ");
+  return (
+    <ListRow
+      title={
+        <Link href={href} className={ROW_LINK}>
+          {g.projectName} · {g.marketName ?? g.milestoneName}
+        </Link>
+      }
+      sub={sub}
+      chip={<Chip tone={chip.tone}>{chip.label}</Chip>}
+      meta={g.dueDate ? <span className={late ? "font-semibold text-[var(--ds-bad-text)]" : undefined}>{late ? `was ${formatDayMonth(g.dueDate, tz)}` : formatDayMonth(g.dueDate, tz)}</span> : "No date"}
+      action={
+        <Link href={href} className={COMPACT}>
+          Checklist
+        </Link>
+      }
+    />
+  );
+}
+
+/** Implementor lens: an open Register issue; its owner may update it there. */
+function IssueRow({ i, tz }: { i: LensIssue; tz: string }) {
+  const href = `/projects/${i.projectId}?tab=Register`;
+  const chip = issueChip(i.status);
+  return (
+    <ListRow
+      title={
+        <Link href={href} className={ROW_LINK}>
+          {i.title}
+        </Link>
+      }
+      sub={`${i.projectName} · ${i.severity.toLowerCase()} severity${i.mine ? " · yours" : ""}`}
+      chip={<Chip tone={chip.tone}>{chip.label}</Chip>}
+      meta={`since ${formatDayMonth(i.raisedAt, tz)}`}
+      action={
+        <Link href={href} className={COMPACT}>
+          {i.mine ? "Update" : "Open"}
+        </Link>
+      }
+    />
+  );
+}
+
+const HANDOVER_SUB: Record<string, string> = { InReview: "waiting on approval", Rejected: "returned for changes", Draft: "draft, not sent for approval" };
+
+/** Implementor lens: a handover document not yet approved; its author sends it from Documents. */
+function HandoverRow({ d, tz }: { d: LensHandover; tz: string }) {
+  const href = `/projects/${d.projectId}?tab=Documents`;
+  const chip = handoverChip(d.status);
+  const send = d.mine && (d.status === "Draft" || d.status === "Rejected");
+  return (
+    <ListRow
+      title={
+        <Link href={href} className={ROW_LINK}>
+          {d.title}
+        </Link>
+      }
+      sub={[d.projectName, d.version > 1 ? `v${d.version}` : null, HANDOVER_SUB[d.status] ?? null].filter(Boolean).join(" · ")}
+      chip={<Chip tone={chip.tone}>{chip.label}</Chip>}
+      meta={formatDayMonth(d.updatedAt, tz)}
+      action={
+        <Link href={href} className={COMPACT}>
+          {send ? "Send" : "Open"}
+        </Link>
+      }
+    />
+  );
+}
+
+function formatWeekdayDayMonth(d: Date, tz: string): string {
+  return new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "short", timeZone: tz }).format(d).replace(",", "");
+}
+
+const EMPTY_TAB: Record<string, string> = {
+  overdue: "Nothing is overdue.",
+  today: "Nothing is due today.",
+  blocked: "Nothing is blocked.",
+  raised: "No open issues you raised.",
+  retest: "Nothing is ready to retest. A bug appears here when it moves to In QA after a fix.",
+  golives: "No go-live milestones on the projects you implement.",
+  issues: "No open issues on the projects you implement.",
+  handover: "No handover documents waiting. Handover documents that aren't approved yet appear here.",
+  all: "",
+};
+
+function EmptyTasks({ lens, tab, anyRows, unmatched }: { lens: MemberLens; tab: string; anyRows: boolean; unmatched: number }) {
   // U7 — say what will appear and how to start.
-  if (anyTasks) {
-    const what = { overdue: "Nothing is overdue.", today: "Nothing is due today.", blocked: "Nothing is blocked.", raised: "No open issues you raised.", all: "" }[tab];
-    return <p className="px-4 py-10 text-center text-[13px] text-[var(--ds-ink3)]">{what}</p>;
+  if (anyRows) return <p className="px-4 py-10 text-center text-[13px] text-[var(--ds-ink3)]">{EMPTY_TAB[tab] ?? ""}</p>;
+  if (lens === "implementor") {
+    return (
+      <div className="flex flex-col items-center gap-1.5 px-6 py-12 text-center">
+        <p className="text-[14px] font-semibold text-[var(--ds-ink)]">Nothing on your list yet</p>
+        <p className="max-w-[52ch] text-[12.5px] text-[var(--ds-ink3)]">
+          Your tasks, go-lives, rollout issues and handover documents on the projects you implement appear here.
+        </p>
+      </div>
+    );
   }
   return (
     <div className="flex flex-col items-center gap-1.5 px-6 py-12 text-center">
@@ -293,6 +409,7 @@ function TaskDrawer({
   project,
   tz,
   today,
+  retest,
   onClose,
 }: {
   task: MyTask | null;
@@ -301,11 +418,12 @@ function TaskDrawer({
   project: MyProject | undefined;
   tz: string;
   today: string;
+  retest: boolean;
   onClose: () => void;
 }) {
   return (
     <Drawer open={!!task} onClose={onClose}>
-      {task && (mode === "task" ? <TaskView t={task} tz={tz} onRaise={() => setMode("blocker")} onDone={onClose} /> : <BlockerForm t={task} project={project} today={today} onBack={() => setMode("task")} onDone={onClose} />)}
+      {task && (mode === "task" ? <TaskView t={task} tz={tz} retest={retest} onRaise={() => setMode("blocker")} onDone={onClose} /> : <BlockerForm t={task} project={project} today={today} onBack={() => setMode("task")} onDone={onClose} />)}
     </Drawer>
   );
 }
@@ -318,7 +436,7 @@ const STATUS_STEPS = [
   { value: "Done", label: "Done" },
 ] as const;
 
-function TaskView({ t, tz, onRaise, onDone }: { t: MyTask; tz: string; onRaise: () => void; onDone: () => void }) {
+function TaskView({ t, tz, retest, onRaise, onDone }: { t: MyTask; tz: string; retest: boolean; onRaise: () => void; onDone: () => void }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const word = taskStatusWord(t.status, !!t.blocker);
@@ -339,7 +457,7 @@ function TaskView({ t, tz, onRaise, onDone }: { t: MyTask; tz: string; onRaise: 
 
   return (
     <DrawerFrame
-      header={<DrawerHeader step={`Task${t.key ? ` · ${t.key}` : ""}`} title={t.title} subtitle={`${t.projectName}${t.dueDate ? ` · due ${formatDate(t.dueDate, tz)}` : ""}`} />}
+      header={<DrawerHeader step={`${retest ? "Retest" : "Task"}${t.key ? ` · ${t.key}` : ""}`} title={t.title} subtitle={`${t.projectName}${t.dueDate ? ` · due ${formatDate(t.dueDate, tz)}` : ""}`} />}
       footer={
         <DrawerFooter>
           <Link href={`/projects/${t.projectId}?tab=Board&task=${t.id}`} className={SECONDARY}>
@@ -353,9 +471,13 @@ function TaskView({ t, tz, onRaise, onDone }: { t: MyTask; tz: string; onRaise: 
         </DrawerFooter>
       }
     >
-      <DrawerSection title="Status" aside={word === "Blocked" || word === "In review" || word === "In QA" ? <StatusChip word={word} /> : undefined}>
+      <DrawerSection title="Status" aside={retest ? <Chip tone="ok">Ready to retest</Chip> : word === "Blocked" || word === "In review" || word === "In QA" ? <StatusChip word={word} /> : undefined}>
         <Choice label="Status (read-only)" value={step} options={STATUS_STEPS.map((o) => ({ value: o.value, label: o.label }))} disabled />
-        <DrawerText hint>Status is updated in YouTrack and syncs here.</DrawerText>
+        <DrawerText hint>
+          {retest
+            ? `${t.raisedByMe ? "You raised this bug and it" : "This bug"} is back from the developer for retest. Record the result in YouTrack; it syncs here.`
+            : "Status is updated in YouTrack and syncs here."}
+        </DrawerText>
       </DrawerSection>
       <Kv
         rows={[
