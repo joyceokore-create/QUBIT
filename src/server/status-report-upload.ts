@@ -217,6 +217,9 @@ export const ApplyInput = z.object({
         /** The product's line for the Head — empty = leave the weekly update alone. */
         narrative: z.string().trim().max(NARRATIVE_MAX).optional().default(""),
         rag: z.enum(RAGS).optional(),
+        /** The PM's own reason when they chose a rating that differs from QUBIT's (UX fidelity);
+         * absent = the rating came from the file, whose reason is used. */
+        ratingReason: z.string().trim().min(5).max(300).optional(),
         stage: z.string().trim().max(STAGE_MAX).optional().default(""),
         /** Replace an already-sent week with this line and resend it. */
         resend: z.boolean().optional(),
@@ -380,7 +383,8 @@ export async function applyStatusReport(ctx: TenantContext, raw: ApplyInputT, re
       if (row.narrative) {
         const current = await getCurrentCheckIn(ctx, row.projectId, now);
         const rag = row.rag ?? current.computedRag;
-        const override = rag !== current.computedRag ? { ragOverride: rag, overrideReason: reason } : {};
+        const why = row.ratingReason ?? reason;
+        const override = rag !== current.computedRag ? { ragOverride: rag, overrideReason: why } : {};
         if (past) {
           // A closed week has no queue: the review here is the review, so send now.
           if (current.status === "Confirmed" && !row.resend) {
@@ -400,7 +404,7 @@ export async function applyStatusReport(ctx: TenantContext, raw: ApplyInputT, re
             outcome = "resent";
           }
         } else {
-          await saveCheckInDraft(ctx, row.projectId, { narrative: row.narrative, ragOverride: rag, overrideReason: reason }, now);
+          await saveCheckInDraft(ctx, row.projectId, { narrative: row.narrative, ragOverride: rag, overrideReason: why }, now);
           outcome = "drafted";
         }
       }

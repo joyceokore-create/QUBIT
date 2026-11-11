@@ -16,7 +16,7 @@ import { Drawer } from "@/components/ui/drawer";
 import { TextLink } from "@/components/ui/text-link";
 import { UpdateCard, type CardNotice } from "@/components/reports/update-card";
 import { StatusUploadDrawer, type UploadResult } from "@/components/reports/status-upload-drawer";
-import { applyRowFor, baseCard, diffCard, mkey, readStage, WEIGHT, type ApplyRow, type Card, type Preview, type PreviewRow, type StatusWorkspaceJson, type WorkspaceProject } from "@/components/reports/status-workspace-model";
+import { applyRowFor, baseCard, diffCard, mkey, readStage, WEIGHT, type ApplyRow, type Card, type Preview, type PreviewRow, type StatusWorkspaceJson, type WorkspaceProject, ratingReasonMissing } from "@/components/reports/status-workspace-model";
 
 export type { StatusWorkspaceJson } from "@/components/reports/status-workspace-model";
 
@@ -221,7 +221,7 @@ export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantN
   const changed = ws.projects.filter((p) => saveableOf(p.catalog.projectId) > 0);
   const canSendCard = (p: WorkspaceProject) => {
     const c = cards[p.catalog.projectId]!;
-    return Boolean(c.narrative.trim()) && (!p.product.alreadySent || c.resend);
+    return Boolean(c.narrative.trim()) && (!p.product.alreadySent || c.resend) && !ratingReasonMissing(p, c);
   };
   const ready = ws.projects.filter(canSendCard);
   const visible = ws.projects.filter((p) => (!onlyChanged || diffs[p.catalog.projectId]!.count > 0) && (!query || `${p.catalog.code} ${p.catalog.name}`.toLowerCase().includes(query.toLowerCase())));
@@ -252,7 +252,8 @@ export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantN
   /** This week's Confirm & Send: confirm the line (with its status) and send it to the Head. */
   async function sendCheckin(p: WorkspaceProject): Promise<string | null> {
     const c = cards[p.catalog.projectId]!;
-    const reason = (file && c.fromFile.rag ? `From the status report ${file.fileName}` : "Set in the weekly update").slice(0, 300);
+    // The PM's own reason for a rating they chose; the file is the reason for one it set.
+    const reason = (file && c.fromFile.rag ? `From the status report ${file.fileName}` : c.ratingReason.trim()).slice(0, 300);
     const res = await fetch(`/api/projects/${p.catalog.projectId}/checkin`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -275,6 +276,10 @@ export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantN
 
   async function saveCard(id: string) {
     const p = ws.projects.find((x) => x.catalog.projectId === id)!;
+    if (ratingReasonMissing(p, cards[id]!)) {
+      setNotices((n) => ({ ...n, [id]: { tone: "bad", text: "Say why your rating differs from QUBIT's (at least 5 characters)." } }));
+      return;
+    }
     const row = applyRowFor(p, cards[id]!, diffs[id]!);
     if (ws.past) row.narrative = "";
     setBusy({ kind: "card", id, action: "save" });
@@ -294,6 +299,10 @@ export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantN
 
   async function sendCard(id: string) {
     const p = ws.projects.find((x) => x.catalog.projectId === id)!;
+    if (ratingReasonMissing(p, cards[id]!)) {
+      setNotices((n) => ({ ...n, [id]: { tone: "bad", text: "Say why your rating differs from QUBIT's (at least 5 characters)." } }));
+      return;
+    }
     const d = diffs[id]!;
     setBusy({ kind: "card", id, action: "send" });
     setError(null);
@@ -320,6 +329,11 @@ export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantN
 
   async function saveAll() {
     if (changed.length === 0) return;
+    const missing = changed.filter((p) => ratingReasonMissing(p, cards[p.catalog.projectId]!));
+    if (missing.length) {
+      setError(`Say why your rating differs for ${missing.map((p) => p.catalog.name).join(", ")}.`);
+      return;
+    }
     setBusy({ kind: "saveAll" });
     setError(null);
     const rows = changed.map((p) => {
@@ -342,6 +356,11 @@ export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantN
 
   /** Confirm & Send All: save every changed card, then send every card that is ready. */
   async function sendAll() {
+    const missing = ws.projects.filter((p) => saveableOf(p.catalog.projectId) > 0 && ratingReasonMissing(p, cards[p.catalog.projectId]!));
+    if (missing.length) {
+      setError(`Say why your rating differs for ${missing.map((p) => p.catalog.name).join(", ")}.`);
+      return;
+    }
     const readyIds = new Set(ready.map((p) => p.catalog.projectId));
     const rows: ApplyRowPayload[] = [];
     for (const p of ws.projects) {

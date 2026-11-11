@@ -67,6 +67,8 @@ export interface ApplyRow {
 export interface Card {
   narrative: string;
   rag: Rag;
+  /** The PM's reason when their rating differs from QUBIT's (required unless it came from the file). */
+  ratingReason: string;
   stage: string;
   resend: boolean;
   scope: string; // "-" = product, else orgUnitId
@@ -108,6 +110,7 @@ export function baseCard(p: WorkspaceProject): Card {
   return {
     narrative: p.product.narrative,
     rag: p.product.ragOverride ?? p.product.computedRag,
+    ratingReason: "",
     stage: p.product.statusNote,
     resend: false,
     scope: "-",
@@ -178,12 +181,22 @@ export function diffCard(p: WorkspaceProject, c: Card, base: Card): Diff {
 
 /** The apply payload for one card. `forceLine` sends the line even when it is unchanged
  * (a past week's Confirm & Send: the apply itself sends it). */
+/** A rating the PM chose (not the file) that differs from QUBIT's needs their own reason. */
+export function needsRatingReason(p: WorkspaceProject, c: Card): boolean {
+  return c.rag !== p.product.computedRag && !c.fromFile.rag;
+}
+export const RATING_REASON_MIN = 5;
+export function ratingReasonMissing(p: WorkspaceProject, c: Card): boolean {
+  return needsRatingReason(p, c) && c.ratingReason.trim().length < RATING_REASON_MIN;
+}
+
 export function applyRowFor(p: WorkspaceProject, c: Card, d: Diff, forceLine = false) {
   const line = d.product || forceLine ? c.narrative.trim() : "";
   return {
     projectId: p.catalog.projectId,
     narrative: line,
     rag: c.rag,
+    ...(needsRatingReason(p, c) && c.ratingReason.trim() ? { ratingReason: c.ratingReason.trim().slice(0, 300) } : {}),
     stage: d.stage ? c.stage.trim() : "",
     resend: c.resend,
     gates: d.gates.map((g) => ({ checkpointId: g.checkpointId, state: g.to, orgUnitId: g.orgUnitId })),

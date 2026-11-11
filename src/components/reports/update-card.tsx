@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { GATE_STATE_LABEL, MODULE_STATE_LABEL, type CatalogMarket } from "@/lib/status-report-delivery";
 import type { CheckpointState } from "@/server/checkpoints";
 import type { InstanceState } from "@/server/project-instances";
-import { GATE_STATES, MODULE_STATES, NARRATIVE_MAX, RAG_TONE, RAG_WORD, RAGS, mkey, progressOf, readStage, type Card, type Diff, type WorkspaceProject } from "@/components/reports/status-workspace-model";
+import { GATE_STATES, MODULE_STATES, NARRATIVE_MAX, RAG_TONE, RAG_WORD, RAGS, mkey, progressOf, readStage, type Card, type Diff, type WorkspaceProject, needsRatingReason, RATING_REASON_MIN } from "@/components/reports/status-workspace-model";
 
 /**
  * Reports › Weekly Update — one project's card (design spec v2, `.mp` + `.gaterow` + `.kv`
@@ -217,6 +217,11 @@ export function UpdateCard({
           Status{c.fromFile.rag ? <span className="font-normal"> · from the file</span> : c.rag !== p.product.computedRag ? <span className="font-normal"> · QUBIT calculates {RAG_WORD[p.product.computedRag].toLowerCase()}</span> : null}
         </span>
         <Choice label={`Status for ${p.catalog.name}`} rag value={c.rag} options={RAGS.map((r) => ({ value: r, label: RAG_WORD[r], tone: RAG_TONE[r] }))} onChange={(r) => onPatch((x) => ({ ...x, rag: r }))} />
+        {needsRatingReason(p, c) && (
+          <Field label="Why your rating differs" hint={`The Head sees this. At least ${RATING_REASON_MIN} characters.`}>
+            <textarea value={c.ratingReason} maxLength={300} rows={2} onChange={(e) => onPatch((x) => ({ ...x, ratingReason: e.target.value }))} placeholder="For example: the blocker clears on Monday; the vendor confirmed" className={FIELD_TEXTAREA} />
+          </Field>
+        )}
       </div>
 
       <div className="flex flex-col gap-[5px]">
