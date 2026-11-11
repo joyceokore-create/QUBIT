@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
-import { REQUESTABLE_ROLES, type RequestableRole } from "@/lib/access-request-schema";
+import { REQUESTABLE_ROLES, type DeclineReason, type RequestableRole } from "@/lib/access-request-schema";
+import { retentionCutoff } from "@/lib/retention";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { z } from "zod";
@@ -100,9 +101,10 @@ export async function reviewAccessRequest(
   ctx: Pick<TenantContext, "tenantId" | "userId">,
   id: string,
   status: "REVIEWED" | "DISMISSED",
-  /** UX11: optional context kept on the audit row only — the dismissal reason the admin
-   *  typed, or the account a grant created. access_request has no column for either. */
-  note: { reason?: string; userId?: string } = {},
+  /** Context kept on the audit row only: a FIXED decline-reason code (never free text — D-F3b,
+   *  so the row holds no personal data once the request is deleted), or the account a grant
+   *  created. access_request has no column for either. */
+  note: { reasonCode?: DeclineReason; userId?: string } = {},
 ): Promise<AccessRequest> {
   const existing = await prisma.accessRequest.findUnique({ where: { id } });
   if (!existing) throw new AccessRequestError("NOT_FOUND", "Access request not found.");
@@ -117,7 +119,7 @@ export async function reviewAccessRequest(
       entityType: "access_request",
       entityId: id,
       before: { status: existing.status },
-      after: { status, ...(note.reason ? { reason: note.reason } : {}), ...(note.userId ? { userId: note.userId } : {}) },
+      after: { status, ...(note.reasonCode ? { reasonCode: note.reasonCode } : {}), ...(note.userId ? { userId: note.userId } : {}) },
     });
     return updated;
   });
@@ -171,4 +173,18 @@ export async function grantAccessRequest(
   });
   const request = await reviewAccessRequest(ctx, id, "REVIEWED", { userId: created.user.id });
   return { request, created };
+}
+
+// ── UX fidelity D-F3b: retention ────────────────────────────────────────────────────
+
+/**
+ * Delete approved and declined requests decided more than `days` ago. Waiting (NEW) requests
+ * are never deleted. access_request is a system table (no tenant, no RLS), so this runs once
+ * per night from a system job, not per tenant. Returns the count only — never names.
+ */
+export async function purgeDecidedAccessRequests(days: number, now: Date = new Date()): Promise<number> {
+  const { count } = await prisma.accessRequest.deleteMany({
+    where: { status: { in: ["REVIEWED", "DISMISSED"] }, reviewedAt: { lt: retentionCutoff(now, days) } },
+  });
+  return count;
 }

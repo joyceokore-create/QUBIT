@@ -2,9 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission } from "@/lib/api-guard";
 import { reviewAccessRequest, AccessRequestError } from "@/server/access-requests";
+import { DECLINE_REASON_VALUES } from "@/lib/access-request-schema";
 
-// UX11: an optional dismissal reason, kept on the audit row only.
-const BodySchema = z.object({ status: z.enum(["REVIEWED", "DISMISSED"]), reason: z.string().trim().max(300).optional() });
+// An optional decline reason as a FIXED code, kept on the audit row only (UX fidelity D-F3b:
+// no free text, so the audit log holds no personal data once the request is deleted).
+// Unknown keys (e.g. an old client's free-text `reason`) are stripped by Zod and ignored.
+const BodySchema = z.object({ status: z.enum(["REVIEWED", "DISMISSED"]), reasonCode: z.enum(DECLINE_REASON_VALUES).optional() });
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const guard = await requirePermission("iam:manage");
@@ -17,9 +20,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   try {
-    const { status, reason } = parsed.data;
-    if (reason) await reviewAccessRequest(guard.ctx, id, status, { reason });
-    else await reviewAccessRequest(guard.ctx, id, status);
+    const { status, reasonCode } = parsed.data;
+    await reviewAccessRequest(guard.ctx, id, status, reasonCode && status === "DISMISSED" ? { reasonCode } : {});
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e instanceof AccessRequestError) {

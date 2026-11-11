@@ -121,10 +121,12 @@ describe("UX11 Admin home", () => {
     expect(home.requests!.counts.NEW).toBeGreaterThanOrEqual(2);
     expect(home.kpis.waiting!.count).toBe(home.requests!.counts.NEW);
 
-    // Dismiss one (reason kept on the audit row, in the reviewer's tenant).
-    await reviewAccessRequest(rb, newer.id, "DISMISSED", { reason: "Synthetic test reason" });
+    // Dismiss one (a fixed reason CODE kept on the audit row, in the reviewer's tenant — D-F3b:
+    // the audit row carries no name, email or free text).
+    await reviewAccessRequest(rb, newer.id, "DISMISSED", { reasonCode: "duplicate" });
     const audit = await withTenant(rb, (tx) => tx.auditLog.findFirst({ where: { entityId: newer.id, action: "access_request_review" } }));
-    expect(audit?.after).toMatchObject({ status: "DISMISSED", reason: "Synthetic test reason" });
+    expect(audit?.after).toEqual({ status: "DISMISSED", reasonCode: "duplicate" });
+    expect(JSON.stringify([audit?.before, audit?.after])).not.toContain(TAG);
     expect(await withTenant(b, (tx) => tx.auditLog.count({ where: { entityId: newer.id } }))).toBe(0);
     const dismissed = await getAdminHome(rb, { ...OPTS, tab: "dismissed" }, now);
     expect(dismissed.requests!.rows.map((r) => r.id)).toContain(newer.id);

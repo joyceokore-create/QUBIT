@@ -4,8 +4,9 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { formatDateTime } from "@/lib/dates";
-import { CARD, FOCUS, PRIMARY } from "@/lib/surface";
-import { cn } from "@/lib/utils";
+import { PRIMARY } from "@/lib/surface";
+import { Panel } from "@/components/ui/panel";
+import { Field, FIELD_INPUT } from "@/components/ui/drawer";
 
 /** The IANA zones this browser knows (Africa/Nairobi first: Riverbank's default). */
 function zones(current: string): string[] {
@@ -39,33 +40,26 @@ export function TimeZoneForm({ current }: { current: string }) {
   }
 
   return (
-    <form onSubmit={save} className={cn(CARD, "flex max-w-[640px] flex-col gap-4 p-5")} style={{ background: "var(--cardbg)" }}>
-      <div>
-        <h2 className="text-[15px] font-semibold text-[var(--qink)]">Time zone</h2>
-        <p className="mt-0.5 text-[13px] text-[var(--ink3)]">
-          Used for &quot;today&quot;, &quot;overdue&quot;, due dates, the Daily Brief and the Friday 17:00 update deadline, for everyone in this organisation.
-        </p>
-      </div>
-      <label className="flex flex-col gap-1.5">
-        <span className="text-[13px] font-semibold text-[var(--qink)]">Time zone</span>
-        <select
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          className={`h-[var(--control-h)] w-full max-w-[360px] rounded-[var(--control-r)] border border-[var(--input)] bg-[var(--qcard)] px-3 text-[13px] text-[var(--qink)] ${FOCUS}`}
-        >
-          {options.map((z) => (
-            <option key={z} value={z}>
-              {z.replace(/_/g, " ")}
-            </option>
-          ))}
-        </select>
-        <span className="text-[12px] text-[var(--ink3)]">It is {preview} there now.</span>
-      </label>
-      <div>
-        <button type="submit" disabled={busy || value === current} className={PRIMARY}>
-          {busy ? "Saving…" : "Save time zone"}
-        </button>
-      </div>
-    </form>
+    <Panel title="Time Zone" className="max-w-[640px]">
+      <p className="-mt-1.5 text-[13px] text-[var(--ds-ink3)]">
+        Used for &quot;today&quot;, &quot;overdue&quot;, due dates, the Daily Brief and the Friday 17:00 update deadline, for everyone in this organisation.
+      </p>
+      <form onSubmit={save} className="flex flex-col gap-3">
+        <Field label="Time Zone" htmlFor="tenant-time-zone" hint={`It is ${preview} there now.`}>
+          <select id="tenant-time-zone" value={value} onChange={(e) => setValue(e.target.value)} className={`${FIELD_INPUT} max-w-[360px]`}>
+            {options.map((z) => (
+              <option key={z} value={z}>
+                {z.replace(/_/g, " ")}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <div>
+          <button type="submit" disabled={busy || value === current} className={PRIMARY}>
+            {busy ? "Saving…" : "Save Time Zone"}
+          </button>
+        </div>
+      </form>
+    </Panel>
   );
 }

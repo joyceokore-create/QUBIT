@@ -10,12 +10,12 @@ import { Bars, Meter, Spark } from "@/components/ui/kpi-charts";
 import { Chip } from "@/components/ui/status-pill";
 import { TextLink } from "@/components/ui/text-link";
 import { Banner, Columns, Foot, ListRow, Panel, PanelList, PanelRow } from "@/components/ui/panel";
-import { Drawer, DrawerError, DrawerFooter, DrawerFrame, DrawerHeader, DrawerSection, DrawerText, Field, FIELD_INPUT, FIELD_TEXTAREA, Kv } from "@/components/ui/drawer";
+import { Choice, Drawer, DrawerError, DrawerFooter, DrawerFrame, DrawerHeader, DrawerSection, DrawerText, Field, FIELD_INPUT, FIELD_TEXTAREA, Kv } from "@/components/ui/drawer";
 import { PageHeader } from "@/components/list/page-header";
 import { useListUrl } from "@/components/list/use-list-url";
 import { formatDate, formatDayMonth } from "@/lib/dates";
 import { ONBOARDING_ROLE_TIERS } from "@/lib/roles";
-import { requestedRoleLabel } from "@/lib/access-request-schema";
+import { DECLINE_REASONS, requestedRoleLabel, type DeclineReason } from "@/lib/access-request-schema";
 import {
   AR_TAB_LABEL,
   AR_TAB_STATUS,
@@ -266,7 +266,7 @@ function ReviewBody({ r, grant, tz, now, onClose }: { r: AdminRequestRow; grant:
   const [message, setMessage] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const [teamId, setTeamId] = useState("");
-  const [reason, setReason] = useState("");
+  const [reasonCode, setReasonCode] = useState<DeclineReason | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<Done | null>(null);
@@ -295,7 +295,7 @@ function ReviewBody({ r, grant, tz, now, onClose }: { r: AdminRequestRow; grant:
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const { ok, data } = await send(`/api/admin/access-requests/${r.id}`, "PATCH", { status: "DISMISSED", reason: reason.trim() || undefined });
+    const { ok, data } = await send(`/api/admin/access-requests/${r.id}`, "PATCH", { status: "DISMISSED", reasonCode: reasonCode ?? undefined });
     setBusy(false);
     if (!ok) {
       setError(errorOf(data, "Couldn't decline the request. Try again."));
@@ -381,9 +381,10 @@ function ReviewBody({ r, grant, tz, now, onClose }: { r: AdminRequestRow; grant:
         }
       >
         <DrawerText>No account is created. The request moves to Declined.</DrawerText>
-        <Field label="Reason (optional)" hint="Kept in the audit log. Up to 300 characters; no personal details.">
-          <textarea value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} rows={3} placeholder="For example: not a Riverbank employee" className={FIELD_TEXTAREA} />
-        </Field>
+        <DrawerSection title="Reason (Optional)">
+          <Choice label="Reason" value={reasonCode} options={DECLINE_REASONS.map((d) => ({ value: d.value, label: d.label }))} onChange={setReasonCode} />
+          <DrawerText hint>Kept in the audit log as one of these choices, never as free text.</DrawerText>
+        </DrawerSection>
         {error && <DrawerError>{error}</DrawerError>}
       </DrawerFrame>
     );

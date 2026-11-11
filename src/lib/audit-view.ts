@@ -1,4 +1,5 @@
 import { primaryRoleLabel } from "@/lib/rbac";
+import { DECLINE_REASONS } from "@/lib/access-request-schema";
 
 /**
  * UX fidelity Tier 2 — the Audit Log in plain words (design: When · Who · Action · Record ·
@@ -60,6 +61,8 @@ export const AUDIT_FIELD_ALLOW: Record<string, string> = {
   invite_sent: "Invite sent",
   password_reset_sent: "Password reset sent",
   reminded: "People reminded",
+  reasonCode: "Reason",
+  accessRequestRetentionDays: "Keep decided requests (days)",
 };
 
 const ROLE_FIELDS = new Set(["role", "viewRole"]);
@@ -68,6 +71,7 @@ function show(key: string, v: unknown): string {
   if (v === null || v === undefined || v === "") return "—";
   if (typeof v === "boolean") return v ? "Yes" : "No";
   if (ROLE_FIELDS.has(key) && typeof v === "string") return primaryRoleLabel([v]);
+  if (key === "reasonCode" && typeof v === "string") return DECLINE_REASONS.find((d) => d.value === v)?.label ?? v;
   if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}T/.test(v)) return v.slice(0, 10);
   if (typeof v === "string" || typeof v === "number") return String(v);
   return "—"; // objects/arrays are never expanded

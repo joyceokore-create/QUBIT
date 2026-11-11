@@ -1734,6 +1734,18 @@ model AccessRequest {
   @@map("access_request")
 }
 
+/// UX fidelity D-F3b — platform-wide settings (no tenant, no RLS — the same pattern as
+/// access_request, which these govern). Written only by a PlatformSuperAdmin through
+/// src/server/platform-settings.ts, audited in the actor's tenant. Key → JSON value.
+model PlatformSetting {
+  key         String   @id
+  value       Json
+  updatedById String?  @map("updated_by_id")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_setting")
+}
+
 enum AccessRequestStatus {
   NEW
   REVIEWED

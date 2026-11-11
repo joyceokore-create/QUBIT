@@ -35,7 +35,17 @@ export interface NetworkJobDefinition {
   run(ctx: JobContext, tenant: JobTenant): Promise<JobDetail>;
 }
 
-export type AnyJobDefinition = JobDefinition | NetworkJobDefinition;
+/**
+ * A job over SYSTEM tables only (no tenant_id, no RLS — e.g. access_request). It runs ONCE
+ * per invocation, not once per tenant, and never touches tenant data. UX fidelity D-F3b.
+ */
+export interface SystemJobDefinition {
+  name: string;
+  system: true;
+  run(): Promise<JobDetail>;
+}
+
+export type AnyJobDefinition = JobDefinition | NetworkJobDefinition | SystemJobDefinition;
 
 export interface JobRunResult {
   runId: string;

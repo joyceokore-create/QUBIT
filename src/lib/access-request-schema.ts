@@ -50,3 +50,16 @@ export const accessRequestSchema = z.object({
 });
 
 export type AccessRequestInput = z.infer<typeof accessRequestSchema>;
+
+/**
+ * UX fidelity D-F3b — why a request was declined, as a fixed choice. The audit row keeps
+ * only this code (never free text), so deleting the request really removes the personal data.
+ */
+export const DECLINE_REASONS = [
+  { value: "not_employee", label: "Not a Riverbank employee" },
+  { value: "duplicate", label: "Duplicate request" },
+  { value: "wrong_role", label: "Asked for the wrong role" },
+  { value: "other", label: "Other" },
+] as const;
+export type DeclineReason = (typeof DECLINE_REASONS)[number]["value"];
+export const DECLINE_REASON_VALUES = DECLINE_REASONS.map((r) => r.value) as [DeclineReason, ...DeclineReason[]];
