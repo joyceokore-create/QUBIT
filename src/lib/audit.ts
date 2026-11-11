@@ -10,7 +10,8 @@ export type AuditAction =
   | "role_grant"
   | "role_revoke"
   | "access_request_review"
-  | "view_switch"; // UX3 (D2a): a "Viewing as" / "Preview home as…" change — presentation only
+  | "view_switch" // UX3 (D2a): a "Viewing as" / "Preview home as…" change — presentation only
+  | "mfa_reminder"; // UX fidelity Tier 1: a bulk "set up MFA" reminder (one row per batch)
 
 export interface AuditEntry {
   action: AuditAction;

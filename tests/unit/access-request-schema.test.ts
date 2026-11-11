@@ -30,4 +30,20 @@ describe("accessRequestSchema", () => {
     const r = accessRequestSchema.parse({ ...base, companyUrl: "http://bot.example" });
     expect(r.companyUrl).toBe("http://bot.example");
   });
+
+  // UX fidelity D-F3: optional requested role (never Super Admin) and a short reason.
+  it("accepts a requestable role and a short reason; drops blanks to undefined", () => {
+    const base = { fullName: "user_001", email: "test@example.invalid", company: "Northwind" };
+    expect(accessRequestSchema.parse({ ...base, requestedRole: "ProjectManager", reason: "Joining Payments Hub" })).toMatchObject({ requestedRole: "ProjectManager", reason: "Joining Payments Hub" });
+    const blank = accessRequestSchema.parse({ ...base, requestedRole: "", reason: "" });
+    expect(blank.requestedRole).toBeUndefined();
+    expect(blank.reason).toBeUndefined();
+  });
+
+  it("refuses Super Admin, unknown roles and a reason over 300 characters", () => {
+    const base = { fullName: "user_001", email: "test@example.invalid", company: "Northwind" };
+    expect(accessRequestSchema.safeParse({ ...base, requestedRole: "PlatformSuperAdmin" }).success).toBe(false);
+    expect(accessRequestSchema.safeParse({ ...base, requestedRole: "Owner" }).success).toBe(false);
+    expect(accessRequestSchema.safeParse({ ...base, reason: "x".repeat(301) }).success).toBe(false);
+  });
 });

@@ -34,6 +34,9 @@ export interface AdminRequestRow {
   email: string;
   company: string;
   jobTitle: string | null;
+  /** What they asked for on the public form (D-F3); null on older requests or "Not sure". */
+  requestedRole: string | null;
+  reason: string | null;
   status: ArStatus;
   createdAt: string;
   reviewedAt: string | null;
@@ -63,9 +66,10 @@ export function agoLabel(days: number): string {
 
 /** Row chip (design: "New"). A request is New for its first two days, then Waiting —
  * amber from day 2, red from day 5. Decided requests read Approved / Declined. */
-export function requestChip(status: ArStatus, days: number): { label: string; tone: Tone } {
+export function requestChip(status: ArStatus, days: number, requestedRole?: string | null): { label: string; tone: Tone } {
   if (status === "REVIEWED") return { label: "Approved", tone: "ok" };
   if (status === "DISMISSED") return { label: "Declined", tone: "muted" };
+  if (requestedRole && needsHeadApproval(requestedRole)) return { label: "Head approval needed", tone: "warn" };
   if (days < 2) return { label: "New", tone: "info" };
   return { label: "Waiting", tone: days >= 5 ? "bad" : "warn" };
 }
@@ -218,8 +222,12 @@ export function activityLine(r: ActivityRow): string {
     case "access_request_review": {
       const s = str(field(r.after, "status"));
       const from = r.targetName ? ` from ${r.targetName}` : "";
-      if (s === "DISMISSED") return `Dismissed the access request${from}`;
-      return field(r.after, "userId") ? `Granted the access request${from}` : `Reviewed the access request${from}`;
+      if (s === "DISMISSED") return `Declined the access request${from}`;
+      return field(r.after, "userId") ? `Approved the access request${from}` : `Reviewed the access request${from}`;
+    }
+    case "mfa_reminder": {
+      const n = Number(field(r.after, "reminded") ?? 0);
+      return `Sent an MFA reminder to ${n} ${n === 1 ? "user" : "users"}`;
     }
     case "view_switch": {
       const role = str(field(r.after, "viewRole"));

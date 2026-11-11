@@ -145,8 +145,8 @@ function superAdminItems({ extras, now, timeZone: tz }: BriefInput): BriefItem[]
       group: "wait",
       weight: n,
       emphasis: `${count(n, "active user still has", "active users still have")} no MFA.`,
-      detail: "They are asked to set it up at their next sign-in.",
-      action: { label: "Open Users", href: "/admin/users" },
+      detail: "They are asked to set it up at their next sign-in. You can send them all a reminder from Admin Home.",
+      action: { label: "See Who", href: "/admin/users?tab=nomfa" },
     });
   }
   if (extras.expiredInvites) {

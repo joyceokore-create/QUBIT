@@ -3,6 +3,7 @@ import { can } from "@/lib/rbac";
 import { withTenant } from "@/lib/tenant";
 import { parseListParams } from "@/lib/list-state";
 import { AR_TAB_SORT, AR_TAB_STATUS, AR_TABS, parseArTab, type AdminRequestRow } from "@/lib/admin-home";
+import { REQUESTABLE_ROLES } from "@/lib/access-request-schema";
 import { Forbidden } from "@/components/forbidden";
 import { accessRequestStatusCounts, listAccessRequestsPaged } from "@/server/access-requests";
 import { getTenantTimeZone } from "@/server/preferences";
@@ -25,11 +26,12 @@ export default async function AdminAccessRequestsPage({ searchParams }: { search
   };
   if (!can(ctx, "iam:manage")) return <Forbidden />;
 
-  const params = parseListParams(await searchParams, { defaultSize: 5, filters: { tab: AR_TABS } });
+  const params = parseListParams(await searchParams, { defaultSize: 5, filters: { tab: AR_TABS, role: REQUESTABLE_ROLES.map((r) => r.key) } });
   const tab = parseArTab(params.filters.tab);
+  const role = REQUESTABLE_ROLES.find((r) => r.key === params.filters.role)?.key;
   const mayInvite = can(ctx, "users:invite");
   const [{ rows, info }, counts, tz, grantOptions] = await Promise.all([
-    listAccessRequestsPaged({ q: params.q, page: params.page, size: params.size, status: AR_TAB_STATUS[tab], sort: AR_TAB_SORT[tab] }),
+    listAccessRequestsPaged({ q: params.q, page: params.page, size: params.size, status: AR_TAB_STATUS[tab], sort: AR_TAB_SORT[tab], role }),
     accessRequestStatusCounts(),
     getTenantTimeZone(ctx),
     mayInvite
@@ -53,6 +55,8 @@ export default async function AdminAccessRequestsPage({ searchParams }: { search
     email: r.email,
     company: r.company,
     jobTitle: r.jobTitle,
+    requestedRole: r.requestedRole,
+    reason: r.reason,
     status: r.status,
     createdAt: r.createdAt.toISOString(),
     reviewedAt: r.reviewedAt?.toISOString() ?? null,

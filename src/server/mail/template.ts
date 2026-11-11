@@ -113,6 +113,8 @@ export function inviteEmail(opts: {
   acceptUrl: string;
   ttlHours: number;
   purpose?: "invite" | "reset";
+  /** Optional admin message (escaped; invite only). */
+  note?: string;
 }): BrandedEmail {
   const isReset = opts.purpose === "reset";
   const title = isReset ? "Reset your QUBIT password" : "You're invited to QUBIT";
@@ -125,6 +127,7 @@ export function inviteEmail(opts: {
   const body = [
     `<p style="font-size:14px;line-height:1.6;margin:0 0 16px">Hi ${escapeHtml(opts.name.split(/\s+/)[0] || "there")},</p>`,
     `<p style="font-size:14px;line-height:1.6;margin:0 0 20px">${escapeHtml(lead)} ${escapeHtml(cta)} to get started.</p>`,
+    ...(opts.note ? [`<p style="font-size:14px;line-height:1.6;margin:0 0 20px;padding:10px 12px;background:#f6f7f9;border-radius:8px">${escapeHtml(opts.note)}</p>`] : []),
     `<p style="margin:0 0 20px"><a href="${escapeHtml(opts.acceptUrl)}" style="display:inline-block;background:${escapeHtml(opts.brandColor)};color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:11px 20px;border-radius:8px">${escapeHtml(cta)}</a></p>`,
     `<p style="font-size:12px;line-height:1.6;color:#6b6b6b;margin:0 0 8px">Or paste this into your browser:</p>`,
     `<p style="font-size:12px;line-height:1.5;word-break:break-all;margin:0 0 16px"><a href="${escapeHtml(opts.acceptUrl)}" style="color:${escapeHtml(opts.brandColor)}">${escapeHtml(opts.acceptUrl)}</a></p>`,
@@ -134,6 +137,7 @@ export function inviteEmail(opts: {
   const text = [
     `Hi ${opts.name.split(/\s+/)[0] || "there"},`,
     "",
+    ...(opts.note ? [opts.note, ""] : []),
     `${lead} ${cta} here:`,
     opts.acceptUrl,
     "",

@@ -39,7 +39,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: { code: "VALIDATION", message: "Invalid request." } }, { status: 400 });
   }
 
-  const { fullName, email, company, jobTitle, companyUrl } = parsed.data;
+  const { fullName, email, company, jobTitle, requestedRole, reason, companyUrl } = parsed.data;
 
   // Honeypot filled → almost certainly a bot. Ack success, store nothing.
   if (companyUrl) {
@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true }, { status: 201 });
   }
 
-  await prisma.accessRequest.create({ data: { fullName, email, company, jobTitle } });
+  await prisma.accessRequest.create({ data: { fullName, email, company, jobTitle, requestedRole, reason } });
   // Public write endpoint: count every accepted attempt (not just failures) toward the limit.
   recordFailure(key);
   return NextResponse.json({ ok: true }, { status: 201 });

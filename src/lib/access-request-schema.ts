@@ -1,5 +1,21 @@
 import { z } from "zod";
 
+/** Roles a person may ask for on the public form (UX fidelity D-F3). Super Admin is never
+ * requestable; the admin still chooses the real role when granting. */
+export const REQUESTABLE_ROLES = [
+  { key: "Member", label: "Member" },
+  { key: "ProjectManager", label: "Project Manager" },
+  { key: "HeadOfQA", label: "Head of QA" },
+  { key: "HeadOfProjects", label: "Head" },
+  { key: "Executive", label: "Executive" },
+] as const;
+export type RequestableRole = (typeof REQUESTABLE_ROLES)[number]["key"];
+const ROLE_KEYS = REQUESTABLE_ROLES.map((r) => r.key) as [RequestableRole, ...RequestableRole[]];
+
+export function requestedRoleLabel(key: string | null | undefined): string | null {
+  return REQUESTABLE_ROLES.find((r) => r.key === key)?.label ?? null;
+}
+
 /**
  * Validation for the public "Get started" request-access form. Shared by the client form
  * (src/app/(auth)/request-access/request-access-form.tsx) and the unauthenticated route
@@ -14,6 +30,19 @@ export const accessRequestSchema = z.object({
     .string()
     .trim()
     .max(120)
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => (v ? v : undefined)),
+  requestedRole: z
+    .enum(ROLE_KEYS)
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => (v ? v : undefined)),
+  // No personal details asked for; length-capped and stored as plain text (escaped on output).
+  reason: z
+    .string()
+    .trim()
+    .max(300, "Keep the reason under 300 characters.")
     .optional()
     .or(z.literal(""))
     .transform((v) => (v ? v : undefined)),

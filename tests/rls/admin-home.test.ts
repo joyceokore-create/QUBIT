@@ -169,8 +169,8 @@ describe("UX11 Admin home", () => {
 
     // The home's feed says it in words; the other tenant's feed doesn't.
     const home = await getAdminHome(rb, OPTS, now);
-    expect(home.activity?.map((a) => a.line)).toContain(`Granted the access request from user_${TAG}_grant`);
-    expect(home.activity?.find((a) => a.line.startsWith("Granted the access request"))?.actorName).toBe("Fixture ADMHOME1");
+    expect(home.activity?.map((a) => a.line)).toContain(`Approved the access request from user_${TAG}_grant`);
+    expect(home.activity?.find((a) => a.line.startsWith("Approved the access request"))?.actorName).toBe("Fixture ADMHOME1");
     const bHome = await getAdminHome(b, OPTS, now);
     expect(bHome.activity?.some((a) => a.line.includes(TAG))).toBe(false);
   });

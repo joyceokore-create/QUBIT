@@ -213,6 +213,7 @@ model User {
    * /**
    * /**
    * /**
+   * /**
    * /** Hours available in a normal week — the denominator leave is subtracted from.
    */
   capacityHoursPerWeek   Int         @default(40) @map("capacity_hours_per_week")
@@ -700,8 +701,10 @@ model TenantIntegration {
   status        String    @default("connected") // connected | error
   lastCheckedAt DateTime? @map("last_checked_at")
   lastError     String?   @map("last_error")
-  /** Non-secret settings: { stateMap: {<youtrackState>: <qubitStatus>}, syncIntervalMinutes,
-   *  firstImportSince, archiveRemoved }. Never put a token here. */
+  /**
+   * Non-secret settings: { stateMap: {<youtrackState>: <qubitStatus>}, syncIntervalMinutes,
+   * firstImportSince, archiveRemoved }. Never put a token here.
+   */
   config        Json?     @db.JsonB
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
@@ -1713,15 +1716,19 @@ model TeamTemplate {
 // Public INSERT via the bare prisma client; reads/updates are gated by RBAC (iam:manage),
 // NOT by tenant RLS. Deliberately omitted from prisma/rls.sql's table array (RLS stays off).
 model AccessRequest {
-  id           String              @id @default(cuid())
-  fullName     String              @map("full_name")
-  email        String
-  company      String
-  jobTitle     String?             @map("job_title")
-  status       AccessRequestStatus @default(NEW)
-  reviewedById String?             @map("reviewed_by_id")
-  reviewedAt   DateTime?           @map("reviewed_at")
-  createdAt    DateTime            @default(now()) @map("created_at")
+  id            String              @id @default(cuid())
+  fullName      String              @map("full_name")
+  email         String
+  company       String
+  jobTitle      String?             @map("job_title")
+  /// UX fidelity D-F3: the role asked for on the public form (ONBOARDING_ROLE_TIERS key, never PlatformSuperAdmin).
+  requestedRole String?             @map("requested_role")
+  /// Optional reason, up to 300 characters.
+  reason        String?             @db.VarChar(300)
+  status        AccessRequestStatus @default(NEW)
+  reviewedById  String?             @map("reviewed_by_id")
+  reviewedAt    DateTime?           @map("reviewed_at")
+  createdAt     DateTime            @default(now()) @map("created_at")
 
   @@index([status, createdAt])
   @@map("access_request")
@@ -2046,9 +2053,13 @@ model StageTerm {
   id          String   @id @default(cuid())
   tenantId    String   @map("tenant_id")
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
-  /** The phrase, folded (lower case, letters/digits/spaces). */
+  /**
+   * The phrase, folded (lower case, letters/digits/spaces).
+   */
   term        String
-  /** The gate's name on the Product build track ("Prototype"). */
+  /**
+   * The gate's name on the Product build track ("Prototype").
+   */
   gateName    String   @map("gate_name")
   createdById String?  @map("created_by_id")
   createdAt   DateTime @default(now()) @map("created_at")

@@ -27,7 +27,7 @@ const ACTIVITY_FETCH = 20;
 /** Audit rows that count as admin actions on the home's activity feed. */
 export const ADMIN_ACTIVITY_WHERE: Prisma.AuditLogWhereInput = {
   OR: [
-    { action: { in: ["role_grant", "role_revoke", "access_request_review", "view_switch"] } },
+    { action: { in: ["role_grant", "role_revoke", "access_request_review", "view_switch", "mfa_reminder"] } },
     { entityType: "user", action: { in: ["create", "delete"] } },
     { entityType: "user", action: "update", after: { path: ["mfa_reset"], equals: true } },
     { entityType: "user", action: "update", after: { path: ["status"], equals: "SUSPENDED" } },
@@ -139,6 +139,8 @@ export async function getAdminHome(
         email: r.email,
         company: r.company,
         jobTitle: r.jobTitle,
+        requestedRole: r.requestedRole,
+        reason: r.reason,
         status: r.status,
         createdAt: r.createdAt.toISOString(),
         reviewedAt: r.reviewedAt?.toISOString() ?? null,

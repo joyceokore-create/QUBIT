@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { REQUESTABLE_ROLES, type RequestableRole } from "@/lib/access-request-schema";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { z } from "zod";
@@ -37,6 +38,8 @@ export const AccessRequestListQuery = z.object({
   page: z.number().int().min(1).max(1_000_000).default(1),
   size: z.number().int().min(1).max(100),
   status: z.enum(ACCESS_REQUEST_STATUSES).optional(),
+  // UX fidelity Tier 1: the "Requested Role" filter (a REQUESTABLE_ROLES key).
+  role: z.enum(REQUESTABLE_ROLES.map((r) => r.key) as [RequestableRole, ...RequestableRole[]]).optional(),
   // UX11: "queue" = NEW first, then newest (the Access requests page); "oldest" = oldest
   // first (Admin home's Waiting tab); "reviewed" = most recently reviewed first.
   sort: z.enum(["queue", "oldest", "reviewed"]).default("queue"),
@@ -49,6 +52,7 @@ export async function listAccessRequestsPaged(input: AccessRequestListQuery): Pr
   const and: Prisma.AccessRequestWhereInput[] = [];
   if (q.q) and.push({ OR: [{ fullName: containsText(q.q) }, { email: containsText(q.q) }, { company: containsText(q.q) }] });
   if (q.status) and.push({ status: q.status });
+  if (q.role) and.push({ requestedRole: q.role });
   const where: Prisma.AccessRequestWhereInput = and.length ? { AND: and } : {};
   const total = await prisma.accessRequest.count({ where });
   const info = pageInfo(total, q.page, q.size);
@@ -126,6 +130,8 @@ export const GrantAccessInput = z.object({
   role: z.string().trim().min(1).max(64),
   departmentId: z.string().uuid().nullable().optional(),
   teamId: z.string().uuid().nullable().optional(),
+  // UX fidelity Tier 1: "Message to <name> (optional)" — goes into the invite email only.
+  message: z.string().trim().max(500).optional(),
 });
 export type GrantAccessInput = z.infer<typeof GrantAccessInput>;
 
@@ -161,6 +167,7 @@ export async function grantAccessRequest(
     teamId: data.teamId ?? null,
     projectId: null,
     projectRole: null,
+    inviteNote: data.message || undefined,
   });
   const request = await reviewAccessRequest(ctx, id, "REVIEWED", { userId: created.user.id });
   return { request, created };

@@ -32,6 +32,9 @@ export const CreateUserInput = z.object({
   // Derived groups still union in at login; this only caps what is DECLARED.
   userGroups: z.array(z.enum(USER_GROUPS)).max(USER_GROUPS.length).optional(),
   primaryGroup: z.enum(USER_GROUPS).nullable().optional(),
+  // UX fidelity Tier 1: an optional note from the admin, shown in the invite email only
+  // (never stored or audited).
+  inviteNote: z.string().trim().max(500).optional(),
 });
 export type CreateUserInput = z.infer<typeof CreateUserInput>;
 
@@ -462,7 +465,7 @@ export async function createUser(ctx: TenantContext, input: CreateUserInput): Pr
   // Non-SSO: mint the one-time link AFTER the user transaction commits — the token
   // references user.id, and a failed send must not roll back a successfully created
   // account (the admin can resend).
-  const { acceptUrl, emailed } = await mintInvite(ctx, user.id, "invite");
+  const { acceptUrl, emailed } = await mintInvite(ctx, user.id, "invite", input.inviteNote);
   return {
     user: { id: user.id, name: user.name, email: user.email },
     emailed,

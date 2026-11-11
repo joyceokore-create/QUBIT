@@ -15,6 +15,7 @@ import { PageHeader } from "@/components/list/page-header";
 import { useListUrl } from "@/components/list/use-list-url";
 import { formatDate, formatDayMonth } from "@/lib/dates";
 import { ONBOARDING_ROLE_TIERS } from "@/lib/roles";
+import { requestedRoleLabel } from "@/lib/access-request-schema";
 import {
   AR_TAB_LABEL,
   AR_TAB_STATUS,
@@ -115,12 +116,12 @@ export function AdminHome({ data, brief, nowIso }: { data: AdminHomeData; brief:
                 <ul className="m-0 flex list-none flex-col p-0">
                   {req.rows.map((r) => {
                     const days = daysOld(r.createdAt, now, tz);
-                    const chip = requestChip(r.status, days);
+                    const chip = requestChip(r.status, days, r.requestedRole);
                     return (
                       <ListRow
                         key={r.id}
                         title={r.fullName}
-                        sub={[r.jobTitle, r.company].filter(Boolean).join(" · ")}
+                        sub={[requestedRoleLabel(r.requestedRole) ? `Asks for ${requestedRoleLabel(r.requestedRole)}` : null, r.company, r.jobTitle].filter(Boolean).join(" · ")}
                         chip={<Chip tone={chip.tone}>{chip.label}</Chip>}
                         meta={<span title={`Requested ${formatDate(r.createdAt, tz)}`}>{agoLabel(days)}</span>}
                         action={
@@ -184,8 +185,20 @@ export function AdminHome({ data, brief, nowIso }: { data: AdminHomeData; brief:
 
 function Attention({ data }: { data: AdminHomeData }) {
   const a = data.attention;
+  const router = useRouter();
+  const [sending, setSending] = useState(false);
+  async function remind() {
+    setSending(true);
+    const { ok, data: res } = await send("/api/admin/users/mfa-reminders", "POST", {});
+    setSending(false);
+    if (!ok) return void toast.error(errorOf(res, "Couldn't send the reminders. Try again."));
+    const sent = Number(res?.sent ?? 0);
+    const skipped = Number(res?.skipped ?? 0);
+    toast.success(sent ? `Reminder sent to ${sent} ${sent === 1 ? "person" : "people"}.${skipped ? ` ${skipped} already reminded in the last 24 hours.` : ""}` : "Everyone was already reminded in the last 24 hours.");
+    router.refresh();
+  }
   const rows: { title: string; n: number; href: string; sub: string; action: boolean }[] = [
-    ...(a.noMfa === null ? [] : [{ title: `${a.noMfa} ${a.noMfa === 1 ? "user" : "users"} without MFA`, n: a.noMfa, href: "/admin/users?tab=nomfa", sub: "Asked to set it up at their next sign-in", action: true }]),
+    ...(a.noMfa === null ? [] : [{ title: `${a.noMfa} ${a.noMfa === 1 ? "user" : "users"} without MFA`, n: a.noMfa, href: "/admin/users?tab=nomfa", sub: "Send a reminder to all of them at once", action: true }]),
     { title: `${a.expiredInvites} ${a.expiredInvites === 1 ? "invite" : "invites"} expired`, n: a.expiredInvites, href: "/admin/users?onboarding=not-signed-in", sub: "Resend or remove", action: false },
     { title: `${a.suspendedInTeams} suspended ${a.suspendedInTeams === 1 ? "account" : "accounts"} still in teams`, n: a.suspendedInTeams, href: "/admin/users?status=SUSPENDED", sub: "Remove from teams", action: false },
   ];
@@ -206,7 +219,13 @@ function Attention({ data }: { data: AdminHomeData }) {
             }
             sub={r.sub}
             chip={r.n > 0 ? r.action ? <Chip tone="warn">Action</Chip> : <Chip>Tidy up</Chip> : <Chip tone="ok">All clear</Chip>}
-          />
+          >
+            {r.action && r.n > 0 && data.kpis.waiting !== null && (
+              <button type="button" onClick={remind} disabled={sending} className={cn(COMPACT, "self-start")}>
+                {sending ? "Sending…" : "Send Reminder"}
+              </button>
+            )}
+          </PanelRow>
         ))}
       </PanelList>
       {data.sso && <p className="text-[12px] text-[var(--ds-ink3)]">MFA is handled by Microsoft sign-in, so it isn&apos;t counted here.</p>}
@@ -241,7 +260,10 @@ function errorOf(data: Record<string, unknown> | null, fallback: string): string
 function ReviewBody({ r, grant, tz, now, onClose }: { r: AdminRequestRow; grant: GrantOptions | null; tz: string; now: Date; onClose: () => void }) {
   const router = useRouter();
   const [mode, setMode] = useState<"review" | "decline" | "done">("review");
-  const [role, setRole] = useState<string>("Member");
+  const tiersAll = ONBOARDING_ROLE_TIERS.filter((t) => grant?.canGrantSuperAdmin || t.key !== "PlatformSuperAdmin");
+  // Start from what they asked for when it's a role this form can grant.
+  const [role, setRole] = useState<string>(tiersAll.some((t) => t.key === r.requestedRole) ? (r.requestedRole as string) : "Member");
+  const [message, setMessage] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const [teamId, setTeamId] = useState("");
   const [reason, setReason] = useState("");
@@ -251,13 +273,13 @@ function ReviewBody({ r, grant, tz, now, onClose }: { r: AdminRequestRow; grant:
   const [copied, setCopied] = useState(false);
   const waiting = r.status === "NEW";
   const days = daysOld(r.createdAt, now, tz);
-  const tiers = ONBOARDING_ROLE_TIERS.filter((t) => grant?.canGrantSuperAdmin || t.key !== "PlatformSuperAdmin");
+  const tiers = tiersAll;
 
   async function approve(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const { ok, data } = await send(`/api/admin/access-requests/${r.id}/grant`, "POST", { role, departmentId: departmentId || null, teamId: teamId || null });
+    const { ok, data } = await send(`/api/admin/access-requests/${r.id}/grant`, "POST", { role, departmentId: departmentId || null, teamId: teamId || null, message: message.trim() || undefined });
     setBusy(false);
     if (!ok) {
       setError(errorOf(data, "Couldn't create the account. The request is still waiting."));
@@ -371,10 +393,10 @@ function ReviewBody({ r, grant, tz, now, onClose }: { r: AdminRequestRow; grant:
     <DrawerSection title="Request">
       <Kv
         rows={[
-          ["Name", r.fullName],
-          ["Email", r.email],
+          ["Asked for", requestedRoleLabel(r.requestedRole) ?? "Not given"],
           ["Company", r.company],
           ["Job title", r.jobTitle ?? "Not given"],
+          ["Email", r.email],
           ["Requested", formatDate(r.createdAt, tz)],
           ...(!waiting
             ? ([
@@ -384,6 +406,12 @@ function ReviewBody({ r, grant, tz, now, onClose }: { r: AdminRequestRow; grant:
             : []),
         ]}
       />
+    </DrawerSection>
+  );
+
+  const reasonGiven = (
+    <DrawerSection title="Reason Given">
+      <DrawerText>{r.reason ?? "Not given."}</DrawerText>
     </DrawerSection>
   );
 
@@ -406,6 +434,7 @@ function ReviewBody({ r, grant, tz, now, onClose }: { r: AdminRequestRow; grant:
         }
       >
         {details}
+        {reasonGiven}
         {waiting && !grant && <DrawerText hint>Creating accounts needs the right to invite users. You can still decline the request.</DrawerText>}
         {error && <DrawerError>{error}</DrawerError>}
       </DrawerFrame>
@@ -428,6 +457,7 @@ function ReviewBody({ r, grant, tz, now, onClose }: { r: AdminRequestRow; grant:
       }
     >
       {details}
+      {reasonGiven}
       <DrawerSection title="Grant Access">
         <div className="flex flex-col gap-3">
           <Field label="Role" hint={tiers.find((t) => t.key === role)?.desc}>
@@ -461,6 +491,9 @@ function ReviewBody({ r, grant, tz, now, onClose }: { r: AdminRequestRow; grant:
           </Field>
         </div>
       </DrawerSection>
+      <Field label={`Message to ${r.fullName.split(/\s+/)[0]} (optional)`} hint="Added to the invite email. Not stored.">
+        <textarea value={message} onChange={(e) => setMessage(e.target.value)} maxLength={500} rows={2} placeholder="For example: Welcome to the Payments squad" className={FIELD_TEXTAREA} />
+      </Field>
       <Banner>{needsHeadApproval(role) ? "Project Manager and Head roles need a Head to approve first. That approval step isn't in QUBIT yet, so check with the Head before you approve." : "Member access can be approved now. Project Manager and Head roles need a Head to approve first."}</Banner>
       {error && <DrawerError>{error}</DrawerError>}
     </DrawerFrame>

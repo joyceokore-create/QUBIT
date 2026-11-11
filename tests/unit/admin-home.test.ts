@@ -50,6 +50,9 @@ describe("access-request tabs, ages and chips", () => {
 
   it("colours a waiting request by age; reviewed and dismissed are calm", () => {
     expect(requestChip("NEW", 0)).toEqual({ label: "New", tone: "info" });
+    // A request for a PM or Head role needs a Head's approval first (design chip).
+    expect(requestChip("NEW", 0, "ProjectManager")).toEqual({ label: "Head approval needed", tone: "warn" });
+    expect(requestChip("NEW", 0, "Member")).toEqual({ label: "New", tone: "info" });
     expect(requestChip("NEW", 2)).toEqual({ label: "Waiting", tone: "warn" });
     expect(requestChip("NEW", 5)).toEqual({ label: "Waiting", tone: "bad" });
     expect(requestChip("REVIEWED", 9)).toEqual({ label: "Approved", tone: "ok" });
@@ -143,9 +146,9 @@ describe("admin activity", () => {
 
   it("tells a granted access request from a dismissed one", () => {
     const ar = { entityType: "access_request", entityId: "r1", targetName: "user_020" };
-    expect(activityLine(row({ ...ar, action: "access_request_review", after: { status: "REVIEWED", userId: "u9" } }))).toBe("Granted the access request from user_020");
+    expect(activityLine(row({ ...ar, action: "access_request_review", after: { status: "REVIEWED", userId: "u9" } }))).toBe("Approved the access request from user_020");
     expect(activityLine(row({ ...ar, action: "access_request_review", after: { status: "REVIEWED" } }))).toBe("Reviewed the access request from user_020");
-    expect(activityLine(row({ ...ar, action: "access_request_review", after: { status: "DISMISSED", reason: "x" }, targetName: null }))).toBe("Dismissed the access request");
+    expect(activityLine(row({ ...ar, action: "access_request_review", after: { status: "DISMISSED", reason: "x" }, targetName: null }))).toBe("Declined the access request");
   });
 
   it("folds a creation's role grant into the creation, newest first, five at most", () => {

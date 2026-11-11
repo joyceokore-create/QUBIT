@@ -59,6 +59,8 @@ export async function mintInvite(
   ctx: TenantContext,
   userId: string,
   purpose: InvitePurpose = "invite",
+  /** Optional admin note for the invite email (not stored, not audited). */
+  note?: string,
 ): Promise<MintResult> {
   const token = newInviteToken();
 
@@ -109,6 +111,7 @@ export async function mintInvite(
       acceptUrl,
       ttlHours: INVITE_TTL_HOURS,
       purpose,
+      note: purpose === "invite" ? note : undefined,
     });
     const result = await getMailer().send({ to: target.email, ...message });
     emailed = result.ok;

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { AUTH_INPUT_CLASS, AUTH_LINK_CLASS, AUTH_PRIMARY_CLASS, AuthField, AuthHeading, AuthShell } from "@/components/auth/auth-shell";
-import { accessRequestSchema } from "@/lib/access-request-schema";
+import { accessRequestSchema, REQUESTABLE_ROLES } from "@/lib/access-request-schema";
 
 function looksLikeCompleteDomain(email: string): boolean {
   const domain = email.split("@")[1];
@@ -15,6 +15,8 @@ export function RequestAccessForm() {
   const [email, setEmail] = useState("");
   const [company, setCompany] = useState("");
   const [jobTitle, setJobTitle] = useState("");
+  const [requestedRole, setRequestedRole] = useState("");
+  const [reason, setReason] = useState("");
   const [companyUrl, setCompanyUrl] = useState(""); // honeypot
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -53,7 +55,7 @@ export function RequestAccessForm() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    const parsed = accessRequestSchema.safeParse({ fullName, email, company, jobTitle, companyUrl });
+    const parsed = accessRequestSchema.safeParse({ fullName, email, company, jobTitle, requestedRole, reason, companyUrl });
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? "Please check the form and try again.");
       return;
@@ -120,6 +122,29 @@ export function RequestAccessForm() {
         </AuthField>
         <AuthField id="jobTitle" label="Job title (optional)">
           <input id="jobTitle" type="text" autoComplete="organization-title" placeholder="For example: Head of PMO" className={AUTH_INPUT_CLASS} value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
+        </AuthField>
+
+        <AuthField id="requestedRole" label="Role you need (optional)">
+          <select id="requestedRole" className={AUTH_INPUT_CLASS} value={requestedRole} onChange={(e) => setRequestedRole(e.target.value)}>
+            <option value="">Not sure</option>
+            {REQUESTABLE_ROLES.map((r) => (
+              <option key={r.key} value={r.key}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+        </AuthField>
+        <AuthField id="reason" label="Why you need access (optional)">
+          <textarea
+            id="reason"
+            rows={3}
+            maxLength={300}
+            placeholder="For example: joining the Payments squad on Payments Hub"
+            className={`${AUTH_INPUT_CLASS} h-auto py-2`}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+          <p className="text-[12px] text-[var(--l-ink-3)]">Up to 300 characters. Please don&apos;t include personal details.</p>
         </AuthField>
 
         {/* Honeypot — visually hidden, never shown to real users. */}
