@@ -1,5 +1,7 @@
 "use client";
 
+import { PasswordChecklist } from "@/components/auth/password-checklist";
+
 import { useState, type FormEvent } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -39,8 +41,8 @@ export function OnboardingForm(props: { viewer: OnboardingViewer; needsPassword:
 
 function StepDots({ current }: { current: Step }) {
   const steps: { key: Step; label: string }[] = [
-    { key: "password", label: "Password" },
-    { key: "mfa", label: "Two-factor" },
+    { key: "password", label: "New Password" },
+    { key: "mfa", label: "Authenticator" },
     { key: "confirm", label: "Confirm" },
   ];
   const index = steps.findIndex((s) => s.key === current);
@@ -155,14 +157,14 @@ function OnboardingFormInner({ viewer, needsPassword }: { viewer: OnboardingView
           <div className="flex flex-col gap-1.5">
             <label htmlFor="ob-pw" className="text-[12.5px] font-medium text-[var(--ink2)]">New password</label>
             <Input id="ob-pw" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
-            <p className="text-[11px] text-[var(--ink4)]">At least 8 characters; don’t reuse a recent password.</p>
+            <PasswordChecklist password={password} />
           </div>
           <div className="flex flex-col gap-1.5">
             <label htmlFor="ob-confirm" className="text-[12.5px] font-medium text-[var(--ink2)]">Confirm password</label>
             <Input id="ob-confirm" type="password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
           </div>
           {error && <p role="alert" className="text-[12.5px] text-status-red">{error}</p>}
-          <Button type="submit" disabled={busy} className="mt-1">{busy ? "Saving…" : "Continue"}</Button>
+          <Button type="submit" disabled={busy} className="mt-1">{busy ? "Saving…" : "Next: Connect Authenticator"}</Button>
         </form>
       )}
 

@@ -72,7 +72,8 @@ export interface TodoItem {
 
 const DAY = 86_400_000;
 const RAG_LONG: Record<DimRag, string> = { G: "Green", A: "Amber", R: "Red", N: "" };
-const word = (r: DimRag) => (r === "N" ? "not rated" : healthWord(RAG_LONG[r]));
+// Status words inside a sentence are lower case ("you report on track, QUBIT calculates at risk").
+const word = (r: DimRag) => (r === "N" ? "not rated" : healthWord(RAG_LONG[r]).toLowerCase());
 
 export function daysLate(due: Date, now: Date, tz: string): number {
   return Math.round((Date.parse(`${dayKey(now, tz)}T00:00:00Z`) - Date.parse(`${dayKey(due, tz)}T00:00:00Z`)) / DAY);

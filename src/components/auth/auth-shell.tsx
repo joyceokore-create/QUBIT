@@ -92,7 +92,7 @@ export function AuthShell({ brand, art, heading, sentence, footer, children }: A
 /* ── Form pieces shared by the pre-auth screens (labels above, placeholders inside, U2/U3) ── */
 
 export const AUTH_INPUT_CLASS =
-  "box-border h-10 w-full rounded-[10px] border border-[var(--l-field-bd)] bg-[var(--l-field-bg)] px-3 text-[14px] text-[var(--l-ink)] outline-none transition-colors placeholder:text-[var(--l-ph)] focus:border-[var(--login-brand)] focus-visible:ring-[3px] focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_22%,transparent)]";
+  "box-border h-9 w-full rounded-[10px] border border-[var(--l-field-bd)] bg-[var(--l-field-bg)] px-3 text-[14px] text-[var(--l-ink)] outline-none transition-colors placeholder:text-[var(--l-ph)] focus:border-[var(--login-brand)] focus-visible:ring-[3px] focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_22%,transparent)]";
 
 export function AuthField({ id, label, hint, children }: { id: string; label: string; hint?: string; children: ReactNode }) {
   return (
@@ -109,17 +109,17 @@ export function AuthField({ id, label, hint, children }: { id: string; label: st
 export function AuthHeading({ title, lead }: { title: string; lead?: ReactNode }) {
   return (
     <div>
-      <h1 className="text-[20px] font-bold tracking-[-.2px] text-[var(--l-ink)]">{title}</h1>
+      <h1 className="text-[24px] font-extrabold tracking-[-.01em] text-[var(--l-ink)]">{title}</h1>
       {lead && <p className="mt-1 text-[14px] text-[var(--l-ink-3)]">{lead}</p>}
     </div>
   );
 }
 
 export const AUTH_PRIMARY_CLASS =
-  "flex h-10 w-full items-center justify-center gap-2 rounded-[10px] bg-[var(--login-brand)] px-4 text-[13.5px] font-bold text-[var(--onbrand)] outline-none transition-[filter] hover:brightness-95 focus-visible:ring-[3px] focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_35%,transparent)] disabled:opacity-60";
+  "flex h-9 w-full items-center justify-center gap-2 rounded-[10px] bg-[var(--login-brand)] px-4 text-[13px] font-bold text-[var(--onbrand)] outline-none transition-[filter] hover:brightness-95 focus-visible:ring-[3px] focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_35%,transparent)] disabled:opacity-60";
 
 export const AUTH_SECONDARY_CLASS =
-  "flex h-10 w-full items-center justify-center gap-2.5 rounded-[10px] border border-[var(--l-field-bd)] bg-[var(--l-card-bg)] px-4 text-[13.5px] font-semibold text-[var(--l-ink)] outline-none transition-colors hover:bg-[var(--l-chip-bg)] focus-visible:ring-[3px] focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_35%,transparent)] disabled:opacity-60";
+  "flex h-9 w-full items-center justify-center gap-2.5 rounded-[10px] border border-[var(--l-field-bd)] bg-[var(--l-card-bg)] px-4 text-[13px] font-semibold text-[var(--l-ink)] outline-none transition-colors hover:bg-[var(--l-chip-bg)] focus-visible:ring-[3px] focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_35%,transparent)] disabled:opacity-60";
 
 export const AUTH_LINK_CLASS =
   "rounded-sm text-[12.5px] font-semibold text-[var(--login-brand)] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_55%,transparent)]";

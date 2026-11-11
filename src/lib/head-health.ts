@@ -31,7 +31,8 @@ export interface DecisionItem {
 export const STALE_DAYS = 14;
 
 const LONG: Record<string, string> = { G: "Green", A: "Amber", R: "Red" };
-const word = (r: string) => (LONG[r] ? healthWord(LONG[r]) : "not rated");
+// Status words inside a sentence are lower case ("reported on track, calculates at risk").
+const word = (r: string) => (LONG[r] ? healthWord(LONG[r]).toLowerCase() : "not rated");
 const href = (id: string, tab?: string) => `/projects/${id}${tab ? `?tab=${encodeURIComponent(tab)}` : ""}`;
 const active = (ps: CockpitProject[]) => ps.filter((p) => !["Completed", "Cancelled"].includes(p.status));
 const pm = (p: CockpitProject) => (p.pmName ? `PM ${p.pmName}` : "No PM");

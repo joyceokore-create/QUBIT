@@ -83,7 +83,7 @@ describe("Needs your decision", () => {
   });
 
   it("words disputes with status words and offers Chase on stale updates", () => {
-    expect(items.find((i) => i.tab === "disputes")?.title).toBe("Project c: reported On track, calculates At risk");
+    expect(items.find((i) => i.tab === "disputes")?.title).toBe("Project c: reported on track, calculates at risk");
     expect(items.find((i) => i.tab === "stale")).toMatchObject({ title: "Project d: no check-in for 40 days", sub: "No PM", action: { kind: "nudge", projectId: "d" } });
     expect(items.find((i) => i.id === "esc-f")?.sub).toBe("Open red item: Vendor SLA unsigned");
     expect(items.find((i) => i.id === "esc-g")?.sub).toBe("Past its target date and not on track");

@@ -69,9 +69,9 @@ export type DueGroup = (typeof DUE_GROUPS)[number];
 export const DUE_GROUP_LABEL: Record<DueGroup, string> = {
   overdue: "Overdue",
   today: "Today",
-  week: "This week",
+  week: "This Week",
   later: "Later",
-  none: "No due date",
+  none: "No Due Date",
 };
 
 /** The tenant-local Sunday ending `now`'s ISO week, as a day key. */
@@ -109,7 +109,7 @@ export function myTabs(work: Pick<MyWork, "tasks" | "raised" | "projects">, now:
     { key: "blocked", label: "Blocked", count: work.tasks.filter((t) => t.blocker).length },
   ];
   const qa = work.projects.some((p) => p.role === "QA");
-  if (qa || work.raised.length) tabs.push({ key: "raised", label: "Issues I raised", count: work.raised.length });
+  if (qa || work.raised.length) tabs.push({ key: "raised", label: "Issues I Raised", count: work.raised.length });
   return tabs;
 }
 

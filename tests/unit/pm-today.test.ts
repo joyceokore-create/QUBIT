@@ -73,7 +73,7 @@ describe("the To do list", () => {
 
   it("words items plainly and points each at its action", () => {
     const items = buildTodo(t, WED);
-    expect(items.find((i) => i.id === "dp-p1")?.title).toBe("Status dispute: you report On track, QUBIT calculates At risk");
+    expect(items.find((i) => i.id === "dp-p1")?.title).toBe("Status dispute: you report on track, QUBIT calculates at risk");
     expect(items.find((i) => i.id === "ms-m2")?.action).toEqual({ kind: "milestone", label: "Update", milestoneId: "m2" });
     expect(items.find((i) => i.id === "up-p1")?.action).toMatchObject({ kind: "link", href: "/projects/p1?tab=This%20week" });
   });

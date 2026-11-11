@@ -61,7 +61,7 @@ export default async function OnboardingPage() {
         }
         footer={session.user.tenantName}
       >
-        <AuthHeading title="Welcome to QUBIT" lead={<>Hi {viewer.firstName}. A few quick steps and you&apos;re in.</>} />
+        <AuthHeading title="Set Up Your Account" lead={<>Hi {viewer.firstName}. Two quick steps and you&apos;re in.</>} />
         <OnboardingForm viewer={viewer} needsPassword={!me.passwordSetAt} />
       </AuthShell>
     </div>

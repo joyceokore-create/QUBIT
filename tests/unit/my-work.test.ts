@@ -64,7 +64,7 @@ describe("tabs and figures", () => {
       ["blocked", 1],
     ]);
     const qa = { ...work, projects: [{ ...work.projects[0], role: "QA" }] };
-    expect(myTabs(qa, WED, TZ).at(-1)).toEqual({ key: "raised", label: "Issues I raised", count: 0 });
+    expect(myTabs(qa, WED, TZ).at(-1)).toEqual({ key: "raised", label: "Issues I Raised", count: 0 });
     expect(tasksForTab(work, "blocked", WED, TZ).map((t) => t.id)).toEqual(["c"]);
   });
 

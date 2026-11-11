@@ -166,7 +166,7 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null, de
       ? { art: "mfa" as const, heading: orgName ? `Keep ${orgName}’s data safe` : "Keep your data safe", sentence: "A code from your authenticator app confirms it’s really you." }
       : step === "password"
         ? { art: "hero" as const, heading: "Know what needs you today", sentence: "Your home page opens on what needs your attention first, for your role." }
-        : { art: "hero" as const, heading: "Run every project in one place", sentence: "Portfolios, projects, risks and weekly reporting, in one place." };
+        : { art: "hero" as const, heading: "Run every project in one place", sentence: orgName ? `Portfolios, projects, risks and weekly reporting for ${orgName}, in one place.` : "Portfolios, projects, risks and weekly reporting, in one place." };
 
   const errorLine = error && (
     <p role="alert" className="text-[12.5px] text-[var(--l-err)]">
@@ -179,7 +179,7 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null, de
       {/* SSO configured → Microsoft is the ONLY sign-in method (unchanged behaviour). */}
       {ssoEnabled && (
         <>
-          <AuthHeading title="Sign in to QUBIT" lead="Use your work Microsoft account to continue." />
+          <AuthHeading title="Sign In to QUBIT" lead="Use your work Microsoft account to continue." />
           <button type="button" onClick={handleMicrosoftSignIn} disabled={ssoLoading} aria-busy={ssoLoading} className={AUTH_SECONDARY_CLASS}>
             {ssoLoading ? (
               <>
@@ -189,7 +189,7 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null, de
             ) : (
               <>
                 <MicrosoftMark />
-                Sign in with Microsoft
+                Sign In with Microsoft
               </>
             )}
           </button>
@@ -199,7 +199,7 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null, de
 
       {!ssoEnabled && step === "email" && (
         <form onSubmit={goToPassword} className="flex flex-col gap-4" noValidate>
-          <AuthHeading title="Sign in to QUBIT" lead="Use your work email to continue." />
+          <AuthHeading title="Sign In to QUBIT" lead="Use your work email to continue." />
           <AuthField id="email" label="Work email" hint="Your email domain identifies your organisation.">
             <input
               ref={focusRef}
@@ -225,7 +225,7 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null, de
           <div className="flex items-center justify-between text-[12.5px] text-[var(--l-ink-3)]">
             <span>New to QUBIT?</span>
             <Link href="/request-access" className={AUTH_LINK_CLASS}>
-              Request access
+              Request Access
             </Link>
           </div>
         </form>
@@ -234,7 +234,7 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null, de
       {!ssoEnabled && step === "password" && (
         <form onSubmit={submitCredentials} className="flex flex-col gap-4" noValidate>
           {orgName && <OrgChip name={orgName} />}
-          <AuthHeading title="Welcome back" />
+          <AuthHeading title="Welcome Back" />
           <div className="flex items-center justify-between gap-3 text-[12.5px] text-[var(--l-ink-3)]">
             <span className="truncate">{email}</span>
             <button type="button" className={AUTH_LINK_CLASS} onClick={() => { setStep("email"); setError(null); }}>
@@ -254,14 +254,15 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null, de
               onChange={(e) => setPassword(e.target.value)}
             />
           </AuthField>
+          <ForgotPassword />
           {errorLine}
           <button type="submit" disabled={loading} aria-busy={loading} className={AUTH_PRIMARY_CLASS}>
-            {loading ? <><Spinner />Signing in…</> : "Sign in"}
+            {loading ? <><Spinner />Signing in…</> : "Sign In"}
           </button>
           <div className="flex items-center justify-between text-[12.5px] text-[var(--l-ink-3)]">
             <span>Use an authenticator app?</span>
             <button type="button" className={AUTH_LINK_CLASS} onClick={() => { setStep("code"); setError(null); }}>
-              Enter your code
+              Enter Your Code
             </button>
           </div>
         </form>
@@ -269,19 +270,9 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null, de
 
       {!ssoEnabled && step === "code" && (
         <form onSubmit={submitCredentials} className="flex flex-col gap-4" noValidate>
-          <AuthHeading title="Enter your code" lead="Open your authenticator app and enter the 6-digit code for QUBIT." />
+          <AuthHeading title="Enter Your Code" lead="Open your authenticator app and enter the 6-digit code for QUBIT." />
           <AuthField id="totpCode" label="Authenticator code">
-            <input
-              ref={focusRef}
-              id="totpCode"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              maxLength={6}
-              placeholder="123456"
-              className={`${AUTH_INPUT_CLASS} h-12 text-center font-mono text-[20px] tracking-[.5em]`}
-              value={totpCode}
-              onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-            />
+            <OtpBoxes inputRef={focusRef} value={totpCode} onChange={setTotpCode} />
           </AuthField>
           {errorLine}
           <button type="submit" disabled={loading || totpCode.length !== 6} aria-busy={loading} className={AUTH_PRIMARY_CLASS}>
@@ -317,5 +308,60 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null, de
         </div>
       )}
     </AuthShell>
+  );
+}
+
+/** "Forgot password?" — QUBIT has no self-service reset: an administrator sends a one-time
+ * reset link (Users › Edit). Says so instead of linking to a page that doesn't exist. */
+function ForgotPassword() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="-mt-2 flex flex-col items-end gap-1">
+      <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className={AUTH_LINK_CLASS}>
+        Forgot password?
+      </button>
+      {open && (
+        <p className="self-stretch rounded-[10px] bg-[var(--l-chip-bg)] px-3 py-2 text-[12.5px] text-[var(--l-ink-2)]" aria-live="polite">
+          Ask your administrator to send you a reset link. It arrives by email, works once and expires in 72 hours.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Design spec v2 code entry: six boxes, the current one ringed in brand. One real input sits
+ * over the boxes (transparent text), so paste, autofill and screen readers work as normal. */
+function OtpBoxes({ value, onChange, inputRef }: { value: string; onChange: (v: string) => void; inputRef?: React.Ref<HTMLInputElement> }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <div className="relative">
+      <div aria-hidden className="flex gap-2">
+        {Array.from({ length: 6 }, (_, i) => {
+          const current = focused && (i === value.length || (i === 5 && value.length === 6));
+          return (
+            <span
+              key={i}
+              className="grid h-12 flex-1 place-items-center rounded-[10px] border bg-[var(--l-field-bg)] text-[20px] font-bold text-[var(--l-ink)]"
+              style={current ? { borderColor: "var(--login-brand)", boxShadow: "0 0 0 3px color-mix(in oklab, var(--login-brand) 18%, transparent)" } : { borderColor: "var(--l-field-bd)" }}
+            >
+              {value[i] ?? ""}
+            </span>
+          );
+        })}
+      </div>
+      <input
+        ref={inputRef}
+        id="totpCode"
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        maxLength={6}
+        aria-label="6-digit authenticator code"
+        className="absolute inset-0 h-full w-full cursor-text bg-transparent text-transparent caret-transparent outline-none selection:bg-transparent"
+        value={value}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, 6))}
+      />
+    </div>
   );
 }

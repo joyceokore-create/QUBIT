@@ -1,5 +1,7 @@
 "use client";
 
+import { PasswordChecklist } from "@/components/auth/password-checklist";
+
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -45,7 +47,7 @@ export function AcceptForm({ token }: { token: string }) {
           Your password is set. You can sign in now.
         </p>
         <Link href="/login">
-          <Button className="w-full">Go to sign in</Button>
+          <Button className="w-full">Go to Sign In</Button>
         </Link>
       </div>
     );
@@ -58,7 +60,7 @@ export function AcceptForm({ token }: { token: string }) {
           Choose a password
         </label>
         <Input id="ac-pw" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
-        <p className="text-[11px] text-[var(--ink4)]">At least 8 characters; don’t reuse a recent password.</p>
+        <PasswordChecklist password={password} />
       </div>
       <div className="flex flex-col gap-1.5">
         <label htmlFor="ac-confirm" className="text-[12.5px] font-medium text-[var(--ink2)]">
@@ -72,7 +74,7 @@ export function AcceptForm({ token }: { token: string }) {
         </p>
       )}
       <Button type="submit" disabled={loading} className="mt-1">
-        {loading ? "Saving…" : "Set password"}
+        {loading ? "Saving…" : "Set Password"}
       </Button>
     </form>
   );

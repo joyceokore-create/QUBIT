@@ -180,7 +180,7 @@ function headItems({ projects, extras, now, timeZone: tz }: BriefInput): BriefIt
         weight: 50,
         emphasis: `${p.name}'s ${GATE_LABELS[blocked[0]]} gate is blocked.`,
         detail: "Find out what is holding it before the next gate review.",
-        action: { label: "Open project", href: projectHref(p.id, "Delivery") },
+        action: { label: "Open Project", href: projectHref(p.id, "Delivery") },
       });
     }
   }
@@ -317,7 +317,7 @@ function qaItems({ projects, extras }: BriefInput): BriefItem[] {
         weight: 50 + n,
         emphasis: `${p.name} can't exit ${p.currentGate} yet.`,
         detail: `${count(n, "critical issue is", "critical issues are")} still open against it.`,
-        action: { label: "Open issues", href: projectHref(p.id, "Register") },
+        action: { label: "Open Issues", href: projectHref(p.id, "Register") },
       });
     }
   }
@@ -333,7 +333,7 @@ function qaItems({ projects, extras }: BriefInput): BriefItem[] {
       emphasis: `${count(total, "critical issue is", "critical issues are")} open.`,
       detail: withCrit.length === 1 ? `All on ${worst[0].name}.` : `Most on ${worst[0].name}; ${count(withCrit.length, "project", "projects")} affected.`,
       // Critical bugs live on boards, not in Risks & Issues — the Quality home tab lists both.
-      action: { label: "See issues", href: "/dashboard?tab=critical" },
+      action: { label: "See Issues", href: "/dashboard?tab=critical" },
     });
   }
 
@@ -351,7 +351,7 @@ function qaItems({ projects, extras }: BriefInput): BriefItem[] {
       weight: 100 - (p.coveragePct ?? 0),
       emphasis: `${p.name} has tests for only ${p.coveragePct}% of its requirements.`,
       detail: `It is at ${p.currentGate}; testing starts at SIT.`,
-      action: { label: "Open project", href: projectHref(p.id, "Delivery") },
+      action: { label: "Open Project", href: projectHref(p.id, "Delivery") },
     });
   }
   return items;
@@ -369,7 +369,7 @@ function execItems({ projects }: BriefInput): BriefItem[] {
       weight: atRisk.length,
       emphasis: `${count(atRisk.length, "approved initiative is", "approved initiatives are")} at risk.`,
       detail: `${nameList(atRisk.map((p) => p.name))} ${plural(atRisk.length, "needs a Group decision", "need Group decisions")}.`,
-      action: atRisk.length === 1 ? { label: "Open project", href: projectHref(atRisk[0].id) } : { label: "See projects", href: "/projects" },
+      action: atRisk.length === 1 ? { label: "Open Project", href: projectHref(atRisk[0].id) } : { label: "See Projects", href: "/projects" },
     });
   }
 
@@ -383,7 +383,7 @@ function execItems({ projects }: BriefInput): BriefItem[] {
       weight: 10 + decisions.length,
       emphasis: `${count(decisions.length, "project may need", "projects may need")} a Group decision.`,
       detail: `${nameList(decisions.map((p) => p.name))}. Suggested from project signals.`,
-      action: decisions.length === 1 ? { label: "Open project", href: projectHref(decisions[0].id) } : { label: "See projects", href: "/projects" },
+      action: decisions.length === 1 ? { label: "Open Project", href: projectHref(decisions[0].id) } : { label: "See Projects", href: "/projects" },
     });
   }
 
@@ -395,7 +395,7 @@ function execItems({ projects }: BriefInput): BriefItem[] {
       weight: hidden.length,
       emphasis: `Reported status hides ${count(hidden.length, "project", "projects")} in worse health.`,
       detail: "Calculated health has drifted from what PMs report.",
-      action: { label: "See which", href: "/reports" },
+      action: { label: "See Which", href: "/reports" },
     });
   }
 
@@ -407,7 +407,7 @@ function execItems({ projects }: BriefInput): BriefItem[] {
       weight: liveCount,
       emphasis: `${count(liveCount, "solution is", "solutions are")} live in production.`,
       detail: "Delivered across the approved portfolio.",
-      action: { label: "See portfolios", href: "/portfolios" },
+      action: { label: "See Portfolios", href: "/portfolios" },
     });
   }
   return items;
@@ -438,7 +438,7 @@ function pmItems({ projects, extras, viewerId, now, timeZone: tz }: BriefInput):
         weight: 50 + p.redRisks,
         emphasis: `${p.name} has ${p.redRisks === 1 ? "an open red risk" : `${p.redRisks} open red risks`}.`,
         detail: `${top ? `${top.title.replace(/\.$/, "")}. ` : ""}Escalate it to your Head if you can't close it.`,
-        action: { label: "Review risk", href: projectHref(p.id, "Register") },
+        action: { label: "Review Risk", href: projectHref(p.id, "Register") },
       });
     }
     if (p.dispute) {
@@ -458,7 +458,7 @@ function pmItems({ projects, extras, viewerId, now, timeZone: tz }: BriefInput):
         weight: 20 + p.openBlockers,
         emphasis: `${p.name} has ${count(p.openBlockers, "open blocker", "open blockers")}.`,
         detail: `Your team is waiting on ${plural(p.openBlockers, "it", "them")}.`,
-        action: { label: "Open blockers", href: projectHref(p.id, "Register") },
+        action: { label: "Open Blockers", href: projectHref(p.id, "Register") },
       });
     }
   }
@@ -478,7 +478,7 @@ function pmItems({ projects, extras, viewerId, now, timeZone: tz }: BriefInput):
           ? `${count(unsent.length, "weekly update hasn't", "weekly updates haven't")} been sent.`
           : `${count(unsent.length, "weekly update is", "weekly updates are")} due Friday at 17:00.`,
         detail: `${nameList(unsent.map((p) => p.name), 2)}.`,
-        action: { label: "Open updates", href: "/reports" },
+        action: { label: "Open Updates", href: "/reports" },
       });
     }
   }
@@ -501,7 +501,7 @@ function memberItems({ extras, now, timeZone: tz }: BriefInput): BriefItem[] {
       weight: 100,
       emphasis: `One task is overdue: ${t.title}.`,
       detail: `${t.projectName}, due ${formatDayMonth(t.dueDate!, tz)}.`,
-      action: { label: "Open task", href: taskHref(t) },
+      action: { label: "Open Task", href: taskHref(t) },
     });
   } else if (overdue.length > 1) {
     items.push({
@@ -510,7 +510,7 @@ function memberItems({ extras, now, timeZone: tz }: BriefInput): BriefItem[] {
       weight: 100 + overdue.length,
       emphasis: `${overdue.length} tasks are overdue.`,
       detail: `${nameList(overdue.map((t) => t.title), 2)}.`,
-      action: { label: "Open tasks", href: "/my-tasks" },
+      action: { label: "Open Tasks", href: "/my-tasks" },
     });
   }
 
@@ -521,7 +521,7 @@ function memberItems({ extras, now, timeZone: tz }: BriefInput): BriefItem[] {
       weight: daysBetween(t.blockedSince!, now, tz),
       emphasis: `${t.title} has been blocked since ${formatDayMonth(t.blockedSince!, tz)}.`,
       detail: `${t.blockerText ? `${t.blockerText.replace(/\.$/, "")}. ` : ""}Your PM can see this blocker.`,
-      action: { label: "Open task", href: taskHref(t) },
+      action: { label: "Open Task", href: taskHref(t) },
     });
   }
 
@@ -534,7 +534,7 @@ function memberItems({ extras, now, timeZone: tz }: BriefInput): BriefItem[] {
       weight: 10 + dueToday.length,
       emphasis: `${count(dueToday.length, "task is", "tasks are")} due today.`,
       detail: `${nameList(dueToday.map((t) => t.title), 2)}.`,
-      action: dueToday.length === 1 ? { label: "Open task", href: taskHref(dueToday[0]) } : { label: "Open tasks", href: "/my-tasks" },
+      action: dueToday.length === 1 ? { label: "Open Task", href: taskHref(dueToday[0]) } : { label: "Open Tasks", href: "/my-tasks" },
     });
   }
   if (dueTomorrow.length) {
@@ -544,7 +544,7 @@ function memberItems({ extras, now, timeZone: tz }: BriefInput): BriefItem[] {
       weight: dueTomorrow.length,
       emphasis: `${count(dueTomorrow.length, "task is", "tasks are")} due tomorrow.`,
       detail: `${nameList(dueTomorrow.map((t) => t.title), 2)}.`,
-      action: dueTomorrow.length === 1 ? { label: "Open task", href: taskHref(dueTomorrow[0]) } : { label: "Open tasks", href: "/my-tasks" },
+      action: dueTomorrow.length === 1 ? { label: "Open Task", href: taskHref(dueTomorrow[0]) } : { label: "Open Tasks", href: "/my-tasks" },
     });
   }
   return items;
