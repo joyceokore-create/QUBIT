@@ -36,8 +36,9 @@ export default async function PeoplePage({
   const canStaffTab = can(ctx, "project:create");
 
   const tabs: { key: TabKey; label: string }[] = [
-    { key: "directory", label: "Directory" },
-    ...(canStaffTab ? [{ key: "requests" as const, label: "Staffing requests" }] : []),
+    // Design spec v2: "Workload" (URL key stays "directory" so old links keep working).
+    { key: "directory", label: "Workload" },
+    ...(canStaffTab ? [{ key: "requests" as const, label: "Staffing Requests" }] : []),
   ];
   const { tab: requested } = await searchParams;
   const tab: TabKey = tabs.some((t) => t.key === requested) ? (requested as TabKey) : "directory";

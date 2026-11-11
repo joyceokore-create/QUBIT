@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Info } from "lucide-react";
 import { toast } from "sonner";
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
+import { Drawer, DrawerHeader } from "@/components/ui/drawer";
 import { PageHeader } from "@/components/list/page-header";
 import { FilterChips, FilterSelect, ListToolbar, SearchField, type ActiveFilter, type FilterOption } from "@/components/list/list-toolbar";
 import { ListEmpty, TableCard, TableFooter } from "@/components/list/table-footer";
@@ -162,12 +162,10 @@ export function ApprovalsClient({
         )}
       </TableCard>
 
-      <Sheet open={!!open} onOpenChange={(o) => !o && setDrawer(null)}>
-        <SheetContent side="right" className="w-full gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-[480px]">
-          {open?.kind === "idea" && <TriageDrawer key={open.id} idea={open} projects={projects} tz={timeZone} now={now} onDone={() => setDrawer(null)} />}
-          {open?.kind === "staffing" && <ReviewDrawer key={open.id} req={open} tz={timeZone} now={now} onDone={() => setDrawer(null)} />}
-        </SheetContent>
-      </Sheet>
+      <Drawer open={!!open} onClose={() => setDrawer(null)}>
+        {open?.kind === "idea" && <TriageDrawer key={open.id} idea={open} projects={projects} tz={timeZone} now={now} onDone={() => setDrawer(null)} />}
+        {open?.kind === "staffing" && <ReviewDrawer key={open.id} req={open} tz={timeZone} now={now} onDone={() => setDrawer(null)} />}
+      </Drawer>
     </main>
   );
 }
@@ -246,14 +244,9 @@ function ApprovalRow({ item, days, onOpen }: { item: ApprovalItem; days: number;
 
 const ago = (days: number) => (days === 0 ? "today" : `${ageLabel(days)} ago`);
 
+/** The design-spec drawer header (step line, 17/700 title, subtitle; bordered close). */
 function DrawerHead({ step, title, sub }: { step: string; title: string; sub: string }) {
-  return (
-    <div className="border-b border-[var(--border)] px-5 py-4 pr-12">
-      <div className="text-[11.5px] font-semibold text-[var(--ink3)]">{step}</div>
-      <SheetTitle className="mt-0.5 text-[17px] font-bold text-[var(--qink)]">{title}</SheetTitle>
-      <SheetDescription className="mt-0.5 text-[12.5px] text-[var(--ink3)]">{sub}</SheetDescription>
-    </div>
-  );
+  return <DrawerHeader step={step} title={title} subtitle={sub} />;
 }
 
 function Details({ rows }: { rows: [string, ReactNode][] }) {
