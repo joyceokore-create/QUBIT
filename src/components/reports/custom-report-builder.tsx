@@ -1,41 +1,32 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  REPORT_DATASETS,
-  type ReportColumn,
-  type ReportDatasetKey,
-} from "@/lib/report-catalogue";
-import { ExportButton } from "@/components/export-button";
-import { ListToolbar, SearchField } from "@/components/list/list-toolbar";
-import { ListEmpty, TableCard, TableFooter } from "@/components/list/table-footer";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Check, Circle, Download, Printer } from "lucide-react";
+import { REPORT_DATASETS, splitDatasets, type ReportDatasetKey } from "@/lib/report-catalogue";
+import { PageHeader } from "@/components/list/page-header";
+import { SearchField } from "@/components/list/list-toolbar";
+import { ListEmpty, TableFooter } from "@/components/list/table-footer";
+import { Panel } from "@/components/ui/panel";
 import { formatDate } from "@/lib/dates";
 import { matchesSearch, paginate, parseSize, type PageSize } from "@/lib/list-state";
-import { CARD } from "@/lib/surface";
+import { toTitleCase } from "@/lib/title-case";
+import { FOCUS, PRIMARY, SECONDARY, THEAD, TROW } from "@/lib/surface";
+import { cn } from "@/lib/utils";
 
-// Custom Reports builder — pick a dataset, tick the columns, PREVIEW, then export. The
-// full column list per dataset comes straight from the client-safe registry; the server
-// re-validates every key, so this UI is a convenience, never the control. The preview
-// table renders the JSON route's rows with search and pagination (UX6, D13 + L1–L3: browser
-// paging over the rows the route returned; search narrows the preview only); Export CSV
-// links the same URL with format=csv and only appears once a preview is on screen, so
-// what gets downloaded is always something the user has looked at first (the
-// export-button rule: no client-side data path that could drift from the screen).
-// Milestone D: the same preview also exports as a PDF in the report print style
-// (/api/reports/export?template=table) — or opens as a print view where no PDF engine exists.
+/**
+ * Custom Reports — UX fidelity Tier 3 (design: three cards, Dataset · Columns · Preview, with
+ * "Export CSV" and "Export PDF" in the page header). Pick a dataset, tick columns, and the
+ * preview refreshes on its own. The full column list per dataset comes from the client-safe
+ * registry; the server re-validates every key, so this UI is a convenience, never the control.
+ *
+ * Export rule (unchanged): the CSV/PDF links are built from the PREVIEW's columns, and are
+ * disabled while the preview is loading or out of date, so a download is always exactly what
+ * is on screen. Search narrows the preview only; exports carry every row.
+ */
 
 const STORAGE_KEY = "qubit.reports.custom.v1";
-// Same per-table key shape as useListUrl, so the remembered rows-per-page follows L3.
 const SIZE_KEY = "qubit.list.size.custom-report";
 const DEFAULT_SIZE: PageSize = 10;
-
-function readStoredSize(): PageSize {
-  try {
-    return parseSize(window.localStorage.getItem(SIZE_KEY), DEFAULT_SIZE);
-  } catch {
-    return DEFAULT_SIZE;
-  }
-}
 
 interface SavedSetup {
   dataset?: ReportDatasetKey;
@@ -56,55 +47,126 @@ function readSaved(): SavedSetup {
   }
 }
 
+function writeSaved(setup: SavedSetup) {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(setup));
+  } catch {
+    // storage blocked — the choice still holds for this visit
+  }
+}
+
 function formatCell(value: string | number | boolean | null, type: string, timeZone?: string): string {
   if (value === null || value === undefined || value === "") return "—";
   if (type === "boolean") return value ? "Yes" : "No";
   if (type === "date") {
     const d = new Date(String(value));
-    // U5: one date format, in the tenant's time zone (never the browser's default).
     return Number.isNaN(d.getTime()) ? String(value) : formatDate(d, timeZone);
   }
   return String(value);
+}
+
+/** A checklist row (`.ck li`): green check when on, grey circle when off. */
+function CheckRow({ on, label, onClick, role }: { on: boolean; label: string; onClick: () => void; role: "radio" | "checkbox" }) {
+  return (
+    <li>
+      <button
+        type="button"
+        role={role}
+        aria-checked={on}
+        onClick={onClick}
+        className={cn("flex w-full items-center gap-2 rounded-[6px] py-[3px] text-left text-[13px]", on ? "text-[var(--ds-ink)]" : "text-[var(--ds-ink3)] hover:text-[var(--ds-ink)]", FOCUS)}
+      >
+        {on ? <Check className="size-3.5 flex-none text-[var(--ds-ok-text)]" aria-hidden /> : <Circle className="size-3.5 flex-none text-[var(--ds-ink3)]" aria-hidden />}
+        <span className="min-w-0">{label}</span>
+      </button>
+    </li>
+  );
 }
 
 export function CustomReportBuilder({
   allowedDatasets,
   pdfAvailable = false,
   timeZone,
+  viewRole,
+  title = "Reports",
+  description = "Build a report from the data you can see.",
+  tabs,
 }: {
   allowedDatasets: ReportDatasetKey[];
   pdfAvailable?: boolean;
   /** The tenant's IANA zone, for date cells (U5). */
   timeZone?: string;
+  /** "Viewing as" role — decides which datasets are listed first. */
+  viewRole?: string | null;
+  title?: string;
+  description?: string;
+  /** The Reports tab strip, rendered between the header and the cards. */
+  tabs?: ReactNode;
 }) {
-  const datasets = useMemo(
-    () => REPORT_DATASETS.filter((d) => allowedDatasets.includes(d.key)),
-    [allowedDatasets],
-  );
-  const [dataset, setDataset] = useState<ReportDatasetKey>(datasets[0]?.key ?? "projects");
-  const [selected, setSelected] = useState<string[]>(datasets[0]?.defaults ?? []);
-  const [result, setResult] = useState<ReportResult | null>(null);
+  const datasets = useMemo(() => REPORT_DATASETS.filter((d) => allowedDatasets.includes(d.key)), [allowedDatasets]);
+  const { featured, more } = useMemo(() => splitDatasets(datasets.map((d) => d.key), viewRole), [datasets, viewRole]);
+  const first = datasets.find((d) => d.key === featured[0]) ?? datasets[0];
+
+  const [dataset, setDataset] = useState<ReportDatasetKey>(first?.key ?? "projects");
+  const [selected, setSelected] = useState<string[]>(first?.defaults ?? []);
+  const [result, setResult] = useState<(ReportResult & { dataset: ReportDatasetKey }) | null>(null);
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
   const [size, setSize] = useState<PageSize>(DEFAULT_SIZE);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [restored, setRestored] = useState(false);
+  const request = useRef(0);
 
-  const meta = datasets.find((d) => d.key === dataset) ?? datasets[0];
+  const meta = datasets.find((d) => d.key === dataset) ?? first;
 
   // Restore the last setup after mount (SSR-safe; a fresh browser gets the defaults).
   useEffect(() => {
     const saved = readSaved();
-    const savedDataset = saved.dataset && datasets.some((d) => d.key === saved.dataset) ? saved.dataset : undefined;
-    if (savedDataset) {
-      setDataset(savedDataset);
-      const ds = datasets.find((d) => d.key === savedDataset)!;
-      const cols = saved.columnsByDataset?.[savedDataset]?.filter((k) => ds.columns.some((c) => c.key === k));
+    const ds = saved.dataset ? datasets.find((d) => d.key === saved.dataset) : undefined;
+    if (ds) {
+      const cols = saved.columnsByDataset?.[ds.key]?.filter((k) => ds.columns.some((c) => c.key === k));
+      setDataset(ds.key);
       setSelected(cols?.length ? cols : ds.defaults);
     }
-    setSize(readStoredSize());
+    try {
+      setSize(parseSize(window.localStorage.getItem(SIZE_KEY), DEFAULT_SIZE));
+    } catch {
+      // keep the default
+    }
+    setRestored(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Live preview: re-run (debounced) whenever the dataset or the ticked columns change.
+  useEffect(() => {
+    if (!restored) return;
+    if (!selected.length) {
+      setResult(null);
+      setError("Tick at least one column.");
+      return;
+    }
+    const id = ++request.current;
+    const t = window.setTimeout(async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/reports/custom?dataset=${dataset}&columns=${selected.join(",")}`);
+        const body = await res.json();
+        if (id !== request.current) return;
+        if (!res.ok) throw new Error(body?.error?.message ?? "The report could not be built.");
+        setResult({ ...(body as ReportResult), dataset });
+        setPage(1);
+      } catch (e) {
+        if (id !== request.current) return;
+        setResult(null);
+        setError(e instanceof Error ? e.message : "The report could not be built.");
+      } finally {
+        if (id === request.current) setLoading(false);
+      }
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [dataset, selected, restored]);
 
   const search = useCallback((next: string) => {
     setQ(next);
@@ -117,223 +179,145 @@ export function CustomReportBuilder({
     try {
       window.localStorage.setItem(SIZE_KEY, String(next));
     } catch {
-      // storage blocked — the choice still holds for this visit
+      // storage blocked
     }
-  }
-
-  function persist(nextDataset: ReportDatasetKey, nextColumns: string[]) {
-    const saved = readSaved();
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        dataset: nextDataset,
-        columnsByDataset: { ...saved.columnsByDataset, [nextDataset]: nextColumns },
-      } satisfies SavedSetup),
-    );
   }
 
   function pickDataset(key: ReportDatasetKey) {
     const ds = datasets.find((d) => d.key === key);
-    if (!ds) return;
-    const saved = readSaved().columnsByDataset?.[key]?.filter((k) => ds.columns.some((c) => c.key === k));
+    if (!ds || key === dataset) return;
+    const saved = readSaved();
+    const cols = saved.columnsByDataset?.[key]?.filter((k) => ds.columns.some((c) => c.key === k));
     setDataset(key);
-    setSelected(saved?.length ? saved : ds.defaults);
-    setResult(null);
-    setError(null);
+    setSelected(cols?.length ? cols : ds.defaults);
+    setQ("");
+    writeSaved({ ...saved, dataset: key });
   }
 
   function toggle(key: string) {
-    setSelected((prev) => {
-      // Keep the registry's column order regardless of ticking order.
-      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
-      const ordered = meta.columns.map((c) => c.key).filter((k) => next.includes(k));
-      persist(dataset, ordered);
-      return ordered;
-    });
+    const next = selected.includes(key) ? selected.filter((k) => k !== key) : [...selected, key];
+    // Keep the registry's column order regardless of ticking order.
+    const ordered = meta.columns.map((c) => c.key).filter((k) => next.includes(k));
+    setSelected(ordered);
+    const saved = readSaved();
+    writeSaved({ dataset, columnsByDataset: { ...saved.columnsByDataset, [dataset]: ordered } });
   }
 
-  function setAll(keys: string[]) {
-    setSelected(keys);
-    persist(dataset, keys);
-  }
+  const current = result && result.dataset === dataset ? result : null;
+  const stale = !current || loading || current.columns.map((c) => c.key).join(",") !== selected.join(",");
+  const exportCols = current ? current.columns.map((c) => c.key).join(",") : "";
+  const csvHref = `/api/reports/custom?dataset=${dataset}&columns=${exportCols}&format=csv`;
+  const pdfHref = `/api/reports/export?template=table&dataset=${dataset}&columns=${exportCols}`;
 
-  async function generate() {
-    if (!selected.length) {
-      setError("Pick at least one column.");
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/reports/custom?dataset=${dataset}&columns=${selected.join(",")}`);
-      const body = await res.json();
-      if (!res.ok) throw new Error(body?.error?.message ?? "The report could not be generated.");
-      setResult(body as ReportResult);
-      setQ("");
-      setPage(1);
-      persist(dataset, selected);
-    } catch (e) {
-      setResult(null);
-      setError(e instanceof Error ? e.message : "The report could not be generated.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Export exactly what was previewed — the href is built from the RESULT's columns, so
-  // re-ticking boxes after a preview can never make the file differ from the screen.
-  const csvHref = result
-    ? `/api/reports/custom?dataset=${dataset}&columns=${result.columns.map((c) => c.key).join(",")}&format=csv`
-    : "";
-  const pdfHref = result
-    ? `/api/reports/export?template=table&dataset=${dataset}&columns=${result.columns.map((c) => c.key).join(",")}`
-    : "";
-  // Search runs over every row as the person sees it (formatted cells), then pages (L1/L3).
   const matching = useMemo(
-    () =>
-      result
-        ? result.rows.filter((row) => matchesSearch(q, ...result.columns.map((c) => formatCell(row[c.key], c.type, timeZone))))
-        : [],
-    [result, q, timeZone],
+    () => (current ? current.rows.filter((row) => matchesSearch(q, ...current.columns.map((c) => formatCell(row[c.key], c.type, timeZone)))) : []),
+    [current, q, timeZone],
   );
   const { rows: previewRows, info } = paginate(matching, page, size);
-  const stale = result ? selected.join(",") !== result.columns.map((c) => c.key).join(",") : false;
-  const enumHint = (c: ReportColumn) => (c.values ? `Values: ${c.values.join(" · ")}` : undefined);
 
   if (!datasets.length) return null;
 
+  const exportDisabled = stale || !current || current.rowCount === 0;
+  const linkProps = (href: string) =>
+    exportDisabled ? { "aria-disabled": true, tabIndex: -1, onClick: (e: React.MouseEvent) => e.preventDefault() } : { href };
+  const disabledCls = exportDisabled ? "pointer-events-none opacity-50" : "";
+
+  const label = (key: ReportDatasetKey) => toTitleCase(REPORT_DATASETS.find((d) => d.key === key)?.label ?? key);
+
   return (
-    <div className="flex flex-col gap-5">
-      <div className={CARD} style={{ background: "var(--cardbg)" }}>
-        <div className="flex flex-wrap items-center gap-3 border-b border-[var(--hair)] p-[12px_16px]">
-          <span className="font-heading text-[13.5px] font-bold text-[var(--qink)]">Build a report</span>
-          <label className="ml-auto flex items-center gap-2 text-[11px] text-[var(--ink4)]">
-            Module
-            <select
-              value={dataset}
-              onChange={(e) => pickDataset(e.target.value as ReportDatasetKey)}
-              className="rounded-[7px] border border-[var(--w07)] bg-[var(--cardbg)] px-2 py-1.5 text-[12px] font-semibold text-[var(--qink)]"
-            >
-              {[...new Set(datasets.map((d) => d.moduleLabel))].map((mod) => (
-                <optgroup key={mod} label={mod}>
-                  {datasets.filter((d) => d.moduleLabel === mod).map((d) => (
-                    <option key={d.key} value={d.key}>{d.label}</option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          </label>
-        </div>
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title={title}
+        description={description}
+        actions={
+          <>
+            <a {...linkProps(csvHref)} download className={cn(SECONDARY, disabledCls)}>
+              <Download className="size-4" aria-hidden /> Export CSV
+            </a>
+            {pdfAvailable ? (
+              <a {...linkProps(pdfHref)} download className={cn(PRIMARY, disabledCls)}>
+                <Download className="size-4" aria-hidden /> Export PDF
+              </a>
+            ) : (
+              <a {...linkProps(`${pdfHref}&format=html`)} target="_blank" rel="noreferrer" title="PDF isn't available here — print this view instead" className={cn(PRIMARY, disabledCls)}>
+                <Printer className="size-4" aria-hidden /> Print View
+              </a>
+            )}
+          </>
+        }
+      />
+      {tabs}
 
-        <div className="flex flex-col gap-3 p-[12px_16px]">
-          <p className="text-[12px] text-[var(--ink4)]">{meta.description}</p>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-bold uppercase tracking-[.06em] text-[var(--ink4)]">
-              Columns · {selected.length}/{meta.columns.length}
-            </span>
-            <button type="button" onClick={() => setAll(meta.defaults)} className="rounded-[7px] border border-[var(--w07)] px-2 py-0.5 text-[10.5px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)]">Defaults</button>
-            <button type="button" onClick={() => setAll(meta.columns.map((c) => c.key))} className="rounded-[7px] border border-[var(--w07)] px-2 py-0.5 text-[10.5px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)]">Select all</button>
-            <button type="button" onClick={() => setAll([])} className="rounded-[7px] border border-[var(--w07)] px-2 py-0.5 text-[10.5px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)]">Clear</button>
-          </div>
-
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-4">
-            {meta.columns.map((c) => (
-              <label key={c.key} title={enumHint(c)} className="flex cursor-pointer items-center gap-2 text-[12px] text-[var(--ink2)]">
-                <input
-                  type="checkbox"
-                  checked={selected.includes(c.key)}
-                  onChange={() => toggle(c.key)}
-                  className="size-3.5 accent-[var(--brand)]"
-                />
-                <span className="min-w-0 truncate">{c.label}</span>
-                {c.type === "enum" && <span className="flex-none text-[11px] uppercase tracking-[.06em] text-[var(--ink5)]">enum</span>}
-              </label>
+      <div className="grid items-start gap-4 lg:grid-cols-[200px_200px_minmax(0,1fr)]">
+        <Panel title={<span className="text-[14px]">Dataset</span>}>
+          <ul role="radiogroup" aria-label="Dataset" className="m-0 flex list-none flex-col gap-1.5 p-0">
+            {featured.map((k) => (
+              <CheckRow key={k} role="radio" on={k === dataset} label={label(k)} onClick={() => pickDataset(k)} />
             ))}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={generate}
-              disabled={loading || !selected.length}
-              className="rounded-[8px] bg-[var(--brand)] px-3.5 py-1.5 text-[12px] font-bold text-[var(--onbrand)] disabled:opacity-50"
-            >
-              {loading ? "Building preview…" : "Preview report"}
-            </button>
-            {!result && (
-              <span className="text-[11px] text-[var(--ink5)]">Preview the report first — export lives on the preview.</span>
-            )}
-            {error && <span role="alert" className="text-[12px] text-[var(--bad)]">{error}</span>}
-          </div>
-        </div>
-      </div>
-
-      {result && (
-        <section aria-label={`${meta.label} preview`} className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-heading text-[13.5px] font-bold text-[var(--qink)]">{meta.label}</span>
-            <span className="rounded-[5px] bg-[color-mix(in_oklab,var(--brand)_10%,transparent)] px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-[.06em] text-[var(--brand)]">
-              Preview
-            </span>
-            <span className="text-[11px] uppercase tracking-[.06em] text-[var(--ink4)]">
-              {result.rowCount} row{result.rowCount === 1 ? "" : "s"} · {result.columns.length} columns
-            </span>
-            {stale && (
-              <span className="text-[11px] font-semibold text-[var(--warn)]">
-                Column selection changed — preview again to refresh; the export matches this preview.
-              </span>
-            )}
-            <span className="ml-auto flex flex-wrap items-center gap-2">
-              {pdfAvailable ? (
-                <ExportButton href={pdfHref} label="Export PDF" />
-              ) : (
-                <a
-                  href={`${pdfHref}&format=html`}
-                  target="_blank"
-                  rel="noreferrer"
-                  title="PDF rendering isn't available here — print this view instead"
-                  className="rounded-[7px] border border-[var(--w07)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)]"
-                >
-                  Print view
-                </a>
-              )}
-              <ExportButton href={csvHref} label={`Export CSV (${result.rowCount} ${result.rowCount === 1 ? "row" : "rows"})`} />
-            </span>
-          </div>
-
-          {result.rowCount > 0 && (
-            <ListToolbar label="Search the preview">
-              <SearchField value={q} onChange={search} placeholder="Search any column" label={`Search ${meta.label.toLowerCase()}`} />
-              {q && (
-                <span className="text-[11.5px] text-[var(--ink4)]">
-                  Search narrows the preview only — exports include all {result.rowCount} rows.
-                </span>
-              )}
-            </ListToolbar>
+          </ul>
+          {more.length > 0 && (
+            <details className="group" open={more.includes(dataset) || undefined}>
+              <summary className={cn("cursor-pointer list-none rounded-[6px] text-[12px] font-semibold text-[var(--ds-brand-ink)]", FOCUS)}>
+                <span className="group-open:hidden">More Datasets ({more.length})</span>
+                <span className="hidden group-open:inline">Fewer Datasets</span>
+              </summary>
+              <ul role="radiogroup" aria-label="More datasets" className="m-0 mt-1.5 flex list-none flex-col gap-1.5 p-0">
+                {more.map((k) => (
+                  <CheckRow key={k} role="radio" on={k === dataset} label={label(k)} onClick={() => pickDataset(k)} />
+                ))}
+              </ul>
+            </details>
           )}
+        </Panel>
 
-          <TableCard footer={<TableFooter info={info} onPage={setPage} onSize={changeSize} noun="rows" />}>
-            {result.rowCount === 0 ? (
+        <Panel title={<span className="text-[14px]">Columns</span>}>
+          <ul aria-label={`Columns for ${meta.label}`} className="m-0 flex list-none flex-col gap-1.5 p-0">
+            {meta.columns.map((c) => (
+              <CheckRow key={c.key} role="checkbox" on={selected.includes(c.key)} label={toTitleCase(c.label)} onClick={() => toggle(c.key)} />
+            ))}
+          </ul>
+        </Panel>
+
+        <Panel title={<span className="text-[14px]">Preview{current ? ` · ${current.rowCount} ${current.rowCount === 1 ? "Row" : "Rows"}` : ""}</span>}>
+          <p className="-mt-1.5 text-[12px] text-[var(--ds-ink3)]">{meta.description}</p>
+          {current && current.rowCount > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <SearchField value={q} onChange={search} placeholder="Search the preview" label={`Search the ${meta.label.toLowerCase()} preview`} />
+              {q && <span className="text-[12px] text-[var(--ds-ink3)]">Search narrows the preview only. Exports include all {current.rowCount} rows.</span>}
+            </div>
+          )}
+          {error && (
+            <p role="alert" className="text-[12.5px] font-semibold text-[var(--ds-bad-text)]">
+              {error}
+            </p>
+          )}
+          <div aria-busy={loading} className={cn("overflow-x-auto transition-opacity", loading && "opacity-60")}>
+            {!current ? (
+              !error && <p className="py-6 text-center text-[12.5px] text-[var(--ds-ink3)]">Building the preview…</p>
+            ) : current.rowCount === 0 ? (
               <ListEmpty filtered={false} noun="rows" hint="Nothing in scope for this report yet." />
             ) : matching.length === 0 ? (
               <ListEmpty filtered noun="rows" onClear={() => search("")} />
             ) : (
-              <table className="w-full border-collapse text-left">
-                <thead>
+              <table className="w-full border-separate border-spacing-0 text-left text-[12.5px]">
+                <thead className={THEAD}>
                   <tr>
-                    {result.columns.map((c) => (
-                      <th key={c.key} className="whitespace-nowrap border-b border-[var(--hair)] p-[8px_16px] text-[11px] font-bold uppercase tracking-[.06em] text-[var(--ink4)]">
-                        {c.label}
+                    {current.columns.map((c) => (
+                      <th key={c.key} scope="col" className="whitespace-nowrap">
+                        {toTitleCase(c.label)}
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {previewRows.map((row, i) => (
-                    <tr key={info.skip + i} className="border-b border-[var(--hair2)] last:border-0">
-                      {result.columns.map((c) => (
-                        <td key={c.key} className="max-w-[36ch] truncate p-[8px_16px] text-[12px] text-[var(--ink2)]" title={row[c.key] === null ? undefined : String(row[c.key])}>
+                    <tr key={info.skip + i} className={TROW}>
+                      {current.columns.map((c, ci) => (
+                        <td
+                          key={c.key}
+                          className={cn("max-w-[36ch] truncate text-[var(--ds-ink2)]", ci === 0 && "font-semibold text-[var(--ds-ink)]")}
+                          title={row[c.key] === null ? undefined : String(row[c.key])}
+                        >
                           {formatCell(row[c.key], c.type, timeZone)}
                         </td>
                       ))}
@@ -342,9 +326,10 @@ export function CustomReportBuilder({
                 </tbody>
               </table>
             )}
-          </TableCard>
-        </section>
-      )}
+          </div>
+          {current && current.rowCount > 0 && <TableFooter info={info} onPage={setPage} onSize={changeSize} noun="rows" />}
+        </Panel>
+      </div>
     </div>
   );
 }

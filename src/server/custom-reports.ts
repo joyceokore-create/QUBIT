@@ -17,6 +17,10 @@ import { listIssues } from "@/server/issues";
 import { listWorkload } from "@/server/resources";
 import { listUsersForReport } from "@/server/users";
 import { listAccessRequests } from "@/server/access-requests";
+import { TEST_WORK } from "@/server/quality";
+import { raidRef } from "@/lib/raid-ref";
+import { healthWord } from "@/lib/status-words";
+import { projectStatusLabel, taskStatusLabel } from "@/lib/project-enums";
 
 // Custom Reports engine — binds each dataset in src/lib/report-catalogue.ts to a
 // tenant-scoped row builder. Requested column keys are validated against the registry
@@ -56,6 +60,13 @@ export const DATASET_PERMISSION: Record<ReportDatasetKey, string | null> = {
   // UX11 — admin datasets: the Users page's gate, and the Access requests page's gate.
   users: "admin:access",
   accessRequests: "iam:manage",
+  // UX fidelity Tier 3 — tenant-wide reads under RLS, each behind its module's read gate.
+  // Check-ins are the weekly status reports, so they sit behind reports:read.
+  riskIssues: "risk:read",
+  milestones: "milestone:read",
+  checkins: "reports:read",
+  requirements: "project:read",
+  testTasks: "task:read",
 };
 
 /** Datasets this viewer may run (the route-level gate; the API door honours exactly this). */
@@ -114,7 +125,7 @@ async function projectRows(ctx: TenantContext): Promise<ReportRow[]> {
       client: p.client,
       businessOwner: p.businessOwner,
       type: p.type,
-      status: p.status,
+      status: projectStatusLabel(p.status),
       priority: p.priority,
       pipelineStage: p.pipelineStage,
       portfolio: p.portfolio?.name ?? null,
@@ -209,6 +220,7 @@ async function riskRows(ctx: TenantContext): Promise<ReportRow[]> {
 async function issueRows(ctx: TenantContext): Promise<ReportRow[]> {
   const issues = await listIssues(ctx);
   return issues.map((i) => ({
+    ref: raidRef(i.id),
     title: i.title,
     project: i.projectCode,
     severity: i.severity,
@@ -224,7 +236,7 @@ async function issueRows(ctx: TenantContext): Promise<ReportRow[]> {
  * per-project role category decides which lanes they may see (their own tasks always),
  * exactly as on the boards — and Draft tasks never appear in reports at all.
  */
-async function taskRows(ctx: TenantContext): Promise<ReportRow[]> {
+async function taskRows(ctx: TenantContext, extraWhere: Prisma.ProjectTaskWhereInput = {}): Promise<ReportRow[]> {
   // Tenant-wide project:write (PlatformSuperAdmin, HeadOfProjects) = PM on every board;
   // project-independent, so checked once (canWriteProject's other half is per-project).
   const tenantPm = can(ctx, "project:write");
@@ -232,7 +244,7 @@ async function taskRows(ctx: TenantContext): Promise<ReportRow[]> {
   const { tasks, memberships, leads } = await withTenant(ctx, async (tx) => {
     const [tasks, memberships, leads] = await Promise.all([
       tx.projectTask.findMany({
-        where: { approvalStatus: "Published" },
+        where: { AND: [{ approvalStatus: "Published" }, extraWhere] },
         select: {
           taskKey: true,
           externalKey: true,
@@ -285,7 +297,7 @@ async function taskRows(ctx: TenantContext): Promise<ReportRow[]> {
       title: t.title,
       project: t.project.code,
       type: t.type,
-      status: t.status,
+      status: taskStatusLabel(t.status),
       priority: t.priority,
       severity: t.severity,
       phase: t.phase,
@@ -347,7 +359,7 @@ async function myTaskRows(ctx: TenantContext): Promise<ReportRow[]> {
     title: t.title,
     key: t.taskKey ?? t.externalKey,
     project: t.project.code,
-    status: t.status,
+    status: taskStatusLabel(t.status),
     dueDate: t.dueDate,
     estimate: t.estimate,
     priority: t.priority,
@@ -387,7 +399,7 @@ async function myProjectRows(ctx: TenantContext): Promise<ReportRow[]> {
     code: p.code,
     name: p.name,
     role: myProjectRole(p.leadUserId === ctx.userId, p.members.map((m) => m.role)),
-    status: p.status,
+    status: projectStatusLabel(p.status),
     dueDate: p.dueDate,
     openTasks: p._count.projectTasks,
     lead: p.lead?.name ?? null,
@@ -490,6 +502,138 @@ async function accessRequestRows(): Promise<ReportRow[]> {
   }));
 }
 
+
+// ── UX fidelity Tier 3: the design's builder datasets ─────────────────────────────────
+
+const DAY_MS = 86_400_000;
+
+/** Risks and issues in one list, through the same reads as the Risks & Issues page. */
+async function riskIssueRows(ctx: TenantContext): Promise<ReportRow[]> {
+  const now = Date.now();
+  const age = (d: Date) => Math.max(0, Math.floor((now - new Date(d).getTime()) / DAY_MS));
+  const [risks, issues] = await Promise.all([listRisks(ctx), can(ctx, "issue:read") ? listIssues(ctx) : Promise.resolve([])]);
+  return [
+    ...issues.map((i) => ({
+      ref: raidRef(i.id),
+      kind: "Issue",
+      title: i.title,
+      project: i.projectCode,
+      severity: i.severity,
+      score: null,
+      status: i.status,
+      owner: i.ownerName,
+      createdAt: i.createdAt,
+      ageDays: age(i.createdAt),
+    })),
+    ...risks.map((r) => ({
+      ref: raidRef(r.id),
+      kind: "Risk",
+      title: r.title,
+      project: r.projectCode,
+      severity: null,
+      score: r.probability * r.impact,
+      status: r.status,
+      owner: r.ownerName,
+      createdAt: r.createdAt,
+      ageDays: age(r.createdAt),
+    })),
+  ];
+}
+
+async function milestoneRows(ctx: TenantContext): Promise<ReportRow[]> {
+  const now = new Date();
+  const milestones = await withTenant(ctx, (tx) =>
+    tx.projectMilestone.findMany({
+      select: {
+        name: true,
+        dueDate: true,
+        status: true,
+        project: { select: { code: true, name: true } },
+        orgUnit: { select: { name: true } },
+        _count: { select: { tasks: true } },
+      },
+      orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { orderIndex: "asc" }],
+    }),
+  );
+  return milestones.map((m) => ({
+    project: m.project.name,
+    name: m.name,
+    market: m.orgUnit?.name ?? null,
+    dueDate: m.dueDate,
+    status: m.status,
+    late: m.status !== "Done" && !!m.dueDate && m.dueDate < now,
+    tasks: m._count.tasks,
+  }));
+}
+
+async function checkinRows(ctx: TenantContext): Promise<ReportRow[]> {
+  const checkins = await withTenant(ctx, (tx) =>
+    tx.checkIn.findMany({
+      select: {
+        isoWeek: true,
+        status: true,
+        computedRag: true,
+        ragOverride: true,
+        overrideReason: true,
+        narrative: true,
+        confirmedAt: true,
+        submittedToHeadAt: true,
+        confirmedBy: { select: { name: true } },
+        project: { select: { name: true } },
+      },
+      orderBy: [{ isoWeek: "desc" }, { project: { name: "asc" } }],
+    }),
+  );
+  return checkins.map((c) => ({
+    project: c.project.name,
+    week: c.isoWeek,
+    status: c.status,
+    computed: healthWord(c.computedRag),
+    rating: healthWord(c.ragOverride ?? c.computedRag),
+    reason: c.overrideReason,
+    narrative: c.narrative,
+    confirmedBy: c.confirmedBy?.name ?? null,
+    confirmedAt: c.confirmedAt,
+    sentAt: c.submittedToHeadAt,
+  }));
+}
+
+/** Requirements with coverage: covered = at least one PUBLISHED task is linked (docs/16 §6). */
+async function requirementRows(ctx: TenantContext): Promise<ReportRow[]> {
+  const requirements = await withTenant(ctx, (tx) =>
+    tx.requirement.findMany({
+      select: {
+        ref: true,
+        text: true,
+        status: true,
+        sectionAnchor: true,
+        createdAt: true,
+        project: { select: { name: true } },
+        taskLinks: { select: { task: { select: { approvalStatus: true } } } },
+      },
+      orderBy: [{ project: { name: "asc" } }, { ref: "asc" }],
+    }),
+  );
+  return requirements.map((r) => {
+    const linked = r.taskLinks.filter((l) => l.task.approvalStatus === "Published").length;
+    return {
+      ref: r.ref,
+      text: r.text,
+      project: r.project.name,
+      status: r.status,
+      section: r.sectionAnchor,
+      covered: linked > 0,
+      linkedTasks: linked,
+      createdAt: r.createdAt,
+    };
+  });
+}
+
+/** The QA queue's test work, behind the same board wall as the Tasks dataset. */
+async function testTaskRows(ctx: TenantContext): Promise<ReportRow[]> {
+  return taskRows(ctx, TEST_WORK);
+}
+
 const BUILDERS: Record<ReportDatasetKey, (ctx: TenantContext) => Promise<ReportRow[]>> = {
   projects: projectRows,
   portfolios: portfolioRows,
@@ -503,6 +647,11 @@ const BUILDERS: Record<ReportDatasetKey, (ctx: TenantContext) => Promise<ReportR
   myBlockers: myBlockerRows,
   users: userRows,
   accessRequests: accessRequestRows,
+  riskIssues: riskIssueRows,
+  milestones: milestoneRows,
+  checkins: checkinRows,
+  requirements: requirementRows,
+  testTasks: testTaskRows,
 };
 
 export interface CustomReportResult {

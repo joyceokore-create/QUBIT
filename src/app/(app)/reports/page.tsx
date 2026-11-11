@@ -75,13 +75,14 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
     const offered = offeredDatasetKeys(ctx).filter((k) => !memberLayout || (MY_DATASET_KEYS as readonly string[]).includes(k));
     return (
       <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-5 p-[22px_24px_90px]">
-        <PageHeader title="Reports" description="Build a report from your work." />
-        <div className="[animation:rise_.5s_cubic-bezier(.22,1,.36,1)_.06s_both]">
-          <ReportTabs tabs={CUSTOM_ONLY_TABS} active="custom" hrefFor={() => "/reports"} />
-        </div>
-        <div className="[animation:rise_.5s_cubic-bezier(.22,1,.36,1)_.1s_both]">
-          <CustomReportBuilder allowedDatasets={offered} pdfAvailable={canPdf} timeZone={timeZone} />
-        </div>
+        <CustomReportBuilder
+          allowedDatasets={offered}
+          pdfAvailable={canPdf}
+          timeZone={timeZone}
+          viewRole="Member"
+          description="Build a report from your work."
+          tabs={<ReportTabs tabs={CUSTOM_ONLY_TABS} active="custom" hrefFor={() => "/reports"} />}
+        />
       </main>
     );
   }
@@ -103,13 +104,29 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
     reportsHref({ week, as: previewing && (!newUi || asDeepLink) ? view : null, tab, ...p }, defaults);
   const isHead = can(ctx, "reports:read") && !previewing && view === "head";
 
+  // UX fidelity Tier 3: Custom Reports draws its own header (Export CSV / Export PDF) and
+  // the three-card builder; no week switcher (the data isn't weekly).
+  if (tab === "custom") {
+    const [canPdf, timeZone] = await Promise.all([pdfAvailable(), getTenantTimeZone(ctx)]);
+    return (
+      <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-5 p-[22px_24px_90px]">
+        <CustomReportBuilder
+          allowedDatasets={offeredDatasetKeys(ctx)}
+          pdfAvailable={canPdf}
+          timeZone={timeZone}
+          viewRole={newUi ? viewState.viewRole : null}
+          tabs={<ReportTabs tabs={tabsFor(view, tabOpts)} active={tab} hrefFor={(k) => href({ tab: k })} />}
+        />
+      </main>
+    );
+  }
+
   const data = await getReportsWeek(ctx, { isoWeek: week, view, previewing });
   const rowCount = data.kind === "pm" ? data.rows.length : 0;
   // Milestone D — exports + email: who the roll-up goes to, and whether this box can render PDFs.
-  const [recipients, canPdf, timeZone] = await Promise.all([
+  const [recipients, canPdf] = await Promise.all([
     can(ctx, "reports:read") ? listRecipients(ctx) : Promise.resolve([]),
     pdfAvailable(),
-    getTenantTimeZone(ctx),
   ]);
 
   return (
@@ -136,9 +153,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
       </div>
 
       <div className="[animation:rise_.5s_cubic-bezier(.22,1,.36,1)_.1s_both]">
-        {tab === "custom" ? (
-          <CustomReportBuilder allowedDatasets={offeredDatasetKeys(ctx)} pdfAvailable={canPdf} timeZone={timeZone} />
-        ) : tab === "quality" ? (
+        {tab === "quality" ? (
           <QualityReport ctx={ctx} />
         ) : data.kind === "pm" ? (
           tab === "history" ? (

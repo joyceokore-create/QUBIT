@@ -1,6 +1,7 @@
 "use client";
 
 import { SeverityPill } from "@/components/raid/severity-pill";
+import { raidRef } from "@/lib/raid-ref";
 import { IssueRowActions } from "@/components/raid/issue-row-actions";
 import { Chip } from "@/components/ui/status-pill";
 import { THEAD, TROW } from "@/lib/surface";
@@ -23,9 +24,7 @@ export function IssueStatus({ status }: { status: string }) {
 }
 
 /** Short, stable reference shown in the ID column (the first characters of the issue id). */
-export function issueRef(id: string): string {
-  return `#${id.slice(0, 6).toUpperCase()}`;
-}
+export const issueRef = raidRef;
 
 function ageOf(createdAt: Date | string): string {
   const days = Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000));
