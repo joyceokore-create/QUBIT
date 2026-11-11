@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ExecTopCard } from "@/components/reports/exec-top-card";
 import { StatusGrid } from "@/components/reports/status-grid";
-import { CARD_GLASS as CARD, CARD_BG, FOCUS } from "@/lib/surface";
+import { CARD, CARD_BG, FOCUS } from "@/lib/surface";
 import type { ExecWeekView, WeekMeta } from "@/server/reports-week";
 
 // Milestone B — the executive's week: the signed line, status by project over eight

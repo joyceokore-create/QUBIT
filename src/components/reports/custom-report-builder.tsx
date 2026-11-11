@@ -229,7 +229,7 @@ export function CustomReportBuilder({
           <p className="text-[12px] text-[var(--ink4)]">{meta.description}</p>
 
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[9px] font-bold uppercase tracking-[1.2px] text-[var(--ink4)]">
+            <span className="text-[11px] font-bold uppercase tracking-[.06em] text-[var(--ink4)]">
               Columns · {selected.length}/{meta.columns.length}
             </span>
             <button type="button" onClick={() => setAll(meta.defaults)} className="rounded-[7px] border border-[var(--w07)] px-2 py-0.5 text-[10.5px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)]">Defaults</button>
@@ -247,7 +247,7 @@ export function CustomReportBuilder({
                   className="size-3.5 accent-[var(--brand)]"
                 />
                 <span className="min-w-0 truncate">{c.label}</span>
-                {c.type === "enum" && <span className="flex-none font-mono text-[8px] uppercase tracking-[.6px] text-[var(--ink5)]">enum</span>}
+                {c.type === "enum" && <span className="flex-none text-[11px] uppercase tracking-[.06em] text-[var(--ink5)]">enum</span>}
               </label>
             ))}
           </div>
@@ -273,10 +273,10 @@ export function CustomReportBuilder({
         <section aria-label={`${meta.label} preview`} className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-heading text-[13.5px] font-bold text-[var(--qink)]">{meta.label}</span>
-            <span className="rounded-[5px] bg-[color-mix(in_oklab,var(--brand)_10%,transparent)] px-1.5 py-0.5 font-mono text-[8.5px] font-bold uppercase tracking-[.6px] text-[var(--brand)]">
+            <span className="rounded-[5px] bg-[color-mix(in_oklab,var(--brand)_10%,transparent)] px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-[.06em] text-[var(--brand)]">
               Preview
             </span>
-            <span className="font-mono text-[9px] uppercase tracking-[1.2px] text-[var(--ink4)]">
+            <span className="text-[11px] uppercase tracking-[.06em] text-[var(--ink4)]">
               {result.rowCount} row{result.rowCount === 1 ? "" : "s"} · {result.columns.length} columns
             </span>
             {stale && (
@@ -323,7 +323,7 @@ export function CustomReportBuilder({
                 <thead>
                   <tr>
                     {result.columns.map((c) => (
-                      <th key={c.key} className="whitespace-nowrap border-b border-[var(--hair)] p-[8px_16px] font-mono text-[9px] font-bold uppercase tracking-[1.2px] text-[var(--ink4)]">
+                      <th key={c.key} className="whitespace-nowrap border-b border-[var(--hair)] p-[8px_16px] text-[11px] font-bold uppercase tracking-[.06em] text-[var(--ink4)]">
                         {c.label}
                       </th>
                     ))}

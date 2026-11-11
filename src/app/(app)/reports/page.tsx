@@ -1,4 +1,6 @@
 import { PageHeader } from "@/components/list/page-header";
+import { PastUpdates } from "@/components/reports/past-updates";
+import { listMyPastUpdates } from "@/server/past-updates";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
@@ -140,13 +142,17 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
           <QualityReport ctx={ctx} />
         ) : data.kind === "pm" ? (
           tab === "history" ? (
-            <StatusGrid
-              weeks={data.grid.length ? data.grid[0]!.rows[0]!.cells.map((c) => c.isoWeek) : []}
-              groups={data.grid}
-              hrefFor={(id) => `/projects/${id}?tab=This%20week`}
-              title="Your projects · last 8 weeks"
-              emptyCopy="No confirmed status updates yet — this week's will be the first."
-            />
+            <div className="flex flex-col gap-6">
+              <StatusGrid
+                weeks={data.grid.length ? data.grid[0]!.rows[0]!.cells.map((c) => c.isoWeek) : []}
+                groups={data.grid}
+                hrefFor={(id) => `/projects/${id}?tab=This%20week`}
+                title="Your projects · last 8 weeks"
+                emptyCopy="No confirmed status updates yet — this week's will be the first."
+              />
+              {/* UX12 (D13): History = status over 8 weeks PLUS past updates. */}
+              <PastUpdatesSection ctx={ctx} />
+            </div>
           ) : (
             <PmWeek isoWeek={week} isCurrent={data.week.isCurrent} canUpload={!previewing} rows={data.rows.map((r) => ({ ...r, sentAt: r.sentAt?.toISOString() ?? null }))} />
           )
@@ -220,4 +226,10 @@ async function ArchiveTab({
       hrefForWeek={hrefForWeek}
     />
   );
+}
+
+/** UX12 (D13): the PM's past updates, read under RLS (projects they run). */
+async function PastUpdatesSection({ ctx }: { ctx: { tenantId: string; userId: string; roles: string[]; permissions?: string[] } }) {
+  const [rows, timeZone] = await Promise.all([listMyPastUpdates(ctx), getTenantTimeZone(ctx)]);
+  return <PastUpdates rows={rows} timeZone={timeZone} />;
 }

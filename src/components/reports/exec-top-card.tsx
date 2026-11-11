@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Check, Download, FileText, Mail } from "lucide-react";
 import { LocalTime } from "@/components/reports/local-time";
-import { CARD_GLASS as CARD, CARD_BG, SECONDARY } from "@/lib/surface";
+import { CARD, CARD_BG, SECONDARY } from "@/lib/surface";
 
 // Milestone B — what the executive opens on: the Head's signed line for the week (or the
 // honest "not signed yet"), the PDF and CSV once it exists, and their own weekly-email switch.

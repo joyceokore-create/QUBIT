@@ -1,6 +1,6 @@
 import { ExportButton } from "@/components/export-button";
 import { QualityByProject } from "@/components/reports/quality-by-project";
-import { CARD_GLASS as CARD, CARD_BG } from "@/lib/surface";
+import { CARD, CARD_BG } from "@/lib/surface";
 import { weekLabel, type WeeklyCount } from "@/lib/quality-report";
 import type { TenantContext } from "@/lib/tenant";
 import { getQualityReport } from "@/server/quality-report";

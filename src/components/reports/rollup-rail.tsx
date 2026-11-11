@@ -6,7 +6,7 @@ import { Check, Download, FileText } from "lucide-react";
 import { LocalTime } from "@/components/reports/local-time";
 import { ReportEmailButton } from "@/components/reports/report-email-button";
 import { RecipientsDialog, type RecipientJson } from "@/components/reports/recipients-dialog";
-import { CARD_GLASS as CARD, CARD_BG, FOCUS, PRIMARY, QUIET, SECONDARY, ragChipStyle, ragFill } from "@/lib/surface";
+import { CARD, CARD_BG, FOCUS, PRIMARY, QUIET, SECONDARY, ragChipStyle, ragFill } from "@/lib/surface";
 
 /**
  * Milestone B — the Head's roll-up rail: the week's spread, the one line for the

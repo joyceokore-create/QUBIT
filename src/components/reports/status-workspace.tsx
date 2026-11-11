@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, FileText, Flag, Layers, Loader2, Plus, Search, Send, Upload } from "lucide-react";
 import { isoWeekId, isoWeekMonday, shiftIsoWeek, weekRange } from "@/lib/iso-week";
-import { CARD_GLASS as CARD, CARD_BG, FOCUS, PRIMARY, QUIET, SECONDARY, ragChipStyle } from "@/lib/surface";
+import { CARD, CARD_BG, FOCUS, PRIMARY, QUIET, SECONDARY, ragChipStyle } from "@/lib/surface";
 import { GATE_STATE_LABEL, MODULE_STATE_LABEL, resolveDelivery, type CatalogMarket, type DeliveryCatalog, type ParsedCell, type ParsedGate, type StageReading } from "@/lib/status-report-delivery";
 import type { Rag } from "@/server/health";
 import type { CheckpointState } from "@/server/checkpoints";

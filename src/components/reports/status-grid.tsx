@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CARD_GLASS as CARD, CARD_BG, FOCUS, ragFill } from "@/lib/surface";
+import { CARD, CARD_BG, FOCUS, ragFill } from "@/lib/surface";
 import type { GridGroup } from "@/server/reports-week";
 
 // Milestone B — "Status by project · last 8 weeks": one row per project, eight 22×18

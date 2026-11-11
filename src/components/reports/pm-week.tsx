@@ -8,7 +8,11 @@ import { CheckCheck, Send, ShieldAlert, Upload } from "lucide-react";
 import { RagTally, WeekMeter } from "@/components/reports/week-meter";
 import { LocalTime } from "@/components/reports/local-time";
 import { lineTone, TONE_TOKEN } from "@/lib/status-lines";
-import { CARD_GLASS as CARD, CARD_BG, FOCUS, PRIMARY, QUIET, RAG_TOKEN, SECONDARY, ragChipStyle, ragFill } from "@/lib/surface";
+import { CARD, CARD_BG, FOCUS, PRIMARY, QUIET, RAG_TOKEN, SECONDARY, ragChipStyle, ragFill } from "@/lib/surface";
+import { FilterChips, FilterSelect, ListToolbar, SearchField } from "@/components/list/list-toolbar";
+import { ListEmpty, TableFooter } from "@/components/list/table-footer";
+import { useListUrl } from "@/components/list/use-list-url";
+import { matchesSearch, paginate } from "@/lib/list-state";
 import type { Rag } from "@/server/health";
 
 /**
@@ -63,6 +67,8 @@ export function PmWeek({ isCurrent, rows: initial, canUpload = false }: { isoWee
     if (next.sentToHead) setOpenId(rows.find((r) => r.projectId !== next.projectId && !r.confirmed && r.canConfirm)?.projectId ?? null);
   };
 
+  const list = useListUrl("pm-week", 10); // before the early return (rules of hooks)
+
   if (rows.length === 0) {
     return (
       <div className={`${CARD} p-8 text-center`} style={CARD_BG} data-tour="pm-week">
@@ -85,6 +91,15 @@ export function PmWeek({ isCurrent, rows: initial, canUpload = false }: { isoWee
 
   // Rows a bulk send can take as they are: drafted narrative, confirmable, not yet sent.
   const sendable = rows.filter((r) => isCurrent && r.canConfirm && !r.confirmed && (r.narrative ?? "").trim());
+
+  // UX12 (L1–L3, D13): the list rules — search, a Status filter, always-visible pagination
+  // (default 10, remembered). "pw*" keys so they never clash with /reports' own params.
+  const statusFilter = list.get("pwstatus");
+  const shown = rows.filter(
+    (r) => matchesSearch(list.q, r.name, r.code) && (!statusFilter || (statusFilter === "sent" ? r.sentToHead : !r.sentToHead)),
+  );
+  const { rows: pageRows, info } = paginate(shown, list.page, list.size);
+  const filtersOn = !!statusFilter || !!list.q;
 
   const sendAll = async () => {
     setSendingAll({ done: 0, total: sendable.length });
@@ -145,8 +160,31 @@ export function PmWeek({ isCurrent, rows: initial, canUpload = false }: { isoWee
           {sendAllErrors.join(" · ")}
         </p>
       )}
+      <div className="flex flex-col gap-2 border-b border-[var(--border)] px-[18px] py-3">
+        <ListToolbar>
+          <SearchField value={list.q} onChange={(v) => list.set({ q: v })} placeholder="Search your projects or codes" label="Search this week's updates" />
+          <FilterSelect
+            label="Status"
+            allLabel="All statuses"
+            value={statusFilter}
+            options={[
+              { value: "tosend", label: "To send" },
+              { value: "sent", label: "Sent" },
+            ]}
+            onChange={(v) => list.set({ pwstatus: v })}
+          />
+        </ListToolbar>
+        <FilterChips
+          filters={statusFilter ? [{ key: "pwstatus", label: `Status: ${statusFilter === "sent" ? "Sent" : "To send"}` }] : []}
+          onRemove={(k) => list.set({ [k]: null })}
+          onClearAll={() => list.clear(["pwstatus"])}
+        />
+      </div>
+      {pageRows.length === 0 && (
+        <ListEmpty filtered={filtersOn} noun="projects" onClear={() => list.clear(["pwstatus"])} hint={filtersOn ? undefined : "Projects you run appear here each week, drafted from the board and the markets."} />
+      )}
       <ul>
-        {rows.map((r) => (
+        {pageRows.map((r) => (
           <PmRow
             // Re-seed the editor when the server hands us a different draft (an upload filled it).
             key={`${r.projectId}:${r.status}:${r.narrative ?? ""}:${r.ragOverride ?? ""}`}
@@ -158,6 +196,7 @@ export function PmWeek({ isCurrent, rows: initial, canUpload = false }: { isoWee
           />
         ))}
       </ul>
+      <TableFooter info={info} noun="projects" onPage={list.setPage} onSize={list.setSize} />
     </section>
   );
 }

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Bell, Check, Upload } from "lucide-react";
 import { WeekMeter } from "@/components/reports/week-meter";
 import { LocalTime } from "@/components/reports/local-time";
-import { CARD_GLASS as CARD, CARD_BG, FOCUS, ragFill, ragToken } from "@/lib/surface";
+import { CARD, CARD_BG, FOCUS, ragFill, ragToken } from "@/lib/surface";
 import type { Rag } from "@/server/health";
 
 /**
