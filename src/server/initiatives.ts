@@ -56,6 +56,8 @@ export async function getInitiatives(ctx: TenantContext, now = new Date()): Prom
             stageEnteredAt: true,
             businessOwner: true,
             portfolio: { select: { id: true, name: true, category: true, ownerId: true } },
+            // UX fidelity Tier 2: the next open milestone is the row's "Next step".
+            milestonesV2: { where: { status: { not: "Done" } }, orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { id: "asc" }], take: 1, select: { name: true, dueDate: true } },
           },
         }),
         ideaScope === "none"
@@ -107,6 +109,7 @@ export async function getInitiatives(ctx: TenantContext, now = new Date()): Prom
       sponsor: p.businessOwner ?? (p.portfolio?.ownerId ? (estate.ownerName.get(p.portfolio.ownerId) ?? null) : null),
       priority: p.priority,
       stageEnteredAt: p.stageEnteredAt ? p.stageEnteredAt.toISOString() : null,
+      nextStep: p.milestonesV2[0] ? { text: p.milestonesV2[0].name, dueDate: p.milestonesV2[0].dueDate?.toISOString() ?? null } : null,
     });
   }
   for (const i of estate.ideas) {
@@ -124,6 +127,7 @@ export async function getInitiatives(ctx: TenantContext, now = new Date()): Prom
       priority: null,
       // An idea enters Intake when it is submitted.
       stageEnteredAt: i.createdAt.toISOString(),
+      nextStep: { text: i.status === "Reviewing" ? "Under review by the Head" : "Waiting for triage", dueDate: null },
     });
   }
 

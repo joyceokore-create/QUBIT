@@ -32,6 +32,7 @@ let seq = 0;
 const row = (stage: InitiativeStage, over: Partial<InitiativeRow> = {}): InitiativeRow => ({
   kind: stage === "Intake" ? "idea" : "project",
   id: `id_${++seq}`,
+  nextStep: null,
   code: stage === "Intake" ? null : `P${seq}`,
   name: `Initiative ${seq}`,
   portfolio: null,

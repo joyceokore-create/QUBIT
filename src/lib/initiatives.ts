@@ -54,6 +54,9 @@ export interface InitiativeRow {
   priority: string | null;
   /** ISO instant the item entered its stage (idea: submitted). Null = unknown. */
   stageEnteredAt: string | null;
+  /** UX fidelity Tier 2 "Next step": a project's next open milestone ("SIT exit · 2026-11-14"),
+   * or an idea's triage state. Null when nothing is scheduled. */
+  nextStep: { text: string; dueDate: string | null } | null;
 }
 
 /** The project's initiative stage: the lifecycle rule plus the Shelved-portfolio overlay. */

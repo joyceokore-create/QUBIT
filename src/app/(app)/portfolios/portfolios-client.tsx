@@ -3,10 +3,10 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { usePanel } from "@/components/panels/panel-context";
-import { Button } from "@/components/ui/button";
-import { HealthPill, StagePill } from "@/components/ui/status-pill";
+import { Chip, HealthPill, StagePill } from "@/components/ui/status-pill";
+import { TextButton } from "@/components/ui/text-link";
 import { PageHeader } from "@/components/list/page-header";
 import { FilterChips, FilterSelect, ListToolbar, SearchField, type ActiveFilter, type FilterOption } from "@/components/list/list-toolbar";
 import { ListEmpty, TableCard, TableFooter } from "@/components/list/table-footer";
@@ -15,7 +15,8 @@ import { LifecycleCards } from "@/components/portfolios/lifecycle-cards";
 import { NewIdeaDialog } from "@/app/(app)/ideas/ideas-client";
 import { matchesSearch, paginate } from "@/lib/list-state";
 import { HEALTH_LABEL, HEALTH_ORDER } from "@/lib/project-gate-view";
-import { TAB, TAB_ACTIVE, TAB_COUNT, TABS_ROW } from "@/lib/surface";
+import { FOCUS, PRIMARY, SECONDARY, TAB, TAB_ACTIVE, TAB_COUNT, TABS_ROW, THEAD, TROW } from "@/lib/surface";
+import { formatDayMonth } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import {
   INITIATIVE_TABS,
@@ -53,10 +54,10 @@ const valueOptions = (values: (string | null)[], noneLabel: string, order?: stri
   return set.map((v) => ({ value: v, label: v === NONE ? noneLabel : v }));
 };
 
-const PILL_NEUTRAL = "inline-flex h-[22px] items-center whitespace-nowrap rounded-full border border-[var(--border)] px-2 text-[12px] font-semibold text-[var(--ink3)]";
+const PILL_NEUTRAL = "inline-flex items-center whitespace-nowrap rounded-full bg-[var(--ds-mutedw)] px-2 py-0.5 text-[11px] font-semibold leading-[1.5] text-[var(--ds-ink2)]";
 
 export function PortfoliosClient({
-  tenantName,
+  tenantName: _tenantName,
   rows: all,
   history,
   nowIso,
@@ -123,32 +124,31 @@ export function PortfoliosClient({
   const isFiltered = active.length > 0 || !!list.q;
   const clearAll = () => list.clear([...FILTER_KEYS]);
 
-  // One filled primary: New project when allowed, else New idea.
-  const primary = can.project ? "project" : can.idea ? "idea" : can.portfolio ? "portfolio" : null;
-  const variant = (k: "project" | "idea" | "portfolio") => (primary === k ? "default" : "outline");
 
   return (
     <main className="mx-auto flex w-full min-w-0 max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
       <PageHeader
-        eyebrow={tenantName}
         title="Portfolios"
-        description={`${all.length} ${all.length === 1 ? "initiative" : "initiatives"}, from idea to live. Health is this week's confirmed check-in.`}
+        description="Every initiative, from first idea to live."
         actions={
           <>
+            <a href="/api/export?kind=projects" className={SECONDARY}>
+              Export CSV
+            </a>
             {can.portfolio && (
-              <Button variant={variant("portfolio")} nativeButton={false} render={<Link href="/portfolios/new" />}>
-                <Plus /> New portfolio
-              </Button>
-            )}
-            {can.idea && (
-              <Button variant={variant("idea")} onClick={() => setIdeaOpen(true)}>
-                <Plus /> New idea
-              </Button>
+              <Link href="/portfolios/new" className={SECONDARY}>
+                <Plus className="size-3.5" aria-hidden /> New Portfolio
+              </Link>
             )}
             {can.project && (
-              <Button variant={variant("project")} nativeButton={false} render={<Link href="/projects/new" />}>
-                <Plus /> New project
-              </Button>
+              <Link href="/projects/new" className={can.idea ? SECONDARY : PRIMARY}>
+                <Plus className="size-3.5" aria-hidden /> New Project
+              </Link>
+            )}
+            {can.idea && (
+              <button type="button" onClick={() => setIdeaOpen(true)} className={PRIMARY}>
+                <Plus className="size-3.5" aria-hidden /> New Idea
+              </button>
             )}
           </>
         }
@@ -156,19 +156,12 @@ export function PortfoliosClient({
 
       <div className="flex flex-col gap-2">
         <LifecycleCards cards={cards} />
-        <p className="text-[12.5px] text-[var(--ink3)]">
+        <p className="flex items-center gap-2 text-[12.5px] text-[var(--ds-ink3)]">
           {inactiveLine(inactiveCount)}
           {inactiveCount > 0 && (
-            <>
-              {" · "}
-              <button
-                type="button"
-                onClick={() => list.set({ tab: "inactive" })}
-                className="rounded-sm font-semibold text-[var(--qink)] underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
-              >
-                View
-              </button>
-            </>
+            <TextButton arrow onClick={() => list.set({ tab: "inactive" })}>
+              View
+            </TextButton>
           )}
         </p>
       </div>
@@ -194,11 +187,11 @@ export function PortfoliosClient({
 
       <div className="flex flex-col gap-2">
         <ListToolbar>
-          <SearchField value={list.q} onChange={(q) => list.set({ q })} placeholder="Search initiatives, codes, sponsors or portfolios" label="Search initiatives" className="sm:w-[320px]" />
+          <SearchField value={list.q} onChange={(q) => list.set({ q })} placeholder="Search initiatives or sponsors" label="Search initiatives" />
           <FilterSelect label="Sponsor" allLabel="All sponsors" value={f.sponsor} options={opts.sponsor} onChange={(v) => list.set({ sponsor: v })} />
           <FilterSelect label="Priority" allLabel="All priorities" value={f.priority} options={opts.priority} onChange={(v) => list.set({ priority: v })} />
           <FilterSelect label="Stage" allLabel="All stages" value={f.stage} options={opts.stage} onChange={(v) => list.set({ stage: v })} />
-          <FilterSelect label="Health" allLabel="All health" value={f.health} options={opts.health} onChange={(v) => list.set({ health: v })} />
+          <FilterSelect label="Health" allLabel="All statuses" value={f.health} options={opts.health} onChange={(v) => list.set({ health: v })} />
           <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={clearAll} />
         </ListToolbar>
       </div>
@@ -212,17 +205,15 @@ export function PortfoliosClient({
             hint={f.health ? "Ideas, live and inactive projects carry no health, so the Health filter hides them." : undefined}
           />
         ) : (
-          <table className="w-full min-w-[920px] text-left text-[13px]">
-            <thead className="border-b border-[var(--border)] text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--ink3)]">
+          <table className="w-full min-w-[880px] border-separate border-spacing-0 text-left text-[12.5px]">
+            <thead className={THEAD}>
               <tr>
-                <th scope="col" className="px-4 py-2.5 font-semibold">Initiative</th>
-                <th scope="col" className="px-3 py-2.5 font-semibold">Portfolio</th>
-                <th scope="col" className="px-3 py-2.5 font-semibold">Stage</th>
-                <th scope="col" className="px-3 py-2.5 font-semibold">Health</th>
-                <th scope="col" className="px-3 py-2.5 font-semibold">Sponsor</th>
-                <th scope="col" className="px-3 py-2.5 text-right font-semibold">Days in stage</th>
-                <th scope="col" className="px-3 py-2.5 font-semibold">Priority</th>
-                <th scope="col" className="w-8 px-2"><span className="sr-only">Open</span></th>
+                <th scope="col">Initiative</th>
+                <th scope="col">Sponsor</th>
+                <th scope="col">Stage</th>
+                <th scope="col">Health</th>
+                <th scope="col">Next Step</th>
+                <th scope="col">In Stage</th>
               </tr>
             </thead>
             <tbody>
@@ -232,8 +223,8 @@ export function PortfoliosClient({
                 const ideaHref = `/ideas?q=${encodeURIComponent(r.name)}`;
                 const open = () => (r.kind === "project" ? openProject(r.id) : router.push(ideaHref));
                 return (
-                  <tr key={`${r.kind}:${r.id}`} onClick={open} className="cursor-pointer border-b border-[var(--border)] transition-colors last:border-0 hover:bg-[var(--surface-2)]">
-                    <td className="max-w-[320px] px-4 py-2.5">
+                  <tr key={`${r.kind}:${r.id}`} onClick={open} className={`${TROW} cursor-pointer hover:[&>td]:bg-[var(--ds-surface2)]`}>
+                    <td className="max-w-[300px]">
                       {r.kind === "project" ? (
                         <button
                           type="button"
@@ -241,65 +232,30 @@ export function PortfoliosClient({
                             e.stopPropagation();
                             openProject(r.id);
                           }}
-                          className="block max-w-full truncate rounded-sm text-left font-semibold text-[var(--qink)] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                          className={`block max-w-full truncate rounded-sm text-left font-semibold text-[var(--ds-ink)] hover:underline ${FOCUS}`}
                         >
                           {r.name}
                         </button>
                       ) : (
-                        <Link
-                          href={ideaHref}
-                          onClick={(e) => e.stopPropagation()}
-                          className="block max-w-full truncate rounded-sm font-semibold text-[var(--qink)] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
-                        >
+                        <Link href={ideaHref} onClick={(e) => e.stopPropagation()} className={`block max-w-full truncate rounded-sm font-semibold text-[var(--ds-ink)] hover:underline ${FOCUS}`}>
                           {r.name}
                         </Link>
                       )}
-                      <span className="block truncate text-[12px] text-[var(--ink3)]">{r.kind === "project" ? <span className="font-mono text-[11.5px]">{r.code}</span> : "Idea"}</span>
+                      <span className="block truncate text-[12px] text-[var(--ds-ink3)]">{[r.kind === "idea" ? "Idea" : null, r.portfolio?.name, r.priority ? `${r.priority} priority` : null].filter(Boolean).join(" · ")}</span>
                     </td>
-                    <td className="max-w-[220px] px-3 py-2.5">
-                      {r.portfolio ? (
-                        <Link
-                          href={`/portfolios/${r.portfolio.id}`}
-                          onClick={(e) => e.stopPropagation()}
-                          title={r.kind === "idea" ? "Suggested portfolio" : undefined}
-                          className="block max-w-full truncate rounded-sm text-[var(--ink2)] outline-none hover:text-[var(--qink)] hover:underline focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
-                        >
-                          {r.portfolio.name}
-                        </Link>
-                      ) : (
-                        <span className="text-[var(--ink3)]">—</span>
-                      )}
+                    <td className="max-w-[180px] truncate whitespace-nowrap text-[var(--ds-ink2)]">{r.sponsor ?? "Not set"}</td>
+                    <td className="whitespace-nowrap">{r.stage === "Inactive" ? <span className={PILL_NEUTRAL}>{r.inactiveReason ?? "Inactive"}</span> : <StagePill stage={r.stage} />}</td>
+                    <td className="whitespace-nowrap">
+                      {r.health === null ? <span className="text-[var(--ds-ink3)]">—</span> : r.health === "None" ? <Chip>No report</Chip> : <HealthPill value={r.health} />}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2.5">
-                      <span className="flex items-center gap-1.5">
-                        {r.stage === "Inactive" ? <span className={PILL_NEUTRAL}>{r.inactiveReason ?? "Inactive"}</span> : <StagePill stage={r.stage} />}
-                        {stuck && (
-                          <span
-                            title="In this stage for more than 30 days"
-                            className="inline-flex h-[22px] items-center whitespace-nowrap rounded-full px-2 text-[12px] font-semibold text-[var(--warn-ink)]"
-                            style={{ background: "color-mix(in oklab, var(--warn-ink) 12%, transparent)" }}
-                          >
-                            Stuck
-                          </span>
-                        )}
+                    <td className="max-w-[260px] truncate text-[var(--ds-ink2)]">
+                      {r.nextStep ? `${r.nextStep.text}${r.nextStep.dueDate ? `, ${formatDayMonth(r.nextStep.dueDate, timeZone)}` : ""}` : <span className="text-[var(--ds-ink3)]">Nothing scheduled</span>}
+                    </td>
+                    <td className="whitespace-nowrap tabular-nums text-[var(--ds-ink2)]" title={days === null ? "Stage entry date not known" : undefined}>
+                      <span className="inline-flex items-center gap-1.5">
+                        {inStageWords(days)}
+                        {stuck && <Chip tone="warn">Stuck</Chip>}
                       </span>
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2.5">
-                      {r.health === null ? (
-                        <span className="text-[var(--ink3)]">—</span>
-                      ) : r.health === "None" ? (
-                        <span className="text-[12px] font-semibold text-[var(--ink3)]" title="No confirmed weekly report yet">No report</span>
-                      ) : (
-                        <HealthPill value={r.health} />
-                      )}
-                    </td>
-                    <td className="max-w-[180px] truncate whitespace-nowrap px-3 py-2.5 text-[var(--ink2)]">{r.sponsor ?? "—"}</td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-[var(--ink2)]" title={days === null ? "Stage entry date not known" : undefined}>
-                      {days ?? "—"}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-[var(--ink2)]">{r.priority ?? "—"}</td>
-                    <td className="px-2 py-2.5">
-                      <ChevronRight className="size-4 text-[var(--ink3)]" aria-hidden />
                     </td>
                   </tr>
                 );
@@ -312,4 +268,12 @@ export function PortfoliosClient({
       {can.idea && <NewIdeaDialog open={ideaOpen} onOpenChange={setIdeaOpen} portfolios={portfolios} onSubmitted={async () => router.refresh()} />}
     </main>
   );
+}
+
+/** "5 days", "3 weeks", "4 months" (design "In stage"). */
+function inStageWords(days: number | null): string {
+  if (days === null) return "Not known";
+  if (days < 14) return `${days} ${days === 1 ? "day" : "days"}`;
+  if (days < 60) return `${Math.floor(days / 7)} weeks`;
+  return `${Math.floor(days / 30)} months`;
 }
