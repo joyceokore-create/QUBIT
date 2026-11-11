@@ -1,5 +1,9 @@
 "use client";
 
+import { Chip } from "@/components/ui/status-pill";
+
+import { THEAD } from "@/lib/surface";
+
 import { usePanel } from "@/components/panels/panel-context";
 import { FilterChips, FilterSelect, ListToolbar, SearchField, type ActiveFilter } from "@/components/list/list-toolbar";
 import { ListEmpty, TableCard, TableFooter } from "@/components/list/table-footer";
@@ -56,8 +60,8 @@ export function QualityByProject({ rows: all }: { rows: QualityRow[] }) {
 
   return (
     <section aria-labelledby="quality-by-project" className="flex flex-col gap-3">
-      <h2 id="quality-by-project" className="text-[15px] font-semibold text-[var(--qink)]">
-        Quality by project
+      <h2 id="quality-by-project" className="text-[16px] font-bold text-[var(--ds-ink)]">
+        Coverage and Last Test Run
       </h2>
       <div className="flex flex-col gap-2">
         <ListToolbar>
@@ -86,18 +90,19 @@ export function QualityByProject({ rows: all }: { rows: QualityRow[] }) {
             <caption className="sr-only">
               Quality by active project, most critical first. Open bugs are High, Medium and Low; Critical bugs count under Open critical.
             </caption>
-            <thead className="border-b border-[var(--border)] text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--ink3)]">
+            <thead className={THEAD}>
               <tr>
-                <th scope="col" className="px-4 py-2.5 font-semibold">Project</th>
-                <th scope="col" className="px-3 py-2.5 font-semibold">PM</th>
-                <th scope="col" className="px-3 py-2.5 font-semibold">Stage</th>
-                <th scope="col" className="px-3 py-2.5 font-semibold">Coverage</th>
-                <th scope="col" className="px-3 py-2.5 text-right font-semibold">Open critical</th>
-                <th scope="col" className="px-3 py-2.5 text-right font-semibold" title="Open bugs by severity: High / Medium / Low">
-                  Open bugs <span className="normal-case tracking-normal">H/M/L</span>
+                <th scope="col">Project</th>
+                <th scope="col">PM</th>
+                <th scope="col">Stage</th>
+                <th scope="col">Coverage</th>
+                <th scope="col" title="Pass rate appears once QUBIT stores test results">Pass Rate</th>
+                <th scope="col" className="!text-right">Open Critical</th>
+                <th scope="col" className="!text-right" title="Open bugs by severity: High / Medium / Low">
+                  Open Bugs H/M/L
                 </th>
-                <th scope="col" className="px-3 py-2.5 text-right font-semibold">Overdue test tasks</th>
-                <th scope="col" className="px-4 py-2.5 text-right font-semibold">Unassigned test tasks</th>
+                <th scope="col" className="!text-right">Overdue Test Tasks</th>
+                <th scope="col" className="!text-right">Unassigned Test Tasks</th>
               </tr>
             </thead>
             <tbody>
@@ -133,6 +138,9 @@ export function QualityByProject({ rows: all }: { rows: QualityRow[] }) {
                   </td>
                   <td className="px-3 py-2.5">
                     <Coverage pct={r.coveragePct} />
+                  </td>
+                  <td>
+                    <Chip>Not tracked</Chip>
                   </td>
                   <td className="px-3 py-2.5 text-right">
                     <Count n={r.criticalOpen} tone="bad" />

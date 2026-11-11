@@ -17,10 +17,10 @@ export async function QualityReport({ ctx }: { ctx: TenantContext }) {
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div className="min-w-0 flex-[1_1_320px]">
-          <h2 className="text-[15px] font-semibold text-[var(--qink)]">
-            Quality across {n} active {n === 1 ? "project" : "projects"}
+          <h2 className="text-[16px] font-bold text-[var(--ds-ink)]">
+            Quality Across {n} Active {n === 1 ? "Project" : "Projects"}
           </h2>
-          <p className="mt-0.5 text-[12.5px] text-[var(--ink3)]">Pass rate appears once test results are tracked.</p>
+          <p className="mt-0.5 text-[12.5px] text-[var(--ds-ink3)]">Pass rate shows “Not tracked” until QUBIT stores test results.</p>
         </div>
         <ExportButton href="/api/reports/quality?format=csv" />
       </div>
@@ -38,11 +38,11 @@ function WeeklyCritical({ weeks, timeZone }: { weeks: WeeklyCount[]; timeZone: s
   const labels = weeks.map((w) => weekLabel(w.isoWeek, timeZone));
   return (
     <section className={`${CARD} overflow-hidden`} style={CARD_BG} aria-labelledby="quality-weekly">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-[var(--hair2)] p-[14px_18px]">
-        <h2 id="quality-weekly" className="text-[15px] font-semibold text-[var(--qink)]">
-          Critical issues opened per week
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-[18px] pb-1 pt-4">
+        <h2 id="quality-weekly" className="text-[16px] font-bold text-[var(--ds-ink)]">
+          Critical Issues Opened per Week
         </h2>
-        <p className="text-[12px] text-[var(--ink3)]">
+        <p className="text-[12px] text-[var(--ds-ink3)]">
           Critical bugs and Critical issues · last {weeks.length} weeks · {total} in total
         </p>
       </div>
@@ -58,8 +58,8 @@ function WeeklyCritical({ weeks, timeZone }: { weeks: WeeklyCount[]; timeZone: s
                 className="w-full max-w-[36px] rounded-t-[4px]"
                 style={{
                   height: w.opened ? `${Math.max(4, (w.opened / max) * 110)}px` : "0px",
-                  background: "var(--qinfo)",
-                  opacity: i === last ? 1 : 0.75,
+                  background: i === last ? "var(--ds-info)" : "var(--ds-infow)",
+                  boxShadow: i === last ? undefined : "inset 0 0 0 1px color-mix(in oklab, var(--ds-info) 35%, transparent)",
                 }}
               />
             </li>

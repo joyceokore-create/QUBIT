@@ -1,23 +1,29 @@
 import Link from "next/link";
 import { ExecTopCard } from "@/components/reports/exec-top-card";
 import { StatusGrid } from "@/components/reports/status-grid";
-import { CARD, CARD_BG, FOCUS } from "@/lib/surface";
+import { COMPACT } from "@/lib/surface";
+import { KpiCard, KpiRow } from "@/components/ui/kpi-card";
+import { Meter } from "@/components/ui/kpi-charts";
+import { Chip } from "@/components/ui/status-pill";
+import { TextLink } from "@/components/ui/text-link";
+import { Columns, Panel, PanelList, PanelRow } from "@/components/ui/panel";
 import type { ExecWeekView, WeekMeta } from "@/server/reports-week";
 
-// Milestone B — the executive's week: the signed line, status by project over eight
-// weeks, the week's spread in three tiles with one sentence of reading, and the
-// blockers that are waiting on a decision.
+// Milestone B + UX fidelity Tier 2 (design: "Executive report: this week"): the Head's signed
+// line as a banner with Email Me Weekly / Print View, three equal On Track · At Risk · Off
+// Track cards, status by project over eight weeks, and the blockers waiting on a decision.
 
-const TILE: Record<"green" | "amber" | "red", { bg: string; fg: string; label: string }> = {
-  green: { bg: "var(--okbg)", fg: "var(--ok)", label: "Green" },
-  amber: { bg: "var(--warnbg)", fg: "var(--warn)", label: "Amber" },
-  red: { bg: "var(--badbg)", fg: "var(--bad)", label: "Red" },
-};
+const TILES = [
+  { key: "green", label: "On Track", tone: "ok" },
+  { key: "amber", label: "At Risk", tone: "warn" },
+  { key: "red", label: "Off Track", tone: "bad" },
+] as const;
 
 export function ExecWeek({ data, week, subscribed, emailEnabled, pdfAvailable }: { data: ExecWeekView; week: WeekMeta; subscribed: boolean; emailEnabled: boolean; pdfAvailable: boolean }) {
   const computed = data.grid.reduce((n, g) => n + g.ragCounts.computed, 0);
+  const total = data.tiles.total;
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-4">
       <ExecTopCard
         isoWeek={week.isoWeek}
         approved={
@@ -25,56 +31,50 @@ export function ExecWeek({ data, week, subscribed, emailEnabled, pdfAvailable }:
             ? { narrative: data.approved.narrative, approvedByName: data.approved.approvedByName, approvedAt: data.approved.approvedAt?.toISOString() ?? null }
             : null
         }
-        inCount={{ in: data.tiles.total - computed, total: data.tiles.total }}
+        inCount={{ in: total - computed, total }}
         subscribed={subscribed}
         emailEnabled={emailEnabled}
         pdfAvailable={pdfAvailable}
       />
-      <div className="flex flex-wrap items-start gap-5">
-        <div className="min-w-0 flex-[999_1_520px]">
-          <StatusGrid weeks={data.weeks} groups={data.grid} hrefFor={(id) => `/projects/${id}?tab=This%20week`} />
-        </div>
-        <aside className="flex flex-[1_1_300px] flex-col gap-4">
-          <section className={`${CARD} p-[14px_16px]`} style={CARD_BG} aria-labelledby="exec-tiles">
-            <h2 id="exec-tiles" className="mb-3 text-[13.5px] font-semibold text-[var(--qink)]">
-              This week across {data.tiles.total} {data.tiles.total === 1 ? "project" : "projects"}
-            </h2>
-            <ul className="grid grid-cols-3 gap-2 text-center">
-              {(["green", "amber", "red"] as const).map((k) => (
-                <li key={k} className="rounded-[10px] px-1.5 py-3" style={{ background: TILE[k].bg }}>
-                  <span className="block text-[26px] font-bold leading-none tabular-nums" style={{ color: TILE[k].fg }}>
-                    {data.tiles[k]}
-                  </span>
-                  <span className="mt-1 block text-[11.5px] font-semibold text-[var(--ink3)]">{TILE[k].label}</span>
-                </li>
-              ))}
-            </ul>
-            {data.delta && <p className="mt-3 text-[12.5px] text-[var(--ink3)]">{data.delta}</p>}
-          </section>
-          <section className={`${CARD} p-[14px_16px]`} style={CARD_BG} aria-labelledby="exec-decisions">
-            <h2 id="exec-decisions" className="mb-2 text-[13.5px] font-semibold text-[var(--qink)]">
-              Blockers needing a decision
-            </h2>
+      <KpiRow count={3} equal label={`This week across ${total} ${total === 1 ? "project" : "projects"}`}>
+        {TILES.map((t) => (
+          <KpiCard
+            key={t.key}
+            label={t.label}
+            value={data.tiles[t.key]}
+            unit={`of ${total}`}
+            context={t.key === "red" && data.delta ? data.delta : undefined}
+            chart={total ? <Meter value={data.tiles[t.key]} max={total} tone={t.tone} /> : undefined}
+          />
+        ))}
+      </KpiRow>
+      <Columns
+        main={
+          <StatusGrid title="Status Over 8 Weeks" weeks={data.weeks} groups={data.grid} hrefFor={(id) => `/projects/${id}?tab=This%20week`} />
+        }
+        rail={
+          <Panel title="Blockers Needing a Decision" action={<TextLink href="/projects">Projects</TextLink>}>
             {data.decisions.length === 0 ? (
-              <p className="text-[12.5px] text-[var(--ink5)]">Nothing is waiting on a decision this week.</p>
+              <p className="text-[12.5px] text-[var(--ds-ink3)]">Nothing is waiting on a decision this week.</p>
             ) : (
-              <ul className="flex flex-col">
+              <PanelList>
                 {data.decisions.map((d) => (
-                  <li key={d.id}>
-                    <Link href={`/projects/${d.projectId}?tab=Register`} className={`block rounded-[4px] border-t border-[var(--hair2)] py-2 ${FOCUS}`}>
-                      <p className="text-[13px] text-[var(--qink)]">{d.description}</p>
-                      <p className="mt-0.5 text-[11.5px] text-[var(--ink4)]">
-                        {d.projectName} · <b style={d.escalated ? { color: "var(--bad)" } : undefined}>{d.ageDays} days</b>
-                        {d.severity === "Critical" && " · Critical"}
-                      </p>
+                  <PanelRow
+                    key={d.id}
+                    title={d.description}
+                    sub={`${d.projectName} · blocked ${d.ageDays} ${d.ageDays === 1 ? "day" : "days"}`}
+                    chip={d.severity === "Critical" ? <Chip tone="bad">Critical</Chip> : d.escalated ? <Chip tone="warn">Escalated</Chip> : <Chip>{d.severity}</Chip>}
+                  >
+                    <Link href={`/projects/${d.projectId}?tab=Register`} className={`${COMPACT} self-start`}>
+                      Open
                     </Link>
-                  </li>
+                  </PanelRow>
                 ))}
-              </ul>
+              </PanelList>
             )}
-          </section>
-        </aside>
-      </div>
+          </Panel>
+        }
+      />
     </div>
   );
 }

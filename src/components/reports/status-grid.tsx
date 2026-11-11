@@ -7,12 +7,14 @@ import type { GridGroup } from "@/server/reports-week";
 // week's spread. Shared by the executive view and the PM's History tab.
 
 const RAGS = ["Green", "Amber", "Red"] as const;
+// Status words, never RAG colours (D-F2).
+const RAG_WORD: Record<(typeof RAGS)[number], string> = { Green: "On track", Amber: "At risk", Red: "Off track" };
 
 export function StatusGrid({
   weeks,
   groups,
   hrefFor,
-  title = "Status by project · last 8 weeks",
+  title = "Status by Project · Last 8 Weeks",
   emptyCopy = "No status updates recorded in these weeks.",
 }: {
   weeks: string[];
@@ -24,15 +26,15 @@ export function StatusGrid({
   const last = weeks.length - 1;
   return (
     <section className={`${CARD} overflow-hidden`} style={CARD_BG} aria-labelledby="status-grid">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[var(--hair2)] p-[14px_18px]">
-        <h2 id="status-grid" className="text-[15px] font-semibold text-[var(--qink)]">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-[18px] pb-2 pt-4">
+        <h2 id="status-grid" className="text-[16px] font-bold text-[var(--ds-ink)]">
           {title}
         </h2>
-        <ul className="ml-auto flex gap-3 text-[12px] text-[var(--ink3)]">
+        <ul className="ml-auto flex gap-3 text-[12px] text-[var(--ds-ink3)]">
           {RAGS.map((r) => (
             <li key={r} className="flex items-center gap-1.5">
-              <span className="size-2.5 rounded-[3px]" style={ragFill(r)} aria-hidden />
-              {r}
+              <span className="size-[11px] rounded-[3px]" style={ragFill(r)} aria-hidden />
+              {RAG_WORD[r]}
             </li>
           ))}
         </ul>

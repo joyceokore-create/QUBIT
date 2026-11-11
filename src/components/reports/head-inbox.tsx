@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import Link from "next/link";
-import { Bell, Check, Upload } from "lucide-react";
-import { WeekMeter } from "@/components/reports/week-meter";
+import { Bell, Upload } from "lucide-react";
 import { LocalTime } from "@/components/reports/local-time";
-import { CARD, CARD_BG, FOCUS, ragFill, ragToken } from "@/lib/surface";
+import { CARD, CARD_BG, COMPACT } from "@/lib/surface";
+import { Chip } from "@/components/ui/status-pill";
+import { Meter } from "@/components/ui/kpi-charts";
+import { ListGroup, ListRow } from "@/components/ui/panel";
 import type { Rag } from "@/server/health";
 
 /**
@@ -34,7 +36,6 @@ export interface InboxGroupJson {
 
 type NudgeState = "idle" | "sending" | "nudged" | "already" | "in" | { error: string };
 
-const BTN = `inline-flex items-center gap-1.5 rounded-[8px] border border-[var(--input)] bg-background px-3 py-1.5 text-[12.5px] font-semibold text-[var(--qink)] transition-colors hover:text-brand disabled:cursor-not-allowed disabled:opacity-60 ${FOCUS}`;
 
 function stateFrom(d: { created?: number; skipped?: number; targeted?: number } | undefined): NudgeState {
   if (!d) return { error: "Could not nudge." };
@@ -80,105 +81,78 @@ export function HeadInbox({
   };
 
   return (
-    <section className={`${CARD} min-w-0 flex-[999_1_520px] overflow-hidden`} style={CARD_BG} aria-labelledby="head-inbox">
-      <h2 id="head-inbox" className="sr-only">
-        Updates received
-      </h2>
-      <WeekMeter done={header.in} total={header.total} label={`${header.in} of ${header.total} updates in`} sub={`${header.outstanding} outstanding`} ariaLabel="Updates received this week">
-        {canUpload && isCurrent && (
-          <Link href="/reports/update" className={BTN} title="Every project on one page: gates, channel states, market check-ins and the line — or prefill it from a status report">
-            <Upload className="size-3.5" aria-hidden /> Update all my projects
-          </Link>
-        )}
-        {isCurrent && canNudge && header.outstanding > 0 && (
-          all === "idle" || all === "busy" ? (
-            <button type="button" onClick={() => void nudgeAll()} disabled={all === "busy"} className={BTN}>
-              <Bell className="size-3.5" aria-hidden /> {all === "busy" ? "Nudging…" : `Nudge all ${header.outstanding}`}
-            </button>
-          ) : "created" in all ? (
-            <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--ok)]">
-              <Check className="size-3.5" aria-hidden /> {all.created > 0 ? `Nudged ${all.created}` : "Already nudged this week"}
-            </span>
-          ) : (
-            <span role="alert" className="text-[12px] text-[var(--bad)]">
-              {all.error}
-            </span>
-          )
-        )}
-      </WeekMeter>
+    <section className={`${CARD} flex min-w-0 flex-[999_1_520px] flex-col gap-3 px-[18px] py-4`} style={CARD_BG} aria-labelledby="head-inbox">
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <h2 id="head-inbox" className="text-[16px] font-bold text-[var(--ds-ink)]">
+          Updates Received This Week · {header.in} of {header.total}
+        </h2>
+        <div className="flex flex-wrap items-center gap-2">
+          {canUpload && isCurrent && (
+            <Link href="/reports/update" className={COMPACT} title="Every project on one page, or prefill it from a status report">
+              <Upload className="size-3.5" aria-hidden /> Update All My Projects
+            </Link>
+          )}
+          {isCurrent && canNudge && header.outstanding > 0 &&
+            (all === "idle" || all === "busy" ? (
+              <button type="button" onClick={() => void nudgeAll()} disabled={all === "busy"} className={COMPACT}>
+                <Bell className="size-3.5" aria-hidden /> {all === "busy" ? "Nudging…" : `Nudge All ${header.outstanding}`}
+              </button>
+            ) : "created" in all ? (
+              <Chip tone="info">{all.created > 0 ? `Nudged ${all.created}` : "Already nudged this week"}</Chip>
+            ) : (
+              <span role="alert" className="text-[12px] font-semibold text-[var(--ds-bad-text)]">
+                {all.error}
+              </span>
+            ))}
+        </div>
+      </div>
+      <Meter value={header.in} max={Math.max(header.total, 1)} tone="ok" />
 
       {groups.length === 0 ? (
-        <p className="p-[14px_18px] text-[12.5px] text-[var(--ink5)]">No active projects this week.</p>
+        <p className="text-[12.5px] text-[var(--ds-ink3)]">No active projects this week.</p>
       ) : (
-        groups.map((g) => (
-          <section key={g.portfolioName} aria-labelledby={`inbox-${g.portfolioName}`}>
-            <h3 id={`inbox-${g.portfolioName}`} className="flex items-center gap-2.5 border-b border-[var(--hair2)] bg-[var(--card2)] px-[18px] py-2">
-              <span className="text-[12px] font-bold text-[var(--qink)]">{g.portfolioName}</span>
-              <span className="text-[12px] text-[var(--ink4)]">
-                {g.in} of {g.total} in
-              </span>
-            </h3>
-            {g.rows.map((r) => {
-              const st = rowState[r.projectId] ?? "idle";
-              return (
-                <div
-                  key={r.projectId}
-                  className="grid grid-cols-[9px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 border-b border-[var(--hair2)] px-[18px] py-2.5 last:border-0 sm:grid-cols-[9px_minmax(120px,200px)_minmax(140px,1fr)_auto]"
-                >
-                  <span
-                    className="size-[9px] rounded-full"
-                    style={r.received ? ragFill(r.rag) : { background: "transparent", border: `1px solid var(${ragToken(r.rag)})` }}
-                    role="img"
-                    aria-label={r.received ? `Status ${r.rag}` : `Not yet sent — computed ${r.rag}`}
-                  />
-                  <div className="min-w-0">
-                    <Link href={`/projects/${r.projectId}?tab=This%20week`} className={`block truncate rounded-[4px] text-[13px] font-semibold text-[var(--qink)] transition-colors hover:text-brand ${FOCUS}`}>
-                      {r.name}
+        <ul className="m-0 flex list-none flex-col p-0">
+          {groups.map((g) => (
+            <Fragment key={g.portfolioName}>
+              <ListGroup>
+                {g.portfolioName} · {g.in} of {g.total} in
+              </ListGroup>
+              {g.rows.map((r) => {
+                const st = rowState[r.projectId] ?? "idle";
+                const chip = r.received ? <Chip tone="ok">Sent</Chip> : st === "nudged" || st === "already" ? <Chip tone="info">Nudged</Chip> : <Chip>Not sent</Chip>;
+                const action =
+                  r.received && r.sentAt ? (
+                    <Link href={`/projects/${r.projectId}?tab=This%20week`} className={COMPACT}>
+                      Open
                     </Link>
-                    <div className="text-[11.5px] text-[var(--ink4)]">
-                      {r.code} · {r.pmName ?? "No PM"}
-                    </div>
-                  </div>
-                  <div className="col-span-full pl-[21px] sm:col-span-1 sm:pl-0">
-                    {r.received && r.line ? (
-                      <p className="line-clamp-2 text-[12.5px] leading-[1.45] text-[var(--ink2)]">{r.line}</p>
-                    ) : (
-                      <p className="text-[12.5px] italic text-[var(--ink5)]">{isCurrent ? `Not yet sent — computed ${r.rag} shown` : "Not sent"}</p>
-                    )}
-                  </div>
-                  <div className="col-start-3 row-start-1 justify-self-end sm:col-start-4">
-                    {r.received && r.sentAt ? (
-                      <span className="whitespace-nowrap text-[11.5px] text-[var(--ink4)]">
-                        <LocalTime iso={r.sentAt} format="weekday-time" />
-                      </span>
-                    ) : !isCurrent || !canNudge ? (
-                      <span className="text-[11.5px] text-[var(--ink5)]">—</span>
-                    ) : st === "nudged" || st === "already" || st === "in" ? (
-                      <span className="inline-flex items-center gap-1 whitespace-nowrap text-[11.5px] font-semibold text-[var(--ok)]" title={st === "nudged" ? "Nudged · again next week" : undefined}>
-                        <Check className="size-3" aria-hidden /> {st === "nudged" ? "Nudged" : st === "already" ? "Already nudged" : "Already in"}
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => void nudgeOne(r.projectId)}
-                          disabled={st === "sending" || !r.nudgeable}
-                          aria-disabled={!r.nudgeable}
-                          title={!r.nudgeable ? "No PM to nudge" : undefined}
-                          className={`${BTN} px-2.5 py-1 text-[12px]`}
-                        >
-                          {st === "sending" ? "Sending…" : "Nudge"}
-                        </button>
-                        {typeof st === "object" && <span className="text-[10.5px] text-[var(--bad)]">{st.error}</span>}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </section>
-        ))
+                  ) : !isCurrent || !canNudge || st === "nudged" || st === "already" || st === "in" ? (
+                    <Link href={`/projects/${r.projectId}?tab=This%20week`} className={COMPACT}>
+                      Open
+                    </Link>
+                  ) : (
+                    <button type="button" onClick={() => void nudgeOne(r.projectId)} disabled={st === "sending" || !r.nudgeable} aria-disabled={!r.nudgeable} title={!r.nudgeable ? "No PM to nudge" : undefined} className={COMPACT}>
+                      {st === "sending" ? "Sending…" : "Nudge"}
+                    </button>
+                  );
+                return (
+                  <ListRow
+                    key={r.projectId}
+                    title={r.name}
+                    sub={r.received && r.line ? r.line : `${r.pmName ?? "No PM"} · ${isCurrent ? `not yet sent, computed ${statusWord(r.rag)} shown` : "not sent"}`}
+                    chip={chip}
+                    meta={r.received && r.sentAt ? <LocalTime iso={r.sentAt} format="weekday-time" /> : typeof st === "object" ? <span className="text-[var(--ds-bad-text)]">{st.error}</span> : r.pmName ?? ""}
+                    action={action}
+                  />
+                );
+              })}
+            </Fragment>
+          ))}
+        </ul>
       )}
     </section>
   );
+}
+
+function statusWord(rag: string): string {
+  return rag === "Green" ? "on track" : rag === "Amber" ? "at risk" : rag === "Red" ? "off track" : "not rated";
 }
