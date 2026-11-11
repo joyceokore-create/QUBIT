@@ -1,29 +1,34 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Check } from "lucide-react";
 import { useAdminMutation } from "@/components/admin/use-admin-mutation";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Banner, Foot, Panel } from "@/components/ui/panel";
+import { Chip } from "@/components/ui/status-pill";
+import { Choice, Drawer, DrawerError, DrawerFooter, DrawerFrame, DrawerHeader, DrawerSection, DrawerText, Field, FIELD_INPUT, Kv } from "@/components/ui/drawer";
 import { groupPermissions } from "@/lib/permission-groups";
 import { primaryRoleLabel } from "@/lib/rbac";
+import { ROLE_MATRIX_ROWS, matrixCell } from "@/lib/role-matrix";
 import { CATALOGUE_PERMISSIONS } from "@/lib/catalogue";
+import { FOCUS, PRIMARY, QUIET, SECONDARY, THEAD, TROW } from "@/lib/surface";
+import { cn } from "@/lib/utils";
+import { AdminHeader } from "../admin-header";
+
+/**
+ * UX fidelity Tier 3 — Roles & Permissions (design: a Permission × role matrix, "Edit Role"
+ * opening a drawer). The matrix is read from each role's EFFECTIVE permission set (code default
+ * + Riverbank's stored override), so it always shows what the server enforces. Editing goes
+ * through the existing audited routes:
+ *   PATCH /api/admin/roles/:role         replace a role's set ([] resets to the code default)
+ *   POST  /api/admin/roles               create a custom role
+ *   PATCH /api/admin/roles/custom/:id    rename / describe / deactivate / reactivate
+ * Viewers without roles:manage (Heads) get the same matrix and a read-only drawer.
+ */
 
 // code → human action name, e.g. "dashboard:read" → "View dashboard".
 const ACTION_NAME = new Map(CATALOGUE_PERMISSIONS.map((p) => [p.code, p.actionName]));
 const actionLabel = (code: string) => ACTION_NAME.get(code) ?? code;
-
-const CARD =
-  "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]";
 
 export interface RoleView {
   role: string;
@@ -39,397 +44,414 @@ export interface RoleView {
   };
 }
 
+const roleName = (v: RoleView) => (v.custom ? v.role : primaryRoleLabel([v.role]));
+const isLocked = (v: RoleView) => v.permissions.includes("*") || !v.editable;
+
 export function RolesEditor({
   roles,
   catalogue,
   canManage,
+  canManageIam,
 }: {
   roles: RoleView[];
   catalogue: string[];
   canManage: boolean;
+  canManageIam: boolean;
 }) {
-  const canonical = roles.filter((r) => !r.custom);
-  const custom = roles.filter((r) => r.custom);
+  const [openRole, setOpenRole] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
+  // "Edit Role" from the header opens the first role that can be edited.
+  const firstEditable = roles.find((r) => !isLocked(r))?.role ?? roles[0]?.role ?? null;
 
   return (
-    <div className="flex flex-col gap-4 [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.06s_both]">
-      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
-        {canonical.map((r) => (
-          <RoleCard key={r.role} view={r} catalogue={catalogue} canManage={canManage} />
-        ))}
-      </div>
+    <>
+      <AdminHeader
+        canManageIam={canManageIam}
+        title="Roles & Permissions"
+        description="What each role can do. Changes apply at the person's next sign-in."
+        action={
+          canManage ? (
+            <>
+              <button type="button" className={SECONDARY} onClick={() => setNewOpen(true)}>
+                New Role
+              </button>
+              <button type="button" className={PRIMARY} onClick={() => setOpenRole(firstEditable)}>
+                Edit Role
+              </button>
+            </>
+          ) : undefined
+        }
+      />
 
-      <div className="mt-1.5 flex items-center justify-between">
-        <div className="flex items-baseline gap-2.5">
-          <span className="font-heading text-[13.5px] font-bold text-[var(--qink)]">Custom roles</span>
-          <span className="text-[11px] text-[var(--ink4)]">
-            Named permission bundles for this organisation — deactivate rather than delete.
-          </span>
+      <Panel>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] border-separate border-spacing-0 text-left text-[12.5px]">
+            <caption className="sr-only">Permissions for each role</caption>
+            <thead className={THEAD}>
+              <tr>
+                <th scope="col">Permission</th>
+                {roles.map((r) => (
+                  <th key={r.role} scope="col" className="text-center!">
+                    <button
+                      type="button"
+                      onClick={() => setOpenRole(r.role)}
+                      className={cn("rounded-[4px] font-bold hover:text-[var(--ds-brand-ink)]", FOCUS)}
+                      aria-label={`${canManage && !isLocked(r) ? "Edit" : "View"} ${roleName(r)}`}
+                    >
+                      {roleName(r)}
+                    </button>
+                    {(r.customised || r.custom) && (
+                      <span className="block text-[10.5px] font-semibold text-[var(--ds-ink3)]">
+                        {r.custom ? (r.custom.status === "Deactivated" ? "Deactivated" : "Custom") : "Customised"}
+                      </span>
+                    )}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {ROLE_MATRIX_ROWS.map((row) => (
+                <tr key={row.label} className={TROW}>
+                  <th scope="row" className="border-b border-dotted border-[var(--ds-line)] p-2.5 text-left text-[13px] font-semibold text-[var(--ds-ink)] [tr:last-child_&]:border-b-0">
+                    {row.label}
+                  </th>
+                  {roles.map((r) => {
+                    const cell = matrixCell(r.permissions, row);
+                    return (
+                      <td key={r.role} className="text-center">
+                        {cell.kind === "yes" ? (
+                          <>
+                            <Check className="mx-auto size-4 text-[var(--ds-ok-text)]" aria-hidden />
+                            <span className="sr-only">Yes</span>
+                          </>
+                        ) : cell.kind === "scoped" ? (
+                          <Chip tone="muted">{cell.note}</Chip>
+                        ) : (
+                          <>
+                            <span aria-hidden className="text-[var(--ds-ink4)]">—</span>
+                            <span className="sr-only">No</span>
+                          </>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        {canManage && <Button onClick={() => setNewOpen(true)}>New role</Button>}
-      </div>
+        <Foot>
+          Defaults come from code; edits are stored for Riverbank and audited. Select a role to see everything it can do.
+        </Foot>
+      </Panel>
 
-      {custom.length === 0 ? (
-        <p className="rounded-[12px] border border-dashed border-[var(--hair)] px-4 py-3 text-[12px] text-[var(--ink4)]">
-          No custom roles yet{canManage ? " — create one to grant a tailored permission set." : "."}
-        </p>
-      ) : (
-        <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
-          {custom.map((r) => (
-            <RoleCard key={r.role} view={r} catalogue={catalogue} canManage={canManage} />
-          ))}
-        </div>
-      )}
-
-      <NewRoleDialog open={newOpen} onOpenChange={setNewOpen} catalogue={catalogue} />
-    </div>
+      <RoleDrawer
+        key={openRole ?? "none"}
+        roles={roles}
+        initialRole={openRole}
+        catalogue={catalogue}
+        canManage={canManage}
+        onClose={() => setOpenRole(null)}
+      />
+      <NewRoleDrawer open={newOpen} onClose={() => setNewOpen(false)} catalogue={catalogue} />
+    </>
   );
 }
 
-/** Module-grouped checkbox picker with a per-group "all" toggle (tuma's permissions modal). */
-function PermissionPicker({
-  catalogue,
-  selected,
-  onToggle,
-  onToggleGroup,
-}: {
-  catalogue: string[];
-  selected: Set<string>;
-  onToggle: (perm: string, checked: boolean) => void;
-  onToggleGroup: (perms: string[], checked: boolean) => void;
-}) {
+/** Module-grouped checkbox picker with a per-group "All" toggle. */
+function PermissionPicker({ catalogue, selected, onChange }: { catalogue: string[]; selected: Set<string>; onChange: (next: Set<string>) => void }) {
+  function set(perms: string[], checked: boolean) {
+    const next = new Set(selected);
+    for (const p of perms) {
+      if (checked) next.add(p);
+      else next.delete(p);
+    }
+    onChange(next);
+  }
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3.5">
       {groupPermissions(catalogue).map((group) => {
-        const allChecked = group.permissions.every((p) => selected.has(p));
+        const all = group.permissions.every((p) => selected.has(p));
         return (
-          <div key={group.label}>
-            <label className="mb-1 flex items-center gap-2">
-              <Checkbox checked={allChecked} onCheckedChange={(c) => onToggleGroup(group.permissions, c === true)} />
-              <span className="font-heading text-[11px] font-bold uppercase tracking-[1px] text-[var(--ink3)]">
-                {group.label}
-              </span>
-            </label>
-            <div className="grid grid-cols-1 gap-1 pl-6 sm:grid-cols-2">
+          <DrawerSection
+            key={group.label}
+            title={group.label}
+            aside={
+              <label className="flex items-center gap-1.5 text-[12px] font-semibold text-[var(--ds-ink3)]">
+                <Checkbox checked={all} onCheckedChange={(c) => set(group.permissions, c === true)} />
+                All
+              </label>
+            }
+          >
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
               {group.permissions.map((perm) => (
-                <label key={perm} className="flex items-start gap-2 text-[11.5px] text-[var(--ink2)]">
-                  <Checkbox checked={selected.has(perm)} onCheckedChange={(c) => onToggle(perm, c === true)} className="mt-0.5" />
+                <label key={perm} className="flex items-start gap-2 text-[13px] text-[var(--ds-ink)]">
+                  <Checkbox checked={selected.has(perm)} onCheckedChange={(c) => set([perm], c === true)} className="mt-0.5" />
                   <span className="flex flex-col leading-tight">
-                    <span className="text-[12.5px] text-[var(--ink2)]">{actionLabel(perm)}</span>
-                    <span className="font-mono text-[9.5px] tracking-[.2px] text-[var(--ink4)]">{perm}</span>
+                    <span>{actionLabel(perm)}</span>
+                    <span className="font-mono text-[10.5px] text-[var(--ds-ink3)]">{perm}</span>
                   </span>
                 </label>
               ))}
             </div>
-          </div>
+          </DrawerSection>
         );
       })}
     </div>
   );
 }
 
-function RoleCard({ view, catalogue, canManage }: { view: RoleView; catalogue: string[]; canManage: boolean }) {
-  const { busy: saving, error, mutate } = useAdminMutation();
+/** Read-only grouped list of a role's permissions. */
+function PermissionList({ permissions }: { permissions: string[] }) {
+  if (permissions.length === 0) return <DrawerText hint>No permissions.</DrawerText>;
+  return (
+    <div className="flex flex-col gap-3.5">
+      {groupPermissions(permissions).map((g) => (
+        <DrawerSection key={g.label} title={g.label}>
+          <div className="flex flex-wrap gap-1.5">
+            {g.permissions.map((p) => (
+              <span key={p} title={p} className="rounded-[6px] bg-[var(--ds-surface2)] px-2 py-1 text-[12px] text-[var(--ds-ink2)]">
+                {actionLabel(p)}
+              </span>
+            ))}
+          </div>
+        </DrawerSection>
+      ))}
+    </div>
+  );
+}
+
+function RoleDrawer({
+  roles,
+  initialRole,
+  catalogue,
+  canManage,
+  onClose,
+}: {
+  roles: RoleView[];
+  initialRole: string | null;
+  catalogue: string[];
+  canManage: boolean;
+  onClose: () => void;
+}) {
+  const [roleKey, setRoleKey] = useState(initialRole);
+  const view = roles.find((r) => r.role === roleKey) ?? null;
+  return (
+    <Drawer open={initialRole !== null} onClose={onClose} wide>
+      {view && (
+        <RoleDrawerBody
+          key={view.role}
+          view={view}
+          roles={roles}
+          onPick={setRoleKey}
+          catalogue={catalogue}
+          canManage={canManage}
+          onClose={onClose}
+        />
+      )}
+    </Drawer>
+  );
+}
+
+function RoleDrawerBody({
+  view,
+  roles,
+  onPick,
+  catalogue,
+  canManage,
+  onClose,
+}: {
+  view: RoleView;
+  roles: RoleView[];
+  onPick: (role: string) => void;
+  catalogue: string[];
+  canManage: boolean;
+  onClose: () => void;
+}) {
+  const { busy, error, mutate } = useAdminMutation();
   const [selected, setSelected] = useState<Set<string>>(new Set(view.permissions));
   const [saved, setSaved] = useState(false);
-
-  const wildcard = view.permissions.includes("*");
   const deactivated = view.custom?.status === "Deactivated";
-  // PlatformSuperAdmin (locked / full "*") is always read-only; editing needs roles:manage.
-  const editable = canManage && view.editable && !wildcard && !deactivated;
-
-  function toggle(perm: string, checked: boolean) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(perm);
-      else next.delete(perm);
-      return next;
-    });
-    setSaved(false);
-  }
-
-  function toggleGroup(perms: string[], checked: boolean) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      for (const p of perms) {
-        if (checked) next.add(p);
-        else next.delete(p);
-      }
-      return next;
-    });
-    setSaved(false);
-  }
+  const editable = canManage && !isLocked(view) && !deactivated;
 
   async function save(perms: string[]) {
     setSaved(false);
-    await mutate(
-      `/api/admin/roles/${encodeURIComponent(view.role)}`,
-      "PATCH",
-      { permissions: perms },
-      { fallback: "Could not save.", onSuccess: () => setSaved(true) },
-    );
-  }
-
-  return (
-    <div className={`${CARD} p-[14px_16px] ${deactivated ? "opacity-70" : ""}`} style={{ background: "var(--cardbg)" }}>
-      <div className="mb-1.5 flex items-center gap-2">
-        <span className="font-heading text-[13.5px] font-bold text-[var(--qink)]">{primaryRoleLabel([view.role])}</span>
-        {view.custom ? (
-          <>
-            <span className="rounded-[5px] bg-[var(--wash2)] px-1.5 py-0.5 font-mono text-[8.5px] uppercase tracking-[1px] text-[var(--ink3)]">
-              Custom
-            </span>
-            {deactivated && (
-              <span className="rounded-[5px] bg-[color-mix(in_oklab,var(--bad)_14%,transparent)] px-1.5 py-0.5 font-mono text-[8.5px] uppercase tracking-[1px] text-[var(--bad)]">
-                Deactivated
-              </span>
-            )}
-            <span className="ml-auto font-mono text-[9px] tracking-[.5px] text-[var(--ink4)]">
-              {view.custom.assignedCount} user{view.custom.assignedCount === 1 ? "" : "s"}
-            </span>
-          </>
-        ) : (
-          <>
-            {view.customised && (
-              <span className="rounded-[5px] bg-[color-mix(in_oklab,var(--brand)_12%,transparent)] px-1.5 py-0.5 font-mono text-[8.5px] uppercase tracking-[1px] text-brand">
-                Customised
-              </span>
-            )}
-            {!view.editable && (
-              <span className="font-mono text-[9px] uppercase tracking-[1px] text-[var(--ink5)]">Locked · full access</span>
-            )}
-          </>
-        )}
-      </div>
-
-      {view.custom?.description && <p className="mb-2 text-[11.5px] text-[var(--ink3)]">{view.custom.description}</p>}
-      {deactivated && view.custom?.deactivationReason && (
-        <p className="mb-2 text-[11px] italic text-[var(--ink4)]">
-          Deactivated: {view.custom.deactivationReason} — holders keep the role but it grants nothing.
-        </p>
-      )}
-
-      {editable ? (
-        <>
-          <PermissionPicker catalogue={catalogue} selected={selected} onToggle={toggle} onToggleGroup={toggleGroup} />
-          <div className="mt-3 flex items-center gap-2.5">
-            <Button onClick={() => save([...selected])} disabled={saving}>
-              {saving ? "Saving…" : "Save"}
-            </Button>
-            {!view.custom && (
-              <button
-                type="button"
-                onClick={() => save([])}
-                disabled={saving}
-                className="text-[11.5px] font-semibold text-[var(--ink4)] transition-colors hover:text-brand disabled:opacity-60"
-              >
-                Reset to default
-              </button>
-            )}
-            {saved && <span className="font-mono text-[9.5px] tracking-[.5px] text-[var(--ok)]">Saved · applies on next sign-in</span>}
-            {error && <span role="alert" className="text-[11.5px] text-[var(--bad)]">{error}</span>}
-          </div>
-        </>
-      ) : (
-        <div className="flex flex-wrap gap-1.5">
-          {view.permissions.length === 0 ? (
-            <span className="text-[11px] text-[var(--ink4)]">No permissions{deactivated ? " while deactivated" : ""}.</span>
-          ) : (
-            view.permissions.map((g) => (
-              <span
-                key={g}
-                title={g}
-                className="rounded-[5px] bg-[var(--wash2)] px-2 py-1 text-[10.5px] tracking-[.2px] text-[var(--ink3)]"
-              >
-                {actionLabel(g)}
-              </span>
-            ))
-          )}
-        </div>
-      )}
-
-      {canManage && view.custom && <CustomRoleActions view={view} />}
-    </div>
-  );
-}
-
-function CustomRoleActions({ view }: { view: RoleView }) {
-  const router = useRouter();
-  const { busy, error, setError, mutate } = useAdminMutation();
-  const custom = view.custom!;
-  const deactivated = custom.status === "Deactivated";
-  const [editOpen, setEditOpen] = useState(false);
-  const [name, setName] = useState(view.role);
-  const [description, setDescription] = useState(custom.description ?? "");
-  const [deactivateOpen, setDeactivateOpen] = useState(false);
-  const [reason, setReason] = useState("");
-
-  async function patch(body: Record<string, unknown>, close: () => void) {
-    await mutate(`/api/admin/roles/custom/${custom.id}`, "PATCH", body, {
-      fallback: "Could not update the role.",
-      onSuccess: () => {
-        close();
-        router.refresh();
-      },
+    await mutate(`/api/admin/roles/${encodeURIComponent(view.role)}`, "PATCH", { permissions: perms }, {
+      fallback: "Could not save the role.",
+      onSuccess: () => setSaved(true),
     });
   }
 
+  const status = view.custom
+    ? `${deactivated ? "Deactivated" : "Custom"} · ${view.custom.assignedCount} ${view.custom.assignedCount === 1 ? "person" : "people"}`
+    : isLocked(view)
+      ? "Full access, fixed"
+      : view.customised
+        ? "Changed for Riverbank"
+        : "Default from code";
+
   return (
-    <div className="mt-3 flex items-center gap-3 border-t border-[var(--hair)] pt-2.5">
-      {!deactivated && (
-        <button
-          type="button"
-          onClick={() => { setError(null); setEditOpen(true); }}
-          className="text-[11.5px] font-semibold text-[var(--ink4)] transition-colors hover:text-brand"
-        >
-          Rename / describe
-        </button>
+    <DrawerFrame
+      header={
+        <DrawerHeader
+          title={editable ? "Edit Role" : "Role Permissions"}
+          subtitle={editable ? "Changes apply at each person's next sign-in and are audited." : "What this role can do."}
+        />
+      }
+      footer={
+        editable ? (
+          <DrawerFooter note={saved ? "Saved. Applies at next sign-in." : undefined}>
+            {!view.custom && view.customised && (
+              <button type="button" className={QUIET} disabled={busy} onClick={() => save([])}>
+                Reset to Default
+              </button>
+            )}
+            <button type="button" className={PRIMARY} disabled={busy} onClick={() => save([...selected])}>
+              {busy ? "Saving…" : "Save Role"}
+            </button>
+          </DrawerFooter>
+        ) : (
+          <DrawerFooter>
+            <button type="button" className={SECONDARY} onClick={onClose}>
+              Close
+            </button>
+          </DrawerFooter>
+        )
+      }
+    >
+      <Choice
+        label="Role"
+        value={view.role}
+        options={roles.map((r) => ({ value: r.role, label: roleName(r) }))}
+        onChange={onPick}
+      />
+      <Kv
+        rows={[
+          ["Role", roleName(view)],
+          ["Status", status],
+          ["Permissions", view.permissions.includes("*") ? "All" : String(view.permissions.length)],
+          ["Applies", "Next sign-in"],
+        ]}
+      />
+      {view.custom?.description && <DrawerText>{view.custom.description}</DrawerText>}
+      {isLocked(view) && !view.custom && <Banner>Super Admin always has full access. It can&apos;t be changed.</Banner>}
+      {deactivated && (
+        <Banner tone="warn">
+          Deactivated{view.custom?.deactivationReason ? `: ${view.custom.deactivationReason}` : ""}. People keep the role, but it grants nothing.
+        </Banner>
       )}
-      {deactivated ? (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => patch({ status: "Active" }, () => {})}
-          className="text-[11.5px] font-semibold text-[var(--ink4)] transition-colors hover:text-brand disabled:opacity-60"
-        >
-          Reactivate
-        </button>
+      {error && <DrawerError>{error}</DrawerError>}
+
+      {editable ? (
+        <PermissionPicker catalogue={catalogue} selected={selected} onChange={(s) => { setSelected(s); setSaved(false); }} />
       ) : (
-        <button
-          type="button"
-          onClick={() => { setError(null); setReason(""); setDeactivateOpen(true); }}
-          className="text-[11.5px] font-semibold text-[var(--bad)] transition-colors hover:opacity-80"
-        >
-          Deactivate
-        </button>
+        !view.permissions.includes("*") && <PermissionList permissions={view.permissions} />
       )}
-      {error && <span role="alert" className="text-[11px] text-[var(--bad)]">{error}</span>}
 
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit role — {view.role}</DialogTitle>
-            <DialogDescription>Renaming updates every user currently holding this role.</DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-2.5">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Role name" maxLength={64} />
-            <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description (optional)" maxLength={500} />
-          </div>
-          {error && <p role="alert" className="text-sm text-status-red">{error}</p>}
-          <DialogFooter>
-            <Button
-              disabled={busy || name.trim().length < 2}
-              onClick={() => patch({ name: name.trim(), description: description.trim() || null }, () => setEditOpen(false))}
-            >
-              {busy ? "Saving…" : "Save"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={deactivateOpen} onOpenChange={setDeactivateOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Deactivate — {view.role}</DialogTitle>
-            <DialogDescription>
-              {custom.assignedCount > 0
-                ? `${custom.assignedCount} user${custom.assignedCount === 1 ? " still holds" : "s still hold"} this role — they keep it, but it grants nothing from their next sign-in.`
-                : "The role keeps its saved permissions and can be reactivated later."}
-            </DialogDescription>
-          </DialogHeader>
-          <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (required)" maxLength={500} />
-          {error && <p role="alert" className="text-sm text-status-red">{error}</p>}
-          <DialogFooter>
-            <Button
-              variant="destructive"
-              disabled={busy || !reason.trim()}
-              onClick={() => patch({ status: "Deactivated", reason: reason.trim() }, () => setDeactivateOpen(false))}
-            >
-              {busy ? "Deactivating…" : "Deactivate"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+      {canManage && view.custom && <CustomRoleSection view={view} />}
+    </DrawerFrame>
   );
 }
 
-function NewRoleDialog({
-  open,
-  onOpenChange,
-  catalogue,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  catalogue: string[];
-}) {
-  const router = useRouter();
+/** Rename, describe, deactivate or reactivate a custom role (inside the role drawer). */
+function CustomRoleSection({ view }: { view: RoleView }) {
+  const { busy, error, mutate } = useAdminMutation();
+  const custom = view.custom!;
+  const deactivated = custom.status === "Deactivated";
+  const [name, setName] = useState(view.role);
+  const [description, setDescription] = useState(custom.description ?? "");
+  const [reason, setReason] = useState("");
+
+  const patch = (body: Record<string, unknown>) =>
+    mutate(`/api/admin/roles/custom/${custom.id}`, "PATCH", body, { fallback: "Could not update the role." });
+
+  return (
+    <DrawerSection title="Custom Role">
+      {!deactivated && (
+        <>
+          <Field label="Name" hint="Renaming updates everyone who holds this role.">
+            <input className={FIELD_INPUT} value={name} maxLength={64} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Field label="Description (optional)">
+            <input className={FIELD_INPUT} value={description} maxLength={500} onChange={(e) => setDescription(e.target.value)} />
+          </Field>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              className={SECONDARY}
+              disabled={busy || name.trim().length < 2}
+              onClick={() => patch({ name: name.trim(), description: description.trim() || null })}
+            >
+              Save Name
+            </button>
+          </div>
+          <Field label="Reason to deactivate" hint={custom.assignedCount > 0 ? `${custom.assignedCount} ${custom.assignedCount === 1 ? "person keeps" : "people keep"} the role, but it grants nothing from their next sign-in.` : "The role keeps its permissions and can be reactivated later."}>
+            <input className={FIELD_INPUT} value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder="Why it is no longer needed" />
+          </Field>
+          <div className="flex justify-end">
+            <button type="button" className={cn(SECONDARY, "text-[var(--ds-bad-text)]")} disabled={busy || !reason.trim()} onClick={() => patch({ status: "Deactivated", reason: reason.trim() })}>
+              Deactivate Role
+            </button>
+          </div>
+        </>
+      )}
+      {deactivated && (
+        <div className="flex justify-end">
+          <button type="button" className={SECONDARY} disabled={busy} onClick={() => patch({ status: "Active" })}>
+            Reactivate Role
+          </button>
+        </div>
+      )}
+      {error && <DrawerError>{error}</DrawerError>}
+    </DrawerSection>
+  );
+}
+
+function NewRoleDrawer({ open, onClose, catalogue }: { open: boolean; onClose: () => void; catalogue: string[] }) {
   const { busy, error, setError, mutate } = useAdminMutation();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  function toggle(perm: string, checked: boolean) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(perm);
-      else next.delete(perm);
-      return next;
-    });
-  }
-
-  function toggleGroup(perms: string[], checked: boolean) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      for (const p of perms) {
-        if (checked) next.add(p);
-        else next.delete(p);
-      }
-      return next;
-    });
-  }
-
-  async function handleCreate() {
+  async function create(e: React.FormEvent) {
+    e.preventDefault();
     setError(null);
-    await mutate(
-      "/api/admin/roles",
-      "POST",
-      { name: name.trim(), description: description.trim() || null, permissions: [...selected] },
-      {
-        fallback: "Could not create the role.",
-        onSuccess: () => {
-          onOpenChange(false);
-          setName("");
-          setDescription("");
-          setSelected(new Set());
-          router.refresh();
-        },
+    await mutate("/api/admin/roles", "POST", { name: name.trim(), description: description.trim() || null, permissions: [...selected] }, {
+      fallback: "Could not create the role.",
+      onSuccess: () => {
+        setName("");
+        setDescription("");
+        setSelected(new Set());
+        onClose();
       },
-    );
+    });
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-[560px]">
-        <DialogHeader>
-          <DialogTitle>New custom role</DialogTitle>
-          <DialogDescription>
-            A named permission bundle you can assign from Admin → Users. Applies on each holder&apos;s next sign-in.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col gap-2.5">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Role name (e.g. Finance Reviewer)" maxLength={64} />
-          <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description (optional)" maxLength={500} />
-          <PermissionPicker catalogue={catalogue} selected={selected} onToggle={toggle} onToggleGroup={toggleGroup} />
-        </div>
-        {error && <p role="alert" className="text-sm text-status-red">{error}</p>}
-        <DialogFooter>
-          <Button disabled={busy || name.trim().length < 2} onClick={handleCreate}>
-            {busy ? "Creating…" : "Create role"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Drawer open={open} onClose={onClose} wide>
+      <DrawerFrame
+        onSubmit={create}
+        header={<DrawerHeader title="New Role" subtitle="A named set of permissions you can give people from Users. Applies at their next sign-in." />}
+        footer={
+          <DrawerFooter>
+            <button type="button" className={SECONDARY} onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className={PRIMARY} disabled={busy || name.trim().length < 2}>
+              {busy ? "Creating…" : "Create Role"}
+            </button>
+          </DrawerFooter>
+        }
+      >
+        <Field label="Name">
+          <input className={FIELD_INPUT} value={name} maxLength={64} onChange={(e) => setName(e.target.value)} placeholder="For example, Finance Reviewer" />
+        </Field>
+        <Field label="Description (optional)">
+          <input className={FIELD_INPUT} value={description} maxLength={500} onChange={(e) => setDescription(e.target.value)} />
+        </Field>
+        {error && <DrawerError>{error}</DrawerError>}
+        <PermissionPicker catalogue={catalogue} selected={selected} onChange={setSelected} />
+      </DrawerFrame>
+    </Drawer>
   );
 }

@@ -201,6 +201,12 @@ function matchesPermission(granted: string, requested: string): boolean {
   return g.length === r.length;
 }
 
+/** Does a granted set (a role's permissions, possibly with "*" wildcards) cover `requested`?
+ * Used by the Roles & Permissions matrix to read a role's effective set. */
+export function grantsPermission(granted: readonly string[], requested: string): boolean {
+  return granted.some((g) => matchesPermission(g, requested));
+}
+
 /**
  * Resolves whether the current session's roles grant `permission` AT THE ROLE LEVEL.
  * Roles come from the session (TenantContext), never from the client. Resource-scoped
