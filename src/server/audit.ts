@@ -112,16 +112,18 @@ const VIEW_SELECT = { id: true, actorId: true, action: true, entityType: true, e
  * tenant's record simply isn't found); access requests from the system table by id. */
 async function toViewRows(tx: Prisma.TransactionClient, raw: Prisma.AuditLogGetPayload<{ select: typeof VIEW_SELECT }>[]): Promise<AuditViewRow[]> {
   const idsOf = (type: string) => [...new Set(raw.filter((r) => r.entityType === type).map((r) => r.entityId))];
-  const [named, users, projects, teams, departments, requests] = await Promise.all([
+  const [named, users, projects, teams, departments, tasks, requests] = await Promise.all([
     withActorNames(tx, raw.map(({ before: _b, after: _a, ...r }) => r)),
     idsOf("user").length ? tx.user.findMany({ where: { id: { in: idsOf("user") } }, select: { id: true, name: true } }) : [],
     idsOf("project").length ? tx.project.findMany({ where: { id: { in: idsOf("project") } }, select: { id: true, name: true } }) : [],
     idsOf("team").length ? tx.team.findMany({ where: { id: { in: idsOf("team") } }, select: { id: true, name: true } }) : [],
     idsOf("department").length ? tx.department.findMany({ where: { id: { in: idsOf("department") } }, select: { id: true, name: true } }) : [],
+    idsOf("project_task").length ? tx.projectTask.findMany({ where: { id: { in: idsOf("project_task") } }, select: { id: true, title: true } }) : [],
     idsOf("access_request").length ? prisma.accessRequest.findMany({ where: { id: { in: idsOf("access_request") } }, select: { id: true, fullName: true } }) : [],
   ]);
   const names = new Map<string, string>([...users, ...projects, ...teams, ...departments].map((x) => [x.id, x.name] as [string, string]));
   for (const r of requests) names.set(r.id, `Request from ${r.fullName}`);
+  for (const t of tasks) names.set(t.id, t.title);
   return named.map((r, i) => ({
     ...r,
     actionLabel: auditActionLabel(r.action, r.entityType),

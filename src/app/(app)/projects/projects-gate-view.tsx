@@ -71,6 +71,7 @@ function GateCell({ gate, state, onOpen }: { gate: string; state: GateState | nu
     <button
       type="button"
       title={`${gate}: ${GATE_STATE_WORD[state]}`}
+      aria-label={`${gate}: ${GATE_STATE_WORD[state]}. Open the gate`}
       onClick={(e) => {
         e.stopPropagation();
         onOpen();
@@ -78,9 +79,7 @@ function GateCell({ gate, state, onOpen }: { gate: string; state: GateState | nu
       className={`inline-grid size-6 place-items-center rounded-[6px] hover:bg-[var(--ds-surface2)] ${FOCUS}`}
     >
       <GateSquare state={state} />
-      <span className="sr-only">
-        {gate}: {GATE_STATE_WORD[state]}. Open
-      </span>
+      <span className="sr-only">{GATE_STATE_WORD[state]}</span>
     </button>
   );
 }

@@ -60,7 +60,7 @@ const options = (values: (string | null)[], noneLabel: string): FilterOption[] =
 export function ProjectsClient({
   projects,
   canCreate,
-  tenantName,
+  tenantName: _tenantName,
   view,
   gateRows,
 }: {
@@ -73,7 +73,6 @@ export function ProjectsClient({
   return (
     <main className="mx-auto flex w-full min-w-0 max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
       <PageHeader
-        eyebrow={tenantName}
         title="Projects"
         description={
           view === "gates"
@@ -85,7 +84,7 @@ export function ProjectsClient({
             <ExportButton href="/api/export?kind=projects" />
             {canCreate && (
               <Button nativeButton={false} render={<Link href="/projects/new" />}>
-                <Plus /> New project
+                <Plus /> New Project
               </Button>
             )}
           </>

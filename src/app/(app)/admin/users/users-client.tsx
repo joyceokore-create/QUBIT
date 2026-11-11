@@ -116,7 +116,7 @@ export function UsersClient({
     <div className="flex flex-col gap-4">
       {tabs}
       <ListToolbar>
-        <SearchField value={list.q} onChange={(q) => list.set({ q })} placeholder="Search users by name, email or department" label="Search users" />
+        <SearchField value={list.q} onChange={(q) => list.set({ q })} placeholder="Search users by name or email" label="Search users" />
         <FilterSelect label="Role" allLabel="All roles" value={f.role} options={roleOptions} onChange={(v) => list.set({ role: v })} />
         <FilterSelect label="Department" allLabel="All departments" value={f.department} options={departmentOptions} onChange={(v) => list.set({ department: v })} />
         {!sso && !nomfaTab && <FilterSelect label="MFA" allLabel="MFA: any" value={f.mfa} options={mfaOptions} onChange={(v) => list.set({ mfa: v })} />}
