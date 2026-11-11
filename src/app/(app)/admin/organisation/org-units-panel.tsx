@@ -59,7 +59,7 @@ export function OrgUnitsPanel({ initial }: { initial: Unit[] }) {
         </h2>
         <span className="text-[12px] text-[var(--ink4)]">Where a product can ship — Kenya, Uganda, a subsidiary. Projects pick them on their Markets tab.</span>
         <button type="button" onClick={() => setAdding((a) => !a)} className={`${SECONDARY} ml-auto gap-1.5`}>
-          <Plus className="size-3.5" aria-hidden /> New market
+          <Plus className="size-3.5" aria-hidden /> New Market
         </button>
       </div>
       {adding && (

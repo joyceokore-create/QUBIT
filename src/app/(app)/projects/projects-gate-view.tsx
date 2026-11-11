@@ -149,7 +149,7 @@ export function ProjectsGateView({ rows: all, canCreate }: { rows: GateViewRow[]
             action={
               canCreate && (
                 <Button variant="outline" nativeButton={false} render={<Link href="/projects/new" />}>
-                  <Plus /> New project
+                  <Plus /> New Project
                 </Button>
               )
             }

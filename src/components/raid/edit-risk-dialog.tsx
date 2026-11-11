@@ -18,7 +18,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/ui/drawer-dialog";
 import { RISK_STATUSES, type RiskListItem } from "@/server/risks";
 import type { AdminUserSummary } from "@/server/users";
 
@@ -80,8 +80,8 @@ export function EditRiskDialog({ risk, users, open, onOpenChange }: EditRiskDial
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit risk — {risk.title}</DialogTitle>
-          <DialogDescription>Changes are audited.</DialogDescription>
+          <DialogTitle>Edit Risk</DialogTitle>
+          <DialogDescription>{risk.title}. Changes are audited.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <div className="flex gap-3">

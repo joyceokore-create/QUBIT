@@ -168,7 +168,7 @@ export function IdeasClient({
         }
         actions={
           <Button type="button" onClick={() => setNewOpen(true)}>
-            <Plus /> New idea
+            <Plus /> New Idea
           </Button>
         }
       />
@@ -193,7 +193,7 @@ export function IdeasClient({
             action={
               // The header keeps the page's one filled primary; this repeat is outlined.
               <Button type="button" variant="outline" onClick={() => setNewOpen(true)}>
-                <Plus /> New idea
+                <Plus /> New Idea
               </Button>
             }
           />
@@ -335,11 +335,11 @@ export function NewIdeaDialog({
     <AdminFormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="New idea"
+      title="New Idea"
       description="Anyone can submit one. The Head triages it and you'll be told what was decided."
       error={error}
       busy={busy}
-      submitLabel="Submit idea"
+      submitLabel="Submit Idea"
       busyLabel="Submitting…"
       onSubmit={submit}
       className="sm:max-w-[520px]"
@@ -437,11 +437,11 @@ function TriageDialog({
     <AdminFormDialog
       open
       onOpenChange={(o) => !o && onClose()}
-      title={park ? "Park this idea" : "Merge into a project"}
+      title={park ? "Park This Idea" : "Merge Into a Project"}
       description={pending.idea.title}
       error={error}
       busy={busy}
-      submitLabel={park ? "Park with this reason" : "Merge into this project"}
+      submitLabel={park ? "Park Idea" : "Merge Into This Project"}
       busyLabel={park ? "Parking…" : "Merging…"}
       onSubmit={submit}
     >

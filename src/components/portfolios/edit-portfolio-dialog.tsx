@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
+} from "@/components/ui/drawer-dialog";
 
 // DM1.73 (Wave C, D3) — the wizard's Review step promises "everything can be changed
 // later"; this dialog is where that promise is kept. Fields mirror exactly what
@@ -88,7 +88,7 @@ export function EditPortfolioDialog({
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit portfolio</DialogTitle>
+          <DialogTitle>Edit Portfolio</DialogTitle>
           <DialogDescription>Governance edits — changes are audited.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
@@ -170,7 +170,7 @@ export function EditPortfolioDialog({
 
           <DialogFooter>
             <Button type="submit" disabled={loading}>
-              {loading ? "Saving…" : "Save changes"}
+              {loading ? "Saving…" : "Save Changes"}
             </Button>
           </DialogFooter>
         </form>

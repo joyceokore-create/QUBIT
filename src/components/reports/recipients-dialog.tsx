@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/drawer-dialog";
 import { FOCUS, PRIMARY, QUIET, SECONDARY } from "@/lib/surface";
 
 /**
@@ -83,7 +83,7 @@ export function RecipientsDialog({ open, onOpenChange, onChange }: { open: boole
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[440px]">
         <DialogHeader>
-          <DialogTitle>Roll-up recipients</DialogTitle>
+          <DialogTitle>Roll-Up Recipients</DialogTitle>
           <DialogDescription>Who gets the weekly roll-up when you press Email to executives. The PDF is internal and confidential.</DialogDescription>
         </DialogHeader>
 

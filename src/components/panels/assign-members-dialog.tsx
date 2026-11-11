@@ -6,7 +6,7 @@ import { Plus } from "lucide-react";
 import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
 import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { Button } from "@/components/ui/button";
-import { DialogTrigger } from "@/components/ui/dialog";
+import { DialogTrigger } from "@/components/ui/drawer-dialog";
 import { Input } from "@/components/ui/input";
 import { assignmentWarnings } from "@/lib/capacity";
 import { PROJECT_ROLES } from "@/lib/roles";
@@ -172,16 +172,16 @@ export function AssignMembersDialog({
         setOpen(o);
         if (!o) setError(null);
       }}
-      title="Add to team"
+      title="Add to Team"
       description="An assignment is person + role hat + allocation + dates — never a bare membership row."
       error={error}
       busy={busy}
-      submitLabel={picked.size > 1 ? `Assign ${picked.size} people` : "Assign"}
+      submitLabel={picked.size > 1 ? `Assign ${picked.size} People` : "Assign"}
       onSubmit={submit}
       className="sm:max-w-[640px]"
       trigger={
         <DialogTrigger render={<Button size="sm" data-tour="add-member" />}>
-          <Plus /> Add member
+          <Plus /> Add Member
         </DialogTrigger>
       }
     >

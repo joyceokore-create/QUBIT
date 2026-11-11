@@ -9,7 +9,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/ui/drawer-dialog";
 
 /**
  * The shared admin form dialog (docs/21 M-O2b). It owns the chrome every admin dialog

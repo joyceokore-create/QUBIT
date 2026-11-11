@@ -5,7 +5,7 @@ import { CalendarOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DialogTrigger } from "@/components/ui/dialog";
+import { DialogTrigger } from "@/components/ui/drawer-dialog";
 import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
 import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { ABSENCE_TYPES, type AbsenceType } from "@/server/absence";
@@ -77,7 +77,7 @@ export function RecordLeaveDialog({ people }: { people: { id: string; name: stri
     <AdminFormDialog
       open={open}
       onOpenChange={setOpen}
-      title="Record leave"
+      title="Record Leave"
       description="Capacity, badges and reminders all react to this one entry (imported/HR leave stays read-only)."
       error={error}
       busy={busy}

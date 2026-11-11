@@ -17,7 +17,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/ui/drawer-dialog";
 import { ISSUE_STATUSES, type IssueListItem } from "@/server/issues";
 import { SEVERITY_ORDER } from "@/components/raid/severity";
 import type { AdminUserSummary } from "@/server/users";
@@ -70,8 +70,8 @@ export function EditIssueDialog({ issue, users, open, onOpenChange }: EditIssueD
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit issue — {issue.title}</DialogTitle>
-          <DialogDescription>Changes are audited.</DialogDescription>
+          <DialogTitle>Edit Issue</DialogTitle>
+          <DialogDescription>{issue.title}. Changes are audited.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <div className="flex gap-3">

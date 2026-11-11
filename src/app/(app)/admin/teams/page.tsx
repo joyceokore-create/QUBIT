@@ -31,7 +31,7 @@ export default async function AdminTeamsPage() {
             users={users}
             trigger={
               <Button className="rounded-full">
-                <Plus /> New team
+                <Plus /> New Team
               </Button>
             }
           />

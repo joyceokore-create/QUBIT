@@ -5,7 +5,7 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DialogTrigger } from "@/components/ui/dialog";
+import { DialogTrigger } from "@/components/ui/drawer-dialog";
 import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
 import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { buildIndentedDepartmentOptions } from "@/lib/department-tree";
@@ -96,7 +96,7 @@ export function DepartmentDialog({
     <AdminFormDialog
       open={open}
       onOpenChange={setOpen}
-      title={mode === "edit" ? "Edit department" : "New department"}
+      title={mode === "edit" ? "Edit Department" : "New Department"}
       description={
         mode === "edit"
           ? "Changes take effect immediately and are audited."
@@ -110,7 +110,7 @@ export function DepartmentDialog({
       trigger={
         mode === "create" ? (
           <DialogTrigger render={<Button className="rounded-full" />}>
-            <Plus /> New department
+            <Plus /> New Department
           </DialogTrigger>
         ) : undefined
       }

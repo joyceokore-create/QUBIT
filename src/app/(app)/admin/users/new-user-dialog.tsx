@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
+} from "@/components/ui/drawer-dialog";
 import { ONBOARDING_ROLE_TIERS, type OnboardingRoleKey } from "@/lib/roles";
 import { derivedGroups, effectiveGroups, landingPersona, type UserGroup } from "@/lib/personas";
 import { useAdminMutation } from "@/components/admin/use-admin-mutation";
@@ -293,7 +293,7 @@ export function NewUserDialog({
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle>User created</DialogTitle>
+              <DialogTitle>User Created</DialogTitle>
               <DialogDescription>
                 {created?.sso ? (
                   <>
@@ -324,7 +324,7 @@ export function NewUserDialog({
               </div>
             )}
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={reset}>Create another</Button>
+              <Button type="button" variant="outline" onClick={reset}>Create Another</Button>
               <Button type="button" onClick={() => setOpen(false)}>Done</Button>
             </div>
           </>

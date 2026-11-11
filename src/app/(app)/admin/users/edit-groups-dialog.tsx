@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/drawer-dialog";
 import { effectiveGroups, landingPersona, USER_GROUPS, type UserGroup } from "@/lib/personas";
 import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { GROUP_LABELS } from "@/components/admin/labels";
@@ -51,8 +51,8 @@ export function EditGroupsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[420px]">
         <DialogHeader>
-          <DialogTitle>Dashboard groups — {user.name}</DialogTitle>
-          <DialogDescription>Groups pick the dashboard they land on. They never change permissions.</DialogDescription>
+          <DialogTitle>Dashboard Groups</DialogTitle>
+          <DialogDescription>{user.name}. Groups pick the dashboard they land on. They never change permissions.</DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
@@ -85,7 +85,7 @@ export function EditGroupsDialog({
           {error && <p role="alert" className="text-sm text-status-red">{error}</p>}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="button" onClick={() => void save()} disabled={busy}>{busy ? "Saving…" : "Save groups"}</Button>
+            <Button type="button" onClick={() => void save()} disabled={busy}>{busy ? "Saving…" : "Save Groups"}</Button>
           </div>
         </div>
       </DialogContent>

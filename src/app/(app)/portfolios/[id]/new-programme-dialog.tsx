@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DialogTrigger } from "@/components/ui/dialog";
+import { DialogTrigger } from "@/components/ui/drawer-dialog";
 import { Input } from "@/components/ui/input";
 import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
 import { useAdminMutation } from "@/components/admin/use-admin-mutation";
@@ -57,15 +57,15 @@ export function NewProgrammeDialog({
         setOpen(o);
         if (!o) setError(null);
       }}
-      title="New programme"
+      title="New Programme"
       description="A grouping inside this portfolio — it inherits the portfolio's markets and report recipients."
       error={error}
       busy={busy}
-      submitLabel="Create programme"
+      submitLabel="Create Programme"
       onSubmit={submit}
       trigger={
         <DialogTrigger render={<Button variant="outline" size="sm" />}>
-          <Plus /> New programme
+          <Plus /> New Programme
         </DialogTrigger>
       }
     >

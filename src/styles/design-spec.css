@@ -202,3 +202,21 @@
   --color-ds-feat-fg: var(--ds-feat-fg);
   --color-ds-side-active: var(--ds-side-active);
 }
+
+/* UX fidelity Tier 3 — forms inside the drawer-dialog (src/components/ui/drawer-dialog.tsx)
+ * take the drawer field spec (docs/08 § Drawer · Field) without rewriting each form: labels
+ * 11.5/600 ink3, controls 36px with a 10px radius on the line border. */
+.ds-form :is(label, span).text-sm.font-medium {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ds-ink3);
+}
+.ds-form :is([data-slot="input"], [data-slot="select-trigger"], textarea) {
+  min-height: var(--ds-control-h);
+  border-radius: var(--ds-radius-control);
+  border-color: var(--ds-line);
+  font-size: 13px;
+}
+.ds-form :is([data-slot="input"], textarea)::placeholder {
+  color: var(--ds-placeholder);
+}

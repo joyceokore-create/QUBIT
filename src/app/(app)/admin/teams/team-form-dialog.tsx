@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
+} from "@/components/ui/drawer-dialog";
 import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import type { AdminUserSummary } from "@/server/users";
 
@@ -107,7 +107,7 @@ export function TeamFormDialog({ users, teamId, trigger, open: openProp, onOpenC
       {trigger ? <DialogTrigger render={trigger} /> : null}
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit team" : "New team"}</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit Team" : "New Team"}</DialogTitle>
           <DialogDescription>
             Teams are cross-functional groups you assign to projects.
           </DialogDescription>
@@ -164,7 +164,7 @@ export function TeamFormDialog({ users, teamId, trigger, open: openProp, onOpenC
           )}
           <DialogFooter>
             <Button type="submit" disabled={busy}>
-              {busy ? "Saving…" : isEdit ? "Save changes" : "Create team"}
+              {busy ? "Saving…" : isEdit ? "Save Changes" : "Create Team"}
             </Button>
           </DialogFooter>
         </form>

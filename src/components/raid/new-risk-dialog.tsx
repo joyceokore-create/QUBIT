@@ -20,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
+} from "@/components/ui/drawer-dialog";
 import type { AdminUserSummary } from "@/server/users";
 
 interface NewRiskDialogProps {
@@ -92,11 +92,11 @@ export function NewRiskDialog({ users, projects, defaultOpen = false }: NewRiskD
       }}
     >
       <DialogTrigger render={<Button />}>
-        <Plus /> New risk
+        <Plus /> New Risk
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New risk</DialogTitle>
+          <DialogTitle>New Risk</DialogTitle>
           <DialogDescription>Adds a risk to the register.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
@@ -206,7 +206,7 @@ export function NewRiskDialog({ users, projects, defaultOpen = false }: NewRiskD
 
           <DialogFooter>
             <Button type="submit" disabled={loading}>
-              {loading ? "Creating…" : "Create risk"}
+              {loading ? "Creating…" : "Create Risk"}
             </Button>
           </DialogFooter>
         </form>

@@ -181,7 +181,7 @@ function ProjectsListView({ projects, canCreate }: { projects: ProjectRow[]; can
             action={
               canCreate && (
                 <Button variant="outline" nativeButton={false} render={<Link href="/projects/new" />}>
-                  <Plus /> New project
+                  <Plus /> New Project
                 </Button>
               )
             }

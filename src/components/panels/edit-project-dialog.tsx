@@ -21,7 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
+} from "@/components/ui/drawer-dialog";
 
 // DM1.73 — shared enums; the old hardcoded ["Low","Medium","High","Critical"] list
 // silently discarded whole saves when the server enum rejected the priority.
@@ -109,7 +109,7 @@ export function EditProjectDialog({ project, onUpdated }: EditProjectDialogProps
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit project</DialogTitle>
+          <DialogTitle>Edit Project</DialogTitle>
           <DialogDescription>Changes are audited.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
@@ -209,7 +209,7 @@ export function EditProjectDialog({ project, onUpdated }: EditProjectDialogProps
 
           <DialogFooter>
             <Button type="submit" disabled={loading}>
-              {loading ? "Saving…" : "Save changes"}
+              {loading ? "Saving…" : "Save Changes"}
             </Button>
           </DialogFooter>
         </form>
