@@ -125,6 +125,221 @@ phones). Each line ends with its action link. With nothing to say it shows one l
 needs your attention right now." Component: `src/components/dashboard/daily-brief.tsx`; rules:
 `src/lib/daily-brief.ts`.
 
+## Design spec v2 — UX fidelity (Nov 2026)
+
+**Scope and precedence.** This section is the spec for the **new Riverbank layout** (per-role
+homes, `ui_mode = new`). Where it disagrees with an older section of this file (fixed tokens,
+Syne headings, 54px top bar, 216px sidebar, 660px panel, the core components table), **this
+section wins** for the new layout; the older sections describe the classic layout. Source: the
+approved role-journeys design (`mwashukes-desk/assets/role-journeys/qubit-role-journeys.html`,
+published as the "QUBIT Role Journeys" artifact). Where the design redefines a screen, the last
+definition wins (walkthrough → overrides → patches → views). Tokens:
+`src/styles/design-spec.css` (`--ds-*`, Tailwind `bg-ds-*` / `text-ds-*`); contrast is enforced
+by `tests/unit/design-spec-contrast.test.ts`.
+
+### Deviations from the design (deliberate, recorded)
+
+| # | Design | Built | Why |
+|---|---|---|---|
+| 1 | Status text in its base hue (#16a34a, #d97706, #dc2626, #2563eb, #0f8b8d) | Light mode: `--ds-*-text` (#166534, #92400e, #b91c1c, #1d4ed8, #6d28d9, #0f766e); dark mode: the design's hues | Base hues are 2.9–4.5:1 as text on their washes (green 3.3:1 and amber 3.2:1 even on white). Fills, meters, RAG bars and gate cells keep the design's hues. |
+| 2 | Sidebar group labels at 42% white | 55% white | 42% is 3.4–4.1:1 on the sidebar gradient; 55% is 5.0–6.2:1. |
+| 3 | `--ink4` (#9f9f9f) for placeholders, group headings (`.grp`), pager ellipsis, "or" divider, sign-in footer | `--ds-ink3` for any **text**; `--ds-ink4` for decoration only (dividers, disabled, chart axes, decorative arrows) | #9f9f9f is 2.65:1. ink3 is ≥ 4.88:1 on every surface. |
+| 4 | Primary fill #ED1C24, white text | **Kept** (both themes; the design's dark-mode #f0353c is not used) | Riverbank brand colour — designer's decision, 11 Nov 2026. White on #ED1C24 is 4.38:1, just under AA: the one accepted exception. Keep button text white at weight 600 or bolder, never smaller than 12.5px on red; hover/pressed go darker (`--ds-brand-ink` #c9181f, 5.8:1), never lighter. |
+| 5 | Sentence case labels | **Title Case labels** (see Casing) | Designer's decision, 11 Nov 2026. |
+| 6 | No phone layouts | Must work at 390px; not required to match | The design is desktop-only. |
+
+### Tokens
+
+| Design | Token | Light | Dark | Use |
+|---|---|---|---|---|
+| `--brand` | `--ds-brand` | #ED1C24 | #ED1C24 | primary fill, active tab underline, focus ring, current OTP box |
+| `--brand-ink` | `--ds-brand-ink` | #c9181f | #ff8a8f | red **text**: links, active counts, active filter chip, Clear all, Brief drawer title; primary hover (light) |
+| `--brand-wash` | `--ds-brand-wash` | #fdecec | rgba(237,28,36,.16) | active filter chip, active tab count, selected menu option |
+| `--bg` | `--ds-bg` | #f3f5f8 | #020617 | page |
+| `--card` | `--ds-card` | #ffffff | #0f172a | cards, drawers, menus, top bar, secondary buttons |
+| `--surface2` | `--ds-surface2` | #f6f7f9 | #132036 | kv panel, table header band, in-card search, active in-card tab, board columns |
+| `--bd` | `--ds-bd` | rgba(15,23,42,.08) | rgba(148,163,184,.16) | card borders |
+| `--line` | `--ds-line` | #e7e9ee | #1e293b | control borders, dividers, dotted row rules |
+| `--ink` | `--ds-ink` | #231f20 | #e5e9f0 | headings, figures, row titles, pager active fill |
+| `--ink2` | `--ds-ink2` | #4b4b4b | #cbd5e1 | body copy, secondary button text, muted chip text |
+| `--ink3` | `--ds-ink3` | #6b6b6b | #94a3b8 | labels, subs, meta, placeholders (`--ds-placeholder`) |
+| `--ink4` | `--ds-ink4` | #9f9f9f | #64748b | decoration only (deviation 3) |
+| `--ok/--warn/--bad/--info/--vio/--teal` | `--ds-ok` … `--ds-teal` | #16a34a #d97706 #dc2626 #2563eb #7c3aed #0f8b8d | #22c55e #f59e0b #f87171 #60a5fa #a78bfa #2dd4bf | fills: RAG bar, meters, bars, gate cells, solid RAG buttons |
+| — | `--ds-ok-text` … `--ds-teal-text` | #166534 #92400e #b91c1c #1d4ed8 #6d28d9 #0f766e | = fills | chip text, KPI context/trend colour (deviation 1) |
+| `--okw` … `--tealw`, `--mutedw` | `--ds-okw` … `--ds-mutedw` | #e7f6ec #fdf2e2 #fdecec #e8effd #f1ebfe #e2f3f3 #eef0f3 | 14–15% alpha of the dark hue | chip washes, meter track (`mutedw`), bar fill (`infow`) |
+| `--feat-*` | `--ds-feat-bg/-fg/-sub/-track` | #231f20 / #fff / 66% / 16% | #1e293b / #f8fafc / 62% / 12% | featured (dark) KPI card |
+| `--shadow` | `--ds-shadow` | 0 1px 2px rgba(35,31,32,.06), 0 8px 24px -12px rgba(35,31,32,.18) | 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6) | cards, KPI cards, panels |
+| — | `--ds-shadow-drawer`, `--ds-scrim`, `--ds-shadow-menu` | -16px 0 40px rgba(15,23,42,.22) · rgba(15,23,42,.38) · 0 10px 30px rgba(0,0,0,.35) | same | drawer, backdrop (no blur), dropdowns |
+| `--side` | `--ds-side` | #241f20 → #5c0f13 | #0b0f1a → #3a0a0d | sidebar gradient |
+| — | `--ds-side-active` · `--ds-side-ink` · `--ds-side-dim` · `--ds-side-count` | #b81c22 · 78% white · 55% white · 16% white | same | sidebar |
+
+Metrics: sidebar 232px · top bar 58px · page padding 22px · body gap 16px · rail 340px · KPI gap
+12px · drawer 440px (wide 580px) · control 36px (compact 28px) · radii: card/panel 18, KPI 16,
+kv 12, control/tab/filter 10, compact button/close 8, pager 7, chip/pill 999.
+
+**Contrast (measured, enforced by the test).** Light: ink 16.3, ink2 8.7, ink3 5.3 on card
+(4.97 surface2, 4.88 page); brand-ink 5.8 on card, 5.1 on wash; status text 4.8–6.4 on washes;
+white on side-active 6.5; side-dim 5.0–5.8. Dark: ink3 7.0, brand-ink 7.9, status 5.2–7.3 on
+washes, side-dim 5.8–6.2. Exception: white on #ED1C24 4.38 (deviation 4). Mini charts carry no
+information that isn't also in the figure or legend text, so their fills are exempt from 3:1.
+
+### Casing
+
+**Title Case** for labels: page, card, section, drawer and dialog titles; tab labels; nav items
+and group labels; buttons; KPI labels; table column headers; filter chip labels; PDF headings.
+**Sentence case** for copy: descriptions, helper text, placeholders, empty states, toasts, Daily
+Brief lines, KPI context lines, row titles and subs, and **status/tag chips** ("On track", "Head
+approval needed"). Minor words stay lower case unless first or last: a, an, and, as, at, but,
+by, for, in, of, on, or, the, to, via, with. Proper nouns and product names are unchanged
+(QUBIT, YouTrack, Daily Brief, Risks & Issues). Uppercase-styled labels (sidebar group, drawer
+group, list group headings) are still written in Title Case in the source.
+
+### Components (design class → app component)
+
+**Shell.** Grid `232px 1fr`, page `--ds-bg`, base 13px.
+- Sidebar (`.m-side`): `--ds-side`, padding 16×12, 16px between groups. Logo: 22px square radius
+  6 #ED1C24 + wordmark 14/800, tracking .08em, white. Group label (`.sg-h`) 10.5/700 uppercase
+  tracking .09em `--ds-side-dim`, padding 0 10 4; items 2px apart. Item (`.si`) 36px, padding 0 10,
+  radius 10, gap 10, 13/500 `--ds-side-ink`, icon 16. Active: `--ds-side-active`, white, 600.
+  Count (`em`) 10.5/700, min-width 20, height 18, padding 0 6, pill, `--ds-side-count` white;
+  **active item's count inverts**: white fill, #b81c22 text.
+- Viewing as (`.va-btn`): padding 8×10, radius 10, 10% white fill + inset 1px 22% white; caption
+  10.5 `--ds-side-dim`, value 12.5/700, chevron right; open: 20% fill, 45% ring. Menu (`.va-dd`):
+  card, radius 12, padding 6, `--ds-shadow-menu`; options 12.5, padding 7×9, radius 8; selected
+  brand-wash / brand-ink / 700 + check; helper 10.5 ink3.
+- Footer (`.m-foot`): pinned bottom, top rule 12% white, padding 10 8 2, gap 10; avatar 30px
+  round, 18% white, 11/700; name 12.5 white; second line = **role** 11.5 `--ds-side-dim`.
+- Top bar (`.m-top`): 58px, card fill, bottom `--ds-line`, padding 0 22, gap 10. Search
+  (`.m-search`): flex 1, max 420, 36px, radius 10, surface2, line border, 12.5 placeholder, ⌘K
+  `kbd` 10.5 bordered. Then spacer, "+ New" (primary), "Ask Q" (secondary), bell (36px square
+  secondary). Buttons (`.tb`) 36px, radius 10, padding 0 12, gap 6, 12.5/600.
+
+**Page header** (`.m-head`): flex, space-between, **align start**, gap 12. Date/crumb line
+11.5/600 ink3 (not uppercase); title 22/800, margin-top 2; description 13 ink3, margin-top 2.
+Actions (`.m-act`) gap 8, no wrap, 36px buttons. Homes have **no** header action.
+
+**KPI row and card.** Grid gap 12. Homes: `1.4fr 1fr 1fr 1fr` (three cards: `1.4fr 1fr 1fr`),
+the first card is the wide one. Reports pages (the On Track / At Risk / Off Track row): three
+equal columns. Card
+(`.kpi`): card, `--ds-bd`, radius 16, `--ds-shadow`, padding 14×16, column gap 4. Top line
+(`.kpi-top`): label 12/600 ink3 left, trend 11.5/600 ink3 right (bad/good → `-text` tokens).
+Figure 23/700 tabular, line-height 1.2; unit 12/600 ink3, margin-left 5. Context 11.5 ink3
+(`bad`/`good` coloured). Chart (`.viz`) pinned bottom (`margin-top: auto`, padding-top 8):
+- RAG bar: 8px, pill, 2px gaps, ok/warn/bad; legend 11px ink3, gap 10, 7px dots, bold counts.
+- Bars: 26px tall, gap 3, radius 3 3 0 0, min 3px, fill `--ds-infow`, **last bar `--ds-info`**.
+- Meter: 6px pill on `--ds-mutedw`; fill info (default) / ok / warn / bad.
+- Spark: 30px tall SVG; area `--ds-infow`, line `--ds-info` 1.8, end dot `--ds-info`.
+- Featured card (`.kpi-feat`): `--ds-feat-bg`, no border, text `--ds-feat-fg`, sub `--ds-feat-sub`;
+  tracks `--ds-feat-track`; bars/spark accent #ff8a8f, spark area rgba(237,28,36,.18).
+
+**Columns.** Main + rail `1fr 340px`, gap 16, align start; rail cards 16px apart.
+
+**Panel** (`.mp`, main cards and rail cards): card, `--ds-bd`, radius 18, `--ds-shadow`, padding
+16×18, gap 12. Header (`.mp-h`): title **16/700** left, link right. **Link** (`.link`): 12/600
+`--ds-brand-ink`, gap 3, trailing arrow icon 12px. Home main cards always have a title + link.
+Rail row (`.ri`): column, gap 5, padding 9px 0, **dotted** `--ds-line` bottom (none on the last);
+top line title 12.5/600 + chip right; sub 11.5 ink3; optional 6px meter. "Suggested" pill
+(`.sug`): 11/600 ink3 on surface2, padding 2×9, pill.
+
+**Tabs** (`.tab`): row gap 4; tab 12.5/600 ink3, padding 8×14, radius 10 10 0 0, 2px bottom border
+transparent, gap 6. Active: ink, fill card (inside a panel: surface2), bottom border brand. Count
+10.5/700, padding 0 6, pill, line-height 17, `--ds-mutedw` / ink2; **active count brand-wash /
+brand-ink**. No full-width line under the row.
+
+**Toolbar** (`.tbar`): gap 10, wraps. Search (`.srch`): 36px, min-width 280 (inside a panel: 0,
+surface2 fill), padding 0 12, radius 10, card fill, line border, gap 8, 14px icon, 12.5
+placeholder. Filters (`.tb-f`) gap 6. **Filter chip** (`.fchip`): 36px, padding 0 12, radius 10,
+line border, card fill, 12.5/600 ink2, gap 5, label = dimension name + 11px chevron. Active:
+brand-wash, transparent border, brand-ink, label "Priority: High" + × icon. **Clear all**
+(`.clr`) inline after the chips, 12/600 brand-ink, shown when more than one filter is on.
+Actions (`.tb-a`) pushed right, gap 8.
+
+**List rows** (`.row`, home lists): grid `1fr auto 92px auto` (title · chip · meta · action), gap
+12, padding 10×4, dotted bottom. Title 13/600 and sub 12 ink3, both single-line ellipsis; meta
+11.5 ink3 right-aligned tabular; action = compact secondary. Group heading (`.grp`) 10.5/700
+uppercase tracking .08em ink3 (deviation 3), padding 10 4 2, no band. Footnote (`.foot`) 12 ink3,
+space-between ("Showing 6 of 11" · link). **Homes use the footnote, not a pager.**
+
+**Table** (`.sgt`): 12.5px. Header cells on a surface2 band with 8px rounded ends, 11/700 ink3,
+tracking .03em, **not uppercase**, padding 8×10. Cells padding 10, dotted bottom, middle-aligned;
+bold = 600.
+
+**Pager** (`.pager`, inside the card): top border line, padding-top 12, space-between, 12px ink3
+tabular. Rows per page: "Rows" + 28px chip (padding 0 8, line border, radius 7, ink 600, chevron).
+Page buttons 28px (min-width), radius 7, line border, card fill, ink2 600; prev/next icon-only;
+**current page `--ds-ink` fill + card text**; disabled 40% opacity; ellipsis ink3.
+
+**Buttons.** Secondary (`.btn-g`): card fill, line border, **ink** text, 600, gap 4, radius 10,
+36px, padding 0 14, 12.5px. Compact (in rows): 28px, padding 0 11, radius 8, 12px. Primary
+(`.btn-p`): `--ds-brand` fill and border, white (deviation 4). One primary per page header and
+per drawer footer.
+
+**Chips** (`.chip`): 11/600, padding 2×8, pill, line-height 1.5, **no dot**. Tones: ok, warn, bad,
+info, vio, teal (wash + `-text`), muted (`--ds-mutedw` + ink2). Gate chips (`.gchip`) 11.5/600,
+padding 3×10. Gate cells (`.gc`) 16px, radius 5: done ok · in progress warn · late bad · not
+started mutedw with a line ring; legend cells 11px radius 3.
+
+**Daily Brief** (`.brief`): radius 14, padding 16×20, `--brief-bg`, white, gap 8. Tag pill
+10.5/700 uppercase tracking 1.2px, 15% white, padding 4×10; time 11px. Lines: grid `1fr auto`,
+gap 12, 13.5px at 94% white, padding 6px 0, top rule 12% white, clamped to two lines; action
+link 12/600 white, underlined (offset 3, 40%). "View N more": 12/700 pill, 14% white fill, 40%
+white border, padding 5×13. Footer 11.5 at 90% white.
+
+**Drawer** (`.m-drawer`): right panel 440px (wide 580px), card fill, line left border,
+`--ds-shadow-drawer`; scrim `--ds-scrim`, **no blur**.
+- Header (`.dr-h`): padding 18×20, bottom line, gap 12. Optional step line 11.5/600 ink3
+  ("Stage Gate 6 of 6 · Go-Live Readiness"); title 17/700 (Brief drawer: 16/700 brand-ink with
+  icon, gap 6); subtitle 12 ink3, margin-top 2. Close (`.dr-x`): 32px, radius 8, line border,
+  card fill, ink2 icon.
+- Body (`.dr-b`): scrolls, padding 16×20, gap 14. Section (`.dsec`) gap 8, head 11/700 uppercase
+  tracking .07em ink3. Group head (`.dr-gh`) same style + count pill (mutedw, ink2). Item
+  (`.dr-i`): grid `1fr auto`, gap 12, padding 10px 0, dotted; title 13/600; sub 12 ink3.
+- Field (`.f`): gap 5; label 11.5/600 ink3; input (`.fi`) min 36px, line border, radius 10, card
+  fill, padding 0 11, 13px ink; textarea min 64px, padding 9×11, line-height 1.5, ink2.
+- Kv (`.kv`): 2-column grid, gap 10×16, surface2, radius 12, padding 12×14; label 11.5 ink3
+  above value 13/600.
+- Choice (`.segs`): separate buttons, gap 6; padding 7×14, line border, radius 10, 12.5/600 ink2,
+  card fill; selected: ink fill + card text. RAG variant (`.rag3`): selected fills solid ok /
+  warn / bad with white text, labelled **On track / At risk / Off track**.
+- Toggle (`.seg`): one bordered group, padding 3, gap 3, radius 10; buttons 12.5/600 ink2,
+  padding 5×11, radius 7; pressed: ink fill + card text.
+- Banner (`.banner`): radius 10, padding 10×12, 12.5 ink; info = infow, warn = warnw; no icon.
+- Checklist (`.ck`): rows 13px, gap 8; met = ok icon, unmet = ink3 icon and text. Blocker callout
+  (`.blk`): badw, radius 10, padding 12, 12.5 ink, bad icon. File chips (`.files`): 12px, padding
+  5×10, radius 8, surface2, ink2. Person rows (`.mrow`): grid `auto 1fr auto auto`, gap 12,
+  padding 10px 0, dotted. Body text (`.dp`) 13 ink2, line-height 1.55; hint 12 ink3.
+- Footer (`.dr-foot`): padding 12×20, top line, buttons right-aligned 36px, gap 8; optional note
+  left 12 ink3. Plain footnote (`.dr-f`) 11.5 ink3.
+- Behaviour: focus trapped, Esc and backdrop close, focus returns to the trigger, labelled by
+  the title. Phones: full width.
+
+**Board** (`.kb`): 3 columns, gap 14. Column surface2, radius 14, padding 12, gap 8; head 13px +
+count pill (card fill, 11/700 ink2). Card: card fill, `--ds-bd`, radius 11, padding 10×12, gap 3,
+shadow 0 1px 2px rgba(15,23,42,.05); title 13/600; sub 12 ink3; meta row 11.5 ink3.
+
+**Lifecycle (Portfolios).** Stage tiles (`.stages`): 5 columns, gap 10; tile card, radius 14,
+padding 12×14, figure 22/700, label 12 ink3, selected = 1.5px inset brand ring. Lifecycle cards
+(`.lcard`): KPI card anatomy with the stage colour (`--c`) for label and figure, 36px round
+icon on the stage wash, trend top right, 40px edge-to-edge spark, dots row (stuck = warn dot).
+
+**Report charts** (`.chart`): grid lines `--ds-line`; axis text 10.5 ink3; value labels 11.5/700
+ink; trend line `--ds-brand` 2.2; bars `--ds-infow` with 35% info stroke, highlight `--ds-info`.
+
+**Sign-in** (`.auth`): two equal columns on the card. Left: centred illustration, heading 26/800,
+sentence 15 ink2 (max 38ch), padding 40×56. Right: padding 36×72; logo 26px square radius 7 +
+wordmark 15/800; form card max 420, radius 18, `--ds-shadow`, padding 28×30, gap 16; title
+24/800; lead 14 ink3. Buttons 36px radius 10 13/700 (primary brand; Microsoft = secondary with
+the four-square mark). "or" divider 12 ink3 with line rules. Links 12.5/600 brand-ink. OTP: six
+boxes, gap 8, 48px tall, radius 10, line border, 20/700; current box brand border + 3px
+brand-wash ring. Password checklist: 2 columns, gap 6, 12 ink3, met = ok-text + check. Footer
+12 ink3, space-between ("Riverbank Group" · "Help · Privacy").
+
+**Responsive.** Below 1024px: rail stacks under the main column; KPI row 2 columns (1 below
+640px); sidebar off-canvas; drawers full width; toolbar wraps with search full width.
+
+**Dark mode.** Same layout; only `--ds-*` values change (table above). PDFs stay light. Theme
+switcher: Light / Dark / System in the user menu, default Light.
+
 ## Core components (map to shadcn/ui where possible)
 
 | Component | Built from | Notes |

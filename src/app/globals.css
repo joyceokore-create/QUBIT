@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+/* UX fidelity: the design's --ds-* tokens (docs/08 § "Design spec v2"). Opt-in only. */
+@import "../styles/design-spec.css";
 
 @custom-variant dark (&:is(.dark *));
 
