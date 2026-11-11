@@ -6,10 +6,11 @@ import { ExportButton } from "@/components/export-button";
 import { PageHeader } from "@/components/list/page-header";
 import { TabStrip } from "@/components/ui/tab-strip";
 import { NewRiskDialog } from "@/components/raid/new-risk-dialog";
+import { NewIssueButton } from "@/components/raid/new-issue-drawer";
 import { SEVERITY_ORDER } from "@/components/raid/severity";
 import { parseListParams } from "@/lib/list-state";
 import { listRisksPage, RISK_STATUSES } from "@/server/risks";
-import { ISSUE_STATUSES, listIssuesPage } from "@/server/issues";
+import { ISSUE_STATUS_FILTERS, listIssuesPage } from "@/server/issues";
 import { raidFacets, raidTabCounts, type RaidTab } from "@/server/raid";
 import { listUsers } from "@/server/users";
 import { listProjects } from "@/server/projects";
@@ -48,7 +49,7 @@ export default async function RisksPage({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   const rawTab = Array.isArray(sp.tab) ? sp.tab[0] : sp.tab;
   const tab: RaidTab = canReadIssues && (rawTab === "issues" || rawTab === "gap") ? rawTab : "risks";
-  const statuses = tab === "risks" ? RISK_STATUSES : ISSUE_STATUSES;
+  const statuses = tab === "risks" ? RISK_STATUSES : ISSUE_STATUS_FILTERS;
   const canUpdate = tab === "risks" ? can(ctx, "risk:update") : tab === "issues" && can(ctx, "issue:update");
 
   const params = parseListParams(sp, {
@@ -76,6 +77,9 @@ export default async function RisksPage({ searchParams }: { searchParams: Promis
     canCreateRisk ? listProjects(ctx) : Promise.resolve([]),
   ]);
 
+  // UX fidelity Tier 2: "+ New Issue" on the Issues tabs (issue:create, or project contributors).
+  const canCreateIssue = canReadIssues && can(ctx, "issue:create");
+  const newIssue = canCreateIssue && tab !== "risks" ? <NewIssueButton projects={(await listProjects(ctx)).map((p) => ({ id: p.id, code: p.code, name: p.name }))} users={(users.length ? users : await listUsers(ctx)).map((u) => ({ id: u.id, name: u.name }))} /> : undefined;
   // The top bar's "+ New › Risk" lands here with ?new=1 (UX fidelity F1).
   const newRisk = canCreateRisk ? <NewRiskDialog users={users} projects={projects.map((p) => ({ id: p.id, code: p.code, name: p.name }))} defaultOpen={sp.new === "1"} /> : undefined;
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -95,7 +99,7 @@ export default async function RisksPage({ searchParams }: { searchParams: Promis
         actions={
           <>
             <ExportButton href="/api/export?kind=risks" label="Export risks CSV" />
-            {newRisk}
+            {tab === "risks" ? newRisk : newIssue}
           </>
         }
       />
@@ -108,7 +112,7 @@ export default async function RisksPage({ searchParams }: { searchParams: Promis
           ...(canReadIssues
             ? [
                 { key: "issues", label: "Issues", href: "/risks?tab=issues", count: counts.issues },
-                { key: "gap", label: "Gap report", href: "/risks?tab=gap", count: counts.gaps },
+                { key: "gap", label: "Gap Report", href: "/risks?tab=gap" },
               ]
             : []),
         ]}

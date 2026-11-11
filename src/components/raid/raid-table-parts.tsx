@@ -1,14 +1,16 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { THEAD, TROW } from "@/lib/surface";
 
 /** UX5 — the list-table look shared by the Risks, Issues and Gap report tables (matches
  * the Projects list: 11px uppercase header row, hairline rows, surface-2 hover). */
-export const RAID_THEAD = "border-b border-[var(--border)] text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--ink3)]";
-export const RAID_ROW = "border-b border-[var(--border)] transition-colors last:border-0 hover:bg-[var(--surface-2)]";
+// Design spec v2 (docs/08 § Table): grey band header, dotted rows.
+export const RAID_THEAD = THEAD;
+export const RAID_ROW = `${TROW} transition-colors hover:[&>td]:bg-[var(--ds-surface2)]`;
 
 export function RaidTh({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <th scope="col" className={cn("px-3 py-2.5 font-semibold", className)}>
+    <th scope="col" className={cn(className)}>
       {children}
     </th>
   );

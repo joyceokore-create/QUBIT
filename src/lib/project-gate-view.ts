@@ -22,7 +22,7 @@ export const GATE_VIEW_LABELS: Record<(typeof GATE_KEYS)[number], string> = {
 export const GATE_STATE_WORD: Record<GateState, string> = {
   done: "Done",
   prog: "In progress",
-  late: "Late",
+  late: "Overdue",
   block: "Blocked",
   none: "Not started",
 };

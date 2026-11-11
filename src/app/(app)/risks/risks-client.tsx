@@ -30,7 +30,7 @@ const TAB_COPY: Record<RaidTab, { noun: string; search: string; searchLabel: str
   },
   issues: {
     noun: "issues",
-    search: "Search issues, risks, projects or owners",
+    search: "Search issues by ID or title",
     searchLabel: "Search issues",
     hint: "Issues appear when a risk is materialised or an issue is raised.",
   },
@@ -81,7 +81,7 @@ export function RisksClient({
       "Unknown project",
     ),
     severity: severities.map((s) => ({ value: s, label: s })),
-    status: statuses.map((s) => ({ value: s, label: s })),
+    status: statuses.map((s) => ({ value: s, label: s === "notclosed" ? "Not closed" : s })),
     owner: withCurrent(
       [
         ...facets.owners.map((o) => ({ value: o.id, label: o.id === viewerId ? `${o.name} (you)` : o.name })),

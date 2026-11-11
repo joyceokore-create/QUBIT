@@ -16,6 +16,19 @@ import { SEVERITY_ORDER } from "@/components/raid/severity";
 
 export const ISSUE_STATUSES = ["Open", "Investigating", "Resolved", "Closed"] as const;
 
+/** UX fidelity Tier 2: the "Status: Not closed" filter value (Open or Investigating). */
+export const NOT_CLOSED = "notclosed";
+export const ISSUE_STATUS_FILTERS = [NOT_CLOSED, ...ISSUE_STATUSES] as const;
+
+/** UX fidelity Tier 2 — "+ New Issue" (design: Head of QA › Risks & Issues). */
+export const CreateIssueInput = z.object({
+  projectId: z.string().uuid().nullable().optional(),
+  title: z.string().trim().min(3, "Give the issue a title of at least 3 characters.").max(200),
+  severity: z.enum(SEVERITY_ORDER),
+  ownerId: z.string().uuid().nullable().optional(),
+});
+export type CreateIssueInput = z.infer<typeof CreateIssueInput>;
+
 export const UpdateIssueInput = z.object({
   status: z.enum(ISSUE_STATUSES).optional(),
   ownerId: z.string().uuid().nullable().optional(),
@@ -40,6 +53,7 @@ export interface IssueListItem {
   ownerName: string | null;
   projectId: string | null;
   projectCode: string | null;
+  projectName?: string | null;
   originRiskId: string | null;
   originRiskTitle: string | null;
   createdAt: Date;
@@ -91,7 +105,7 @@ export async function listIssues(ctx: TenantContext, filters: IssueListFilters =
 // ── UX5 (L4) — the Issues and Gap report tabs page, search and filter on the server ──
 
 export const IssuePageParams = RaidPageBase.extend({
-  status: z.enum(ISSUE_STATUSES).optional(),
+  status: z.enum(ISSUE_STATUS_FILTERS).optional(),
   /** Only issues with no owned, mitigated risk behind them (the Gap report). */
   gap: z.boolean().default(false),
 });
@@ -119,7 +133,8 @@ export async function listIssuesPage(ctx: TenantContext, query: RaidPageQuery & 
     if (p.gap) and.push(GAP_ISSUE_WHERE);
     if (p.projectId) and.push({ projectId: idOrNull(p.projectId) });
     if (p.ownerId) and.push({ ownerId: idOrNull(p.ownerId) });
-    if (p.status) and.push({ status: p.status });
+    if (p.status === NOT_CLOSED) and.push({ status: { notIn: ["Resolved", "Closed"] } });
+    else if (p.status) and.push({ status: p.status });
     if (p.severity) and.push({ severity: p.severity });
     if (p.q) {
       const c = containsText(p.q);
@@ -127,6 +142,8 @@ export async function listIssuesPage(ctx: TenantContext, query: RaidPageQuery & 
       and.push({
         OR: [
           { title: c },
+          // The ID column shows the first characters of the issue id ("Search issues by ID").
+          { id: { startsWith: p.q.toLowerCase().replace(/^#/, "") } },
           { project: { is: { code: c } } },
           { project: { is: { name: c } } },
           { originRisk: { is: { title: c } } },
@@ -141,7 +158,7 @@ export async function listIssuesPage(ctx: TenantContext, query: RaidPageQuery & 
     const issues = await tx.issue.findMany({
       where,
       include: {
-        project: { select: { code: true } },
+        project: { select: { code: true, name: true } },
         originRisk: { select: { id: true, title: true, ownerId: true, mitigation: true } },
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -159,12 +176,35 @@ export async function listIssuesPage(ctx: TenantContext, query: RaidPageQuery & 
       ownerName: i.ownerId ? (ownerNames.get(i.ownerId) ?? null) : null,
       projectId: i.projectId,
       projectCode: i.project?.code ?? null,
+      projectName: i.project?.name ?? null,
       originRiskId: i.originRisk?.id ?? null,
       originRiskTitle: i.originRisk?.title ?? null,
       createdAt: i.createdAt,
       gapReason: gapReasonOf(i.originRisk),
     }));
     return { rows, info };
+  });
+}
+
+/**
+ * Raise an issue directly (not materialised from a risk). The project and the owner are looked
+ * up under the caller's RLS context, so another tenant's project or person is refused, not
+ * stored. Audited. The route checks who may raise it (project contributor or issue:create).
+ */
+export async function createIssue(ctx: TenantContext, input: CreateIssueInput) {
+  const data = CreateIssueInput.parse(input);
+  return withTenant(ctx, async (tx) => {
+    if (data.projectId && !(await tx.project.findUnique({ where: { id: data.projectId }, select: { id: true } }))) {
+      throw new IssueError("Project not found.", "NOT_FOUND");
+    }
+    if (data.ownerId && !(await tx.user.findUnique({ where: { id: data.ownerId }, select: { id: true } }))) {
+      throw new IssueError("Owner not found.", "NOT_FOUND");
+    }
+    const issue = await tx.issue.create({
+      data: { tenantId: ctx.tenantId, projectId: data.projectId ?? null, title: data.title, severity: data.severity, ownerId: data.ownerId ?? null, status: "Open" },
+    });
+    await audit(tx, ctx, { action: "create", entityType: "issue", entityId: issue.id, after: { title: issue.title, severity: issue.severity, status: issue.status } });
+    return issue;
   });
 }
 

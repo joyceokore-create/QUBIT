@@ -97,7 +97,9 @@ export function ProjectsClient({
         active={view}
         tabs={[
           { key: "list", label: "List", href: "/projects" },
-          { key: "gates", label: "Gate view", href: "/projects?view=gates" },
+          { key: "gates", label: "Gate View", href: "/projects?view=gates" },
+          // Design: List · Gate View · Board. The Board is My Board across these projects (D-F4).
+          { key: "board", label: "Board", href: "/board" },
         ]}
       />
 

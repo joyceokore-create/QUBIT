@@ -5,7 +5,7 @@ export function SeverityPill({ severity, className }: { severity: string; classN
   return (
     <span
       className={cn(
-        "inline-block rounded-[4px] px-2 py-0.5 text-[10px] font-semibold tracking-[0.4px] uppercase",
+        "inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold leading-[1.5]",
         SEVERITY_CLASSES[severity as SeverityLevel] ?? "bg-background text-ink-3",
         className,
       )}
