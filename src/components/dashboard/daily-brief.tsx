@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
-import { Drawer, DrawerHeader } from "@/components/ui/drawer";
+import { toast } from "sonner";
+import { Drawer, DrawerFooter, DrawerHeader } from "@/components/ui/drawer";
+import { PanelList, PanelRow } from "@/components/ui/panel";
 import { BRIEF_CARD_LINES, BRIEF_EMPTY, BRIEF_GROUP_LABEL, BRIEF_GROUPS, type BriefGroup, type BriefItem } from "@/lib/daily-brief";
 import { COMPACT, COMPACT_PRIMARY } from "@/lib/surface";
 import { cn } from "@/lib/utils";
@@ -102,6 +104,11 @@ function BriefDrawer({
   focusId: string | null;
 }) {
   const bodyRef = useRef<HTMLDivElement>(null);
+  // D4a: an item's action opens it inside this drawer, with Back to the Brief.
+  const [view, setView] = useState<BriefItem | null>(null);
+  useEffect(() => {
+    if (!open) setView(null);
+  }, [open]);
 
   // A clicked line opens the drawer on that item.
   useEffect(() => {
@@ -114,6 +121,9 @@ function BriefDrawer({
 
   return (
     <Drawer open={open} onClose={() => onOpenChange(false)}>
+      {view?.inline ? (
+        <BriefItemView item={view} onBack={() => setView(null)} onLeave={() => onOpenChange(false)} />
+      ) : (
       <div className="flex h-full flex-col">
         <DrawerHeader brief icon={<Sparkles className="size-4" aria-hidden />} title="Daily Brief" subtitle={`${items.length} ${items.length === 1 ? "item" : "items"} · generated ${generatedAt} today`} />
 
@@ -143,10 +153,17 @@ function BriefDrawer({
                         <b className="block text-[13px] font-semibold text-[var(--ds-ink)]">{item.emphasis}</b>
                         <span className="text-[12px] text-[var(--ds-ink3)]">{item.detail}</span>
                       </div>
-                      <Link href={item.action.href} onClick={() => onOpenChange(false)} className={group === "now" ? COMPACT_PRIMARY : COMPACT}>
-                        {item.action.label}
-                        <ArrowRight className="size-3" aria-hidden />
-                      </Link>
+                      {item.inline ? (
+                        <button type="button" onClick={() => setView(item)} className={group === "now" ? COMPACT_PRIMARY : COMPACT}>
+                          {item.action.label}
+                          <ArrowRight className="size-3" aria-hidden />
+                        </button>
+                      ) : (
+                        <Link href={item.action.href} onClick={() => onOpenChange(false)} className={group === "now" ? COMPACT_PRIMARY : COMPACT}>
+                          {item.action.label}
+                          <ArrowRight className="size-3" aria-hidden />
+                        </Link>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -155,8 +172,72 @@ function BriefDrawer({
           })}
         </div>
 
-        <p className="border-t border-[var(--ds-line)] px-5 py-3 text-[11.5px] text-[var(--ds-ink3)]">Generated {SOURCE}</p>
+        <p className="border-t border-[var(--ds-line)] px-5 py-3 text-[11.5px] text-[var(--ds-ink3)]">Actions open the item here, with Back to return. Generated {SOURCE}</p>
       </div>
+      )}
     </Drawer>
+  );
+}
+
+/** D4a — one Brief line opened inside the drawer: the projects it is about, each with its
+ * link, and "Send Reminder" for stale updates (the same check-in nudge the Head's list uses). */
+function BriefItemView({ item, onBack, onLeave }: { item: BriefItem; onBack: () => void; onLeave: () => void }) {
+  const inline = item.inline!;
+  const [sent, setSent] = useState<Record<string, "busy" | "done">>({});
+
+  async function nudge(projectId: string) {
+    setSent((s) => ({ ...s, [projectId]: "busy" }));
+    const res = await fetch(`/api/projects/${projectId}/checkin/nudge`, { method: "POST" }).catch(() => null);
+    if (!res?.ok) {
+      setSent((s) => {
+        const next = { ...s };
+        delete next[projectId];
+        return next;
+      });
+      const body = res ? await res.json().catch(() => null) : null;
+      toast.error(body?.error?.message ?? "Couldn't send the reminder. Try again.");
+      return;
+    }
+    const body = (await res.json().catch(() => null)) as { data?: { targeted?: number } } | null;
+    setSent((s) => ({ ...s, [projectId]: "done" }));
+    toast.success(body?.data?.targeted === 0 ? "This week's update is already in." : "Reminder sent to the PM.");
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <DrawerHeader onBack={onBack} backLabel="Back to Brief" step="Daily Brief" title={item.emphasis} subtitle={item.detail} />
+      <div className="flex flex-1 flex-col gap-3.5 overflow-y-auto px-5 pb-4 pt-4">
+        <PanelList label="Projects">
+          {inline.projects.map((p) => (
+            <PanelRow
+              key={p.id}
+              title={
+                <Link href={p.href} onClick={onLeave} className="rounded-[3px] hover:underline">
+                  {p.name}
+                </Link>
+              }
+              sub={p.note}
+            >
+              <span className="flex gap-2">
+                <Link href={p.href} onClick={onLeave} className={COMPACT}>
+                  Open
+                </Link>
+                {inline.nudge && (
+                  <button type="button" disabled={!!sent[p.id]} onClick={() => void nudge(p.id)} className={COMPACT}>
+                    {sent[p.id] === "done" ? "Reminded" : sent[p.id] === "busy" ? "Sending…" : "Send Reminder"}
+                  </button>
+                )}
+              </span>
+            </PanelRow>
+          ))}
+        </PanelList>
+      </div>
+      <DrawerFooter>
+        <Link href={item.action.href} onClick={onLeave} className={COMPACT}>
+          {item.action.label}
+          <ArrowRight className="size-3" aria-hidden />
+        </Link>
+      </DrawerFooter>
+    </div>
   );
 }

@@ -31,6 +31,10 @@ export interface BriefItem {
   emphasis: string;
   detail: string;
   action: { label: string; href: string };
+  /** UX fidelity D4a: the projects this line is about. When present, the Brief drawer opens
+   * them inside itself (with Back) instead of leaving the page. `nudge` adds a "Send
+   * Reminder" for each (stale updates). */
+  inline?: { projects: { id: string; name: string; href: string; note?: string }[]; nudge?: boolean };
 }
 
 export interface Brief {
@@ -187,9 +191,10 @@ function headItems({ projects, extras, now, timeZone: tz }: BriefInput): BriefIt
       id: "head-red",
       group: "now",
       weight: 40 + red.length,
-      emphasis: `${count(red.length, "project calculates", "projects calculate")} Red.`,
+      emphasis: `${count(red.length, "project calculates", "projects calculate")} off track.`,
       detail: `${nameList(red.map((p) => p.name))}. Decide what to escalate this week.`,
-      action: red.length === 1 ? { label: "Open project", href: projectHref(red[0].id) } : { label: "See projects", href: "/projects" },
+      action: red.length === 1 ? { label: "Open Project", href: projectHref(red[0].id) } : { label: "See Projects", href: "/projects" },
+      inline: { projects: red.map((p) => ({ id: p.id, name: p.name, href: projectHref(p.id) })) },
     });
   }
 
@@ -205,7 +210,8 @@ function headItems({ projects, extras, now, timeZone: tz }: BriefInput): BriefIt
         escalate.length === 1
           ? `${escalate[0].name}: ${escalate[0].redRisks > 0 ? "it has an open red risk" : "it is past its target date and not on track"}.`
           : `${nameList(escalate.map((p) => p.name))}: each has a red risk, or is past target and not on track.`,
-      action: escalate.length === 1 ? { label: "Open project", href: projectHref(escalate[0].id, "Register") } : { label: "See projects", href: "/projects" },
+      action: escalate.length === 1 ? { label: "Open Project", href: projectHref(escalate[0].id, "Register") } : { label: "See Projects", href: "/projects" },
+      inline: { projects: escalate.map((p) => ({ id: p.id, name: p.name, href: projectHref(p.id, "Register"), note: p.redRisks > 0 ? "Open red risk" : "Past its target date" })) },
     });
   }
 
@@ -217,7 +223,8 @@ function headItems({ projects, extras, now, timeZone: tz }: BriefInput): BriefIt
       weight: 30 + overdue.length,
       emphasis: `${count(overdue.length, "project has", "projects have")} an overdue milestone.`,
       detail: `${nameList(overdue.map((p) => p.name))}.`,
-      action: overdue.length === 1 ? { label: "Open project", href: projectHref(overdue[0].id, "Delivery") } : { label: "See projects", href: "/projects" },
+      action: overdue.length === 1 ? { label: "Open Project", href: projectHref(overdue[0].id, "Delivery") } : { label: "See Projects", href: "/projects" },
+      inline: { projects: overdue.map((p) => ({ id: p.id, name: p.name, href: projectHref(p.id, "Delivery"), note: p.nextMilestone ? `Next: ${p.nextMilestone.name}` : undefined })) },
     });
   }
 
@@ -229,7 +236,8 @@ function headItems({ projects, extras, now, timeZone: tz }: BriefInput): BriefIt
       weight: 20 + disputes.length,
       emphasis: `${count(disputes.length, "project is", "projects are")} reported greener than ${plural(disputes.length, "it calculates", "they calculate")}.`,
       detail: `${nameList(disputes.map((p) => p.name))}. Check whether ${plural(disputes.length, "it is", "they are")} under-reporting.`,
-      action: { label: "Open the week", href: "/reports" },
+      action: { label: "Open Disputes", href: "/dashboard?tab=disputes" },
+      inline: { projects: disputes.map((p) => ({ id: p.id, name: p.name, href: projectHref(p.id, "This week"), note: `Reported ${healthWordOf(p.reported)}, calculates ${healthWordOf(p.calculated)}` })) },
     });
   }
 
@@ -241,7 +249,8 @@ function headItems({ projects, extras, now, timeZone: tz }: BriefInput): BriefIt
       weight: 10 + stale.length,
       emphasis: `${count(stale.length, "status update is", "status updates are")} older than 14 days.`,
       detail: `Chase ${nameList(stale.map((p) => p.name), 2)}.`,
-      action: { label: "Open the week", href: "/reports" },
+      action: { label: "Open Stale", href: "/dashboard?tab=stale" },
+      inline: { projects: stale.map((p) => ({ id: p.id, name: p.name, href: projectHref(p.id, "This week"), note: `No check-in for ${p.freshnessDays} days` })), nudge: true },
     });
   }
 
@@ -254,7 +263,7 @@ function headItems({ projects, extras, now, timeZone: tz }: BriefInput): BriefIt
       weight: 5 + ideas.count,
       emphasis: `${count(ideas.count, "idea is", "ideas are")} waiting for triage.`,
       detail: age > 0 ? `The oldest was submitted ${count(age, "day", "days")} ago.` : "Submitted today.",
-      action: { label: "Triage", href: "/ideas" },
+      action: { label: "Triage", href: "/approvals?tab=ideas" },
     });
   }
 
@@ -267,7 +276,7 @@ function headItems({ projects, extras, now, timeZone: tz }: BriefInput): BriefIt
       weight: 4 + staffing.count,
       emphasis: `${count(staffing.count, "staffing request is", "staffing requests are")} open.`,
       detail: staffing.count === 1 ? `Raised ${ageWords(age).replace(" old", " ago")}.` : `The oldest is ${ageWords(age)}.`,
-      action: { label: "Open Staffing", href: "/staffing" },
+      action: { label: "Open Staffing", href: "/approvals?tab=staffing" },
     });
   }
 
@@ -284,6 +293,11 @@ function headItems({ projects, extras, now, timeZone: tz }: BriefInput): BriefIt
     });
   }
   return items;
+}
+
+const HEALTH_WORD: Record<string, string> = { G: "on track", A: "at risk", R: "off track" };
+function healthWordOf(r: string): string {
+  return HEALTH_WORD[r] ?? "not rated";
 }
 
 const TESTING_GATES = new Set(["sit", "uat"]);

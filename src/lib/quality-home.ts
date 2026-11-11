@@ -41,9 +41,11 @@ export interface QhData {
   overdue: QhTest[];
 }
 
-export const QH_TABS = ["gates", "critical", "unassigned", "overdue"] as const;
+// Design spec v2 (Quality Home): three tabs. Unassigned and overdue test tasks share the
+// third tab (their chips say which), so neither drops off the home page.
+export const QH_TABS = ["gates", "critical", "tasks"] as const;
 export type QhTab = (typeof QH_TABS)[number];
-export const QH_TAB_LABEL: Record<QhTab, string> = { gates: "Testing gates", critical: "Critical issues", unassigned: "Unassigned test tasks", overdue: "Overdue test tasks" };
+export const QH_TAB_LABEL: Record<QhTab, string> = { gates: "Testing Gates", critical: "Critical Issues", tasks: "Test Tasks" };
 
 export type Tone = "bad" | "warn" | "info" | "ok" | "muted";
 export interface QhItem {
@@ -103,7 +105,7 @@ export function buildQueue(d: QhData, now: Date): QhItem[] {
   for (const t of d.unassigned) {
     items.push({
       id: `un-${t.id}`,
-      tab: "unassigned",
+      tab: "tasks",
       title: t.title,
       sub: t.projectName,
       chip: { tone: "warn", label: "Unassigned" },
@@ -116,7 +118,7 @@ export function buildQueue(d: QhData, now: Date): QhItem[] {
     const late = daysSince(t.dueDate!, now, tz);
     items.push({
       id: `od-${t.id}`,
-      tab: "overdue",
+      tab: "tasks",
       title: t.title,
       sub: `${t.projectName}${t.assignee ? ` · ${t.assignee}` : " · unassigned"}`,
       chip: { tone: "bad", label: `${late} ${late === 1 ? "day" : "days"} late` },

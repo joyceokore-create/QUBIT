@@ -3,31 +3,24 @@
 import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { KpiCard } from "@/components/ui/kpi-card";
+import { KpiCard, KpiRow } from "@/components/ui/kpi-card";
+import { Meter, RagBar } from "@/components/ui/kpi-charts";
+import { Chip } from "@/components/ui/status-pill";
+import { TextLink } from "@/components/ui/text-link";
+import { Columns, Foot, ListRow, Panel, PanelList, PanelRow, SuggestedPill } from "@/components/ui/panel";
+import { PageHeader } from "@/components/list/page-header";
 import { useListUrl } from "@/components/list/use-list-url";
 import type { CockpitProject } from "@/server/dashboard-cockpit";
-import { buildDecisions, DECISION_TAB_LABEL, DECISION_TABS, headKpis, pmLoad, type DecisionItem, type DecisionTab, type Tone } from "@/lib/head-health";
-import { CARD, FOCUS, TAB, TAB_ACTIVE_ON_CARD, TAB_COUNT, TABS_ROW } from "@/lib/surface";
+import { buildDecisions, DECISION_TAB_LABEL, DECISION_TABS, headKpis, pmLoad, type DecisionItem, type DecisionTab } from "@/lib/head-health";
+import { COMPACT, FOCUS, TAB, TAB_ACTIVE_ON_CARD, TAB_COUNT, TABS_ROW } from "@/lib/surface";
 import { cn } from "@/lib/utils";
 
 /**
- * UX8 — Head › Delivery health (UX plan D3/D4/D5, UX8). Brief → four KPI cards → one
- * "Needs your decision" list (Gates · Disputes · Stale · Escalations) → PM load and
- * "Also waiting". Gate rows are labelled "Suggested from project signals": gates have no
- * approval workflow yet (WS1/UX13). The stage-gate tracker lives in Projects › Gate view.
+ * UX8 + UX fidelity Tier 1 — Head › Delivery Health, built to design spec v2 (docs/08). Brief →
+ * four KPI cards → the "Needs Your Decision" panel (Gates · Disputes · Stale · Escalations) →
+ * PM Load and Also Waiting. Gate rows are "Suggested from project signals": gates have no
+ * approval workflow yet (WS1, Tier 4). The stage-gate tracker lives in Projects › Gate View.
  */
-
-const TONE: Record<Tone, string> = { bad: "--bad-ink", warn: "--warn-ink", info: "--stage-exploring", muted: "--ink3" };
-const COMPACT = `inline-flex h-[var(--control-h-compact)] items-center justify-center whitespace-nowrap rounded-[8px] border border-[var(--input)] bg-[var(--qcard)] px-2.5 text-[12px] font-semibold text-[var(--ink2)] hover:text-[var(--qink)] disabled:opacity-50 ${FOCUS}`;
-
-function Chip({ tone, label }: { tone: Tone; label: string }) {
-  const tok = TONE[tone];
-  return (
-    <span className="inline-flex h-[22px] items-center whitespace-nowrap rounded-full px-2 text-[12px] font-semibold" style={{ color: `var(${tok})`, background: `color-mix(in oklab, var(${tok}) 12%, transparent)` }}>
-      {label}
-    </span>
-  );
-}
 
 export interface AlsoWaiting {
   ideas: number | null;
@@ -61,36 +54,40 @@ export function HeadHealthHome({
   const fallback = DECISION_TABS.find((t) => counts[t] > 0) ?? "gates";
   const tab: DecisionTab = DECISION_TABS.includes(raw) ? raw : fallback;
   const shown = items.filter((i) => i.tab === tab);
+  const dateLine = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone }).format(now).replace(",", "");
 
   const healthLine = [k.byHealth.ok && `${k.byHealth.ok} on track`, k.byHealth.warn && `${k.byHealth.warn} at risk`, k.byHealth.bad && `${k.byHealth.bad} off track`, k.byHealth.none && `${k.byHealth.none} not rated`]
     .filter(Boolean)
     .join(" · ");
 
   return (
-    <main className="mx-auto flex w-full max-w-[1280px] flex-col gap-5 p-[22px_24px_72px]">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <div className="text-[12px] font-semibold text-[var(--ink3)]">{new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone }).format(now).replace(",", "")}</div>
-          <h1 className="font-heading text-[24px] font-bold tracking-[-.5px] text-[var(--qink)]">Delivery health</h1>
-          <p className="mt-0.5 text-[13px] text-[var(--ink3)]">What needs your decision across all projects this week.</p>
-        </div>
-        <Link href="/projects?view=gates" className={`inline-flex h-[var(--control-h)] items-center rounded-[var(--control-r)] border border-[var(--input)] bg-[var(--qcard)] px-3.5 text-[13px] font-semibold text-[var(--ink2)] hover:text-[var(--qink)] ${FOCUS}`}>
-          Gate view
-        </Link>
-      </header>
+    <main className="mx-auto flex w-full max-w-[1280px] flex-col gap-4 p-[22px_22px_72px]">
+      <PageHeader eyebrow={dateLine} title="Delivery Health" description="What needs your decision across all projects this week." />
 
       {brief}
 
-      <section aria-label="Your numbers" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Approved portfolio" value={k.approved} unit="projects" context={healthLine || "Nothing approved yet"} />
-        <KpiCard label="Gates to watch" value={k.gates} context="Go-live gates in play · suggested from project signals" />
-        <KpiCard label="Stale updates" value={k.stale} context="No check-in for 14+ days" />
-        <KpiCard label="Status disputes" value={k.disputes} context="Reported greener than calculated" />
-      </section>
+      <KpiRow count={4} label="Your numbers">
+        <KpiCard
+          label="Approved Portfolio"
+          value={k.approved}
+          unit="projects"
+          context={healthLine || "Nothing approved yet"}
+          chart={k.approved ? <RagBar ok={k.byHealth.ok} warn={k.byHealth.warn} bad={k.byHealth.bad} /> : undefined}
+        />
+        <KpiCard label="Gates Waiting on You" value={k.gates} context="Go-live gates in play · suggested from project signals" />
+        <KpiCard
+          label="Stale Updates"
+          value={k.stale}
+          context="No check-in for 14+ days"
+          contextTone={k.stale ? "bad" : "neutral"}
+          chart={k.approved ? <Meter value={k.stale} max={k.approved} tone="warn" /> : undefined}
+        />
+        <KpiCard label="Status Disputes" value={k.disputes} context="Reported greener than calculated" />
+      </KpiRow>
 
-      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <section aria-label="Needs your decision" className={cn(CARD, "min-w-0 overflow-hidden")} style={{ background: "var(--cardbg)" }}>
-          <div className="flex flex-wrap items-end justify-between gap-2 border-b border-[var(--border)] px-4 pt-3">
+      <Columns
+        main={
+          <Panel title="Needs Your Decision" labelledBy="head-decisions" action={<TextLink href="/approvals">Open Approvals</TextLink>}>
             <nav aria-label="Decision views">
               <ul className={TABS_ROW}>
                 {DECISION_TABS.map((t) => (
@@ -103,65 +100,57 @@ export function HeadHealthHome({
                 ))}
               </ul>
             </nav>
-            <Link href="/approvals" className={`mb-2 text-[12.5px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)] ${FOCUS}`}>
-              Open Approvals →
-            </Link>
-          </div>
-          {tab === "gates" && (
-            <p className="border-b border-[var(--border)] bg-[var(--surface-2)] px-4 py-2 text-[12.5px] text-[var(--ink2)]">
-              <b className="font-semibold text-[var(--qink)]">Suggested from project signals.</b> Gates have no approval step yet; these are projects whose go-live gate is in play.
-            </p>
-          )}
-          {shown.length === 0 ? (
-            <div className="flex flex-col items-center gap-1.5 px-6 py-12 text-center">
-              <p className="text-[14px] font-semibold text-[var(--qink)]">{EMPTY[tab]}</p>
-              <p className="max-w-[52ch] text-[12.5px] text-[var(--ink3)]">A quiet week. Items appear here as projects drift, go quiet or need escalating.</p>
-            </div>
-          ) : (
-            <ul>
-              {shown.map((it) => (
-                <DecisionRow key={it.id} it={it} />
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <aside className="flex flex-col gap-4" aria-label="Side panel">
-          <section className={cn(CARD, "p-4")} style={{ background: "var(--cardbg)" }}>
-            <div className="mb-1 flex items-center justify-between">
-              <h2 className="text-[13.5px] font-semibold text-[var(--qink)]">PM load</h2>
-              <Link href="/people" className={`text-[12.5px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)] ${FOCUS}`}>
-                People →
-              </Link>
-            </div>
-            {load.length === 0 ? (
-              <p className="text-[12.5px] text-[var(--ink3)]">No project has a PM yet.</p>
+            {tab === "gates" && shown.length > 0 && <SuggestedPill />}
+            {shown.length === 0 ? (
+              <div className="flex flex-col items-center gap-1.5 px-6 py-10 text-center">
+                <p className="text-[14px] font-semibold text-[var(--ds-ink)]">{EMPTY[tab]}</p>
+                <p className="max-w-[52ch] text-[12.5px] text-[var(--ds-ink3)]">A quiet week. Items appear here as projects drift, go quiet or need escalating.</p>
+              </div>
             ) : (
-              <ul>
-                {load.slice(0, 6).map((l) => (
-                  <li key={l.id} className="flex items-center justify-between gap-2 border-t border-[var(--border)] py-2 first:border-0">
-                    <span className="min-w-0">
-                      <b className="block truncate text-[13px] font-semibold text-[var(--qink)]">{l.name}</b>
-                      <span className="block text-[12px] text-[var(--ink3)]">
-                        {l.projects} {l.projects === 1 ? "project" : "projects"}
-                      </span>
-                    </span>
-                    {l.red ? <Chip tone="bad" label={`${l.red} off track`} /> : l.amber ? <Chip tone="warn" label={`${l.amber} at risk`} /> : <Chip tone="muted" label="All on track" />}
-                  </li>
+              <ul className="m-0 flex list-none flex-col p-0">
+                {shown.map((it) => (
+                  <DecisionRow key={it.id} it={it} />
                 ))}
               </ul>
             )}
-          </section>
-          <section className={cn(CARD, "p-4")} style={{ background: "var(--cardbg)" }}>
-            <h2 className="mb-1 text-[13.5px] font-semibold text-[var(--qink)]">Also waiting</h2>
-            <ul>
-              {also.ideas !== null && <AlsoRow href="/approvals?tab=ideas" label={`${also.ideas} ${also.ideas === 1 ? "idea" : "ideas"} to triage`} sub="Approvals › Ideas" />}
-              {also.staffing !== null && <AlsoRow href="/approvals?tab=staffing" label={`${also.staffing} staffing ${also.staffing === 1 ? "request" : "requests"}`} sub="Approvals › Staffing" />}
-              <AlsoRow href="/people" label={`${also.clashes} ${also.clashes === 1 ? "person" : "people"} booked over 100%`} sub="People › Workload" />
-            </ul>
-          </section>
-        </aside>
-      </div>
+            <Foot>{tab === "gates" ? "Gates are suggested from project signals until gate approvals exist. Disputes, Stale and Escalations are real." : "Each action opens where the work is done."}</Foot>
+          </Panel>
+        }
+        rail={
+          <>
+            <Panel title="PM Load" action={<TextLink href="/people">People</TextLink>}>
+              {load.length === 0 ? (
+                <p className="text-[12.5px] text-[var(--ds-ink3)]">No project has a PM yet.</p>
+              ) : (
+                <PanelList>
+                  {load.slice(0, 6).map((l) => (
+                    <PanelRow
+                      key={l.id}
+                      title={l.name}
+                      sub={`${l.projects} ${l.projects === 1 ? "project" : "projects"}${l.red || l.amber ? "" : " · all on track"}`}
+                      chip={l.red ? <Chip tone="bad">{l.red} off track</Chip> : l.amber ? <Chip tone="warn">{l.amber} at risk</Chip> : <Chip tone="ok">On track</Chip>}
+                    />
+                  ))}
+                </PanelList>
+              )}
+            </Panel>
+            <Panel title="Also Waiting">
+              <PanelList>
+                {also.ideas !== null && <AlsoRow href="/approvals?tab=ideas" label={`${also.ideas} ${also.ideas === 1 ? "idea" : "ideas"} to triage`} sub="Approvals › Ideas" chip={<Chip tone="info">Ideas</Chip>} />}
+                {also.staffing !== null && (
+                  <AlsoRow href="/approvals?tab=staffing" label={`${also.staffing} staffing ${also.staffing === 1 ? "request" : "requests"}`} sub="Approvals › Staffing" chip={<Chip tone="info">People</Chip>} />
+                )}
+                <AlsoRow
+                  href="/people"
+                  label={`${also.clashes} resource ${also.clashes === 1 ? "clash" : "clashes"} this week`}
+                  sub="People › Workload"
+                  chip={also.clashes ? <Chip tone="warn">Clash</Chip> : <Chip tone="ok">All clear</Chip>}
+                />
+              </PanelList>
+            </Panel>
+          </>
+        }
+      />
     </main>
   );
 }
@@ -173,14 +162,17 @@ const EMPTY: Record<DecisionTab, string> = {
   escalations: "Nothing to escalate",
 };
 
-function AlsoRow({ href, label, sub }: { href: string; label: string; sub: string }) {
+function AlsoRow({ href, label, sub, chip }: { href: string; label: string; sub: string; chip: ReactNode }) {
   return (
-    <li className="border-t border-[var(--border)] py-2 first:border-0">
-      <Link href={href} className={`block rounded-sm text-[13px] font-semibold text-[var(--qink)] hover:underline ${FOCUS}`}>
-        {label}
-      </Link>
-      <span className="block text-[12px] text-[var(--ink3)]">{sub}</span>
-    </li>
+    <PanelRow
+      title={
+        <Link href={href} className={cn("rounded-[3px] hover:underline", FOCUS)}>
+          {label}
+        </Link>
+      }
+      sub={sub}
+      chip={chip}
+    />
   );
 }
 
@@ -203,27 +195,15 @@ function DecisionRow({ it }: { it: DecisionItem }) {
   }
 
   const a = it.action;
-  return (
-    <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border)] px-4 py-2.5 last:border-0 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-      <div className="min-w-0">
-        <span className="block truncate text-[13.5px] font-semibold text-[var(--qink)]">{it.title}</span>
-        <span className="block truncate text-[12px] text-[var(--ink3)]">{it.sub}</span>
-        <span className="mt-1 sm:hidden">
-          <Chip tone={it.chip.tone} label={it.chip.label} />
-        </span>
-      </div>
-      <span className="max-sm:hidden">
-        <Chip tone={it.chip.tone} label={it.chip.label} />
-      </span>
-      {a.kind === "link" ? (
-        <Link href={a.href} className={COMPACT}>
-          {a.label}
-        </Link>
-      ) : (
-        <button type="button" disabled={busy || done} onClick={() => nudge(a.projectId)} className={COMPACT}>
-          {done ? "Reminded" : busy ? "Sending…" : a.label}
-        </button>
-      )}
-    </li>
-  );
+  const action =
+    a.kind === "link" ? (
+      <Link href={a.href} className={COMPACT}>
+        {a.label}
+      </Link>
+    ) : (
+      <button type="button" disabled={busy || done} onClick={() => nudge(a.projectId)} className={COMPACT}>
+        {done ? "Reminded" : busy ? "Sending…" : a.label}
+      </button>
+    );
+  return <ListRow title={it.title} sub={it.sub} chip={<Chip tone={it.chip.tone}>{it.chip.label}</Chip>} meta={it.when} action={action} />;
 }

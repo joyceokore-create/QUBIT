@@ -207,11 +207,15 @@ describe("Head of Projects", () => {
     );
     expect(brief.items.map((i) => i.emphasis)).toEqual([
       "Project p1's SIT gate is blocked.",
-      "1 project calculates Red.",
+      "1 project calculates off track.",
       "1 project is reported greener than it calculates.",
       "1 status update is older than 14 days.",
       "3 ideas are waiting for triage.",
     ]);
+    // D4a: lines about specific projects open them inside the drawer; stale ones can be chased there.
+    const stale = brief.items.find((i) => i.id === "head-stale");
+    expect(stale?.inline).toMatchObject({ nudge: true, projects: [{ id: "p4", note: "No check-in for 20 days" }] });
+    expect(brief.items.find((i) => i.id === "head-disputes")?.inline?.projects[0].note).toBe("Reported on track, calculates at risk");
     expect(brief.items[4].detail).toBe("The oldest was submitted 6 days ago.");
   });
 
