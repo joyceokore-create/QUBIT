@@ -35,6 +35,9 @@ export const NUDGE_SIGNALS = [
 ] as const;
 export type NudgeSignal = (typeof NUDGE_SIGNALS)[number];
 
+/** UX12: member weekly reports are retired; their two nudges are no longer emitted. */
+export const RETIRED_MEMBER_REPORTS = true;
+
 export class NudgeError extends Error {
   constructor(
     message: string,
@@ -225,10 +228,17 @@ export async function collectCandidates(tx: Prisma.TransactionClient, now: Date)
   // standard `entityId:signal:isoWeek` dedupe — one ping per week, escalation-free.
   const isoWeek = isoWeekId(now);
 
-  // A submitted member report a lead/PM has not acknowledged yet. Same lookup shape as
-  // collectMemberReportChase, but for the CURRENT week and routed to the leads of the
-  // still-pending sections instead of the member — the report is theirs to sign off.
-  const unackedReports = await tx.memberReport.findMany({
+  // UX12: member weekly reports are RETIRED (PMs report from tasks, blockers and status
+  // uploads). The "acknowledge this member report" nudge pointed PMs at an action that no
+  // longer exists, so it is no longer emitted. The signal name stays in NUDGE_SIGNALS so
+  // nudges already stored still render. (The read below is skipped entirely.)
+  const unackedReports: {
+    id: string;
+    userId: string;
+    draft: unknown;
+    user: { name: string };
+    acks: { projectId: string }[];
+  }[] = RETIRED_MEMBER_REPORTS ? [] : await tx.memberReport.findMany({
     where: { isoWeek, status: "Submitted" },
     select: {
       id: true,
@@ -320,6 +330,9 @@ export async function collectMemberReportChase(
   tx: Prisma.TransactionClient,
   now: Date,
 ): Promise<NudgeCandidate[]> {
+  // UX12: retired with member weekly reports — a Member can no longer send one, so a
+  // "your report is still a draft" chase has nothing to act on. Nothing is emitted.
+  if (RETIRED_MEMBER_REPORTS) return [];
   const prevWeek = isoWeekId(new Date(now.getTime() - 7 * day));
   const stale = await tx.memberReport.findMany({
     where: { isoWeek: prevWeek, status: "Draft" },

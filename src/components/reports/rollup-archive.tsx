@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { RollupArchiveList } from "@/components/reports/rollup-archive-list";
 import { ExportButton } from "@/components/export-button";
-import { CARD_GLASS as CARD, CARD_BG, FOCUS, ragChipStyle } from "@/lib/surface";
+import { CARD, CARD_BG, FOCUS } from "@/lib/surface";
 import type { RollupArchiveRow } from "@/server/portfolio-reports";
 
 // Milestone B — the archive: approved weeks (and the Head's standing Draft), the shared
@@ -51,7 +52,9 @@ export function RollupArchive({
   showExports,
   isHead,
   hrefForWeek,
+  timeZone,
 }: {
+  timeZone: string;
   rows: RollupArchiveRow[];
   shares: { token: string; title: string; createdAt: Date }[];
   showExports: boolean;
@@ -60,41 +63,8 @@ export function RollupArchive({
 }) {
   return (
     <div className="flex flex-col gap-5">
-      <section className={`${CARD} overflow-hidden`} style={CARD_BG} aria-labelledby="archive">
-        <h2 id="archive" className="border-b border-[var(--hair2)] p-[12px_16px] text-[13.5px] font-semibold text-[var(--qink)]">
-          Past roll-ups
-        </h2>
-        {rows.length === 0 ? (
-          <p className="p-[12px_16px] text-[12px] text-[var(--ink5)]">
-            {isHead ? "No approved roll-ups yet — approve this week's on This week." : "No approved roll-ups yet."}
-          </p>
-        ) : (
-          rows.map((r) => (
-            <div key={r.isoWeek} className="flex flex-wrap items-center gap-2.5 border-b border-[var(--hair2)] p-[10px_16px] last:border-0">
-              <Link href={hrefForWeek(r.isoWeek)} className={`w-[64px] flex-none rounded-[4px] font-mono text-[10.5px] font-semibold text-[var(--ink4)] hover:text-brand ${FOCUS}`}>
-                {r.isoWeek.replace("-W", " W")}
-              </Link>
-              <span className="flex-none rounded-full px-2 py-0.5 text-[10.5px] font-bold" style={ragChipStyle(r.status === "Approved" ? "Green" : "Amber")}>
-                {r.status}
-              </span>
-              <span className="flex-none font-mono text-[10px] tabular-nums text-[var(--ink4)]">{r.projects} projects</span>
-              <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink2)]">{r.narrative ?? <span className="text-[var(--ink5)]">no narrative yet</span>}</span>
-              {r.approvedByName && (
-                <span className="flex-none text-[10.5px] text-[var(--ink4)]">
-                  signed {r.approvedByName}
-                  {r.approvedAt && ` · ${fmt(r.approvedAt)}`}
-                </span>
-              )}
-              <a href={pdfHref(r.isoWeek)} download className={`flex-none rounded-[7px] border border-[var(--input)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)] ${FOCUS}`}>
-                PDF
-              </a>
-              <a href={`/api/rollup/export?week=${r.isoWeek}`} download className={`flex-none rounded-[7px] border border-[var(--input)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)] ${FOCUS}`}>
-                CSV
-              </a>
-            </div>
-          ))
-        )}
-      </section>
+      {/* UX12 (L1–L3): the list on the shared kit — search, Status filter, always-visible pagination. */}
+      <RollupArchiveList rows={rows.map((r) => ({ ...r, href: hrefForWeek(r.isoWeek) }))} isHead={isHead} timeZone={timeZone} />
 
       {shares.length > 0 && (
         <section className={`${CARD} overflow-hidden`} style={CARD_BG} aria-labelledby="snapshots">

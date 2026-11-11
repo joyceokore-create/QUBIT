@@ -7,6 +7,7 @@ import { REPORT_DATASET_KEYS, type ReportDatasetKey } from "@/lib/report-catalog
 import { CustomReportError, DATASET_PERMISSION } from "@/server/custom-reports";
 import { getDigestReport, getProjectReport, getTableReport } from "@/server/pdf/report-data";
 import { renderDigest, renderProjectReport, renderTable, type RenderedReport } from "@/server/pdf/templates";
+import { getTenantTimeZone } from "@/server/preferences";
 
 /**
  * Milestone D — one door for "give me this report as a document": the export route, the
@@ -60,13 +61,15 @@ export function resolveWeek(week: string | undefined, now: Date): string {
 }
 
 export async function buildExport(ctx: TenantContext, input: ExportRequestInput, now = new Date()): Promise<ExportResult> {
+  // Every date on the page (report date, "as of", due dates) is in the tenant's zone (D14).
+  const timeZone = await getTenantTimeZone(ctx);
   if (input.template === "table") {
     if (!input.dataset) throw new ExportError("A data table needs ?dataset=.", "BAD_REQUEST");
     const permission = DATASET_PERMISSION[input.dataset];
     if (permission && !can(ctx, permission)) throw new ExportError("That module is not yours to report on.", "FORBIDDEN");
     try {
       const data = await getTableReport(ctx, input.dataset, input.columns, now);
-      return { ...renderTable(data), kind: "table", isoWeek: isoWeekId(now), label: `${data.title} · custom report` };
+      return { ...renderTable(data, { timeZone }), kind: "table", isoWeek: isoWeekId(now), label: `${data.title} · custom report` };
     } catch (e) {
       if (e instanceof CustomReportError) throw new ExportError(e.message, e.code === "FORBIDDEN" ? "FORBIDDEN" : "BAD_REQUEST");
       throw e;
@@ -77,14 +80,14 @@ export async function buildExport(ctx: TenantContext, input: ExportRequestInput,
     if (!can(ctx, "reports:read")) throw new ExportError("The roll-up is for report readers.", "FORBIDDEN");
     const data = await getDigestReport(ctx, isoWeek, { portfolioId: input.portfolio, now });
     if (!data) throw new ExportError("No roll-up for that week.", "NOT_FOUND");
-    return { ...renderDigest(data), kind: "digest", isoWeek, label: `Week ${data.week.number} roll-up` };
+    return { ...renderDigest(data, { timeZone }), kind: "digest", isoWeek, label: `Week ${data.week.number} roll-up` };
   }
   if (!input.project) throw new ExportError("A project one-pager needs ?project=.", "BAD_REQUEST");
   if (!can(ctx, "project:read")) throw new ExportError("Project reports need project access.", "FORBIDDEN");
   const data = await getProjectReport(ctx, input.project, isoWeek, now, input.template === "auto" ? undefined : input.template);
   if (!data) throw new ExportError("No such project.", "NOT_FOUND");
   return {
-    ...renderProjectReport(data),
+    ...renderProjectReport(data, { timeZone }),
     kind: "project",
     isoWeek,
     label: `${data.project.code} · Week ${data.week.number} status report`,

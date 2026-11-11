@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/list/page-header";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
@@ -72,10 +73,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
     const offered = offeredDatasetKeys(ctx).filter((k) => !memberLayout || (MY_DATASET_KEYS as readonly string[]).includes(k));
     return (
       <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-5 p-[22px_24px_90px]">
-        <div className="min-w-0 [animation:rise_.5s_cubic-bezier(.22,1,.36,1)_both]">
-          <h1 className="font-heading text-[26px] rv:text-heading-lg font-bold tracking-[-.7px] text-[var(--qink)]">Reports</h1>
-          <p className="mt-1 text-[13.5px] text-[var(--ink3)] [text-wrap:pretty]">Build a report from your work.</p>
-        </div>
+        <PageHeader title="Reports" description="Build a report from your work." />
         <div className="[animation:rise_.5s_cubic-bezier(.22,1,.36,1)_.06s_both]">
           <ReportTabs tabs={CUSTOM_ONLY_TABS} active="custom" hrefFor={() => "/reports"} />
         </div>
@@ -114,19 +112,22 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
 
   return (
     <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-5 p-[22px_24px_90px]">
-      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3.5 [animation:rise_.5s_cubic-bezier(.22,1,.36,1)_both]">
-        <div className="min-w-0 flex-[1_1_420px]">
-          <h1 className="font-heading text-[26px] rv:text-heading-lg font-bold tracking-[-.7px] text-[var(--qink)]">Reports</h1>
-          <p className="mt-1 text-[13.5px] text-[var(--ink3)] [text-wrap:pretty]">
+      {/* UX12 (D13, L2): the shared page header — title, one-line description, actions top right. */}
+      <PageHeader
+        title="Reports"
+        description={
+          <>
             {tab === "quality" ? QUALITY_SUBTITLE : SUBTITLE[view](rowCount)}
-            {previewing && <span className="text-[var(--ink5)]"> · Previewing as {VIEW_LABEL[view]}</span>}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          {tab !== "quality" && <WeekSwitcher isoWeek={week} range={data.week.range} prev={data.week.prev} next={data.week.next} currentWeek={currentWeek} hrefFor={(w) => href({ week: w })} />}
-          {!newUi && canPreview(ctx.roles) && <PreviewSwitch view={view} hrefFor={(v) => href({ as: v, tab: tab === "custom" ? "custom" : "week" })} />}
-        </div>
-      </div>
+            {previewing && <span> · Previewing as {VIEW_LABEL[view]}</span>}
+          </>
+        }
+        actions={
+          <>
+            {tab !== "quality" && <WeekSwitcher isoWeek={week} range={data.week.range} prev={data.week.prev} next={data.week.next} currentWeek={currentWeek} hrefFor={(w) => href({ week: w })} />}
+            {!newUi && canPreview(ctx.roles) && <PreviewSwitch view={view} hrefFor={(v) => href({ as: v, tab: tab === "custom" ? "custom" : "week" })} />}
+          </>
+        }
+      />
 
       <div className="[animation:rise_.5s_cubic-bezier(.22,1,.36,1)_.06s_both]">
         <ReportTabs tabs={tabsFor(view, tabOpts)} active={tab} hrefFor={(k) => href({ tab: k })} />
@@ -208,9 +209,10 @@ async function ArchiveTab({
   isHead: boolean;
   hrefForWeek: (w: string) => string;
 }) {
-  const [rows, shares] = await Promise.all([listRollups(ctx), listShares(ctx)]);
+  const [rows, shares, timeZone] = await Promise.all([listRollups(ctx), listShares(ctx), getTenantTimeZone(ctx)]);
   return (
     <RollupArchive
+      timeZone={timeZone}
       rows={rows}
       shares={shares.filter((s) => s.type === "weekly").map((s) => ({ token: s.token, title: s.title, createdAt: s.createdAt }))}
       showExports={can(ctx, "reports:read")}

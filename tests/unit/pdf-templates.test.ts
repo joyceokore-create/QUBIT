@@ -45,6 +45,8 @@ function project(over: Partial<ProjectReportData> = {}): ProjectReportData {
 const NETWORK = /<script|\ssrc=|\shref=|@import|url\(/i;
 
 describe("project one-pagers", () => {
+  // UX12 (D14): the "lab report" layout — header, one notice, two summary panels, counted
+  // sections ("None" when empty), plain tables, status markers with a symbol AND a word.
   it("escapes user text, inlines the logo and never references the network", () => {
     const { html, spec, filenameStem } = renderProjectReport(project());
     expect(html).toContain("Atlas &lt;migration&gt;");
@@ -53,41 +55,50 @@ describe("project one-pagers", () => {
     expect(html).toContain('<svg id="Layer_1"');
     expect(html).toContain("#1B7A3E"); // the tenant's brand rule, not a hardcoded red
     expect(html).not.toMatch(NETWORK);
-    expect(html.match(/<section class="page">/g)).toHaveLength(1);
-    expect(spec).toEqual({ landscape: true });
+    expect(html).toContain("Confidential — for Demo Org B internal use.");
+    // D14: the Build-only one-pager is A4 portrait; the page chip comes from Chromium's footer.
+    expect(spec).toMatchObject({ format: "A4", landscape: false });
+    expect(spec.footerTemplate).toContain('class="pageNumber"');
     expect(filenameStem).toBe("qubit-atlas-2026-W41-build");
   });
 
-  it("renders one gate column per checkpoint and the blocker reason as the note", () => {
+  it("lists every gate with a symbol-and-word marker and the blocker reason as the note", () => {
     const { html } = renderProjectReport(project());
-    expect(html).toContain("grid-template-columns:repeat(3,1fr)");
-    expect(html).toContain("2 · BLOCKED");
+    expect(html).toContain("Gates (3)");
+    expect(html).toMatch(/✓[\s\S]{0,80}Done/);
+    expect(html).toMatch(/![\s\S]{0,80}Blocked/);
     expect(html).toContain("Waiting on vendor");
   });
 
-  it("says so when nothing waits on a decision and there is no risk", () => {
+  it("counts every section and shows a None box when nothing waits on a decision or is at risk", () => {
     const { html } = renderProjectReport(project());
-    expect(html).toContain("Nothing is waiting on a decision.");
-    expect(html).toContain("No open risks.");
+    expect(html).toContain("Needs a decision (0)");
+    expect(html).toContain("Risks and issues (0)");
+    expect(html).toContain(">None<");
   });
 
   it("footer names the signer for a confirmed week and the live-data caveat for a past one", () => {
     const past = renderProjectReport(project({ week: { isoWeek: "2026-W40", number: "40", range: "28 Sep–2 Oct", isCurrent: false, generatedAt: now } }));
-    expect(past.html).toContain("RAG confirmed by PM One on 9 Oct");
-    expect(past.html).toContain("Gates, board and register as of 9 Oct");
+    expect(past.spec.footerTemplate).toContain("RAG confirmed by PM One on 9 Oct");
+    expect(past.spec.footerTemplate).toContain("live data");
+    expect(past.spec.footerTemplate).toContain("Nairobi time");
     const current = renderProjectReport(project({ checkIn: { ...project().checkIn, status: "Draft", confirmedByName: null, confirmedAt: null } }));
-    expect(current.html).toContain("RAG computed");
-    expect(current.html).not.toContain("as of 9 Oct");
+    expect(current.spec.footerTemplate).toContain("RAG computed");
+    expect(current.spec.footerTemplate).not.toContain("RAG confirmed by");
+    // The single attention item replaces the confidentiality notice.
+    expect(current.html).toContain("Not yet confirmed");
   });
 
-  it("the dual page carries both tiles and the market table; the market page its KPIs", () => {
+  it("the dual page carries both tracks and the market table; the market page its KPIs", () => {
     const markets = [{ code: "KE", name: "Kenya", flag: "🇰🇪", status: "OnTrack", progress: 60, rag: "Green" as const, checkedIn: false, narrative: null }];
     const dual = renderProjectReport(project({ template: "dual", markets, checkIn: { ...project().checkIn, marketRag: "Green" }, marketKpis: { tracks: 1, checkedIn: 0, onTrack: 1, gatesDone: 0, gatesTotal: 0 } }));
     expect(dual.html).toContain("Build + In market");
-    expect(dual.html).toContain("no check-in · track status");
+    expect(dual.html).toContain("Markets (1)");
+    expect(dual.html).toContain("No check-in");
+    expect(dual.spec).toMatchObject({ landscape: true });
     expect(dual.filenameStem).toBe("qubit-atlas-2026-W41-dual");
     const market = renderProjectReport(project({ template: "market", markets, marketKpis: { tracks: 1, checkedIn: 0, onTrack: 1, gatesDone: 0, gatesTotal: 0 } }));
-    expect(market.html).toContain("Market rollout");
+    expect(market.html).toContain("In market");
     expect(market.html).toContain("Checked in this week");
   });
 });
@@ -116,16 +127,17 @@ describe("portfolio digest", () => {
 
   it("flows with Chromium's footer, groups by portfolio and marks computed rows", () => {
     const { html, spec, filenameStem } = renderDigest(digest("Approved"));
-    expect(html).toContain("Prepared by Head One, Demo Org B");
+    expect(html).toContain("Approved by Head One");
     expect(html).toContain("Nine of thirteen &lt;green&gt;");
-    expect(html).toContain('text-transform:uppercase;color:#6b6b6b;border-top:1px solid #e9e9e9">Alpha</td>');
+    expect(html).toContain("Alpha (2)");
     expect(html).toContain("In market: 1 of 2 on track");
     expect(html).toContain("computed");
     expect(html).toContain("Not yet sent — computed status shown.");
     expect(html).not.toMatch(NETWORK);
-    expect(spec.footerTemplate).toContain("Internal and confidential");
+    expect(spec).toMatchObject({ format: "A4", landscape: true });
     expect(spec.footerTemplate).toContain("RAG approved by the Head on 9 Oct");
-    expect(spec.margin?.bottom).toBe("0.7in");
+    expect(spec.footerTemplate).toContain('class="totalPages"');
+    expect(spec.margin?.bottom).toBe("16mm");
     expect(filenameStem).toBe("qubit-rollup-2026-W41");
   });
 

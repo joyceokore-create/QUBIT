@@ -61,3 +61,12 @@ export const TAB_ACTIVE = "border-[var(--brand)] bg-[var(--qcard)] text-[var(--q
 export const TAB_ACTIVE_ON_CARD = "border-[var(--brand)] bg-[var(--surface-2)] text-[var(--qink)]";
 /** The count after a tab label ("Waiting 3"). */
 export const TAB_COUNT = "inline-flex min-w-[20px] items-center justify-center rounded-full bg-[var(--surface-2)] px-1.5 text-[11px] font-bold tabular-nums text-[var(--ink3)]";
+
+/** U3 — the compact 28px button, ONLY for actions inside table rows and list items. */
+export const COMPACT = `inline-flex h-[var(--control-h-compact)] items-center justify-center gap-1.5 whitespace-nowrap rounded-[8px] border border-[var(--input)] bg-[var(--qcard)] px-2.5 text-[12px] font-semibold text-[var(--ink2)] transition-colors hover:text-[var(--qink)] disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`;
+/** The compact primary (an in-row "Confirm & send"). */
+export const COMPACT_PRIMARY = `inline-flex h-[var(--control-h-compact)] items-center justify-center gap-1.5 whitespace-nowrap rounded-[8px] bg-[var(--brand)] px-2.5 text-[12px] font-bold text-[var(--onbrand)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`;
+/** U3 — a text input / select at the control size and radius. */
+export const INPUT = `h-[var(--control-h)] rounded-[var(--control-r)] border border-[var(--input)] bg-background px-3 text-[13px] text-foreground placeholder:text-[var(--ink4)] focus:border-brand ${FOCUS}`;
+/** The standard list-table header row (sentence-case words in small caps, never mono). */
+export const THEAD = "border-b border-[var(--border)] text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--ink3)]";
