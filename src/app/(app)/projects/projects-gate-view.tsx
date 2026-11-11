@@ -39,12 +39,14 @@ import {
 // screen readers and a tooltip (U4: never colour alone).
 const CELL: Record<GateState, string> = {
   done: "var(--ds-ok)",
-  prog: "var(--ds-info)",
-  late: "var(--ds-warn)",
+  // Design `.gc`: in progress amber, overdue red (the workspace's Gates by Market uses the
+  // same fills). Blocked shares overdue's red; each cell also carries its word.
+  prog: "var(--ds-warn)",
+  late: "var(--ds-bad)",
   block: "var(--ds-bad)",
   none: "var(--ds-mutedw)",
 };
-const LEGEND_ORDER: GateState[] = ["done", "prog", "late", "block", "none"];
+const LEGEND_ORDER: GateState[] = ["done", "prog", "late", "none"];
 
 function GateSquare({ state, size = 16 }: { state: GateState; size?: number }) {
   return (
@@ -287,7 +289,7 @@ function GateLegend() {
         {LEGEND_ORDER.map((st) => (
           <span key={st} className="inline-flex items-center gap-1.5">
             <GateSquare state={st} size={11} />
-            {GATE_STATE_WORD[st]}
+            {st === "late" ? "Overdue or blocked" : GATE_STATE_WORD[st]}
           </span>
         ))}
         <span>— not on this template</span>
