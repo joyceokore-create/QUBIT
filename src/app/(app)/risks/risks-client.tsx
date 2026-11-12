@@ -102,9 +102,10 @@ export function RisksClient({
       <div className="flex flex-col gap-2">
         <ListToolbar label={`Search and filter ${copy.noun}`}>
           <SearchField value={list.q} onChange={(q) => list.set({ q })} placeholder={copy.search} label={copy.searchLabel} className="sm:w-[340px]" />
-          <FilterSelect label="Project" allLabel="All projects" value={f.project} options={opts.project} onChange={(v) => list.set({ project: v })} />
+          {/* Design order: Severity · Status · Project · Owner. */}
           <FilterSelect label="Severity" allLabel="All severities" value={f.severity} options={opts.severity} onChange={(v) => list.set({ severity: v })} />
           <FilterSelect label="Status" allLabel="All statuses" value={f.status} options={opts.status} onChange={(v) => list.set({ status: v })} />
+          <FilterSelect label="Project" allLabel="All projects" value={f.project} options={opts.project} onChange={(v) => list.set({ project: v })} />
           <FilterSelect label="Owner" allLabel="All owners" value={f.owner} options={opts.owner} onChange={(v) => list.set({ owner: v })} />
           <span title={`${copy.noun[0].toUpperCase()}${copy.noun.slice(1)} you own`}>
             <FilterToggle label="Mine" count={facets.mine} pressed={f.owner === viewerId} onChange={(on) => list.set({ owner: on ? viewerId : null })} />

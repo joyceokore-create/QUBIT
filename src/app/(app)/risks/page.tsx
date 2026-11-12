@@ -82,23 +82,20 @@ export default async function RisksPage({ searchParams }: { searchParams: Promis
   const newIssue = canCreateIssue && tab !== "risks" ? <NewIssueButton projects={(await listProjects(ctx)).map((p) => ({ id: p.id, code: p.code, name: p.name }))} users={(users.length ? users : await listUsers(ctx)).map((u) => ({ id: u.id, name: u.name }))} /> : undefined;
   // The top bar's "+ New › Risk" lands here with ?new=1 (UX fidelity F1).
   const newRisk = canCreateRisk ? <NewRiskDialog users={users} projects={projects.map((p) => ({ id: p.id, code: p.code, name: p.name }))} defaultOpen={sp.new === "1"} /> : undefined;
-  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  // Design: one line for the page; the tab counts carry the numbers.
   const description =
-    tab === "risks"
-      ? `${plural(counts.risks, "risk", "risks")} in this organization.`
-      : tab === "issues"
-        ? `${plural(counts.issues, "issue", "issues")}, raised directly or materialised from a risk.`
-        : `${counts.gaps} of ${plural(counts.issues, "issue", "issues")} had no owned, mitigated risk behind them · ${counts.issues - counts.gaps} traced.`;
+    tab === "gap"
+      ? `${counts.gaps} of ${counts.issues} ${counts.issues === 1 ? "issue" : "issues"} had no owned, mitigated risk behind them · ${counts.issues - counts.gaps} traced.`
+      : "Risks, issues and the gap report across all projects.";
 
   return (
     <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
       <PageHeader
-        eyebrow={session.user.tenantName}
         title="Risks & Issues"
         description={description}
         actions={
           <>
-            <ExportButton href="/api/export?kind=risks" label="Export risks CSV" />
+            <ExportButton href="/api/export?kind=risks" label="Export CSV" />
             {tab === "risks" ? newRisk : newIssue}
           </>
         }

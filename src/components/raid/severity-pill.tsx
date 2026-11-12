@@ -1,16 +1,11 @@
-import { cn } from "@/lib/utils";
-import { SEVERITY_CLASSES, type SeverityLevel } from "@/components/raid/severity";
+import { Chip } from "@/components/ui/status-pill";
+import { SEVERITY_TONE, type SeverityLevel } from "@/components/raid/severity";
 
+/** Severity as a design chip (Low green · Medium blue · High amber · Critical red). */
 export function SeverityPill({ severity, className }: { severity: string; className?: string }) {
   return (
-    <span
-      className={cn(
-        "inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold leading-[1.5]",
-        SEVERITY_CLASSES[severity as SeverityLevel] ?? "bg-background text-ink-3",
-        className,
-      )}
-    >
+    <Chip tone={SEVERITY_TONE[severity as SeverityLevel] ?? "muted"} className={className}>
       {severity}
-    </span>
+    </Chip>
   );
 }

@@ -6,14 +6,15 @@ import { ChevronRight, Plus } from "lucide-react";
 import { usePanel } from "@/components/panels/panel-context";
 import { ExportButton } from "@/components/export-button";
 import { Button } from "@/components/ui/button";
-import { HealthPill } from "@/components/ui/status-pill";
+import { Chip, HealthPill } from "@/components/ui/status-pill";
 import { PageHeader } from "@/components/list/page-header";
 import { FilterChips, FilterSelect, FilterToggle, ListToolbar, SearchField, type ActiveFilter, type FilterOption } from "@/components/list/list-toolbar";
 import { ListEmpty, TableCard, TableFooter } from "@/components/list/table-footer";
 import { useListUrl } from "@/components/list/use-list-url";
 import { matchesSearch, paginate } from "@/lib/list-state";
 import { COCKPIT_PHASES } from "@/lib/cockpit-gates";
-import { RAG_TOKEN } from "@/lib/surface";
+import { RAG_TOKEN, THEAD, TROW } from "@/lib/surface";
+import { cn } from "@/lib/utils";
 import { healthWord } from "@/lib/status-words";
 import { TabStrip } from "@/components/ui/tab-strip";
 import { HEALTH_LABEL, HEALTH_ORDER, healthOf, type GateViewRow, type HealthBucket } from "@/lib/project-gate-view";
@@ -77,7 +78,7 @@ export function ProjectsClient({
         description={
           view === "gates"
             ? `${projects.length} projects. Gates come from checkpoint records; a project in several markets shows its furthest-behind market.`
-            : `${projects.length} projects. Health is this week's confirmed check-in.`
+            : `${projects.length} projects. Status is this week's confirmed check-in.`
         }
         actions={
           <>
@@ -159,12 +160,13 @@ function ProjectsListView({ projects, canCreate }: { projects: ProjectRow[]; can
     <>
       <div className="flex flex-col gap-2">
         <ListToolbar>
-          <SearchField value={list.q} onChange={(q) => list.set({ q })} placeholder="Search projects, codes or PMs" label="Search projects" />
-          <FilterSelect label="Portfolio" allLabel="All portfolios" value={f.portfolio} options={opts.portfolio} onChange={(v) => list.set({ portfolio: v })} />
-          <FilterSelect label="Project manager" allLabel="All PMs" value={f.pm} options={opts.pm} onChange={(v) => list.set({ pm: v })} />
-          <FilterSelect label="Stage" allLabel="All stages" value={f.stage} options={opts.stage} onChange={(v) => list.set({ stage: v })} />
-          <FilterSelect label="Health" allLabel="All health" value={f.health} options={opts.health} onChange={(v) => list.set({ health: v })} />
+          <SearchField value={list.q} onChange={(q) => list.set({ q })} placeholder="Search projects or PMs" label="Search projects" />
+          {/* Design order: PM · Priority · Stage · Status; Portfolio and Mine follow. */}
+          <FilterSelect label="PM" allLabel="All PMs" value={f.pm} options={opts.pm} onChange={(v) => list.set({ pm: v })} />
           <FilterSelect label="Priority" allLabel="All priorities" value={f.priority} options={opts.priority} onChange={(v) => list.set({ priority: v })} />
+          <FilterSelect label="Stage" allLabel="All stages" value={f.stage} options={opts.stage} onChange={(v) => list.set({ stage: v })} />
+          <FilterSelect label="Status" allLabel="All statuses" value={f.health} options={opts.health} onChange={(v) => list.set({ health: v })} />
+          <FilterSelect label="Portfolio" allLabel="All portfolios" value={f.portfolio} options={opts.portfolio} onChange={(v) => list.set({ portfolio: v })} />
           <span data-tour="mine" title="Projects you lead or are allocated to">
             <FilterToggle label="Mine" count={mineCount} pressed={f.mine === "1"} onChange={(on) => list.set({ mine: on ? "1" : null })} />
           </span>
@@ -187,18 +189,18 @@ function ProjectsListView({ projects, canCreate }: { projects: ProjectRow[]; can
             }
           />
         ) : (
-          <table className="w-full min-w-[860px] text-left text-[13px]">
-            <thead className="border-b border-[var(--border)] text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--ink3)]">
+          <table className="w-full min-w-[860px] border-separate border-spacing-0 text-left text-[12.5px]">
+            <thead className={THEAD}>
               <tr>
-                <th scope="col" className="w-[76px] px-4 py-2.5 font-semibold">Code</th>
-                <th scope="col" className="px-3 py-2.5 font-semibold">Project</th>
-                <th scope="col" className="px-3 py-2.5 font-semibold">PM</th>
-                <th scope="col" className="px-3 py-2.5 font-semibold">Stage</th>
-                <th scope="col" className="w-[150px] px-3 py-2.5 font-semibold">Progress</th>
-                <th scope="col" className="px-3 py-2.5 font-semibold">Health</th>
-                <th scope="col" className="px-3 py-2.5 font-semibold">Check-in</th>
-                <th scope="col" className="px-3 py-2.5 text-right font-semibold">Team</th>
-                <th scope="col" className="w-8 px-2"><span className="sr-only">Open</span></th>
+                <th scope="col" className="w-[76px]">Code</th>
+                <th scope="col">Project</th>
+                <th scope="col">PM</th>
+                <th scope="col">Stage</th>
+                <th scope="col" className="w-[150px]">Progress</th>
+                <th scope="col">Status</th>
+                <th scope="col">Check-In</th>
+                <th scope="col" className="text-right">Team</th>
+                <th scope="col" className="w-8"><span className="sr-only">Open</span></th>
               </tr>
             </thead>
             <tbody>
@@ -208,52 +210,52 @@ function ProjectsListView({ projects, canCreate }: { projects: ProjectRow[]; can
                   <tr
                     key={p.id}
                     onClick={() => openProject(p.id)}
-                    className="cursor-pointer border-b border-[var(--border)] transition-colors last:border-0 hover:bg-[var(--surface-2)]"
+                    className={cn(TROW, "cursor-pointer transition-colors hover:bg-[var(--ds-surface2)]")}
                   >
-                    <td className="px-4 py-2.5 font-mono text-[11.5px] text-[var(--ink3)]">{p.code}</td>
-                    <td className="max-w-[320px] px-3 py-2.5">
+                    <td className="font-mono text-[11.5px] text-[var(--ds-ink3)]">{p.code}</td>
+                    <td className="max-w-[320px]">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           openProject(p.id);
                         }}
-                        className="block max-w-full truncate rounded-sm text-left font-semibold text-[var(--qink)] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                        className="block max-w-full truncate rounded-sm text-left text-[13px] font-semibold text-[var(--ds-ink)] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[var(--ds-brand)]"
                       >
                         {p.name}
                       </button>
-                      <span className="block truncate text-[12px] text-[var(--ink3)]">
+                      <span className="block truncate text-[12px] text-[var(--ds-ink3)]">
                         {p.portfolio ?? "No portfolio"} · {p.priority} priority
                       </span>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-[var(--ink2)]">{p.pm ?? "—"}</td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-[var(--ink2)]">{p.stage}</td>
-                    <td className="px-3 py-2.5">
+                    <td className="whitespace-nowrap text-[var(--ds-ink2)]">{p.pm ?? "—"}</td>
+                    <td className="whitespace-nowrap text-[var(--ds-ink2)]">{p.stage}</td>
+                    <td>
                       <span className="flex items-center gap-2">
-                        <span className="h-1 flex-1 overflow-hidden rounded-full bg-[var(--surface-2)]">
-                          <span className="block h-full rounded-full bg-[var(--brand)]" style={{ width: `${p.avgProgress}%` }} />
+                        <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--ds-mutedw)]">
+                          <span className="block h-full rounded-full bg-[var(--ds-info)]" style={{ width: `${p.avgProgress}%` }} />
                         </span>
-                        <span className="w-[34px] text-right text-[12px] tabular-nums text-[var(--ink2)]">{p.avgProgress}%</span>
+                        <span className="w-[34px] text-right text-[12px] tabular-nums text-[var(--ds-ink2)]">{p.avgProgress}%</span>
                       </span>
                     </td>
-                    <td className="px-3 py-2.5" title={h === "None" ? "No confirmed weekly report yet" : "This week's confirmed status"}>
-                      {h === "None" ? <span className="text-[12px] font-semibold text-[var(--ink3)]">No report</span> : <HealthPill value={h} />}
+                    <td title={h === "None" ? "No confirmed weekly report yet" : "This week's confirmed status"}>
+                      {h === "None" ? <Chip tone="muted">No report</Chip> : <HealthPill value={h} />}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2.5" title="This week's check-in">
+                    <td className="whitespace-nowrap" title="This week's check-in">
                       {p.checkin ? (
                         <span className="flex items-center gap-1.5 text-[12px]">
                           <span className="size-2 flex-none rounded-full" style={{ background: `var(${RAG_TOKEN[p.checkin.rag]})` }} aria-hidden />
-                          <span className={p.checkin.confirmed ? "text-[var(--ink3)]" : "font-semibold text-[var(--warn-ink)]"}>
+                          <span className={p.checkin.confirmed ? "text-[var(--ds-ink3)]" : "font-semibold text-[var(--ds-warn-text)]"}>
                             {p.checkin.confirmed ? "Confirmed" : `Draft: ${healthWord(p.checkin.rag)}`}
                           </span>
                         </span>
                       ) : (
-                        <span className="text-[var(--ink3)]">None this week</span>
+                        <span className="text-[var(--ds-ink3)]">None this week</span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-[var(--ink2)]">{p.memberCount}</td>
-                    <td className="px-2 py-2.5">
-                      <ChevronRight className="size-4 text-[var(--ink3)]" aria-hidden />
+                    <td className="text-right tabular-nums text-[var(--ds-ink2)]">{p.memberCount}</td>
+                    <td>
+                      <ChevronRight className="size-4 text-[var(--ds-ink3)]" aria-hidden />
                     </td>
                   </tr>
                 );

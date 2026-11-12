@@ -17,6 +17,8 @@ import { useListUrl } from "@/components/list/use-list-url";
 import { matchesSearch, paginate } from "@/lib/list-state";
 import { matchesSubmitted, SUBMITTED_BUCKETS, SUBMITTED_LABEL } from "@/lib/list-buckets";
 import { formatDate } from "@/lib/dates";
+import { THEAD, TROW } from "@/lib/surface";
+import { cn } from "@/lib/utils";
 
 /**
  * M-P4a (docs/35 §1) — idea intake & triage. "Accept" routes to the project wizard
@@ -159,8 +161,8 @@ export function IdeasClient({
   return (
     <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
       <PageHeader
-        eyebrow={tenantName}
-        title="Ideas"
+        eyebrow={board.canTriage ? "Ideas" : tenantName}
+        title={board.canTriage ? "Triage Board" : "Ideas"}
         description={
           board.canTriage
             ? "Where projects are born. Accept an idea and the project wizard opens pre-filled; park it and the reason stays on the record."
@@ -198,16 +200,16 @@ export function IdeasClient({
             }
           />
         ) : (
-          <table className="relative w-full min-w-[920px] text-left text-[13px]">
-            <thead className="border-b border-[var(--border)] text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--ink3)]">
+          <table className="relative w-full min-w-[920px] border-separate border-spacing-0 text-left text-[12.5px]">
+            <thead className={THEAD}>
               <tr>
-                <th scope="col" className="px-4 py-2.5 font-semibold">Idea</th>
-                <th scope="col" className="px-3 py-2.5 font-semibold">Sponsor</th>
-                <th scope="col" className="px-3 py-2.5 font-semibold">Stage</th>
-                <th scope="col" className="px-3 py-2.5 font-semibold">Submitted</th>
-                <th scope="col" className="px-3 py-2.5 font-semibold">Outcome</th>
+                <th scope="col">Idea</th>
+                <th scope="col">Sponsor</th>
+                <th scope="col">Stage</th>
+                <th scope="col">Submitted</th>
+                <th scope="col">Outcome</th>
                 {board.canTriage && (
-                  <th scope="col" className="px-3 py-2.5 text-right font-semibold">
+                  <th scope="col" className="text-right">
                     <span className="sr-only">Triage</span>
                   </th>
                 )}
@@ -217,42 +219,42 @@ export function IdeasClient({
               {rows.map((idea) => {
                 const open = idea.status === "New" || idea.status === "Reviewing";
                 return (
-                  <tr key={idea.id} className="border-b border-[var(--border)] align-top transition-colors last:border-0 hover:bg-[var(--surface-2)]">
-                    <td className="max-w-[420px] px-4 py-2.5">
+                  <tr key={idea.id} className={cn(TROW, "align-top transition-colors hover:[&>td]:bg-[var(--ds-surface2)] [&>td]:align-top")}>
+                    <td className="max-w-[420px]">
                       <span className="flex items-baseline gap-2">
-                        <span className="min-w-0 font-semibold text-[var(--qink)]">{idea.title}</span>
-                        {idea.mine && <span className="flex-none text-[11px] font-semibold text-[var(--ink3)]">Yours</span>}
+                        <span className="min-w-0 font-semibold text-[var(--ds-ink)]">{idea.title}</span>
+                        {idea.mine && <span className="flex-none text-[11px] font-semibold text-[var(--ds-ink3)]">Yours</span>}
                       </span>
-                      <span className="line-clamp-2 text-[12px] text-[var(--ink3)]" title={idea.expectedValue ? `${idea.problem}\nValue: ${idea.expectedValue}` : idea.problem}>
+                      <span className="line-clamp-2 text-[12px] text-[var(--ds-ink3)]" title={idea.expectedValue ? `${idea.problem}\nValue: ${idea.expectedValue}` : idea.problem}>
                         {idea.problem}
                       </span>
-                      {idea.suggestedPortfolio && <span className="block truncate text-[12px] text-[var(--ink3)]">Suggested portfolio: {idea.suggestedPortfolio.name}</span>}
+                      {idea.suggestedPortfolio && <span className="block truncate text-[12px] text-[var(--ds-ink3)]">Suggested portfolio: {idea.suggestedPortfolio.name}</span>}
                       {/* An empty summary says "not summarised" — never a fabricated line (docs/35 §3). */}
-                      {idea.summary && <span className="block text-[12px] italic text-[var(--ink3)]">{idea.summary}</span>}
+                      {idea.summary && <span className="block text-[12px] italic text-[var(--ds-ink3)]">{idea.summary}</span>}
                     </td>
-                    <td className="px-3 py-2.5 text-[var(--ink2)]">{idea.sponsor}</td>
-                    <td className="px-3 py-2.5">
+                    <td className="text-[var(--ds-ink2)]">{idea.sponsor}</td>
+                    <td>
                       <StatusPill status={idea.status} />
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2.5">
-                      <span className="block tabular-nums text-[var(--ink2)]">{formatDate(idea.submittedAt, timeZone)}</span>
-                      {idea.submittedByName && <span className="block text-[12px] text-[var(--ink3)]">by {idea.submittedByName}</span>}
+                    <td className="whitespace-nowrap">
+                      <span className="block tabular-nums text-[var(--ds-ink2)]">{formatDate(idea.submittedAt, timeZone)}</span>
+                      {idea.submittedByName && <span className="block text-[12px] text-[var(--ds-ink3)]">by {idea.submittedByName}</span>}
                     </td>
-                    <td className="max-w-[260px] px-3 py-2.5 text-[12.5px]">
+                    <td className="max-w-[260px] text-[12.5px]">
                       {idea.outcomeProject ? (
-                        <Link href={`/projects/${idea.outcomeProject.id}`} className="font-semibold text-[var(--qink)] hover:underline" title={idea.outcomeProject.name}>
-                          {idea.outcomeProject.code} · <span className="font-normal text-[var(--ink2)]">{idea.outcomeProject.name}</span>
+                        <Link href={`/projects/${idea.outcomeProject.id}`} className="font-semibold text-[var(--ds-ink)] hover:underline" title={idea.outcomeProject.name}>
+                          {idea.outcomeProject.code} · <span className="font-normal text-[var(--ds-ink2)]">{idea.outcomeProject.name}</span>
                         </Link>
                       ) : idea.parkReason ? (
-                        <span className="line-clamp-2 italic text-[var(--ink3)]" title={idea.parkReason}>
+                        <span className="line-clamp-2 italic text-[var(--ds-ink3)]" title={idea.parkReason}>
                           “{idea.parkReason}”
                         </span>
                       ) : (
-                        <span className="text-[var(--ink3)]">{idea.status === "Reviewing" ? "Under review" : open ? "Waiting for triage" : "—"}</span>
+                        <span className="text-[var(--ds-ink3)]">{idea.status === "Reviewing" ? "Under review" : open ? "Waiting for triage" : "—"}</span>
                       )}
                     </td>
                     {board.canTriage && (
-                      <td className="whitespace-nowrap px-3 py-2 text-right">
+                      <td className="whitespace-nowrap text-right">
                         {open && (
                           <span className="inline-flex items-center gap-2">
                             <Button type="button" size="sm" variant="outline" disabled={row.busy} onClick={() => router.push(`/projects/new?fromIdea=${idea.id}`)}>
