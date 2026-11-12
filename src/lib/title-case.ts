@@ -17,7 +17,9 @@ export function toTitleCase(label: string): string {
   return words
     .map((w, i) => {
       const lower = w.toLowerCase();
-      const edge = i === 0 || i === words.length - 1;
+      // A word right after a separator ("+", "·", ":", "—", "–", "/") starts a new phrase.
+      const afterSep = i > 0 && /^[+·:—–/]$|[:]$/.test(words[i - 1]);
+      const edge = i === 0 || i === words.length - 1 || afterSep;
       if (!edge && MINOR_WORDS.has(lower)) return lower;
       if (/[A-Z]{2,}/.test(w)) return w; // acronyms: MFA, QUBIT, PDF, CSV
       return w.split("-").map(capPart).join("-");

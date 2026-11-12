@@ -4,6 +4,7 @@ import type { Orientation } from "@/server/pdf/shell";
 import type { DigestReportData, DigestRow, GateCell, ProjectReportData, TableReportData } from "@/server/pdf/report-data";
 import type { ReportCell } from "@/server/custom-reports";
 import type { RenderPdfOptions } from "@/server/pdf/render";
+import { toTitleCase } from "@/lib/title-case";
 
 /**
  * UX plan D14 — the print templates, all in the one "lab report" layout (blocks.ts):
@@ -237,14 +238,14 @@ export function renderDigest(d: DigestReportData, opts: RenderOptions = {}): Ren
   const tz = opts.timeZone ?? DEFAULT_TIME_ZONE;
   const approved = d.status === "Approved";
   const c = d.counts;
-  const groups = d.groups.map((g) => section(g.portfolioName, g.rows.length, table(DIGEST_COLUMNS, g.rows.map((r): Row => digestRow(r)))));
+  const groups = d.groups.map((g) => section(g.portfolioName, g.rows.length, table(DIGEST_COLUMNS, g.rows.map((r): Row => digestRow(r))), { name: true }));
   const { html, spec } = labReport({
     docTitle: `Week ${d.week.number} roll-up`,
     orientation: "landscape",
     tenantName: d.tenantName,
     brandColor: d.brandColor,
     timeZone: tz,
-    title: `Weekly roll-up — Week ${d.week.number}`,
+    title: `Weekly Roll-Up — Week ${d.week.number}`,
     subtitle: `Project status report · ${d.week.range} · ${d.tenantName}`,
     generatedAt: d.week.generatedAt,
     attention: approved ? null : { kind: "attention", label: "Draft:", text: "not yet approved by the Head — computed status is shown where a PM has not confirmed." },
@@ -322,17 +323,17 @@ export function renderTable(d: TableReportData, opts: RenderOptions = {}): Rende
     tenantName: d.tenantName,
     brandColor: d.brandColor,
     timeZone: tz,
-    title: d.title,
+    title: toTitleCase(d.title), // dataset name ("Access requests") is a label
     subtitle: `Custom report · ${d.moduleLabel}`,
     generatedAt: d.generatedAt,
     attention: null,
     info: {
       title: "Report information",
+      // Designer, 12 Nov 2026: the report name is the page title and the columns are the table
+      // header, so only Module and About remain.
       rows: [
-        ["Report", d.title],
-        ["Module", d.moduleLabel],
+        ["Module", toTitleCase(d.moduleLabel)],
         ["About", d.description],
-        ["Columns", d.columns.map((c) => c.label).join(", ")],
       ],
     },
     status: { title: "Summary", items: tableStatusItems(d) },

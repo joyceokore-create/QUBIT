@@ -72,8 +72,8 @@ describe("project one-pagers", () => {
 
   it("counts every section and shows a None box when nothing waits on a decision or is at risk", () => {
     const { html } = renderProjectReport(project());
-    expect(html).toContain("Needs a decision (0)");
-    expect(html).toContain("Risks and issues (0)");
+    expect(html).toContain("Needs a Decision (0)");
+    expect(html).toContain("Risks and Issues (0)");
     expect(html).toContain(">None<");
   });
 
@@ -92,14 +92,14 @@ describe("project one-pagers", () => {
   it("the dual page carries both tracks and the market table; the market page its KPIs", () => {
     const markets = [{ code: "KE", name: "Kenya", flag: "🇰🇪", status: "OnTrack", progress: 60, rag: "Green" as const, checkedIn: false, narrative: null }];
     const dual = renderProjectReport(project({ template: "dual", markets, checkIn: { ...project().checkIn, marketRag: "Green" }, marketKpis: { tracks: 1, checkedIn: 0, onTrack: 1, gatesDone: 0, gatesTotal: 0 } }));
-    expect(dual.html).toContain("Build + In market");
+    expect(dual.html).toContain("Build + In Market");
     expect(dual.html).toContain("Markets (1)");
     expect(dual.html).toContain("No check-in");
     expect(dual.spec).toMatchObject({ landscape: true });
     expect(dual.filenameStem).toBe("qubit-atlas-2026-W41-dual");
     const market = renderProjectReport(project({ template: "market", markets, marketKpis: { tracks: 1, checkedIn: 0, onTrack: 1, gatesDone: 0, gatesTotal: 0 } }));
-    expect(market.html).toContain("In market");
-    expect(market.html).toContain("Checked in this week");
+    expect(market.html).toContain("In Market");
+    expect(market.html).toContain("Checked in This Week");
   });
 });
 

@@ -1,6 +1,7 @@
 import { QUBIT_LOGO_SVG } from "@/server/pdf/brand";
 import { esc, footerTemplate, labDocument, printSpec, safeColor, stamp, zoneLabel, type Orientation, type Tone } from "@/server/pdf/shell";
 import { healthKey, healthWord, type HealthKey } from "@/lib/status-words";
+import { toTitleCase } from "@/lib/title-case";
 import type { RenderPdfOptions } from "@/server/pdf/render";
 
 /**
@@ -84,7 +85,7 @@ export function statusCell(value: string): Cell {
 /** QUBIT logo │ title (+ optional subtitle) on the left; "Report Date" + date/time right. */
 export function header(title: string, reportDate: string, subtitle?: string | null): string {
   return `<header class="hd"><div class="hd-l"><span class="hd-logo">${QUBIT_LOGO_SVG}</span><span class="hd-bar"></span><div style="min-width:0"><div class="hd-title">${esc(title)}</div>${
-    subtitle ? `<div class="hd-sub">${esc(subtitle)}</div>` : ""
+    subtitle ? `<div class="hd-sub">${esc(toTitleCase(subtitle))}</div>` : ""
   }</div></div><div class="hd-r"><div class="hd-k">Report Date</div><div class="hd-v">${esc(reportDate)}</div></div></header>`;
 }
 
@@ -114,21 +115,23 @@ export const statusColumns = (n: number): 1 | 2 => (n > 3 ? 2 : 1);
 
 /** Two grey panels side by side: key-value information on the left, a status grid on the right. */
 export function summaryPanels(info: { title: string; rows: [string, Cell][] }, status: { title: string; items: StatusItem[] }): string {
-  const rows = info.rows.map(([k, v]) => `<tr><td class="k">${esc(k)}</td><td class="v">${cell(v)}</td></tr>`).join("");
+  const rows = info.rows.map(([k, v]) => `<tr><td class="k">${esc(toTitleCase(k))}</td><td class="v">${cell(v)}</td></tr>`).join("");
   const items = status.items
     .map((s) => {
       const v = s.tone && !isRaw(s.value) ? `<span class="st tone-${s.tone}">${cell(s.value)}</span>` : cell(s.value);
-      return `<div class="gi"><span class="k">${esc(s.label)}</span><span class="v">${v}</span></div>`;
+      return `<div class="gi"><span class="k">${esc(toTitleCase(s.label))}</span><span class="v">${v}</span></div>`;
     })
     .join("");
-  return `<div class="panels"><div class="panel"><div class="panel-t">${esc(info.title)}</div><table class="kv"><tbody>${rows}</tbody></table></div><div class="panel"><div class="panel-t">${esc(status.title)}</div><div class="grid" style="grid-template-columns:repeat(${statusColumns(status.items.length)},1fr)">${items}</div></div></div>`;
+  return `<div class="panels"><div class="panel"><div class="panel-t">${esc(toTitleCase(info.title))}</div><table class="kv"><tbody>${rows}</tbody></table></div><div class="panel"><div class="panel-t">${esc(toTitleCase(status.title))}</div><div class="grid" style="grid-template-columns:repeat(${statusColumns(status.items.length)},1fr)">${items}</div></div></div>`;
 }
 
 /** "Name (N)" + body, or a grey "None" box when the section is empty. `count: null` is a
  * prose section (no count); its body is still replaced by "None" when absent. */
-export function section(title: string, count: number | null, body: string | null): string {
+export function section(title: string, count: number | null, body: string | null, opts: { name?: boolean } = {}): string {
   const empty = body === null || count === 0;
-  return `<section class="sec"><h2 class="sec-t">${esc(title)}${count === null ? "" : ` (${count})`}</h2>${empty ? `<div class="none">None</div>` : body}</section>`;
+  // Headings are labels (Title Case, UX fidelity D-F2b); `name: true` keeps a record's own name
+  // (a portfolio, a project) exactly as written.
+  return `<section class="sec"><h2 class="sec-t">${esc(opts.name ? title : toTitleCase(title))}${count === null ? "" : ` (${count})`}</h2>${empty ? `<div class="none">None</div>` : body}</section>`;
 }
 
 export interface Column {
@@ -143,7 +146,7 @@ export type Row = Cell[] | { group: string };
 /** A plain table: rules only, no fills; colour only on status words inside the cells. */
 export function table(columns: Column[], rows: Row[]): string {
   const cls = (c: Column | undefined) => (c?.align === "right" ? ` class="r"` : "");
-  const head = columns.map((c) => `<th${cls(c)}${c.width ? ` style="width:${esc(c.width)}"` : ""}>${esc(c.label)}</th>`).join("");
+  const head = columns.map((c) => `<th${cls(c)}${c.width ? ` style="width:${esc(c.width)}"` : ""}>${esc(toTitleCase(c.label))}</th>`).join("");
   const body = rows
     .map((r) =>
       Array.isArray(r)
