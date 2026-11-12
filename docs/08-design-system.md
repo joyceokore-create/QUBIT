@@ -147,7 +147,7 @@ by `tests/unit/design-spec-contrast.test.ts`.
 | 4 | Primary fill #ED1C24, white text | **Kept** (both themes; the design's dark-mode #f0353c is not used) | Riverbank brand colour — designer's decision, 11 Nov 2026. White on #ED1C24 is 4.38:1, just under AA: the one accepted exception. Keep button text white at weight 600 or bolder, never smaller than 12.5px on red; hover/pressed go darker (`--ds-brand-ink` #c9181f, 5.8:1), never lighter. |
 | 5 | Sentence case labels | **Title Case labels** (see Casing) | Designer's decision, 11 Nov 2026. |
 | 6 | No phone layouts | Must work at 390px; not required to match | The design is desktop-only. |
-| 7 | Page background #f3f5f8 (cool grey) | **#f7f7f7** (neutral grey), light mode only; the ambient glow is kept | Designer's decision, 12 Nov 2026: the cool tint read as darker. ink3 text on it is 4.97:1. |
+| 7 | Page background #f3f5f8 / dark #020617, ambient glow | **#fafafa** light, **#01030a** dark; **only the brand-red glow** (navy and green dropped) | Designer's decision, 12 Nov 2026: a lighter (and in dark, deeper) page so grey chips and tab counts read without adding borders. ink3 text on #fafafa is 5.1:1. |
 
 ### Tokens
 
@@ -156,7 +156,7 @@ by `tests/unit/design-spec-contrast.test.ts`.
 | `--brand` | `--ds-brand` | #ED1C24 | #ED1C24 | primary fill, active tab underline, focus ring, current OTP box |
 | `--brand-ink` | `--ds-brand-ink` | #c9181f | #ff8a8f | red **text**: links, active counts, active filter chip, Clear all, Brief drawer title; primary hover (light) |
 | `--brand-wash` | `--ds-brand-wash` | #fdecec | rgba(237,28,36,.16) | active filter chip, active tab count, selected menu option |
-| `--bg` | `--ds-bg` | #f7f7f7 (design #f3f5f8, deviation 7) | #020617 | page |
+| `--bg` | `--ds-bg` | #fafafa (design #f3f5f8, deviation 7) | #01030a (design #020617, deviation 7) | page |
 | `--card` | `--ds-card` | #ffffff | #0f172a | cards, drawers, menus, top bar, secondary buttons |
 | `--surface2` | `--ds-surface2` | #f6f7f9 | #132036 | kv panel, table header band, in-card search, active in-card tab, board columns |
 | `--bd` | `--ds-bd` | rgba(15,23,42,.08) | rgba(148,163,184,.16) | card borders |

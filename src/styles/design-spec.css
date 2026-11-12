@@ -24,7 +24,7 @@
   --ds-brand-wash: color-mix(in oklab, var(--brand) 10%, white); /* active chip/count fill */
 
   /* Surfaces */
-  --ds-bg: #f7f7f7; /* deviation 7: neutral page grey (design #f3f5f8) */
+  --ds-bg: #fafafa; /* deviation 7: lighter neutral page (design #f3f5f8) */
   --ds-card: #ffffff;
   --ds-surface2: #f6f7f9; /* kv panels, table header band, in-card search, active in-card tab */
   --ds-bd: rgba(15, 23, 42, 0.08); /* card border */
@@ -113,7 +113,7 @@
   --ds-brand-ink: color-mix(in oklab, var(--brand) 55%, white);
   --ds-brand-wash: color-mix(in oklab, var(--brand) 16%, transparent);
 
-  --ds-bg: #020617;
+  --ds-bg: #01030a; /* deviation 7: a touch darker (design #020617) */
   --ds-card: #0f172a;
   --ds-surface2: #132036;
   --ds-bd: rgba(148, 163, 184, 0.16);

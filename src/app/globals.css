@@ -794,11 +794,11 @@
 
   /* Surfaces — Material-style: a cool-gray page so solid white cards separate
      with real elevation (no glass/blur). */
-  --qbg: #f7f7f7; /* designer, 12 Nov 2026: neutral and lighter than the design's cool #f3f5f8 */
-  /* Designer, 12 Nov 2026: no navy glow (top right) and a half-strength green glow, so the
-     page reads lighter. The brand-red glow stays. */
+  --qbg: #fafafa; /* designer, 12 Nov 2026: neutral and lighter than the design's cool #f3f5f8 */
+  /* Designer, 12 Nov 2026: only the brand-red accent glow; navy and green dropped so the page
+     stays light and grey chips/counts read against it (no extra borders). */
   --amb2: transparent;
-  --amb3: rgba(17, 64, 46, 0.035);
+  --amb3: transparent;
   --qcard: #ffffff;
   --card2: #f8fafc;
   --drawer: #ffffff;
@@ -851,12 +851,12 @@
 .dark [data-tenant="riverbank"] {
   --rbrand: #ed1c24;            /* guide keeps brand red on primary buttons */
   --onbrand: #ffffff;
-  /* Dark mode keeps the full glow (the light block drops navy and halves green). */
-  --amb2: rgba(64, 99, 168, 0.11);
-  --amb3: rgba(242, 177, 60, 0.07);
+  /* Designer, 12 Nov 2026: red accent glow only, in dark mode too. */
+  --amb2: transparent;
+  --amb3: transparent;
 
   /* Slate near-black dark ramp (slate-950 based; deeper = darker) */
-  --qbg: #020617;
+  --qbg: #01030a; /* designer, 12 Nov 2026: a touch darker than #020617 so counts/chips read */
   --qcard: #0f172a;
   --card2: #0b1120;
   --drawer: #1e293b;
