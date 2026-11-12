@@ -72,7 +72,7 @@
   --ds-shadow-drawer: -16px 0 40px rgba(15, 23, 42, 0.22);
   /* White controls that sit on the page (search, filter chips, secondary buttons): a soft lift so
      they read against the #fafafa page without a heavier border (designer, 12 Nov 2026). */
-  --ds-shadow-control: 0 1px 2px rgba(35, 31, 32, 0.06), 0 2px 8px -3px rgba(35, 31, 32, 0.14);
+  --ds-shadow-control: 0 1px 2px rgba(35, 31, 32, 0.05), 0 1px 4px -2px rgba(35, 31, 32, 0.10);
   --ds-shadow-menu: 0 10px 30px rgba(0, 0, 0, 0.35);
   --ds-scrim: rgba(15, 23, 42, 0.38);
 
