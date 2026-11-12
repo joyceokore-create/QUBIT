@@ -99,7 +99,7 @@ export const confidential = (tenantName: string): Notice => ({ kind: "confidenti
 
 /** One line in a thin brand-coloured outline. */
 export function notice(n: Notice, brandColor: string): string {
-  return `<div class="notice" role="note" style="border-color:${safeColor(brandColor)}">${n.label ? `<b>${esc(n.label)}</b> ` : ""}${esc(n.text)}</div>`;
+  return `<div class="notice" role="note" style="border-color:${safeColor(brandColor)};color:${safeColor(brandColor)}">${n.label ? `<b>${esc(n.label)}</b> ` : ""}${esc(n.text)}</div>`;
 }
 
 export interface StatusItem {

@@ -54,6 +54,15 @@ const css = (orientation: Orientation) => `
   html, body { margin: 0; padding: 0; }
   body { font-family: ${PRINT_FONT}; color: ${INK.text}; font-size: 10.5px; line-height: 1.4; background: #fff;
          -webkit-print-color-adjust: exact; print-color-adjust: exact; font-variant-numeric: tabular-nums; }
+  /* The browser print view (format=html) has no @page box on screen: give it the same margins
+     as the printed page. Print/PDF rendering uses print media, so it is unaffected. */
+  @media screen {
+    body { padding: ${PAGE_MARGIN.top} ${PAGE_MARGIN.right} ${PAGE_MARGIN.bottom} ${PAGE_MARGIN.left};
+           /* On a viewer's machine Inter may be missing and a single-weight Noto Sans would lose
+              every bold; system faces (which have bold) come before it. PDFs are rendered in the
+              server image, which ships Inter. */
+           font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", sans-serif; }
+  }
   * { box-sizing: border-box; }
   p { margin: 0; }
   .doc { display: flex; flex-direction: column; gap: 12px; }
@@ -69,12 +78,14 @@ const css = (orientation: Orientation) => `
   .hd-k { font-size: 9px; font-weight: 600; color: ${INK.muted}; text-transform: uppercase; letter-spacing: .06em; }
   .hd-v { font-size: 11px; font-weight: 600; margin-top: 1px; }
 
-  .notice { border: 1px solid; border-radius: 4px; padding: 6px 10px; font-size: 10.5px; color: ${INK.text}; }
+  /* Designer, 12 Nov 2026: a thick brand-coloured rule on the left, the text in the brand colour
+     (set inline by notice()), no box. */
+  .notice { border: 0; border-left: 4px solid; padding: 5px 0 5px 10px; font-size: 10.5px; font-weight: 600; }
   .notice b { font-weight: 700; }
 
   .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; break-inside: avoid; }
   .panel { background: ${INK.panel}; border-radius: 6px; padding: 10px 12px; min-width: 0; }
-  .panel-t { font-size: 10px; font-weight: 700; color: ${INK.text}; margin-bottom: 6px; }
+  .panel-t { font-size: 11px; font-weight: 700; color: ${INK.text}; margin-bottom: 6px; }
   .kv { width: 100%; border-collapse: collapse; }
   .kv td { padding: 2px 0; vertical-align: top; }
   .kv td.k { color: ${INK.muted}; width: 38%; padding-right: 10px; }

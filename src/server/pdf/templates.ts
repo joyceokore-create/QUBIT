@@ -336,7 +336,9 @@ export function renderTable(d: TableReportData, opts: RenderOptions = {}): Rende
       ],
     },
     status: { title: "Summary", items: tableStatusItems(d) },
-    sections: [section("Rows", d.rows.length, wide ? `<div style="font-size:9px">${grid}</div>` : grid)],
+    // Designer, 12 Nov 2026: the table follows the panels directly (no "Rows (N)" heading; the
+    // Summary panel already gives the row count).
+    sections: [d.rows.length ? `<section class="sec">${wide ? `<div style="font-size:9px">${grid}</div>` : grid}</section>` : section("Rows", 0, null)],
     source: `QUBIT custom report · Live ${d.moduleLabel.toLowerCase()} data`,
   });
   return { html, spec, filenameStem: `qubit-report-${stem(d.dataset)}-${d.generatedAt.toISOString().slice(0, 10)}` };
