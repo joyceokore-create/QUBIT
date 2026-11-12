@@ -244,7 +244,13 @@
   color: var(--ds-ink2);
 }
 .ds-menu :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]) svg { color: var(--ds-ink3); }
-.ds-menu :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"])[data-highlighted] { background: var(--ds-surface2); color: var(--ds-ink); }
+/* Hover = grey + bold dark; selected (radio/checkbox) = red wash + bold red, hovered or not. */
+.ds-menu :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"])[data-highlighted]:not([data-variant="destructive"]),
+.ds-menu :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"])[data-highlighted]:not([data-variant="destructive"]) svg { background-color: var(--ds-surface2); color: var(--ds-ink); font-weight: 600; }
+.ds-menu :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"])[data-highlighted] svg { background-color: transparent; }
+.ds-menu :is([role="menuitemradio"], [role="menuitemcheckbox"])[data-checked],
+.ds-menu :is([role="menuitemradio"], [role="menuitemcheckbox"])[data-checked] svg { color: var(--ds-brand-ink); font-weight: 600; }
+.ds-menu :is([role="menuitemradio"], [role="menuitemcheckbox"])[data-checked] { background-color: var(--ds-brand-wash); }
 .ds-menu [data-slot="dropdown-menu-label"] { padding: 8px 9px 4px; font-size: 11px; font-weight: 600; color: var(--ds-ink3); }
 .ds-menu [data-slot="dropdown-menu-separator"] { margin: 6px -6px; background: var(--ds-line); }
 .ds-menu [data-variant="destructive"], .ds-menu [data-variant="destructive"] svg { color: var(--ds-bad-text); }

@@ -120,7 +120,7 @@ export function FilterSelect({
               <DropdownMenuRadioItem
                 key={o.value || "__all"}
                 value={o.value}
-                className="rounded-[8px] px-[9px] py-[7px] pr-8 text-[12.5px] data-checked:bg-[var(--ds-brand-wash)] data-checked:font-bold data-checked:text-[var(--ds-brand-ink)]"
+                className="rounded-[8px] px-[9px] py-[7px] pr-8 text-[12.5px]"
               >
                 {o.label}
               </DropdownMenuRadioItem>
