@@ -74,9 +74,11 @@ export const COMPACT = `inline-flex h-[var(--ds-control-h-compact)] items-center
 export const COMPACT_PRIMARY = `inline-flex h-[var(--ds-control-h-compact)] items-center justify-center gap-1 whitespace-nowrap rounded-[var(--ds-radius-compact)] px-[11px] text-[12px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${PRIMARY_FILL} ${FOCUS}`;
 /** U3 — a text input / select at the control size and radius. */
 export const INPUT = `h-[var(--ds-control-h)] rounded-[var(--ds-radius-control)] border border-[var(--ds-line)] bg-[var(--ds-card)] px-3 text-[13px] text-[var(--ds-ink)] placeholder:text-[var(--ds-placeholder)] focus:border-[var(--ds-brand)] ${FOCUS}`;
-/** Table header row (put on <thead>): a grey band with rounded ends, 11px/700 Title Case
- * labels — not uppercase (design `.sgt`). */
+/** Table header row (put on <thead>): its own grey band (`--ds-thead`, a step darker than the
+ * row hover so the two never look alike), rounded ends, 12.5px/600 ink2 Title Case labels —
+ * not uppercase. Designer, 12 Nov 2026: larger and roomier than the design's 11px `.sgt`. */
 export const THEAD =
-  "[&_th]:bg-[var(--ds-surface2)] [&_th]:px-2.5 [&_th]:py-2 [&_th]:text-left [&_th]:text-[11px] [&_th]:font-bold [&_th]:tracking-[.03em] [&_th]:text-[var(--ds-ink3)] [&_th:first-child]:rounded-l-[8px] [&_th:last-child]:rounded-r-[8px]";
-/** Body rows of a spec table: 10px cells, dotted rules, none after the last row. */
-export const TROW = "[&>td]:border-b [&>td]:border-dotted [&>td]:border-[var(--ds-line)] [&>td]:p-2.5 [&>td]:align-middle last:[&>td]:border-b-0";
+  "[&_th]:bg-[var(--ds-thead)] [&_th]:px-3.5 [&_th]:py-[11px] [&_th]:text-left [&_th]:text-[12.5px] [&_th]:font-semibold [&_th]:text-[var(--ds-ink2)] [&_th:first-child]:rounded-l-[10px] [&_th:last-child]:rounded-r-[10px]";
+/** Body rows of a spec table: 14px cells at 13px text, dotted rules, none after the last row.
+ * Hover (where a table adds it) uses --ds-surface2, lighter than the header band. */
+export const TROW = "[&>td]:border-b [&>td]:border-dotted [&>td]:border-[var(--ds-line)] [&>td]:px-3.5 [&>td]:py-3.5 [&>td]:text-[13px] [&>td]:align-middle last:[&>td]:border-b-0";

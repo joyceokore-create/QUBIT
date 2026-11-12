@@ -26,7 +26,8 @@
   /* Surfaces */
   --ds-bg: #fafafa; /* deviation 7: lighter neutral page (design #f3f5f8) */
   --ds-card: #ffffff;
-  --ds-surface2: #f6f7f9; /* kv panels, table header band, in-card search, active in-card tab */
+  --ds-surface2: #f6f7f9; /* kv panels, row hover, in-card search, active in-card tab */
+  --ds-thead: #edeff2; /* table header band — a step darker than the row hover (designer, 12 Nov 2026) */
   --ds-bd: rgba(15, 23, 42, 0.08); /* card border */
   --ds-line: #e7e9ee; /* control borders, dividers, dotted row rules */
 
@@ -116,6 +117,7 @@
   --ds-bg: #01030a; /* deviation 7: a touch darker (design #020617) */
   --ds-card: #0f172a;
   --ds-surface2: #132036;
+  --ds-thead: #1b2a44;
   --ds-bd: rgba(148, 163, 184, 0.16);
   --ds-line: #1e293b;
 
