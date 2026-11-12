@@ -85,7 +85,7 @@ export function RecordLeaveDialog({ people }: { people: { id: string; name: stri
       onSubmit={submit}
       trigger={
         <DialogTrigger render={<Button variant="outline" />}>
-          <CalendarOff /> Record leave
+          <CalendarOff /> Record Leave
         </DialogTrigger>
       }
     >

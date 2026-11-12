@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { RaiseRequestFormSchema, DeclineFormSchema } from "@/lib/staffing-schema";
-import { FIELD_INVALID } from "@/lib/surface";
+import { FIELD_INVALID, THEAD, TROW } from "@/lib/surface";
 import { useFieldErrors } from "@/components/forms/use-field-errors";
 import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { Button } from "@/components/ui/button";
@@ -208,11 +208,11 @@ export function StaffingClient({
       )}
 
       <div className="rounded-[14px] border border-[var(--w08)] bg-[var(--qcard)]">
-        <table className="w-full text-[12.5px]">
-          <thead>
-            <tr className="border-b border-[var(--w08)] text-left">
+        <table className="w-full border-separate border-spacing-0 text-left text-[12.5px]">
+          <thead className={THEAD}>
+            <tr>
               {["Request", "Project", "Raised by", "Status", ""].map((h) => (
-                <th key={h} className="px-3.5 py-2.5 text-[10px] font-semibold tracking-[0.8px] text-[var(--ink4)] uppercase">
+                <th key={h} scope="col">
                   {h}
                 </th>
               ))}
@@ -221,22 +221,22 @@ export function StaffingClient({
           <tbody>
             {requests.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3.5 py-6 text-center text-[12px] text-[var(--ink4)]">
+                <td colSpan={5} className="!py-6 text-center !text-[12px] text-[var(--ds-ink3)]">
                   No requests yet.
                 </td>
               </tr>
             )}
             {requests.map((r) => (
-              <tr key={r.id} className="border-b border-[var(--w06)] last:border-0">
-                <td className="px-3.5 py-2.5">
+              <tr key={r.id} className={TROW}>
+                <td>
                   <span className="font-semibold text-[var(--qink)]">
                     1 {r.role} · {r.allocationPct}% · {fmt(r.windowStart)}–{fmt(r.windowEnd)}
                   </span>
                   {r.note && <div className="text-[11px] text-[var(--ink4)]">{r.note}</div>}
                 </td>
-                <td className="px-3.5 py-2.5 text-[var(--ink3)]">{r.projectCode}</td>
-                <td className="px-3.5 py-2.5 text-[var(--ink3)]">{r.raisedByName}</td>
-                <td className="px-3.5 py-2.5">
+                <td className="text-[var(--ds-ink2)]">{r.projectCode}</td>
+                <td className="text-[var(--ds-ink2)]">{r.raisedByName}</td>
+                <td>
                   <span
                     className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
                       r.status === "Open"
@@ -252,7 +252,7 @@ export function StaffingClient({
                     {(r.status === "Declined" || r.status === "Cancelled") && r.resolvedNote ? ` — ${r.resolvedNote}` : ""}
                   </span>
                 </td>
-                <td className="px-3.5 py-2.5 text-right">
+                <td className="text-right">
                   {r.status === "Open" && (
                     <span className="inline-flex gap-1.5">
                       {isHead && (

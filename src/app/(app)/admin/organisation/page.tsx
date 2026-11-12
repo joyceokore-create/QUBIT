@@ -4,6 +4,8 @@ import { Forbidden } from "@/components/forbidden";
 import { listOrgUnits } from "@/server/org-units";
 import { AdminHeader } from "../admin-header";
 import { OrgUnitsPanel } from "./org-units-panel";
+import { HeaderSlot } from "@/components/list/header-slot";
+import { MARKETS_HEADER_SLOT } from "@/lib/header-slots";
 
 // docs/38 — Admin › Markets: the markets (= subsidiaries) a product ships into, which
 // projects pick on their Markets tab. Until I1 these lived only in the seed.
@@ -18,7 +20,12 @@ export default async function AdminOrganisationPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
-      <AdminHeader canManageIam={can(ctx, "iam:manage")} subtitle={`Markets · ${units.length} ${units.length === 1 ? "market" : "markets"}${markets !== units.length ? ` (${units.length - markets} internal)` : ""}`} />
+      <AdminHeader
+        canManageIam={can(ctx, "iam:manage")}
+        title="Markets"
+        description={`Where a product can ship, picked on each project's Markets tab · ${units.length} ${units.length === 1 ? "market" : "markets"}${markets !== units.length ? ` (${units.length - markets} internal)` : ""}.`}
+        action={<HeaderSlot id={MARKETS_HEADER_SLOT} />}
+      />
       <OrgUnitsPanel initial={units.map((u) => ({ ...u, createdAt: u.createdAt.toISOString() }))} />
     </main>
   );

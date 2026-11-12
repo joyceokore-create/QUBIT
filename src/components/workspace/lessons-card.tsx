@@ -5,7 +5,7 @@ import { Loader2, Plus } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useFieldErrors } from "@/components/forms/use-field-errors";
 import { FieldError } from "@/components/ui/drawer";
-import { FIELD_INVALID } from "@/lib/surface";
+import { COMPACT_PRIMARY, FIELD_INVALID } from "@/lib/surface";
 import { readApiError } from "@/lib/form-errors";
 import { LessonFormSchema } from "@/lib/workspace-schema";
 import { LESSON_CATEGORIES, LESSON_LABELS, type LessonCategory, type LessonRow } from "@/server/lessons";
@@ -117,7 +117,7 @@ export function LessonsCard({ projectId }: { projectId: string }) {
               type="button"
               onClick={() => void add()}
               disabled={busy}
-              className="ml-auto flex items-center gap-1.5 rounded-[8px] bg-[var(--brand)] px-3 py-1.5 text-[11.5px] font-bold text-[var(--onbrand)] disabled:opacity-60"
+              className={`ml-auto ${COMPACT_PRIMARY}`}
             >
               {busy && <Loader2 className="size-3 animate-spin" />} Save
             </button>

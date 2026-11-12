@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Check, Loader2, Sparkles, X } from "lucide-react";
 import type { CoverageReport, RequirementCandidate, RequirementRow } from "@/server/requirements";
-import { CARD } from "@/lib/surface";
+import { CARD, COMPACT, COMPACT_PRIMARY } from "@/lib/surface";
 
 // Requirements + traceability (docs/16 §6). Extraction PROPOSES; this screen is the
 // human gate — "Q found this in your BRD" — and only ticked items become real. Coverage
@@ -105,7 +105,7 @@ export function RequirementsPanel({ projectId }: { projectId: string }) {
                   type="button"
                   disabled={busy}
                   onClick={() => void propose(d.id)}
-                  className="flex items-center gap-1 rounded-full border border-[var(--w10)] px-2.5 py-1 text-[10.5px] font-semibold text-[var(--ink3)] hover:border-[var(--brand)] hover:text-[var(--brand)] disabled:opacity-60"
+                  className={COMPACT}
                 >
                   {busy ? <Loader2 className="size-3 animate-spin" /> : <Sparkles className="size-3" />}
                   Read {d.kind}
@@ -226,7 +226,7 @@ export function RequirementsPanel({ projectId }: { projectId: string }) {
               type="button"
               onClick={() => void accept()}
               disabled={busy || picked.size === 0}
-              className="flex items-center gap-1.5 rounded-[9px] bg-[var(--brand)] px-3.5 py-1.5 text-[12px] font-bold text-[var(--onbrand)] disabled:opacity-60"
+              className={COMPACT_PRIMARY}
             >
               {busy && <Loader2 className="size-3.5 animate-spin" />}
               Approve {picked.size} of {candidates.length}

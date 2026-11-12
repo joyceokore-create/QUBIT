@@ -14,6 +14,7 @@ import { Banner } from "@/components/ui/panel";
 import { useFieldErrors } from "@/components/forms/use-field-errors";
 import { readApiError, type FieldErrors } from "@/lib/form-errors";
 import { CommentFormSchema, PromoteFormSchema } from "@/lib/comment-schema";
+import { COMPACT, COMPACT_PRIMARY, PRIMARY } from "@/lib/surface";
 
 // Conversation attached to work (M4, docs/16 §4): one-level threads, @mentions
 // (notification now, email with M5), promote-to-Decision for PMs. Mounted on projects,
@@ -101,7 +102,7 @@ function Composer({
           <DropdownMenuTrigger
             onMouseEnter={() => void loadPeople()}
             onFocus={() => void loadPeople()}
-            className="flex items-center gap-1 rounded-[7px] border border-[var(--w07)] px-2 py-1 text-[10.5px] font-semibold text-[var(--ink3)] transition-colors hover:text-[var(--qink)]"
+            className={COMPACT}
           >
             <AtSign className="size-3" /> Mention
           </DropdownMenuTrigger>
@@ -126,7 +127,7 @@ function Composer({
           type="button"
           onClick={() => void post()}
           disabled={busy}
-          className="ml-auto flex items-center gap-1.5 rounded-[8px] bg-[var(--brand)] px-3 py-1.5 text-[11px] font-bold text-[var(--onbrand)] disabled:opacity-50"
+          className={`ml-auto ${COMPACT_PRIMARY}`}
         >
           <Send className="size-3" /> Post
         </button>
@@ -308,9 +309,9 @@ function PromoteForm({ comment, onDone }: { comment: CommentJson; onDone: () => 
         type="button"
         onClick={() => void promote()}
         disabled={busy}
-        className="flex items-center justify-center gap-1.5 rounded-[8px] bg-[var(--brand)] px-3.5 py-2 text-xs font-bold text-[var(--onbrand)] disabled:opacity-50"
+        className={PRIMARY}
       >
-        <Gavel className="size-3.5" /> {busy ? "Recording…" : "Record decision"}
+        <Gavel className="size-3.5" /> {busy ? "Recording…" : "Record Decision"}
       </button>
     </div>
   );

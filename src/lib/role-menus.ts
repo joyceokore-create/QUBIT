@@ -58,7 +58,7 @@ const I = {
   teams: { key: "teams", label: "Teams", href: "/admin/teams", icon: "users", perm: "admin:access", module: "ADMIN_IAM" },
   roles: { key: "roles", label: "Roles & Permissions", href: "/admin/roles", icon: "key", perm: "admin:access", module: "ADMIN_IAM" },
   departments: { key: "departments", label: "Departments", href: "/admin/departments", icon: "building", perm: "admin:access", module: "ADMIN_IAM" },
-  organisation: { key: "organisation", label: "Organisation", href: "/admin/organisation", icon: "compass", perm: "admin:access", module: "ADMIN_IAM" },
+  organisation: { key: "organisation", label: "Markets", href: "/admin/organisation", icon: "compass", perm: "admin:access", module: "ADMIN_IAM" },
   audit: { key: "audit", label: "Audit Log", href: "/admin/audit", icon: "history", perm: "iam:manage", module: "ADMIN_IAM" },
   settings: { key: "settings", label: "Settings", href: "/admin/settings", icon: "filter", perm: "iam:manage", module: "ADMIN_IAM" },
 } satisfies Record<string, MenuItem>;

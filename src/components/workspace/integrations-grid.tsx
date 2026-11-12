@@ -3,7 +3,7 @@
 import { dispatchTourEvent } from "@/components/tour/tour-events";
 import { youtrackBaseUrl, integrationToken } from "@/lib/workspace-schema";
 import { readApiError } from "@/lib/form-errors";
-import { FIELD_INVALID } from "@/lib/surface";
+import { COMPACT, COMPACT_PRIMARY, FIELD_INVALID } from "@/lib/surface";
 import { Field, FieldError } from "@/components/ui/drawer";
 import { useFieldErrors, type FieldBinding } from "@/components/forms/use-field-errors";
 import { z } from "zod";
@@ -184,7 +184,7 @@ export function IntegrationsGrid({ projectId, canEdit }: { projectId: string; ca
             <button
               type="button"
               onClick={() => void navigator.clipboard?.writeText(webhookSecretOnce)}
-              className="rounded-[8px] border border-[var(--w12)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--ink2)] hover:border-brand hover:text-brand"
+              className={COMPACT}
             >
               Copy
             </button>
@@ -232,7 +232,7 @@ export function IntegrationsGrid({ projectId, canEdit }: { projectId: string; ca
                     type="button"
                     disabled={syncing}
                     onClick={() => void syncNow(false)}
-                    className="flex items-center gap-1 rounded-[8px] border border-[var(--w12)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ink2)] hover:border-brand hover:text-brand disabled:opacity-50"
+                    className={COMPACT}
                   >
                     <RefreshCw className={`size-3 ${syncing ? "animate-spin" : ""}`} /> Sync now
                   </button>
@@ -257,7 +257,7 @@ export function IntegrationsGrid({ projectId, canEdit }: { projectId: string; ca
                   <button
                     type="button"
                     onClick={() => set(c.provider, { connected: false, resource: null })}
-                    className="rounded-[9px] border border-[var(--w12)] px-3.5 py-1.5 text-[12px] font-semibold text-[var(--ink2)] hover:border-brand hover:text-brand"
+                    className={COMPACT}
                   >
                     Disconnect
                   </button>
@@ -272,9 +272,9 @@ export function IntegrationsGrid({ projectId, canEdit }: { projectId: string; ca
                   )}
                 </>
               ) : (
-                <Button type="button" onClick={() => setConnect(c)} className="h-8 px-3.5 text-[12px]">
+                <button type="button" onClick={() => setConnect(c)} className={COMPACT_PRIMARY}>
                   Connect
-                </Button>
+                </button>
               )
             ) : (
               <span className="text-[11px] text-[var(--ink5)]">{c.connected ? "Connected" : "Not connected"}</span>

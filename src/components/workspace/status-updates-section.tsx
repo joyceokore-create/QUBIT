@@ -7,7 +7,7 @@ import { FieldError } from "@/components/ui/drawer";
 import { useFieldErrors } from "@/components/forms/use-field-errors";
 import { Send } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FIELD_INVALID, RAG_TOKEN } from "@/lib/surface";
+import { COMPACT_PRIMARY, FIELD_INVALID, RAG_TOKEN } from "@/lib/surface";
 
 interface Update {
   id: string;
@@ -89,9 +89,9 @@ export function StatusUpdatesSection({ projectId, canEdit }: { projectId: string
               type="button"
               onClick={post}
               disabled={posting}
-              className={`${error ? "" : "ml-auto "}flex items-center gap-1.5 rounded-[8px] bg-[var(--brand)] px-3.5 py-1.5 text-xs font-bold text-[var(--onbrand)] disabled:opacity-50`}
+              className={`${error ? "" : "ml-auto "}${COMPACT_PRIMARY}`}
             >
-              <Send className="size-3.5" /> {posting ? "Posting…" : "Post update"}
+              <Send className="size-3.5" /> {posting ? "Posting…" : "Post Update"}
             </button>
           </div>
         </div>

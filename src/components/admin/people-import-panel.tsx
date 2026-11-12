@@ -8,7 +8,7 @@ import { FieldError, FIELD_INPUT } from "@/components/ui/drawer";
 import { useFieldErrors } from "@/components/forms/use-field-errors";
 import { readApiError } from "@/lib/form-errors";
 import { PeopleImportBodySchema } from "@/lib/people-import-schema";
-import { CARD } from "@/lib/surface";
+import { CARD, COMPACT, QUIET, THEAD, TROW } from "@/lib/surface";
 
 /**
  * Bulk onboarding from the CSV template (DM1.72; Oct 2026 — template download, file
@@ -127,14 +127,14 @@ export function PeopleImportPanel() {
     <section className={`${CARD} flex flex-col gap-3 p-4`} style={{ background: "var(--cardbg)" }}>
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-[14px] font-bold text-[var(--qink)]">Import people</h2>
-        <a href="/api/admin/people-import/template" download className="inline-flex items-center gap-1.5 rounded-[7px] border border-[var(--w07)] px-2.5 py-1 text-[11.5px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)]">
+        <a href="/api/admin/people-import/template" download className={COMPACT}>
           <Download className="size-3.5" aria-hidden /> Download template
         </a>
-        <button type="button" onClick={() => fileInput.current?.click()} className="inline-flex items-center gap-1.5 rounded-[7px] border border-[var(--w07)] px-2.5 py-1 text-[11.5px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)]">
+        <button type="button" onClick={() => fileInput.current?.click()} className={COMPACT}>
           <Upload className="size-3.5" aria-hidden /> {fileName ? `Replace ${fileName}` : "Choose file"}
         </button>
         <input ref={fileInput} type="file" accept=".csv,text/csv" className="sr-only" aria-label="People CSV file" onChange={(e) => readFile(e.target.files?.[0])} />
-        <button type="button" onClick={() => setOpen(false)} className="ml-auto text-[11.5px] text-[var(--ink4)] hover:text-[var(--qink)]">
+        <button type="button" onClick={() => setOpen(false)} className={`ml-auto ${QUIET}`}>
           Close
         </button>
       </div>
@@ -185,34 +185,34 @@ export function PeopleImportPanel() {
       )}
 
       {preview && (
-        <div className="overflow-x-auto rounded-[10px] border border-[var(--w08)]">
-          <table className="w-full border-collapse text-left text-[12px]">
-            <thead>
-              <tr className="font-mono text-[9px] font-bold uppercase tracking-[1px] text-[var(--ink4)]">
-                <th className="border-b border-[var(--hair)] px-3 py-2">Line</th>
-                <th className="border-b border-[var(--hair)] px-3 py-2">Person</th>
-                <th className="border-b border-[var(--hair)] px-3 py-2">Role</th>
-                <th className="border-b border-[var(--hair)] px-3 py-2">Projects</th>
-                <th className="border-b border-[var(--hair)] px-3 py-2">Will</th>
+        <div className="overflow-x-auto">
+          <table className="w-full border-separate border-spacing-0 text-left text-[12.5px]">
+            <thead className={THEAD}>
+              <tr>
+                <th scope="col">Line</th>
+                <th scope="col">Person</th>
+                <th scope="col">Role</th>
+                <th scope="col">Projects</th>
+                <th scope="col">Will</th>
               </tr>
             </thead>
             <tbody>
               {preview.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-3 text-[var(--ink5)]">
+                  <td colSpan={5} className="text-[var(--ds-ink3)]">
                     No importable rows.
                   </td>
                 </tr>
               )}
               {preview.map((p) => (
-                <tr key={p.line} className="border-b border-[var(--hair2)] last:border-0">
-                  <td className="px-3 py-2 font-mono text-[10.5px] text-[var(--ink4)]">{p.line}</td>
-                  <td className="px-3 py-2">
-                    <span className="font-medium text-[var(--qink)]">{p.name}</span>
+                <tr key={p.line} className={TROW}>
+                  <td className="tabular-nums text-[var(--ds-ink3)]">{p.line}</td>
+                  <td>
+                    <span className="font-medium text-[var(--ds-ink)]">{p.name}</span>
                     <span className="text-[var(--ink4)]"> · {p.email}</span>
                   </td>
-                  <td className="px-3 py-2 text-[var(--ink2)]">{p.role}</td>
-                  <td className="px-3 py-2">
+                  <td className="text-[var(--ds-ink2)]">{p.role}</td>
+                  <td>
                     {p.projectsFound.map((c) => (
                       <span key={c} className="mr-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold" style={{ color: "var(--ok)", background: "color-mix(in oklab, var(--ok) 10%, transparent)" }}>
                         ✓ {c}
@@ -225,7 +225,7 @@ export function PeopleImportPanel() {
                     ))}
                     {p.projectsFound.length + p.unknownProjects.length === 0 && <span className="text-[var(--ink5)]">—</span>}
                   </td>
-                  <td className="px-3 py-2 text-[var(--ink3)]">{p.exists ? "update (already exists)" : "create"}</td>
+                  <td className="text-[var(--ds-ink2)]">{p.exists ? "update (already exists)" : "create"}</td>
                 </tr>
               ))}
             </tbody>
@@ -256,7 +256,7 @@ export function PeopleImportPanel() {
                 <button
                   type="button"
                   onClick={() => void navigator.clipboard.writeText(r.acceptUrl!).catch(() => {})}
-                  className="rounded-[6px] border border-[var(--w07)] px-2 py-0.5 text-[10.5px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)]"
+                  className={COMPACT}
                 >
                   Copy invite link
                 </button>

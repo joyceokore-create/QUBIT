@@ -114,7 +114,7 @@ export function DepartmentDialog({
       onSubmit={submit}
       trigger={
         mode === "create" ? (
-          <DialogTrigger render={<Button className="rounded-full" />}>
+          <DialogTrigger render={<Button />}>
             <Plus /> New Department
           </DialogTrigger>
         ) : undefined

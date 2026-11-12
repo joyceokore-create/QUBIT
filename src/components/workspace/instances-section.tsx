@@ -8,7 +8,7 @@ import { useFieldErrors } from "@/components/forms/use-field-errors";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus, ShieldAlert, X } from "lucide-react";
 import type { NamedInstanceJson } from "@/components/panels/project-panel-json";
-import { CARD_GLASS as CARD, CARD_BG, FIELD_INVALID, FOCUS, PRIMARY, QUIET, SECONDARY } from "@/lib/surface";
+import { CARD_GLASS as CARD, CARD_BG, FIELD_INVALID, FOCUS, PRIMARY, QUIET, SECONDARY, THEAD, TROW } from "@/lib/surface";
 
 /**
  * docs/38 — the Delivery tab's Instances grid: rows are the product's named instances
@@ -139,22 +139,26 @@ export function InstancesSection({
       )}
       {rows.length > 0 && (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[420px] border-collapse text-left text-[12px]">
-            <thead>
-              <tr className="font-mono text-[9px] font-bold uppercase tracking-[1px] text-[var(--ink4)]">
-                <th className="py-1.5 pr-3">Instance</th>
+          <table className="w-full min-w-[420px] border-separate border-spacing-0 text-left text-[12.5px]">
+            <thead className={THEAD}>
+              <tr>
+                <th scope="col">Instance</th>
                 {columns.map((c) => (
-                  <th key={c.orgUnitId ?? "product"} className="px-2 py-1.5 text-center">
+                  <th key={c.orgUnitId ?? "product"} scope="col" className="!text-center">
                     {c.label}
                   </th>
                 ))}
-                {canManage && <th className="w-8" />}
+                {canManage && (
+                  <th scope="col" className="w-8">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-t border-[var(--hair2)]">
-                  <td className="py-2 pr-3">
+                <tr key={r.id} className={TROW}>
+                  <td>
                     <span className="font-semibold text-[var(--qink)]">{r.name}</span>
                     <span className="ml-1.5 font-mono text-[10px] text-[var(--ink4)]">{r.code}</span>
                     <span className="block text-[10.5px] text-[var(--ink4)]" title="One track for all markets — pick a template in the gates card while this instance is selected">
@@ -169,7 +173,7 @@ export function InstancesSection({
             const mixed = c.all && cell.state === "";
                     const k = `${r.id}:${c.orgUnitId ?? "-"}`;
                     return (
-                      <td key={k} className="px-2 py-2 text-center">
+                      <td key={k} className="text-center">
                         <div className="inline-flex flex-col items-center gap-1">
                           {canManage && c.editable ? (
                             <select
@@ -205,7 +209,7 @@ export function InstancesSection({
                     );
                   })}
                   {canManage && (
-                    <td className="py-2 text-right">
+                    <td className="text-right">
                       <button type="button" onClick={() => void remove(r.id)} aria-label={`Remove ${r.name}`} className={`${QUIET} px-1 text-[var(--ink4)]`} title="Remove (only while it carries no work)">
                         <X className="size-3" aria-hidden />
                       </button>

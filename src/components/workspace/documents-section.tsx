@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Markdown } from "@/components/q/markdown";
 import { useFieldErrors } from "@/components/forms/use-field-errors";
 import { Field } from "@/components/ui/drawer";
-import { FIELD_INVALID } from "@/lib/surface";
+import { COMPACT, FIELD_INVALID, PRIMARY } from "@/lib/surface";
 import { readApiError } from "@/lib/form-errors";
 import { DocumentFormSchema } from "@/lib/workspace-schema";
 
@@ -194,21 +194,21 @@ export function DocumentsSection({
             {/* I am a named approver on a document in review — my decision, my act. */}
             {d.status === "InReview" && d.approvals.some((a) => a.approverId === viewerId && a.decision === "Pending") && (
               <>
-                <button type="button" onClick={() => decide(d.id, "Approved")} className="flex flex-none items-center gap-1 rounded-full border border-[var(--w10)] px-2.5 py-1 text-[10.5px] font-semibold text-ink-3 hover:border-[var(--ok)] hover:text-[var(--ok)]">
+                <button type="button" onClick={() => decide(d.id, "Approved")} className={`${COMPACT} flex-none`}>
                   <Check className="size-3.5" /> Approve
                 </button>
-                <button type="button" onClick={() => decide(d.id, "Rejected")} className="flex-none rounded-full border border-[var(--w10)] px-2.5 py-1 text-[10.5px] font-semibold text-ink-3 hover:border-[var(--bad)] hover:text-[var(--bad)]">
+                <button type="button" onClick={() => decide(d.id, "Rejected")} className={`${COMPACT} flex-none`}>
                   Send back
                 </button>
               </>
             )}
             {canEdit && (d.status === "Draft" || d.status === "Rejected") && members.length > 0 && (
-              <button type="button" onClick={() => setSubmitFor(submitFor === d.id ? null : d.id)} className="flex-none rounded-full border border-[var(--w10)] px-2.5 py-1 text-[10.5px] font-semibold text-ink-3 hover:border-[var(--brand)] hover:text-brand">
+              <button type="button" onClick={() => setSubmitFor(submitFor === d.id ? null : d.id)} className={`${COMPACT} flex-none`}>
                 Submit for review
               </button>
             )}
             {canEdit && d.status === "Approved" && !d.superseded && (
-              <button type="button" onClick={() => void raiseVersion(d.id)} title="Raise the next version" className="flex-none rounded-full border border-[var(--w10)] px-2.5 py-1 text-[10.5px] font-semibold text-ink-3 hover:border-[var(--brand)] hover:text-brand">
+              <button type="button" onClick={() => void raiseVersion(d.id)} title="Raise the next version" className={`${COMPACT} flex-none`}>
                 New version
               </button>
             )}
@@ -239,7 +239,7 @@ export function DocumentsSection({
                     void submit(d.id, [m.id]);
                     setSubmitFor(null);
                   }}
-                  className="rounded-full border border-[var(--w10)] px-2.5 py-1 text-[10.5px] font-semibold text-ink-3 hover:border-[var(--brand)] hover:text-brand"
+                  className={COMPACT}
                 >
                   {m.name}
                 </button>
@@ -375,7 +375,7 @@ function ViewDialog({ doc, onClose }: { doc: DocDetail; onClose: () => void }) {
           <a
             href={`data:${FILE_MIME[doc.format]};base64,${doc.fileData}`}
             download={`${doc.title}.${doc.format}`}
-            className="flex w-fit items-center gap-2 rounded-[10px] bg-[var(--brand)] px-4 py-2.5 text-[13px] font-bold text-[var(--onbrand)]"
+            className={`${PRIMARY} w-fit`}
           >
             <Download className="size-4" /> Download {doc.format.toUpperCase()}
           </a>

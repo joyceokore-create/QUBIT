@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FieldError } from "@/components/ui/drawer";
 import { useFieldErrors } from "@/components/forms/use-field-errors";
-import { FIELD_INVALID } from "@/lib/surface";
+import { FIELD_INVALID, TROW } from "@/lib/surface";
 import { ProjectWizardFormSchema } from "@/lib/project-wizard-schema";
 import { assignmentWarnings } from "@/lib/capacity";
 import { PROJECT_ROLES } from "@/lib/roles";
@@ -778,7 +778,7 @@ export function ProjectWizard({
 
       {cur === "review" && (
         <WizardCard title="Review — the whole project on one card">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full border-separate border-spacing-0 text-left text-[12.5px]">
             <tbody>
               {[
                 ["Project", `${d.name.trim() || "—"} · ${d.code.trim() || `auto: ${d.name ? codePreview(d.name) : "—"}`}`],
@@ -800,9 +800,9 @@ export function ProjectWizard({
                     : "— staff later",
                 ],
               ].map(([l, v]) => (
-                <tr key={l} className="border-b border-[var(--w06)] last:border-0">
-                  <td className="w-[120px] py-2 text-[10px] font-semibold tracking-[0.8px] text-[var(--ink4)] uppercase">{l}</td>
-                  <td className="py-2 font-semibold text-[var(--qink)]">{v}</td>
+                <tr key={l} className={TROW}>
+                  <td className="w-[120px] font-semibold text-[var(--ds-ink3)]">{l}</td>
+                  <td className="font-semibold text-[var(--ds-ink)]">{v}</td>
                 </tr>
               ))}
             </tbody>

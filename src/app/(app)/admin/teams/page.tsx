@@ -30,7 +30,7 @@ export default async function AdminTeamsPage() {
           <TeamFormDialog
             users={users}
             trigger={
-              <Button className="rounded-full">
+              <Button>
                 <Plus /> New Team
               </Button>
             }

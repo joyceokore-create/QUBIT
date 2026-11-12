@@ -3,11 +3,14 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { useFieldErrors } from "@/components/forms/use-field-errors";
-import { Field, FIELD_INPUT } from "@/components/ui/drawer";
+import { Drawer, DrawerFooter, DrawerFrame, DrawerHeader, Field, FIELD_INPUT } from "@/components/ui/drawer";
+import { InHeaderSlot } from "@/components/list/header-slot";
+import { MARKETS_HEADER_SLOT } from "@/lib/header-slots";
+import { cn } from "@/lib/utils";
 import { Banner } from "@/components/ui/panel";
 import { readApiError, type FieldErrors } from "@/lib/form-errors";
 import { NewOrgUnitFormSchema } from "@/lib/org-unit-schema";
-import { CARD_GLASS as CARD, CARD_BG, PRIMARY, QUIET, SECONDARY } from "@/lib/surface";
+import { CARD_GLASS as CARD, CARD_BG, INPUT, PRIMARY, SECONDARY, THEAD, TROW } from "@/lib/surface";
 
 /**
  * docs/38 — markets (= subsidiaries): code (immutable — projects, reports and the
@@ -25,7 +28,6 @@ interface Unit {
   createdAt: string;
 }
 
-const INPUT = `h-8 rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none`;
 
 export function OrgUnitsPanel({ initial }: { initial: Unit[] }) {
   const [rows, setRows] = useState<Unit[]>(initial);
@@ -76,67 +78,70 @@ export function OrgUnitsPanel({ initial }: { initial: Unit[] }) {
   };
   const patch = (id: string, body: Record<string, unknown>) => call(id, `/api/admin/org-units/${id}`, { method: "PATCH", body: JSON.stringify(body) });
 
+  const closeAdd = () => {
+    setAdding(false);
+    setFormError(null);
+    fe.reset();
+  };
+
   return (
-    <section className={`${CARD} overflow-hidden`} style={CARD_BG} aria-labelledby="org-units-title">
-      <div className="flex flex-wrap items-center gap-3 p-[12px_16px]">
-        <h2 id="org-units-title" className="text-[13.5px] font-semibold text-[var(--qink)]">
-          Markets
-        </h2>
-        <span className="text-[12px] text-[var(--ink4)]">Where a product can ship — Kenya, Uganda, a subsidiary. Projects pick them on their Markets tab.</span>
-        <button type="button" onClick={() => setAdding((a) => !a)} className={`${SECONDARY} ml-auto gap-1.5`}>
-          <Plus className="size-3.5" aria-hidden /> New Market
+    <>
+      {/* Designer, 12 Nov 2026: the page's one red primary sits in the page header. */}
+      <InHeaderSlot id={MARKETS_HEADER_SLOT}>
+        <button type="button" onClick={() => setAdding(true)} className={PRIMARY}>
+          <Plus className="size-4" aria-hidden /> New Market
         </button>
-      </div>
-      {adding && (
-        <form
-          className="flex flex-col gap-3 border-t border-[var(--hair2)] bg-[var(--card2)] p-[12px_16px]"
-          noValidate
+      </InHeaderSlot>
+
+      <Drawer open={adding} onClose={closeAdd}>
+        <DrawerFrame
           onSubmit={(e) => {
             e.preventDefault();
             void create();
           }}
+          header={<DrawerHeader title="New Market" subtitle="Where a product can ship — a country or a subsidiary. Projects pick it on their Markets tab." />}
+          footer={
+            <DrawerFooter>
+              <button type="button" onClick={closeAdd} className={SECONDARY}>
+                Cancel
+              </button>
+              <button type="submit" disabled={busy !== null} className={PRIMARY}>
+                {busy === "new" ? "Adding…" : "Add Market"}
+              </button>
+            </DrawerFooter>
+          }
         >
           {formError && <Banner tone="bad">{formError}</Banner>}
-          <div className="grid gap-3 sm:grid-cols-[150px_minmax(0,1fr)_110px]">
-            <Field label="Code" htmlFor={fe.idOf("code")} error={fe.errors.code}>
-              <input {...fe.bind("code")} value={draft.code} onChange={(e) => setDraft({ ...draft, code: e.target.value })} maxLength={12} placeholder="DRC" className={`${FIELD_INPUT} font-mono uppercase`} />
-            </Field>
-            <Field label="Name" htmlFor={fe.idOf("name")} error={fe.errors.name}>
-              <input {...fe.bind("name")} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} maxLength={80} placeholder="DR Congo" className={FIELD_INPUT} />
-            </Field>
-            <Field label="Flag" htmlFor={fe.idOf("flag")} error={fe.errors.flag}>
-              <input {...fe.bind("flag")} value={draft.flag} onChange={(e) => setDraft({ ...draft, flag: e.target.value })} maxLength={8} placeholder="🇨🇩" className={FIELD_INPUT} />
-            </Field>
-          </div>
-          <div className="flex items-center gap-2">
-            <button type="submit" disabled={busy !== null} className={PRIMARY}>
-              {busy === "new" ? "Adding…" : "Add"}
-            </button>
-            <button type="button" onClick={() => { setAdding(false); setFormError(null); fe.reset(); }} className={QUIET}>
-              Cancel
-            </button>
-          </div>
-        </form>
-      )}
-      {rowError && (
-        <div className="px-4 py-2">
-          <Banner tone="bad">{rowError}</Banner>
-        </div>
-      )}
-      <table className="w-full border-t border-[var(--hair2)] text-left text-[12.5px]">
-        <thead>
-          <tr className="font-mono text-[9px] font-bold uppercase tracking-[1px] text-[var(--ink4)]">
-            <th className="px-4 py-2">Code</th>
-            <th className="px-4 py-2">Name</th>
-            <th className="px-4 py-2">Flag</th>
-            <th className="px-4 py-2 text-right">Projects</th>
+          <Field label="Code" htmlFor={fe.idOf("code")} error={fe.errors.code} hint="Short and unique, e.g. KE.">
+            <input {...fe.bind("code")} value={draft.code} onChange={(e) => setDraft({ ...draft, code: e.target.value })} maxLength={12} placeholder="DRC" className={`${FIELD_INPUT} font-mono uppercase`} />
+          </Field>
+          <Field label="Name" htmlFor={fe.idOf("name")} error={fe.errors.name}>
+            <input {...fe.bind("name")} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} maxLength={80} placeholder="DR Congo" className={FIELD_INPUT} />
+          </Field>
+          <Field label="Flag (Optional)" htmlFor={fe.idOf("flag")} error={fe.errors.flag}>
+            <input {...fe.bind("flag")} value={draft.flag} onChange={(e) => setDraft({ ...draft, flag: e.target.value })} maxLength={8} placeholder="🇨🇩" className={`${FIELD_INPUT} max-w-[120px]`} />
+          </Field>
+        </DrawerFrame>
+      </Drawer>
+
+    <section className={cn(CARD, "flex flex-col gap-3 px-[18px] py-4")} style={CARD_BG} aria-label="Markets">
+      {rowError && <Banner tone="bad">{rowError}</Banner>}
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[560px] border-separate border-spacing-0 text-left text-[12.5px]">
+        <caption className="sr-only">Markets</caption>
+        <thead className={THEAD}>
+          <tr>
+            <th scope="col" className="w-[120px]">Code</th>
+            <th scope="col">Name</th>
+            <th scope="col" className="w-[110px]">Flag</th>
+            <th scope="col" className="w-[100px] text-right!">Projects</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((u) => (
-            <tr key={u.id} className="border-t border-[var(--hair2)]">
-              <td className="px-4 py-2 font-mono text-[11.5px] font-semibold text-[var(--qink)]">{u.code}</td>
-              <td className="px-4 py-2">
+            <tr key={u.id} className={cn(TROW, "transition-colors hover:[&>td]:bg-[var(--ds-surface2)]")}>
+              <td className="font-mono text-[11.5px] font-semibold text-[var(--ds-ink)]">{u.code}</td>
+              <td>
                 <input defaultValue={u.name} maxLength={80} aria-label={`${u.code} name`} onBlur={(e) => {
                   const v = e.target.value.trim();
                   if (v === u.name) return;
@@ -145,16 +150,19 @@ export function OrgUnitsPanel({ initial }: { initial: Unit[] }) {
                     return;
                   }
                   void patch(u.id, { name: v });
-                }} className={`${INPUT} h-7 w-full max-w-[260px]`} />
+                }} className={`${INPUT} h-8 w-full max-w-[280px]`} />
               </td>
-              <td className="px-4 py-2">
-                <input defaultValue={u.flag ?? ""} maxLength={8} aria-label={`${u.code} flag`} onBlur={(e) => e.target.value.trim() !== (u.flag ?? "") && void patch(u.id, { flag: e.target.value.trim() || null })} className={`${INPUT} h-7 w-[64px]`} />
+              <td>
+                <input defaultValue={u.flag ?? ""} maxLength={8} aria-label={`${u.code} flag`} onBlur={(e) => e.target.value.trim() !== (u.flag ?? "") && void patch(u.id, { flag: e.target.value.trim() || null })} className={`${INPUT} h-8 w-[72px]`} />
               </td>
-              <td className="px-4 py-2 text-right tabular-nums text-[var(--ink3)]">{u.projects}</td>
+              <td className="text-right tabular-nums text-[var(--ds-ink2)]">{u.projects}</td>
             </tr>
           ))}
         </tbody>
       </table>
+      </div>
+      <p className="text-[12px] text-[var(--ds-ink3)]">Edit a name or flag in place; it saves when you leave the field.</p>
     </section>
+    </>
   );
 }

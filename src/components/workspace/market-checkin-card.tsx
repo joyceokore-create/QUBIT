@@ -7,7 +7,7 @@ import { FieldError } from "@/components/ui/drawer";
 import { useFieldErrors } from "@/components/forms/use-field-errors";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import { CARD, FIELD_INVALID, RAG_TOKEN } from "@/lib/surface";
+import { CARD, COMPACT_PRIMARY, FIELD_INVALID, RAG_TOKEN } from "@/lib/surface";
 
 // The market check-in (docs/18 §3.1): one narrative paragraph of focus & blockers plus
 // a RAG, per project × market per week. The track's % stays derived from gate state —
@@ -107,10 +107,10 @@ export function MarketCheckInCard({
               type="button"
               onClick={() => void save()}
               disabled={busy}
-              className="ml-auto flex items-center gap-2 rounded-[9px] bg-[var(--brand)] px-3.5 py-1.5 text-[12px] font-bold text-[var(--onbrand)] disabled:opacity-60"
+              className={`ml-auto ${COMPACT_PRIMARY}`}
             >
               {busy && <Loader2 className="size-3.5 animate-spin" />}
-              {saved ? "Saved" : "Save check-in"}
+              {saved ? "Saved" : "Save Check-in"}
             </button>
           </div>
           {error && <p role="alert" className="text-[11.5px] text-[var(--bad)]">{error}</p>}

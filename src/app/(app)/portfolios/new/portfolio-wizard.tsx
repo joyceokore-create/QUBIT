@@ -7,7 +7,7 @@ import { Chip, OptionCard, WizardCard, WizardShell } from "@/components/wizard/w
 import { Input } from "@/components/ui/input";
 import { FieldError } from "@/components/ui/drawer";
 import { useFieldErrors } from "@/components/forms/use-field-errors";
-import { FIELD_INVALID } from "@/lib/surface";
+import { FIELD_INVALID, TROW } from "@/lib/surface";
 import { PORTFOLIO_WIZARD_FIELD_STEP, PortfolioWizardFormSchema } from "@/lib/portfolio-wizard-schema";
 import { draftKey, nextStep, prevStep, type WizardStep } from "@/lib/wizard";
 
@@ -319,7 +319,7 @@ export function PortfolioWizard({
 
       {cur === "review" && (
         <WizardCard title="Review — create when it reads right">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full border-separate border-spacing-0 text-left text-[12.5px]">
             <tbody>
               {[
                 ["Name", d.name.trim() || "—"],
@@ -333,9 +333,9 @@ export function PortfolioWizard({
                     : "—",
                 ],
               ].map(([l, v]) => (
-                <tr key={l} className="border-b border-[var(--w06)] last:border-0">
-                  <td className="w-[130px] py-2 text-[10px] font-semibold tracking-[0.8px] text-[var(--ink4)] uppercase">{l}</td>
-                  <td className="py-2 font-semibold text-[var(--qink)]">{v}</td>
+                <tr key={l} className={TROW}>
+                  <td className="w-[130px] font-semibold text-[var(--ds-ink3)]">{l}</td>
+                  <td className="font-semibold text-[var(--ds-ink)]">{v}</td>
                 </tr>
               ))}
             </tbody>

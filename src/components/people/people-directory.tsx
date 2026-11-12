@@ -7,6 +7,7 @@ import { useListUrl } from "@/components/list/use-list-url";
 import { matchesSearch, paginate } from "@/lib/list-state";
 import { WORKLOAD_BUCKETS, WORKLOAD_LABEL, workloadBucket } from "@/lib/list-buckets";
 import { formatDayMonth } from "@/lib/dates";
+import { THEAD, TROW } from "@/lib/surface";
 
 /**
  * People › Directory — everyone with their project allocations. DM1.73: shows the
@@ -93,19 +94,19 @@ export function PeopleDirectory({ people, timeZone }: { people: DirectoryPerson[
         {rows.length === 0 ? (
           <ListEmpty filtered={isFiltered} noun="people" onClear={() => list.clear([...FILTER_KEYS])} hint={isFiltered ? undefined : "People appear here once they are invited or imported in Admin."} />
         ) : (
-          <table className="relative w-full min-w-[860px] text-left text-[13px]">
-            <thead className="border-b border-[var(--border)] text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--ink3)]">
+          <table className="relative w-full min-w-[860px] border-separate border-spacing-0 text-left text-[12.5px]">
+            <thead className={THEAD}>
               <tr>
-                <th scope="col" className="px-4 py-2.5 font-semibold">Person</th>
-                <th scope="col" className="px-3 py-2.5 font-semibold">Department</th>
-                <th scope="col" className="px-3 py-2.5 font-semibold">Projects</th>
-                <th scope="col" className="px-4 py-2.5 text-right font-semibold">Allocation</th>
+                <th scope="col">Person</th>
+                <th scope="col">Department</th>
+                <th scope="col">Projects</th>
+                <th scope="col" className="!text-right">Allocation</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((p) => (
-                <tr key={p.userId} className="border-b border-[var(--border)] align-top transition-colors last:border-0 hover:bg-[var(--surface-2)]">
-                  <td className="max-w-[300px] px-4 py-2.5">
+                <tr key={p.userId} className={TROW}>
+                  <td className="max-w-[300px]">
                     <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="truncate font-semibold text-[var(--qink)]">{p.name}</span>
                       {p.onLeaveUntil && (
@@ -116,11 +117,11 @@ export function PeopleDirectory({ people, timeZone }: { people: DirectoryPerson[
                     </span>
                     <span className="block truncate text-[12px] text-[var(--ink3)]">{p.email}</span>
                   </td>
-                  <td className="px-3 py-2.5">
-                    <span className="block text-[var(--ink2)]">{p.departmentName ?? "—"}</span>
+                  <td>
+                    <span className="block text-[var(--ds-ink2)]">{p.departmentName ?? "—"}</span>
                     {p.teams.length > 0 && <span className="block text-[12px] text-[var(--ink3)]">{p.teams.join(", ")}</span>}
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td>
                     {p.allocations.length === 0 ? (
                       <span className="text-[var(--ink3)]">—</span>
                     ) : (
@@ -138,7 +139,7 @@ export function PeopleDirectory({ people, timeZone }: { people: DirectoryPerson[
                       </span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-2.5 text-right">
+                  <td className="whitespace-nowrap text-right">
                     <span
                       className="font-semibold tabular-nums"
                       style={{ color: p.effectivePct > 100 ? "var(--bad-ink)" : "var(--ink2)" }}
