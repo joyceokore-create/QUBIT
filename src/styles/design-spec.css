@@ -28,7 +28,7 @@
   --ds-card: #ffffff;
   --ds-surface2: #f6f7f9; /* kv panels, row hover, in-card search, active in-card tab */
   --ds-thead: #edeff2; /* table header band — a step darker than the row hover (designer, 12 Nov 2026) */
-  --ds-bd: rgba(15, 23, 42, 0.08); /* card border */
+  --ds-bd: transparent; /* card border — none in light mode: shadow only (designer, 12 Nov 2026) */
   --ds-line: #e7e9ee; /* control borders, dividers, dotted row rules */
 
   /* Ink ramp (design names; NOT the legacy --ink2…--ink6, which are one step darker) */

@@ -493,7 +493,7 @@ export function RiverbankShell({
       <div className={`flex min-h-screen flex-col transition-[margin] duration-300 motion-reduce:transition-none ${open ? (newNav ? "md:ml-[var(--ds-sidebar-w)]" : "md:ml-64") : "md:ml-20"}`}>
         {newNav ? (
           /* Design spec v2 top bar: white, 58px — organisation, search, "+ New" (ink), Ask Q, bell, account. */
-          <header className="sticky top-0 z-30 flex h-[var(--ds-topbar-h)] items-center gap-2.5 border-b border-[var(--ds-line)] bg-[var(--ds-card)] px-4 md:px-[22px]">
+          <header className="sticky top-0 z-30 flex h-[var(--ds-topbar-h)] items-center gap-2.5 bg-[var(--ds-card)] px-4 md:px-[22px]">
             <button
               type="button"
               onClick={() => setMobileOpen(true)}
