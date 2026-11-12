@@ -39,7 +39,7 @@ export function SlidePanel() {
 
   return (
     <Sheet open={!!state} onOpenChange={(open) => !open && close()}>
-      <SheetContent side="right" className="w-full gap-0 overflow-hidden p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-[var(--ds-drawer-w-wide)]">
+      <SheetContent side="right" className="gap-0 overflow-hidden p-0 data-[side=right]:w-[calc(100%-20px)] data-[side=right]:sm:max-w-[var(--ds-drawer-w-wide)]">
         {/* SheetContent requires an accessible title; the real one renders inside the panel header. */}
         <SheetTitle className="sr-only">Details panel</SheetTitle>
         {error && <p className="p-[26px] text-[12.5px] font-semibold text-[var(--ds-bad-text)]">{error}</p>}

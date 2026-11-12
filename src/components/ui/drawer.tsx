@@ -18,7 +18,7 @@ export function Drawer({ open, onClose, wide = false, children }: { open: boolea
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
       <SheetContent
         side="right"
-        className={cn("w-full gap-0 p-0 data-[side=right]:w-full", wide ? "data-[side=right]:sm:max-w-[var(--ds-drawer-w-wide)]" : "data-[side=right]:sm:max-w-[var(--ds-drawer-w)]")}
+        className={cn("gap-0 p-0 data-[side=right]:w-[calc(100%-20px)]", wide ? "data-[side=right]:sm:max-w-[var(--ds-drawer-w-wide)]" : "data-[side=right]:sm:max-w-[var(--ds-drawer-w)]")}
       >
         {children}
       </SheetContent>
@@ -46,7 +46,7 @@ export function DrawerFrame({ header, footer, children, onSubmit }: { header: Re
 
 export function DrawerHeader({ step, title, subtitle, onBack, backLabel = "Back", brief = false, icon }: { step?: ReactNode; title: ReactNode; subtitle?: ReactNode; onBack?: () => void; backLabel?: string; brief?: boolean; icon?: ReactNode }) {
   return (
-    <div className="border-b border-[var(--ds-line)] px-5 py-[18px] pr-16">
+    <div className="px-5 pb-1 pt-[18px] pr-16">
       {onBack && (
         <button type="button" onClick={onBack} className={cn("mb-1.5 inline-flex items-center gap-1 rounded-[4px] text-[12px] font-semibold text-[var(--ds-ink3)] hover:text-[var(--ds-ink)]", FOCUS)}>
           <ArrowLeft className="size-3.5" aria-hidden /> {backLabel}
@@ -64,7 +64,7 @@ export function DrawerHeader({ step, title, subtitle, onBack, backLabel = "Back"
 
 export function DrawerFooter({ note, children }: { note?: ReactNode; children: ReactNode }) {
   return (
-    <div className="flex items-center justify-end gap-2 border-t border-[var(--ds-line)] px-5 py-3">
+    <div className="flex items-center justify-end gap-2 px-5 pb-4 pt-3">
       {note && <span className="mr-auto text-[12px] text-[var(--ds-ink3)]">{note}</span>}
       {children}
     </div>

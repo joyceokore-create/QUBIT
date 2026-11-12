@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * UX fidelity Tier 3 — the edit forms that were centred dialogs now open as the design's
- * right-hand drawer (docs/08 § Drawer: 440px, wide 580px, scrim without blur, header 18×20
+ * right-hand drawer (floating, 10px from the edges, 18px radius — designer, 12 Nov 2026) (docs/08 § Drawer: 440px, wide 580px, scrim without blur, header 18×20
  * with a bordered 32px close, body 16×20, footer right-aligned with a top rule).
  *
  * Drop-in for `@/components/ui/dialog`: the same export names and props, so converting a
@@ -48,7 +48,7 @@ function DialogContent({
         data-slot="sheet-content"
         data-side="right"
         className={cn(
-          "fixed inset-y-0 right-0 z-50 flex h-full w-full flex-col border-l border-[var(--ds-line)] bg-[var(--ds-card)] text-sm text-[var(--ds-ink)] shadow-[var(--ds-shadow-drawer)] outline-none transition duration-200 ease-in-out data-ending-style:translate-x-[2.5rem] data-ending-style:opacity-0 data-starting-style:translate-x-[2.5rem] data-starting-style:opacity-0",
+          "fixed inset-y-[10px] right-[10px] z-50 flex w-[calc(100%-20px)] flex-col overflow-hidden rounded-[18px] bg-[var(--ds-card)] text-sm text-[var(--ds-ink)] shadow-[var(--ds-shadow-drawer)] outline-none transition duration-200 ease-in-out data-ending-style:translate-x-[2.5rem] data-ending-style:opacity-0 data-starting-style:translate-x-[2.5rem] data-starting-style:opacity-0",
           isWide ? "sm:max-w-[var(--ds-drawer-w-wide)]" : "sm:max-w-[var(--ds-drawer-w)]",
         )}
         {...props}
@@ -75,7 +75,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="sheet-header"
-      className={cn("sticky top-0 z-[1] -mx-5 flex flex-col gap-0.5 border-b border-[var(--ds-line)] bg-[var(--ds-card)] px-5 py-[18px] pr-16", className)}
+      className={cn("sticky top-0 z-[1] -mx-5 flex flex-col gap-0.5 bg-[var(--ds-card)] px-5 pb-2 pt-[18px] pr-16", className)}
       {...props}
     />
   );
@@ -86,7 +86,7 @@ function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="sheet-footer"
-      className={cn("sticky bottom-0 z-[1] -mx-5 -mb-4 mt-auto flex flex-wrap items-center justify-end gap-2 border-t border-[var(--ds-line)] bg-[var(--ds-card)] px-5 py-3", className)}
+      className={cn("sticky bottom-0 z-[1] -mx-5 -mb-4 mt-auto flex flex-wrap items-center justify-end gap-2 bg-[var(--ds-card)] px-5 pb-4 pt-3", className)}
       {...props}
     />
   );
