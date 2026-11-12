@@ -24,7 +24,7 @@
   --ds-brand-wash: color-mix(in oklab, var(--brand) 10%, white); /* active chip/count fill */
 
   /* Surfaces */
-  --ds-bg: #f3f5f8;
+  --ds-bg: #f7f7f7; /* deviation 7: neutral page grey (design #f3f5f8) */
   --ds-card: #ffffff;
   --ds-surface2: #f6f7f9; /* kv panels, table header band, in-card search, active in-card tab */
   --ds-bd: rgba(15, 23, 42, 0.08); /* card border */
