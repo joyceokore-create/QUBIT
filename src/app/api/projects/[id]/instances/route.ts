@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { validationError } from "@/server/errors";
 import { can } from "@/lib/rbac";
 import { canWriteProject } from "@/lib/access";
 import { requirePermission } from "@/lib/api-guard";
@@ -27,11 +28,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: { code: "FORBIDDEN", message: "Only the project's PM can add instances." } }, { status: 403 });
   }
   const parsed = CreateInstanceInput.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: { code: "VALIDATION", message: "Give the instance a name." } }, { status: 400 });
+  if (!parsed.success) return validationError(parsed.error);
   try {
     return NextResponse.json({ data: await createProjectInstance(guard.ctx, id, parsed.data) }, { status: 201 });
   } catch (e) {
-    if (e instanceof ProjectInstanceError) return NextResponse.json({ error: { code: e.code, message: e.message } }, { status: STATUS[e.code] });
+    if (e instanceof ProjectInstanceError) {
+      // A taken code means the NAME clashes — put it on the name field.
+      const fields = e.code === "CODE_TAKEN" ? { name: e.message } : undefined;
+      return NextResponse.json({ error: { code: e.code, message: e.message, ...(fields && { fields }) } }, { status: STATUS[e.code] });
+    }
     throw e;
   }
 }

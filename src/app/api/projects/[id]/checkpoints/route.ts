@@ -6,6 +6,7 @@ import { canWriteProject } from "@/lib/access";
 import { gateWriteScope } from "@/lib/testing-gates";
 import { approverScope } from "@/lib/gate-approval";
 import { getTenantContext } from "@/lib/tenant";
+import { validationError } from "@/server/errors";
 import {
   CheckpointError,
   checkpointIsTesting,
@@ -64,10 +65,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   });
 }
 
-const PatchBody = z.union([
-  SetCheckpointStateInput.merge(Scope),
-  z.object({ templateId: z.string().min(1).nullable() }),
-]);
+const StatePatchBody = SetCheckpointStateInput.merge(Scope);
+const TemplatePatchBody = z.object({ templateId: z.string().min(1).nullable() });
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   let ctx;
@@ -78,10 +77,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   const { id } = await params;
 
-  const parsed = PatchBody.safeParse(await req.json());
-  if (!parsed.success) {
-    return NextResponse.json({ error: { code: "VALIDATION", message: "Invalid input." } }, { status: 400 });
-  }
+  // Pick the schema by shape (not z.union) so a rejected body names the offending field.
+  const raw: unknown = await req.json().catch(() => null);
+  const parsed =
+    raw && typeof raw === "object" && "templateId" in raw ? TemplatePatchBody.safeParse(raw) : StatePatchBody.safeParse(raw);
+  if (!parsed.success) return validationError(parsed.error);
   const runs = await canWriteProject(ctx, id);
   const allowed = can(ctx, "project:stage") || runs;
   if (!allowed) return NextResponse.json({ error: { code: "FORBIDDEN" } }, { status: 403 });

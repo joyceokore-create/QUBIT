@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { milestoneName } from "@/lib/workspace-schema";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { emitDomainEvent } from "@/server/events";
@@ -41,7 +42,7 @@ export async function listMilestones(ctx: TenantContext, projectId: string): Pro
 }
 
 export const CreateMilestoneInput = z.object({
-  name: z.string().min(1),
+  name: milestoneName,
   dueDate: z.string().datetime().nullable().optional(),
 });
 export type CreateMilestoneInput = z.infer<typeof CreateMilestoneInput>;

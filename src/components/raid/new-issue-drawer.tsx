@@ -4,7 +4,11 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
-import { Drawer, DrawerError, DrawerFooter, DrawerFrame, DrawerHeader, Field, FIELD_INPUT } from "@/components/ui/drawer";
+import { Drawer, DrawerFooter, DrawerFrame, DrawerHeader, Field, FIELD_INPUT } from "@/components/ui/drawer";
+import { Banner } from "@/components/ui/panel";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { readApiError } from "@/lib/form-errors";
+import { NewIssueFormSchema } from "@/lib/issue-schema";
 import { SEVERITY_ORDER } from "@/components/raid/severity";
 import { PRIMARY, SECONDARY } from "@/lib/surface";
 
@@ -22,11 +26,14 @@ export function NewIssueButton({ projects, users }: { projects: { id: string; co
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // docs/08 § Errors: Title shows its problem on the field; Raise Issue stays enabled.
+  const fe = useFieldErrors({ schema: NewIssueFormSchema, values: { title }, idPrefix: "new-issue" });
+
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (title.trim().length < 3) return setError("Give the issue a title of at least 3 characters.");
-    setBusy(true);
     setError(null);
+    if (!fe.validate()) return;
+    setBusy(true);
     const res = await fetch("/api/issues", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -34,13 +41,19 @@ export function NewIssueButton({ projects, users }: { projects: { id: string; co
     }).catch(() => null);
     setBusy(false);
     if (!res?.ok) {
-      const body = res ? await res.json().catch(() => null) : null;
-      return setError(body?.error?.message ?? "Couldn't raise the issue. Try again.");
+      const { message, fields } = readApiError(res ? await res.json().catch(() => null) : null, "Could not raise the issue. Try again.");
+      const { _: root, ...onFields } = fields;
+      if (Object.keys(onFields).length > 0) {
+        fe.setServerErrors(onFields, ["title"]);
+        if (root) setError(root);
+      } else setError(message);
+      return;
     }
     toast.success("Issue raised.");
     setOpen(false);
     setTitle("");
     setOwnerId("");
+    fe.reset();
     router.refresh();
   }
 
@@ -64,8 +77,9 @@ export function NewIssueButton({ projects, users }: { projects: { id: string; co
             </DrawerFooter>
           }
         >
-          <Field label="Title">
-            <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} required placeholder="For example: duplicate SMS on sign-up" className={FIELD_INPUT} />
+          {error && <Banner tone="bad">{error}</Banner>}
+          <Field label="Title" htmlFor={fe.idOf("title")} error={fe.errors.title}>
+            <input {...fe.bind("title")} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="For example: duplicate SMS on sign-up" className={FIELD_INPUT} />
           </Field>
           <Field label="Project">
             <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className={FIELD_INPUT}>
@@ -86,7 +100,7 @@ export function NewIssueButton({ projects, users }: { projects: { id: string; co
               ))}
             </select>
           </Field>
-          <Field label="Owner (optional)" hint="Leave empty to show it as Unassigned.">
+          <Field label="Owner (Optional)" hint="Leave empty to show it as Unassigned.">
             <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className={FIELD_INPUT}>
               <option value="">Unassigned</option>
               {users.map((u) => (
@@ -96,7 +110,6 @@ export function NewIssueButton({ projects, users }: { projects: { id: string; co
               ))}
             </select>
           </Field>
-          {error && <DrawerError>{error}</DrawerError>}
         </DrawerFrame>
       </Drawer>
     </>

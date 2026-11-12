@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { formMessages as m } from "@/lib/form-messages";
+import { validationError } from "@/server/errors";
 import { z } from "zod";
 import { requirePermission, forbidden } from "@/lib/api-guard";
 import { canWriteTask } from "@/lib/access";
@@ -13,7 +15,7 @@ import { dayKey } from "@/lib/dates";
 type Ctx = { params: Promise<{ id: string }> };
 
 const FlagBody = z.object({
-  description: z.string().trim().min(1).max(500),
+  description: z.string().trim().min(1, "Say what is blocking this task.").max(500, m.maxLength("the reason", 500)),
   severity: z.enum(["Low", "Medium", "Critical"]).optional(),
   // UX6 "Raise a blocker": who can unblock it (someone on the project — checked in the
   // engine) and the tenant-local day it started ("YYYY-MM-DD").
@@ -30,17 +32,7 @@ export async function POST(req: Request, { params }: Ctx) {
   }
   const parsed = FlagBody.safeParse(await req.json());
   if (!parsed.success) {
-    return NextResponse.json(
-      {
-        error: {
-          code: "VALIDATION",
-          message: parsed.error.issues.some((i) => i.path[0] === "description")
-            ? "A blocked reason (max 500 chars) is required."
-            : (parsed.error.issues[0]?.message ?? "Check the blocker details."),
-        },
-      },
-      { status: 400 },
-    );
+    return validationError(parsed.error);
   }
   try {
     const { since, unblockerId, ...rest } = parsed.data;

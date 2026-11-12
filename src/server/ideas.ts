@@ -5,6 +5,7 @@
 // a parked idea is never deleted, the reason it stopped is the record), merge (provenance
 // on the receiving project).
 import { z } from "zod";
+import { ideaExpectedValue, ideaProblem, ideaSponsor, ideaTitle } from "@/lib/idea-schema";
 import type { Prisma } from "@prisma/client";
 import { audit } from "@/lib/audit";
 import { withTenant, type TenantContext } from "@/lib/tenant";
@@ -32,10 +33,10 @@ function assertTriage(ctx: TenantContext): void {
 }
 
 export const SubmitIdeaInput = z.object({
-  title: z.string().trim().min(4, "Give the idea a title.").max(140),
-  sponsor: z.string().trim().min(2, "Name the sponsor — an idea needs someone behind it.").max(120),
-  problem: z.string().trim().min(10, "Describe the problem it solves.").max(2000),
-  expectedValue: z.string().trim().max(500).nullable().optional(),
+  title: ideaTitle,
+  sponsor: ideaSponsor,
+  problem: ideaProblem,
+  expectedValue: ideaExpectedValue.nullable().optional(),
   suggestedPortfolioId: z.string().uuid().nullable().optional(),
 });
 export type SubmitIdeaInputT = z.infer<typeof SubmitIdeaInput>;

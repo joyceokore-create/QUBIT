@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Banner } from "@/components/ui/panel";
+import { readApiError } from "@/lib/form-errors";
 import {
   Select,
   SelectContent,
@@ -50,7 +52,10 @@ export function EditRiskDialog({ risk, users, open, onOpenChange }: EditRiskDial
     }
   }, [open, risk]);
 
-  async function handleSave() {
+  // Every control here is a fixed choice (or free text with no rule), so there is nothing to
+  // check on the field; any rejection is form-level and sits in the banner at the top.
+  async function handleSave(e: FormEvent) {
+    e.preventDefault();
     setLoading(true);
     setError(null);
     const res = await fetch(`/api/risks/${risk.id}`, {
@@ -67,8 +72,7 @@ export function EditRiskDialog({ risk, users, open, onOpenChange }: EditRiskDial
     setLoading(false);
 
     if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      setError(body?.error?.message ?? "Could not update risk.");
+      setError(readApiError(await res.json().catch(() => null), "Could not update the risk.").message);
       return;
     }
 
@@ -83,7 +87,8 @@ export function EditRiskDialog({ risk, users, open, onOpenChange }: EditRiskDial
           <DialogTitle>Edit Risk</DialogTitle>
           <DialogDescription>{risk.title}. Changes are audited.</DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-4">
+        <form onSubmit={handleSave} className="flex flex-col gap-4" noValidate>
+          {error && <Banner tone="bad">{error}</Banner>}
           <div className="flex gap-3">
             <div className="flex flex-1 flex-col gap-1.5">
               <span className="text-sm font-medium text-ink-2">Status</span>
@@ -161,19 +166,13 @@ export function EditRiskDialog({ risk, users, open, onOpenChange }: EditRiskDial
             </label>
             <Input id="edit-risk-mitigation" value={mitigation} onChange={(e) => setMitigation(e.target.value)} />
           </div>
-        </div>
 
-        {error && (
-          <p role="alert" className="text-sm text-status-red">
-            {error}
-          </p>
-        )}
-
-        <DialogFooter>
-          <Button onClick={handleSave} disabled={loading}>
-            {loading ? "Saving…" : "Save"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button type="submit" disabled={loading}>
+              {loading ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

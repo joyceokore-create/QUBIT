@@ -8,6 +8,9 @@ import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { Button } from "@/components/ui/button";
 import { DialogTrigger } from "@/components/ui/drawer-dialog";
 import { Input } from "@/components/ui/input";
+import { FieldError } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { AssignMembersFormSchema } from "@/lib/assign-members-schema";
 import { assignmentWarnings } from "@/lib/capacity";
 import { PROJECT_ROLES } from "@/lib/roles";
 
@@ -65,6 +68,9 @@ export function AssignMembersDialog({
   // DM1.73 (Wave D) — sparse per-person overrides on top of the shared defaults.
   const [overrides, setOverrides] = useState<Record<string, RowOverride>>({});
   const { busy, error, setError, mutate } = useAdminMutation();
+  // docs/08 § Errors: "pick at least one person" sits under the list (the group), and the default
+  // window's end date shows its own problem; Assign stays enabled.
+  const fe = useFieldErrors({ schema: AssignMembersFormSchema, values: { members: [...picked], start, end }, idPrefix: "assign" });
 
   useEffect(() => {
     if (!open) return;
@@ -131,10 +137,8 @@ export function AssignMembersDialog({
   const selected = useMemo(() => candidates.filter((c) => picked.has(c.userId)), [candidates, picked]);
 
   async function submit() {
-    if (picked.size === 0) {
-      setError("Pick at least one person.");
-      return;
-    }
+    setError(null);
+    if (!fe.validate(["members", "start", "end"])) return;
     await mutate(
       `/api/projects/${projectId}/members`,
       "POST",
@@ -154,8 +158,17 @@ export function AssignMembersDialog({
         acceptedWarnings: warnings,
       },
       {
-        fallback: "Could not assign.",
+        fallback: "Could not assign the people.",
+        onFieldErrors: (fields) => {
+          // Anything the server names that isn't on this form's fields (e.g. one row's allocation)
+          // goes in the banner at the top.
+          const { members, end: endErr, start: startErr, ...rest } = fields;
+          fe.setServerErrors({ ...(members ? { members } : {}), ...(endErr ? { end: endErr } : {}), ...(startErr ? { start: startErr } : {}) }, ["members", "start", "end"]);
+          const other = Object.values(rest)[0];
+          if (other) setError(other);
+        },
         onSuccess: () => {
+          fe.reset();
           setOpen(false);
           setPicked(new Set());
           setOverrides({});
@@ -170,7 +183,10 @@ export function AssignMembersDialog({
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
-        if (!o) setError(null);
+        if (!o) {
+          setError(null);
+          fe.reset();
+        }
       }}
       title="Add to Team"
       description="An assignment is person + role hat + allocation + dates — never a bare membership row."
@@ -189,7 +205,14 @@ export function AssignMembersDialog({
         {bench.length > 6 && (
           <Input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a person…" aria-label="Find a person" className="h-8" />
         )}
-        <div className="max-h-[180px] flex-none overflow-auto rounded-[10px] border border-[var(--w08)]">
+        <div
+          id={fe.idOf("members")}
+          role="group"
+          aria-label="People"
+          data-invalid={fe.errors.members ? true : undefined}
+          aria-describedby={fe.errors.members ? `${fe.idOf("members")}-error` : undefined}
+          className="max-h-[180px] flex-none overflow-auto rounded-[10px] border border-[var(--w08)] aria-invalid:border-[var(--ds-bad)]"
+        >
           {benchState === "loading" ? (
             <p className="p-3 text-[12px] text-[var(--ink4)]">Loading people…</p>
           ) : benchState === "error" ? (
@@ -249,6 +272,7 @@ export function AssignMembersDialog({
             })
           )}
         </div>
+        {fe.errors.members && <FieldError id={`${fe.idOf("members")}-error`}>{fe.errors.members}</FieldError>}
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
@@ -270,13 +294,15 @@ export function AssignMembersDialog({
               className="mt-1.5"
             />
           </div>
-          <div>
-            <span className={LABEL}>Default start</span>
-            <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="mt-1.5" />
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor={fe.idOf("start")} className={LABEL}>Default start</label>
+            <Input {...fe.bind("start")} type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+            {fe.errors.start && <FieldError id={`${fe.idOf("start")}-error`}>{fe.errors.start}</FieldError>}
           </div>
-          <div>
-            <span className={LABEL}>Default end</span>
-            <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="mt-1.5" />
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor={fe.idOf("end")} className={LABEL}>Default end</label>
+            <Input {...fe.bind("end")} type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+            {fe.errors.end && <FieldError id={`${fe.idOf("end")}-error`}>{fe.errors.end}</FieldError>}
           </div>
         </div>
 

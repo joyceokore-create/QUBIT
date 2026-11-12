@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
+import { validationError } from "@/server/errors";
 import { GateApprovalError, type GateApprovalErrorCode } from "@/server/gate-approval";
 
 // WS1 — one error mapping for the gate sign-off routes (submit / approve / return / review).
@@ -18,8 +19,12 @@ const STATUS: Record<GateApprovalErrorCode, number> = {
 
 /** Maps the engine's refusals to HTTP; anything else is rethrown (a 500, logged). */
 export function gateErrorResponse(e: unknown): NextResponse {
-  if (e instanceof GateApprovalError) return NextResponse.json({ error: { code: e.code, message: e.message } }, { status: STATUS[e.code] });
-  if (e instanceof ZodError) return NextResponse.json({ error: { code: "VALIDATION", message: e.issues[0]?.message ?? "Invalid input." } }, { status: 400 });
+  if (e instanceof GateApprovalError) {
+    // docs/08 § Errors: a missing reason belongs to the Decision Note field.
+    const fields = e.code === "NOTE_REQUIRED" ? { note: e.message } : undefined;
+    return NextResponse.json({ error: { code: e.code, message: e.message, ...(fields ? { fields } : {}) } }, { status: STATUS[e.code] });
+  }
+  if (e instanceof ZodError) return validationError(e);
   throw e;
 }
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PEOPLE_REQUIRED } from "@/lib/assign-members-schema";
 import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { availabilityFactor } from "@/server/absence";
@@ -121,7 +122,7 @@ export const BulkAddMembersInput = z.object({
     .array(
       SetProjectMemberInput.extend({ userId: z.string().uuid() }),
     )
-    .min(1)
+    .min(1, PEOPLE_REQUIRED)
     .max(20),
   acceptedWarnings: z.array(z.string().max(200)).max(20).default([]),
 });

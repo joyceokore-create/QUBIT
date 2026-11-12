@@ -36,7 +36,7 @@ export function DrawerFrame({ header, footer, children, onSubmit }: { header: Re
     </>
   );
   return onSubmit ? (
-    <form onSubmit={onSubmit} className="flex h-full flex-col">
+    <form onSubmit={onSubmit} className="flex h-full flex-col" noValidate>
       {inner}
     </form>
   ) : (

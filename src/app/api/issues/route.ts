@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { forbidden, requirePermission } from "@/lib/api-guard";
+import { validationError } from "@/server/errors";
 import { can } from "@/lib/rbac";
 import { canContributeToProject } from "@/lib/access";
 import { createIssue, CreateIssueInput, IssueError, listIssues } from "@/server/issues";
@@ -31,9 +32,7 @@ export async function POST(req: Request) {
   const guard = await requirePermission("issue:read");
   if ("response" in guard) return guard.response;
   const parsed = CreateIssueInput.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json({ error: { code: "VALIDATION", message: parsed.error.issues[0]?.message ?? "Invalid input." } }, { status: 400 });
-  }
+  if (!parsed.success) return validationError(parsed.error);
   const projectId = parsed.data.projectId ?? null;
   const allowed = can(guard.ctx, "issue:create") || (projectId ? await canContributeToProject(guard.ctx, projectId) : false);
   if (!allowed) return forbidden("You can only raise issues on a project you're part of.");

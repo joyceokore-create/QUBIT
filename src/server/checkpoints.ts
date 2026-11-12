@@ -20,6 +20,7 @@ import { evaluateGate, type GateRule } from "@/server/gate-rules";
 
 // The states and the derived-% rule are pure and client-safe; they live in src/lib so the
 // cockpit's client components can share them (UX1). Re-exported for existing callers.
+import { gateOverrideReason } from "@/lib/workspace-schema";
 import { CHECKPOINT_STATES, derivedProgress, type CheckpointState } from "@/lib/checkpoint-progress";
 export { CHECKPOINT_STATES, derivedProgress, type CheckpointState } from "@/lib/checkpoint-progress";
 
@@ -242,7 +243,7 @@ export const SetCheckpointStateInput = z.object({
   /** Required when moving to Blocked — same flag pattern as tasks (§2). */
   blockerId: z.string().uuid().nullable().optional(),
   /** docs/16 §6 — closing a gate whose checklist is unmet needs a written reason. */
-  overrideReason: z.string().trim().min(5, "Say why the gate is being closed early.").max(300).optional(),
+  overrideReason: gateOverrideReason.optional(),
   /** Joyce (2026-10-12): a later gate Done closes the earlier ones still open. Run here, on
    * the server, so it stops at a sign-off gate (WS1) the same way for every caller. */
   cascade: z.boolean().optional(),

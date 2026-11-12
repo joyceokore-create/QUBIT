@@ -4,6 +4,7 @@ import { retentionCutoff } from "@/lib/retention";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { z } from "zod";
+import { grantMessage, grantRole } from "@/lib/grant-access-schema";
 import type { AccessRequest, Prisma } from "@prisma/client";
 import { pageInfo, type PageInfo } from "@/lib/list-state";
 import { containsText } from "@/lib/list-query";
@@ -129,11 +130,11 @@ export async function reviewAccessRequest(
 
 export const GrantAccessInput = z.object({
   // Validated in createUser against canonical + ACTIVE custom roles (and the Super Admin guard).
-  role: z.string().trim().min(1).max(64),
+  role: grantRole,
   departmentId: z.string().uuid().nullable().optional(),
   teamId: z.string().uuid().nullable().optional(),
   // UX fidelity Tier 1: "Message to <name> (optional)" — goes into the invite email only.
-  message: z.string().trim().max(500).optional(),
+  message: grantMessage.optional(),
 });
 export type GrantAccessInput = z.infer<typeof GrantAccessInput>;
 

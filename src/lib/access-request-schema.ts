@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { formMessages } from "@/lib/form-messages";
 
 /** Roles a person may ask for on the public form (UX fidelity D-F3). Super Admin is never
  * requestable; the admin still chooses the real role when granting. */
@@ -23,18 +24,18 @@ export function requestedRoleLabel(key: string | null | undefined): string | nul
  * real users, so a non-empty value marks a bot (the route drops it silently).
  */
 export const accessRequestSchema = z.object({
-  fullName: z.string().trim().min(1, "Enter your full name.").max(120),
-  email: z.string().trim().toLowerCase().email("Enter a valid work email.").max(190),
-  company: z.string().trim().min(1, "Enter your company name.").max(160),
+  fullName: z.string().trim().min(1, formMessages.enter("your full name")).max(120, formMessages.maxLength("your name", 120)),
+  email: z.string().trim().toLowerCase().min(1, formMessages.enter("your work email")).email(formMessages.workEmail()).max(190, formMessages.maxLength("your email", 190)),
+  company: z.string().trim().min(1, formMessages.enter("your company name")).max(160, formMessages.maxLength("the company name", 160)),
   jobTitle: z
     .string()
     .trim()
-    .max(120)
+    .max(120, formMessages.maxLength("the job title", 120))
     .optional()
     .or(z.literal(""))
     .transform((v) => (v ? v : undefined)),
   requestedRole: z
-    .enum(ROLE_KEYS)
+    .enum(ROLE_KEYS, { message: formMessages.choose("a role from the list") })
     .optional()
     .or(z.literal(""))
     .transform((v) => (v ? v : undefined)),
@@ -42,7 +43,7 @@ export const accessRequestSchema = z.object({
   reason: z
     .string()
     .trim()
-    .max(300, "Keep the reason under 300 characters.")
+    .max(300, formMessages.maxLength("the reason", 300))
     .optional()
     .or(z.literal(""))
     .transform((v) => (v ? v : undefined)),

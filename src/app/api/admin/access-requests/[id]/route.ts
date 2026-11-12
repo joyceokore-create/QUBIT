@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission } from "@/lib/api-guard";
+import { validationError } from "@/server/errors";
 import { reviewAccessRequest, AccessRequestError } from "@/server/access-requests";
 import { DECLINE_REASON_VALUES } from "@/lib/access-request-schema";
 
@@ -15,9 +16,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
 
   const parsed = BodySchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json({ error: { code: "VALIDATION", message: "Invalid status." } }, { status: 400 });
-  }
+  if (!parsed.success) return validationError(parsed.error);
 
   try {
     const { status, reasonCode } = parsed.data;

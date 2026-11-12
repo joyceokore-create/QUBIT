@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requirePermission, forbidden } from "@/lib/api-guard";
+import { validationError } from "@/server/errors";
 import { canWriteRisk } from "@/lib/access";
 import { updateRisk, UpdateRiskInput, RiskError } from "@/server/risks";
 
@@ -12,13 +13,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return forbidden("You can only edit risks on a project you're part of.");
   }
 
-  const parsed = UpdateRiskInput.safeParse(await req.json());
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: "VALIDATION", message: "Invalid input." } },
-      { status: 400 },
-    );
-  }
+  const parsed = UpdateRiskInput.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return validationError(parsed.error);
 
   try {
     await updateRisk(guard.ctx, id, parsed.data);

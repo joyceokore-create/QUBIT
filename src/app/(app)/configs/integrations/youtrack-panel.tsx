@@ -4,7 +4,12 @@ import { useCallback, useMemo, useState } from "react";
 import { AlertTriangle, Check, CircleAlert, Search } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CARD, CARD_BG, PRIMARY, QUIET, SECONDARY } from "@/lib/surface";
+import { Banner } from "@/components/ui/panel";
+import { FieldError } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { readApiError } from "@/lib/form-errors";
+import { YoutrackConnectFormSchema, YoutrackReplaceTokenSchema } from "@/lib/youtrack-schema";
+import { CARD, CARD_BG, FIELD_INVALID, PRIMARY, QUIET, SECONDARY } from "@/lib/surface";
 
 /**
  * Configs › Integrations › YouTrack — the redesigned module. One instance + one token per
@@ -72,7 +77,7 @@ const TASK_STATUS_LABEL: Record<(typeof TASK_STATUSES)[number], string> = {
 // Common YouTrack states to offer in the Status-mapping tab (the connector's defaults).
 const COMMON_YT_STATES = ["Submitted", "Open", "In Progress", "In Review", "To Verify", "Fixed", "Verified", "Blocked"];
 
-const INPUT = `h-10 w-full rounded-[8px] border border-[var(--input)] bg-background px-3 text-[13px] text-foreground focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none`;
+const INPUT = `h-10 w-full rounded-[8px] border border-[var(--input)] bg-background px-3 text-[13px] text-foreground focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none ${FIELD_INVALID}`;
 const LABEL = "text-[12.5px] font-semibold text-[var(--ink2)]";
 const HINT = "text-[11.5px] text-[var(--ink4)]";
 const EYEBROW = "font-mono text-[10px] font-semibold uppercase tracking-[2px] text-[var(--ink4)]";
@@ -148,17 +153,30 @@ function ConnectScreen({ status, onConnected }: { status: StatusJson; onConnecte
   const [busy, setBusy] = useState<"test" | "save" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const urlOk = /^https:\/\/.+/i.test(baseUrl.trim());
-  const canTest = urlOk && token.trim().length > 0 && !busy;
+  // docs/08 § Errors: URL and token problems show on their fields; Test stays enabled.
+  const fe = useFieldErrors({ schema: YoutrackConnectFormSchema, values: { baseUrl, token }, idPrefix: "yt" });
   const canSave = report?.ok && (!report.looksLikePerson || acceptedPerson) && !busy;
 
+  /** Server rejection → the field it names, else the banner. */
+  function showServerError(payload: unknown, fallback: string) {
+    const { message, fields } = readApiError(payload, fallback);
+    const { _: root, ...onFields } = fields;
+    if (Object.keys(onFields).length > 0) {
+      fe.setServerErrors(onFields, ["baseUrl", "token"]);
+      if (root) setError(root);
+    } else {
+      setError(message);
+    }
+  }
+
   async function test() {
-    setBusy("test");
     setError(null);
+    if (!fe.validate(["baseUrl", "token"])) return;
+    setBusy("test");
     setReport(null);
     const res = await fetch(`${API}/test`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ baseUrl: baseUrl.trim(), token: token.trim() }) });
     const j = await readJson<TestReport>(res);
-    if (!res.ok || !j.data) setError(j.error?.message ?? "Could not test the connection.");
+    if (!res.ok || !j.data) showServerError(j, "Could not test the connection.");
     else {
       setReport(j.data);
       setTestedAt(new Date().toISOString());
@@ -172,7 +190,7 @@ function ConnectScreen({ status, onConnected }: { status: StatusJson; onConnecte
     const res = await fetch(`${API}/connect`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ baseUrl: baseUrl.trim(), token: token.trim() }) });
     const j = await readJson<StatusJson>(res);
     if (!res.ok) {
-      setError(j.error?.message ?? "Could not save the connection.");
+      showServerError(j, "Could not save the connection.");
       setBusy(null);
       return;
     }
@@ -210,25 +228,25 @@ function ConnectScreen({ status, onConnected }: { status: StatusJson; onConnecte
           <p className={`mt-1 ${HINT}`}>One YouTrack instance per tenant. You map projects to it in the next step.</p>
 
           <div className="mt-5 flex flex-col gap-1.5">
-            <label htmlFor="yt-url" className={LABEL}>Instance URL</label>
-            <input id="yt-url" className={INPUT} value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://your-org.youtrack.cloud" autoComplete="off" />
-            <p className={HINT}>HTTPS only. The host must end in .youtrack.cloud or be on the allowlist your platform admin keeps.</p>
+            <label htmlFor={fe.idOf("baseUrl")} className={LABEL}>Instance URL</label>
+            <input {...fe.bind("baseUrl")} className={INPUT} value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://your-org.youtrack.cloud" autoComplete="off" />
+            {fe.errors.baseUrl ? <FieldError id={`${fe.idOf("baseUrl")}-error`}>{fe.errors.baseUrl}</FieldError> : <p className={HINT}>HTTPS only. The host must end in .youtrack.cloud or be on the allowlist your platform admin keeps.</p>}
           </div>
 
           <div className="mt-4 flex flex-col gap-1.5">
-            <label htmlFor="yt-token" className={LABEL}>Permanent token</label>
-            <input id="yt-token" type="password" className={INPUT} value={token} onChange={(e) => setToken(e.target.value)} placeholder="perm:… (read-only is enough)" autoComplete="off" />
-            <p className={HINT}>Encrypted when saved. After that QUBIT shows only the last 4 characters. To change it, replace it.</p>
+            <label htmlFor={fe.idOf("token")} className={LABEL}>Permanent Token</label>
+            <input {...fe.bind("token")} type="password" className={INPUT} value={token} onChange={(e) => setToken(e.target.value)} placeholder="perm:… (read-only is enough)" autoComplete="off" />
+            {fe.errors.token ? <FieldError id={`${fe.idOf("token")}-error`}>{fe.errors.token}</FieldError> : <p className={HINT}>Encrypted when saved. After that QUBIT shows only the last 4 characters. To change it, replace it.</p>}
           </div>
 
           <div className="mt-5 flex items-center gap-2">
-            <button type="button" className={PRIMARY} disabled={!canTest} onClick={() => void test()}>
+            <button type="button" className={PRIMARY} disabled={busy !== null} onClick={() => void test()}>
               {busy === "test" ? "Testing…" : "Test connection"}
             </button>
-            <button type="button" className={SECONDARY} onClick={() => { setToken(""); setReport(null); setError(null); }}>Cancel</button>
+            <button type="button" className={SECONDARY} onClick={() => { setToken(""); setReport(null); setError(null); fe.reset(); }}>Cancel</button>
           </div>
 
-          {error && <p role="alert" className="mt-3 text-[13px]" style={{ color: "var(--bad)" }}>{error}</p>}
+          {error && <Banner tone="bad" className="mt-3">{error}</Banner>}
 
           {report && (
             <div className="mt-6 border-t border-[var(--hair)] pt-5">
@@ -317,19 +335,30 @@ function ConnectedScreen({ view, refresh }: { view: MappingViewJson; refresh: ()
   const [notice, setNotice] = useState<string | null>(null);
   const [replacing, setReplacing] = useState(false);
   const [newToken, setNewToken] = useState("");
+  // docs/08 § Errors: the new token's problem shows on its field; Save stays enabled.
+  const tokenFe = useFieldErrors({ schema: YoutrackReplaceTokenSchema, values: { token: newToken }, idPrefix: "yt-replace" });
 
-  async function act(label: string, fn: () => Promise<Response>, okMsg?: string) {
+  async function act(label: string, fn: () => Promise<Response>, okMsg?: string, onFields?: (f: Record<string, string>) => void): Promise<boolean> {
     setBusy(label);
     setError(null);
     setNotice(null);
     const res = await fn();
     const j = await readJson<unknown>(res);
-    if (!res.ok) setError(j.error?.message ?? `Could not ${label.toLowerCase()}.`);
-    else {
+    let ok = false;
+    if (!res.ok) {
+      const { message, fields } = readApiError(j, `Could not ${label.toLowerCase()}.`);
+      const { _: root, ...onField } = fields;
+      if (onFields && Object.keys(onField).length > 0) {
+        onFields(onField);
+        if (root) setError(root);
+      } else setError(message);
+    } else {
       await refresh();
       if (okMsg) setNotice(okMsg);
+      ok = true;
     }
     setBusy(null);
+    return ok;
   }
 
   return (
@@ -365,15 +394,31 @@ function ConnectedScreen({ view, refresh }: { view: MappingViewJson; refresh: ()
           </button>
         </div>
         {replacing && (
-          <div className="flex w-full items-center gap-2 border-t border-[var(--hair)] pt-3">
-            <input type="password" className={`${INPUT} max-w-[420px]`} value={newToken} onChange={(e) => setNewToken(e.target.value)} placeholder="New permanent token (re-tested before it is saved)" autoComplete="off" />
-            <button type="button" className={PRIMARY} disabled={!newToken.trim() || busy !== null} onClick={() => void act("Replace token", () => fetch(`${API}/connect`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: newToken.trim() }) }), "Token replaced.").then(() => { setNewToken(""); setReplacing(false); })}>
-              {busy === "Replace token" ? "Saving…" : "Save token"}
-            </button>
+          <div className="flex w-full flex-col gap-1.5 border-t border-[var(--hair)] pt-3">
+            <label htmlFor={tokenFe.idOf("token")} className={LABEL}>New Permanent Token</label>
+            <div className="flex items-start gap-2">
+              <div className="flex max-w-[420px] flex-1 flex-col gap-1.5">
+                <input {...tokenFe.bind("token")} type="password" className={INPUT} value={newToken} onChange={(e) => setNewToken(e.target.value)} placeholder="Re-tested before it is saved" autoComplete="off" />
+                {tokenFe.errors.token && <FieldError id={`${tokenFe.idOf("token")}-error`}>{tokenFe.errors.token}</FieldError>}
+              </div>
+              <button
+                type="button"
+                className={PRIMARY}
+                disabled={busy !== null}
+                onClick={() => {
+                  if (!tokenFe.validate(["token"])) return;
+                  void act("Replace token", () => fetch(`${API}/connect`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: newToken.trim() }) }), "Token replaced.", (f) => tokenFe.setServerErrors(f, ["token"])).then((ok) => {
+                    if (ok) { setNewToken(""); setReplacing(false); tokenFe.reset(); }
+                  });
+                }}
+              >
+                {busy === "Replace token" ? "Saving…" : "Save token"}
+              </button>
+            </div>
           </div>
         )}
         {status.lastError && <p className="w-full text-[12.5px]" style={{ color: "var(--bad)" }}>Last check failed: {status.lastError}</p>}
-        {error && <p role="alert" className="w-full text-[12.5px]" style={{ color: "var(--bad)" }}>{error}</p>}
+        {error && <Banner tone="bad" className="w-full">{error}</Banner>}
         {notice && <p className="w-full text-[12.5px]" style={{ color: "var(--ok)" }}>{notice}</p>}
       </section>
 
@@ -502,7 +547,7 @@ function ProjectsTab({ rows, ytProjects, counts, connectedUser, refresh }: { row
 
       {(error || notice) && (
         <div className="border-b border-[var(--hair)] px-5 py-2 text-[12.5px]">
-          {error && <p role="alert" style={{ color: "var(--bad)" }}>{error}</p>}
+          {error && <Banner tone="bad" className="mb-1.5">{error}</Banner>}
           {notice && <p style={{ color: "var(--ok)" }}>{notice}</p>}
         </div>
       )}
@@ -610,7 +655,7 @@ function StatusMappingTab({ status, refresh }: { status: StatusJson; refresh: ()
           </label>
         ))}
       </div>
-      {error && <p role="alert" className="mt-3 text-[12.5px]" style={{ color: "var(--bad)" }}>{error}</p>}
+      {error && <Banner tone="bad" className="mt-3">{error}</Banner>}
       <div className="mt-4 flex justify-end">
         <button type="button" className={PRIMARY} disabled={busy} onClick={() => void save()}>{busy ? "Saving…" : "Map statuses"}</button>
       </div>
@@ -665,7 +710,7 @@ function SyncSettingsTab({ status, refresh }: { status: StatusJson; refresh: () 
           <span className="font-semibold text-[var(--qink)]">{archive ? "Archived in QUBIT, never deleted" : "Deleted in QUBIT"}</span>
         </dd>
       </dl>
-      {error && <p role="alert" className="mt-3 text-[12.5px]" style={{ color: "var(--bad)" }}>{error}</p>}
+      {error && <Banner tone="bad" className="mt-3">{error}</Banner>}
       <div className="mt-4 flex justify-end">
         <button type="button" className={PRIMARY} disabled={busy} onClick={() => void save()}>{busy ? "Saving…" : "Save sync settings"}</button>
       </div>

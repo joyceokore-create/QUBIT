@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { RaiseRequestFormSchema, DeclineFormSchema } from "@/lib/staffing-schema";
+import { FIELD_INVALID } from "@/lib/surface";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
 import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FieldError } from "@/components/ui/drawer";
 import { PROJECT_ROLES } from "@/lib/roles";
 
 interface RequestRow {
@@ -66,12 +70,15 @@ export function StaffingClient({
   const [note, setNote] = useState("");
   // DM1.73 — brief inline confirmation after a successful raise.
   const [sent, setSent] = useState(false);
+  // docs/08 § Errors: problems show on their field; the buttons stay enabled except while sending.
+  const fe = useFieldErrors({ schema: RaiseRequestFormSchema, values: { projectId, windowStart: start, windowEnd: end, note }, idPrefix: "staffing" });
 
   // Head: which request's bench is open, and the decline-reason editor.
   const [benchFor, setBenchFor] = useState<RequestRow | null>(null);
   const [bench, setBench] = useState<BenchRow[]>([]);
   const [decliningId, setDecliningId] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  const declineFe = useFieldErrors({ schema: DeclineFormSchema, values: { reason }, idPrefix: "decline" });
 
   useEffect(() => {
     if (!benchFor) return;
@@ -84,10 +91,8 @@ export function StaffingClient({
   }, [benchFor]);
 
   async function raise() {
-    if (!projectId || !start || !end) {
-      setError("Project and window are required.");
-      return;
-    }
+    setError(null);
+    if (!fe.validate(["projectId", "windowStart", "windowEnd", "note"])) return;
     await mutate(
       "/api/staffing/requests",
       "POST",
@@ -101,11 +106,13 @@ export function StaffingClient({
       },
       {
         fallback: "Could not raise the request.",
+        onFieldErrors: (f) => fe.setServerErrors(f, ["projectId", "windowStart", "windowEnd", "note"]),
         // DM1.73 — clear the form and confirm inline; the refreshed queue below is the
         // real receipt, the banner just points at it.
         onSuccess: () => {
           setProjectId("");
           setNote("");
+          fe.reset();
           setStart(defaultStart());
           setEnd(defaultEnd());
           setSent(true);
@@ -122,7 +129,9 @@ export function StaffingClient({
         setBenchFor(null);
         setDecliningId(null);
         setReason("");
+        declineFe.reset();
       },
+      onFieldErrors: (f) => declineFe.setServerErrors(f),
     });
 
   return (
@@ -132,8 +141,8 @@ export function StaffingClient({
           <p className="text-[13px] font-bold text-[var(--qink)]">New request</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-5">
             <div className="sm:col-span-2">
-              <span className={LABEL}>Project</span>
-              <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className={SELECT}>
+              <label htmlFor={fe.idOf("projectId")} className={LABEL}>Project</label>
+              <select {...fe.bind("projectId")} value={projectId} onChange={(e) => setProjectId(e.target.value)} className={`${SELECT} ${FIELD_INVALID}`}>
                 <option value="">— pick —</option>
                 {projects.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -141,6 +150,7 @@ export function StaffingClient({
                   </option>
                 ))}
               </select>
+              {fe.errors.projectId && <div className="mt-1.5"><FieldError id={`${fe.idOf("projectId")}-error`}>{fe.errors.projectId}</FieldError></div>}
             </div>
             <div>
               <span className={LABEL}>Role</span>
@@ -163,32 +173,37 @@ export function StaffingClient({
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <span className={LABEL}>From</span>
-                <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="mt-1.5" />
+                <label htmlFor={fe.idOf("windowStart")} className={LABEL}>From</label>
+                <Input {...fe.bind("windowStart")} type="date" value={start} onChange={(e) => setStart(e.target.value)} className="mt-1.5" />
+                {fe.errors.windowStart && <div className="mt-1.5"><FieldError id={`${fe.idOf("windowStart")}-error`}>{fe.errors.windowStart}</FieldError></div>}
               </div>
               <div>
-                <span className={LABEL}>To</span>
-                <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="mt-1.5" />
+                <label htmlFor={fe.idOf("windowEnd")} className={LABEL}>To</label>
+                <Input {...fe.bind("windowEnd")} type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="mt-1.5" />
+                {fe.errors.windowEnd && <div className="mt-1.5"><FieldError id={`${fe.idOf("windowEnd")}-error`}>{fe.errors.windowEnd}</FieldError></div>}
               </div>
             </div>
           </div>
           <div className="mt-3">
-            <span className={LABEL}>Why (optional)</span>
-            <Input value={note} onChange={(e) => setNote(e.target.value)} className="mt-1.5" placeholder="e.g. UAT regression pack needs a second QA" />
+            <label htmlFor={fe.idOf("note")} className={LABEL}>Why (optional)</label>
+            <Input {...fe.bind("note")} value={note} onChange={(e) => setNote(e.target.value)} className="mt-1.5" placeholder="e.g. UAT regression pack needs a second QA" />
+            {fe.errors.note && <div className="mt-1.5"><FieldError id={`${fe.idOf("note")}-error`}>{fe.errors.note}</FieldError></div>}
           </div>
-          {error && (
-            <p role="alert" className="mt-2 text-[12.5px] text-status-red">
-              {error}
-            </p>
-          )}
-          {sent && (
-            <p role="status" className="mt-2 text-[12.5px] font-semibold text-[var(--ok)]">
-              Request sent — it&apos;s in the queue below.
-            </p>
-          )}
-          <Button type="button" onClick={() => void raise()} disabled={busy} className="mt-3">
-            {busy ? "Sending…" : "Send to Head"}
-          </Button>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <Button type="button" onClick={() => void raise()} disabled={busy}>
+              {busy ? "Sending…" : "Send to Head"}
+            </Button>
+            {error && !decliningId && (
+              <p role="alert" className="text-[12.5px] text-status-red">
+                {error}
+              </p>
+            )}
+            {sent && (
+              <p role="status" className="text-[12.5px] font-semibold text-[var(--ok)]">
+                Request sent — it&apos;s in the queue below.
+              </p>
+            )}
+          </div>
         </div>
       )}
 
@@ -245,7 +260,11 @@ export function StaffingClient({
                           <Button size="sm" onClick={() => setBenchFor(benchFor?.id === r.id ? null : r)}>
                             Fill from bench
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => setDecliningId(decliningId === r.id ? null : r.id)}>
+                          <Button size="sm" variant="outline" onClick={() => {
+                            declineFe.reset();
+                            setError(null);
+                            setDecliningId(decliningId === r.id ? null : r.id);
+                          }}>
                             Decline
                           </Button>
                         </>
@@ -294,16 +313,27 @@ export function StaffingClient({
       {decliningId && (
         <div className="rounded-[14px] border border-[var(--w08)] bg-[var(--qcard)] p-4">
           <p className="text-[13px] font-bold text-[var(--qink)]">Decline — a reason is required</p>
-          <div className="mt-2 flex gap-2">
-            <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. no QA bench until September" />
+          <div className="mt-2 flex items-start gap-2">
+            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+              <Input {...declineFe.bind("reason")} aria-label="Reason for declining" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. no QA bench until September" />
+              {declineFe.errors.reason && <FieldError id={`${declineFe.idOf("reason")}-error`}>{declineFe.errors.reason}</FieldError>}
+            </div>
             <Button
               variant="destructive"
-              disabled={busy || reason.trim().length < 3}
-              onClick={() => void resolve(decliningId, { action: "decline", reason: reason.trim() })}
+              disabled={busy}
+              onClick={() => {
+                if (!declineFe.validate()) return;
+                void resolve(decliningId, { action: "decline", reason: reason.trim() });
+              }}
             >
               Decline
             </Button>
           </div>
+          {error && (
+            <p role="alert" className="mt-2 text-[12.5px] text-status-red">
+              {error}
+            </p>
+          )}
         </div>
       )}
     </div>

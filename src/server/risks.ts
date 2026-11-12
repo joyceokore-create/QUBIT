@@ -32,8 +32,8 @@ export const UpdateRiskInput = z.object({
   status: z.enum(RISK_STATUSES).optional(),
   ownerId: z.string().uuid().nullable().optional(),
   mitigation: z.string().nullable().optional(),
-  probability: z.number().int().min(1).max(5).optional(),
-  impact: z.number().int().min(1).max(5).optional(),
+  probability: riskScore("a probability").optional(),
+  impact: riskScore("an impact").optional(),
 });
 export type UpdateRiskInput = z.infer<typeof UpdateRiskInput>;
 

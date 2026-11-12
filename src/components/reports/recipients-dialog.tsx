@@ -3,6 +3,11 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/drawer-dialog";
+import { Field } from "@/components/ui/drawer";
+import { Banner } from "@/components/ui/panel";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { readApiError } from "@/lib/form-errors";
+import { RecipientsFormSchema } from "@/lib/recipient-schema";
 import { PRIMARY, QUIET, SECONDARY } from "@/lib/surface";
 
 /**
@@ -34,6 +39,8 @@ export function RecipientsDialog({ open, onOpenChange, onChange }: { open: boole
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // docs/08 § Errors: each add form shows its problem on its own field; Add stays enabled.
+  const fe = useFieldErrors({ schema: RecipientsFormSchema, values: { userId: pick, email }, idPrefix: "recipient" });
 
   const load = async () => {
     const res = await fetch("/api/rollup/recipients");
@@ -53,17 +60,21 @@ export function RecipientsDialog({ open, onOpenChange, onChange }: { open: boole
   }, [open]);
 
   const add = async (payload: { userId?: string; email?: string }) => {
-    setBusy(true);
     setError(null);
+    if (!fe.validate([payload.userId !== undefined ? "userId" : "email"])) return;
+    setBusy(true);
     const res = await fetch("/api/rollup/recipients", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
     const body = await res.json().catch(() => null);
     setBusy(false);
     if (!res.ok) {
-      setError(body?.error?.message ?? "Could not add that recipient.");
+      const { message, fields } = readApiError(body, "Could not add that recipient.");
+      if (Object.keys(fields).length > 0) fe.setServerErrors(fields);
+      else setError(message);
       return;
     }
     setPick("");
     setEmail("");
+    fe.reset();
     await load();
   };
 
@@ -87,6 +98,7 @@ export function RecipientsDialog({ open, onOpenChange, onChange }: { open: boole
           <DialogDescription>Who gets the weekly roll-up when you press Email to executives. The PDF is internal and confidential.</DialogDescription>
         </DialogHeader>
 
+        {error && <Banner tone="bad">{error}</Banner>}
         <ul className="flex flex-col" aria-label="Current recipients">
           {rows.length === 0 && <li className="py-2 text-[12.5px] italic text-[var(--ink5)]">Nobody yet — add the executives below.</li>}
           {rows.map((r) => (
@@ -104,16 +116,15 @@ export function RecipientsDialog({ open, onOpenChange, onChange }: { open: boole
 
         <form
           className="flex flex-col gap-2"
+          noValidate
           onSubmit={(e) => {
             e.preventDefault();
-            if (pick) void add({ userId: pick });
+            void add({ userId: pick });
           }}
         >
-          <label htmlFor="recipient-user" className="text-[11.5px] font-semibold text-[var(--ink4)]">
-            Add a person
-          </label>
+          <Field label="Add a Person" htmlFor={fe.idOf("userId")} error={fe.errors.userId}>
           <div className="flex gap-2">
-            <select id="recipient-user" value={pick} onChange={(e) => setPick(e.target.value)} className={`${INPUT} min-w-0 flex-1`}>
+            <select {...fe.bind("userId")} value={pick} onChange={(e) => setPick(e.target.value)} className={`${INPUT} min-w-0 flex-1`}>
               <option value="">{candidates.length ? "Choose from the executive seats…" : "Everyone eligible is already listed"}</option>
               {candidates.map((c) => (
                 <option key={c.userId} value={c.userId}>
@@ -121,35 +132,30 @@ export function RecipientsDialog({ open, onOpenChange, onChange }: { open: boole
                 </option>
               ))}
             </select>
-            <button type="submit" disabled={!pick || busy} className={SECONDARY}>
+            <button type="submit" disabled={busy} className={SECONDARY}>
               Add
             </button>
           </div>
+          </Field>
         </form>
 
         <form
           className="flex flex-col gap-2"
+          noValidate
           onSubmit={(e) => {
             e.preventDefault();
-            if (email.trim()) void add({ email: email.trim() });
+            void add({ email: email.trim() });
           }}
         >
-          <label htmlFor="recipient-email" className="text-[11.5px] font-semibold text-[var(--ink4)]">
-            Add an email address
-          </label>
+          <Field label="Add an Email Address" htmlFor={fe.idOf("email")} error={fe.errors.email}>
           <div className="flex gap-2">
-            <input id="recipient-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.example" className={`${INPUT} min-w-0 flex-1`} />
-            <button type="submit" disabled={!email.trim() || busy} className={PRIMARY}>
+            <input {...fe.bind("email")} type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.example" className={`${INPUT} min-w-0 flex-1`} />
+            <button type="submit" disabled={busy} className={PRIMARY}>
               Add
             </button>
           </div>
+          </Field>
         </form>
-
-        {error && (
-          <p role="alert" className="text-[12px] text-[var(--bad)]">
-            {error}
-          </p>
-        )}
       </DialogContent>
     </Dialog>
   );

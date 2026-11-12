@@ -1,8 +1,11 @@
 "use client";
 
 import { dispatchTourEvent } from "@/components/tour/tour-events";
+import { checkInFormSchema } from "@/lib/checkin-schema";
+import { readApiError } from "@/lib/form-errors";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Send, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -292,13 +295,15 @@ function PmUpdateForm({ row: r, onSent, onCancel }: { row: PmRowJson; onSent: (r
   const [narrative, setNarrative] = useState(r.narrative ?? r.draftLines[0] ?? "");
   const [rag, setRag] = useState<Rag>(r.ragOverride ?? r.effectiveRag);
   const [reason, setReason] = useState(r.overrideReason ?? "");
-  const [reasonTouched, setReasonTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [composing, setComposing] = useState(false);
   const [composed, setComposed] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const overridden = rag !== r.computedRag;
-  const reasonOk = !overridden || reason.trim().length >= 5;
+  // docs/08 § Errors: the line and (when the status is changed) the reason show their problems on
+  // the field; Confirm & Send stays enabled except while sending.
+  const schema = useMemo(() => checkInFormSchema(overridden), [overridden]);
+  const fe = useFieldErrors({ schema, values: { narrative, overrideReason: reason }, idPrefix: `pm-update-${r.projectId}` });
 
   /** The product line from this week's market check-ins (worst RAG, a clause per market). */
   const draftFromMarkets = async () => {
@@ -319,10 +324,9 @@ function PmUpdateForm({ row: r, onSent, onCancel }: { row: PmRowJson; onSent: (r
 
   const send = async (e: React.FormEvent) => {
     e.preventDefault();
-    setReasonTouched(true);
-    if (!narrative.trim() || !reasonOk) return;
-    setBusy(true);
     setError(null);
+    if (busy || !fe.validate()) return;
+    setBusy(true);
     const res = await fetch(`/api/projects/${r.projectId}/checkin`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -343,7 +347,12 @@ function PmUpdateForm({ row: r, onSent, onCancel }: { row: PmRowJson; onSent: (r
         ragOverride: overridden ? rag : null,
       });
     } else {
-      setError(d?.error?.message ?? "Could not send the update. Try again.");
+      const { message, fields } = readApiError(d, "Could not send the update. Try again.");
+      const { _: root, ...onFields } = fields;
+      if (Object.keys(onFields).length > 0) {
+        fe.setServerErrors(onFields, ["narrative", "overrideReason"]);
+        if (root) setError(root);
+      } else setError(message);
     }
   };
 
@@ -356,7 +365,7 @@ function PmUpdateForm({ row: r, onSent, onCancel }: { row: PmRowJson; onSent: (r
           <button type="button" onClick={onCancel} className={SECONDARY}>
             Cancel
           </button>
-          <button type="submit" disabled={busy || !narrative.trim() || !reasonOk} className={PRIMARY}>
+          <button type="submit" disabled={busy} className={PRIMARY}>
             <Send className="size-3.5" aria-hidden /> {busy ? "Sending…" : r.confirmed ? "Confirm & Resend" : "Confirm & Send"}
           </button>
         </DrawerFooter>
@@ -378,8 +387,8 @@ function PmUpdateForm({ row: r, onSent, onCancel }: { row: PmRowJson; onSent: (r
         <Choice label="Status" rag value={rag} options={RAGS.map((o) => ({ value: o, label: RAG_WORD[o], tone: RAG_TONE[o] }))} onChange={setRag} />
         <DrawerText hint>QUBIT calculates {RAG_WORD[r.computedRag].toLowerCase()}.</DrawerText>
       </DrawerSection>
-      <Field label="Line for the Head" hint={`${narrative.length}/500`}>
-        <textarea value={narrative} onChange={(e) => setNarrative(e.target.value)} maxLength={500} rows={3} placeholder="What leadership should know this week" className={FIELD_TEXTAREA} />
+      <Field label="Line for the Head" htmlFor={fe.idOf("narrative")} error={fe.errors.narrative} hint={`${narrative.length}/500`}>
+        <textarea {...fe.bind("narrative")} value={narrative} onChange={(e) => setNarrative(e.target.value)} maxLength={500} rows={3} placeholder="What leadership should know this week" className={FIELD_TEXTAREA} />
       </Field>
       {r.marketsTotal > 0 && (
         <div className="flex flex-col gap-1">
@@ -391,11 +400,10 @@ function PmUpdateForm({ row: r, onSent, onCancel }: { row: PmRowJson; onSent: (r
         </div>
       )}
       {overridden && (
-        <Field label="Why Your Status Differs" hint="Required. The Head sees it; the override expires in 7 days.">
-          <input value={reason} onChange={(e) => setReason(e.target.value)} onBlur={() => setReasonTouched(true)} maxLength={300} placeholder="For example: the blocker clears on Monday" className={FIELD_INPUT} />
+        <Field label="Why Your Status Differs" htmlFor={fe.idOf("overrideReason")} error={fe.errors.overrideReason} hint="Required. The Head sees it; the override expires in 7 days.">
+          <input {...fe.bind("overrideReason")} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} placeholder="For example: the blocker clears on Monday" className={FIELD_INPUT} />
         </Field>
       )}
-      {reasonTouched && !reasonOk && <DrawerError>Give a reason of at least 5 characters.</DrawerError>}
       {error && <DrawerError>{error}</DrawerError>}
       <TextLink href={workspaceOf(r)} className="self-start">
         Open Workspace

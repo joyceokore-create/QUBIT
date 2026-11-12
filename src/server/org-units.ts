@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { audit } from "@/lib/audit";
+import { orgUnitCode, orgUnitFlag, orgUnitKind, orgUnitName } from "@/lib/org-unit-schema";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 
 /**
@@ -42,10 +43,10 @@ export async function listOrgUnits(ctx: TenantContext): Promise<OrgUnitRow[]> {
 }
 
 export const CreateOrgUnitInput = z.object({
-  code: z.string().trim().toUpperCase().regex(/^[A-Z0-9-]{2,12}$/, "Code: 2–12 letters, digits or dashes."),
-  name: z.string().trim().min(2).max(80),
-  flag: z.string().trim().max(8).nullable().optional(),
-  kind: z.enum(["Market", "Internal"]),
+  code: orgUnitCode,
+  name: orgUnitName,
+  flag: orgUnitFlag,
+  kind: orgUnitKind,
 });
 
 export async function createOrgUnit(ctx: TenantContext, input: z.infer<typeof CreateOrgUnitInput>): Promise<OrgUnitRow[]> {
@@ -59,9 +60,9 @@ export async function createOrgUnit(ctx: TenantContext, input: z.infer<typeof Cr
 }
 
 export const UpdateOrgUnitInput = z.object({
-  name: z.string().trim().min(2).max(80).optional(),
-  flag: z.string().trim().max(8).nullable().optional(),
-  kind: z.enum(["Market", "Internal"]).optional(),
+  name: orgUnitName.optional(),
+  flag: orgUnitFlag,
+  kind: orgUnitKind.optional(),
 });
 
 export async function updateOrgUnit(ctx: TenantContext, id: string, input: z.infer<typeof UpdateOrgUnitInput>): Promise<OrgUnitRow[]> {

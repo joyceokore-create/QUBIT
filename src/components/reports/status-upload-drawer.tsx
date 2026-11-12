@@ -2,8 +2,9 @@
 
 import { useRef, useState } from "react";
 import { Loader2, Upload } from "lucide-react";
-import { Choice, DrawerError, DrawerFooter, DrawerFrame, DrawerHeader, DrawerSection, DrawerText, FIELD_INPUT, Kv } from "@/components/ui/drawer";
+import { Choice, DrawerFooter, DrawerFrame, DrawerHeader, DrawerSection, DrawerText, FieldError, FIELD_INPUT, Kv } from "@/components/ui/drawer";
 import { Banner } from "@/components/ui/panel";
+import { readApiError } from "@/lib/form-errors";
 import { Chip, HealthPill, type ChipTone } from "@/components/ui/status-pill";
 import { TextButton } from "@/components/ui/text-link";
 import { FOCUS, PRIMARY, SECONDARY } from "@/lib/surface";
@@ -63,7 +64,11 @@ export function StatusUploadDrawer({
   const fileInput = useRef<HTMLInputElement>(null);
   const [reading, setReading] = useState<string | null>(null);
   const [creating, setCreating] = useState<number | null>(null);
+  // docs/08 § Errors: a file that could not be read sits on the file picker; "nothing placed yet"
+  // sits on the list of lines; a failed "create project" is form-level (banner at the top).
   const [error, setError] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [placeError, setPlaceError] = useState<string | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [attach, setAttach] = useState(true);
   /** line → project id ("" = not placed yet, "skip" = left out). */
@@ -76,6 +81,7 @@ export function StatusUploadDrawer({
     if (!f || !week) return;
     setReading(f.name);
     setError(null);
+    setFileError(null);
     const fd = new FormData();
     fd.append("file", f);
     fd.append("week", week);
@@ -84,7 +90,7 @@ export function StatusUploadDrawer({
     setReading(null);
     if (fileInput.current) fileInput.current.value = "";
     if (!res.ok) {
-      setError(body?.error?.message ?? "The file could not be read.");
+      setFileError(readApiError(body, "The file could not be read. Choose a Word, Excel, PDF or PowerPoint report.").message);
       return;
     }
     const p = body.data as Preview;
@@ -119,6 +125,11 @@ export function StatusUploadDrawer({
 
   function apply() {
     if (!preview) return;
+    if (placedRows.length === 0) {
+      setPlaceError("Place at least one line on a project, or choose a different file.");
+      return;
+    }
+    setPlaceError(null);
     onApply({
       preview,
       attach,
@@ -158,20 +169,24 @@ export function StatusUploadDrawer({
           </DrawerFooter>
         }
       >
+        {error && <Banner tone="bad">{error}</Banner>}
         <DrawerText>QUBIT reads each line of the week&apos;s report into your cards: the gates per market, channel states, market check-ins and the line for the Head. It asks when a phrase is unclear.</DrawerText>
         {input}
         <button
           type="button"
           onClick={() => fileInput.current?.click()}
           disabled={reading !== null || !week}
-          className={cn("flex flex-col items-center gap-2 rounded-[var(--ds-radius-kv)] border border-dashed border-[var(--ds-line)] bg-[var(--ds-surface2)] px-4 py-8 text-center transition-colors hover:border-[var(--ds-brand)] disabled:cursor-not-allowed disabled:opacity-60", FOCUS)}
+          id="status-file"
+          data-invalid={fileError ? true : undefined}
+          aria-describedby={fileError ? "status-file-error" : undefined}
+          className={cn("flex flex-col items-center gap-2 rounded-[var(--ds-radius-kv)] border border-dashed border-[var(--ds-line)] bg-[var(--ds-surface2)] px-4 py-8 text-center transition-colors hover:border-[var(--ds-brand)] data-[invalid=true]:border-[var(--ds-bad)] disabled:cursor-not-allowed disabled:opacity-60", FOCUS)}
         >
           {reading ? <Loader2 className="size-5 animate-spin text-[var(--ds-ink3)]" aria-hidden /> : <Upload className="size-5 text-[var(--ds-ink3)]" aria-hidden />}
           <span className="text-[13px] font-semibold text-[var(--ds-ink)]">{reading ? `Reading ${reading}…` : "Choose a File"}</span>
           <span className="text-[12px] text-[var(--ds-ink3)]">Word, Excel or PDF table, the milestone tracker, or a PowerPoint one-pager per project or market</span>
         </button>
+        {fileError && <FieldError id="status-file-error">{fileError}</FieldError>}
         <DrawerText hint>Nothing is saved until you save or send a card. Lines reach the Head only when you confirm them.</DrawerText>
-        {error && <DrawerError>{error}</DrawerError>}
       </DrawerFrame>
     );
   }
@@ -184,12 +199,13 @@ export function StatusUploadDrawer({
           <button type="button" onClick={onClose} className={SECONDARY}>
             Cancel
           </button>
-          <button type="button" onClick={apply} disabled={placedRows.length === 0 || creating !== null} className={PRIMARY}>
+          <button type="button" onClick={apply} disabled={creating !== null} className={PRIMARY}>
             Apply to Update
           </button>
         </DrawerFooter>
       }
     >
+      {error && <Banner tone="bad">{error}</Banner>}
       {(preview.preparedBy || preview.reportDate) && (
         <Kv
           rows={[
@@ -202,7 +218,10 @@ export function StatusUploadDrawer({
 
       <DrawerSection title="What QUBIT Read">
         {placedRows.length === 0 ? (
-          <DrawerText hint>No line is placed on a project yet. Answer the questions below.</DrawerText>
+          <>
+            <DrawerText hint>No line is placed on a project yet. Answer the questions below.</DrawerText>
+            {placeError && <FieldError id="status-place-error">{placeError}</FieldError>}
+          </>
         ) : (
           <ul className="m-0 flex list-none flex-col p-0">
             {placedRows.map((r) => {
@@ -324,7 +343,7 @@ export function StatusUploadDrawer({
       <TextButton onClick={() => fileInput.current?.click()} className="self-start">
         {reading ? `Reading ${reading}…` : "Choose a Different File"}
       </TextButton>
-      {error && <DrawerError>{error}</DrawerError>}
+      {fileError && <FieldError id="status-file-error">{fileError}</FieldError>}
     </DrawerFrame>
   );
 }

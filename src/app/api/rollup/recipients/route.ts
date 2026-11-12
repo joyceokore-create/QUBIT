@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/api-guard";
+import { validationError } from "@/server/errors";
 import { isHeadOfProjects } from "@/lib/rbac";
 import { emailEnabled } from "@/server/mail/mailer";
 import { AddRecipientInput, addRecipient, listCandidates, listRecipients, RecipientError, removeRecipient } from "@/server/rollup-recipients";
@@ -9,8 +10,12 @@ import { AddRecipientInput, addRecipient, listCandidates, listRecipients, Recipi
 
 const STATUS: Record<RecipientError["code"], number> = { FORBIDDEN: 403, NOT_FOUND: 404, ALREADY_LISTED: 409, BAD_INPUT: 400 };
 
-function fail(e: unknown) {
-  if (e instanceof RecipientError) return NextResponse.json({ error: { code: e.code, message: e.message } }, { status: STATUS[e.code] });
+function fail(e: unknown, field?: "userId" | "email") {
+  if (e instanceof RecipientError) {
+    // docs/08 § Errors: a refusal about the person or address just added belongs to that field.
+    const onField = field && (e.code === "ALREADY_LISTED" || (e.code === "NOT_FOUND" && field === "userId")) ? { fields: { [field]: e.message } } : {};
+    return NextResponse.json({ error: { code: e.code, message: e.message, ...onField } }, { status: STATUS[e.code] });
+  }
   throw e;
 }
 
@@ -26,13 +31,11 @@ export async function POST(req: Request) {
   const guard = await requirePermission("reports:read");
   if ("response" in guard) return guard.response;
   const parsed = AddRecipientInput.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json({ error: { code: "VALIDATION", message: parsed.error.issues[0]?.message ?? "Pass a userId or a valid email." } }, { status: 400 });
-  }
+  if (!parsed.success) return validationError(parsed.error, "Pass a userId or a valid email.");
   try {
     return NextResponse.json({ data: await addRecipient(guard.ctx, parsed.data) }, { status: 201 });
   } catch (e) {
-    return fail(e);
+    return fail(e, parsed.data.userId ? "userId" : "email");
   }
 }
 

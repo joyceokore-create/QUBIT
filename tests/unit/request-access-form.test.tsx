@@ -24,6 +24,31 @@ describe("RequestAccessForm", () => {
     expect(await screen.findByText(/enter your full name/i)).toBeInTheDocument();
   });
 
+  it("puts every problem on its own field, with the first one focused", async () => {
+    render(<RequestAccessForm />);
+    fireEvent.click(screen.getByRole("button", { name: /request access/i }));
+    const name = await screen.findByLabelText(/full name/i);
+    expect(name).toHaveAttribute("aria-invalid", "true");
+    expect(name).toHaveAttribute("aria-describedby", "fullName-error");
+    expect(screen.getByText("Enter your work email.")).toBeInTheDocument();
+    expect(screen.getByText("Enter your company name.")).toBeInTheDocument();
+    expect(fetch).not.toHaveBeenCalledWith("/api/access-request", expect.anything());
+  });
+
+  it("shows a server field rejection on its field", async () => {
+    (global.fetch as unknown as Mock).mockImplementation((url: string) => {
+      if (String(url).includes("/api/auth/resolve-org")) return Promise.resolve(new Response("{}", { status: 404 }));
+      return Promise.resolve(new Response(JSON.stringify({ error: { code: "VALIDATION", message: "x", fields: { company: "Enter your company name." } } }), { status: 400 }));
+    });
+    render(<RequestAccessForm />);
+    fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: "Ada K." } });
+    fireEvent.change(screen.getByLabelText(/work email/i), { target: { value: "ada@acme.example" } });
+    fireEvent.change(screen.getByLabelText(/company/i), { target: { value: "Acme" } });
+    fireEvent.click(screen.getByRole("button", { name: /request access/i }));
+    expect(await screen.findByText("Enter your company name.")).toBeInTheDocument();
+    expect(screen.getByLabelText(/company/i)).toHaveAttribute("aria-invalid", "true");
+  });
+
   it("submits and shows the confirmation state", async () => {
     render(<RequestAccessForm />);
     fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: "Ada K." } });

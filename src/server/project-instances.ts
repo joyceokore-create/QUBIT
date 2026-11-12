@@ -1,4 +1,5 @@
 import "server-only";
+import { instanceName } from "@/lib/workspace-schema";
 import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { emitDomainEvent } from "@/server/events";
@@ -108,7 +109,7 @@ export async function listProjectInstances(ctx: TenantContext, projectId: string
 }
 
 export const CreateInstanceInput = z.object({
-  name: z.string().trim().min(1).max(60),
+  name: instanceName(),
   code: z.string().trim().toUpperCase().regex(/^[A-Z0-9-]{2,12}$/).optional(),
   kind: z.enum(["instance", "module"]).optional(),
   /** Modules: the instance to sit under (null / omitted = the product). */

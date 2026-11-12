@@ -1,8 +1,8 @@
 import "server-only";
-import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { withTenant, type TenantContext } from "@/lib/tenant";
+import { RetentionBodySchema } from "@/lib/retention-schema";
 import { RETENTION_MAX_DAYS, RETENTION_MIN_DAYS, retentionDays } from "@/lib/retention";
 
 /**
@@ -23,7 +23,7 @@ export class PlatformSettingError extends Error {
   }
 }
 
-export const RetentionInput = z.object({ days: z.number().int().min(RETENTION_MIN_DAYS).max(RETENTION_MAX_DAYS) });
+export const RetentionInput = RetentionBodySchema;
 
 /** Days decided access requests are kept (the default when never set). */
 export async function getAccessRequestRetentionDays(): Promise<number> {

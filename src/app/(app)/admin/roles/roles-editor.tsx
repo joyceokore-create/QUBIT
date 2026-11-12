@@ -6,7 +6,9 @@ import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Banner, Foot, Panel } from "@/components/ui/panel";
 import { Chip } from "@/components/ui/status-pill";
-import { Choice, Drawer, DrawerError, DrawerFooter, DrawerFrame, DrawerHeader, DrawerSection, DrawerText, Field, FIELD_INPUT, Kv } from "@/components/ui/drawer";
+import { Choice, Drawer, DrawerFooter, DrawerFrame, DrawerHeader, DrawerSection, DrawerText, Field, FIELD_INPUT, Kv } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { DeactivateRoleFormSchema, NewRoleFormSchema, RenameRoleFormSchema } from "@/lib/role-schema";
 import { groupPermissions } from "@/lib/permission-groups";
 import { primaryRoleLabel } from "@/lib/rbac";
 import { ROLE_MATRIX_ROWS, matrixCell } from "@/lib/role-matrix";
@@ -319,6 +321,7 @@ function RoleDrawerBody({
         )
       }
     >
+      {error && <Banner tone="bad">{error}</Banner>}
       <Choice
         label="Role"
         value={view.role}
@@ -340,7 +343,6 @@ function RoleDrawerBody({
           Deactivated{view.custom?.deactivationReason ? `: ${view.custom.deactivationReason}` : ""}. People keep the role, but it grants nothing.
         </Banner>
       )}
-      {error && <DrawerError>{error}</DrawerError>}
 
       {editable ? (
         <PermissionPicker catalogue={catalogue} selected={selected} onChange={(s) => { setSelected(s); setSaved(false); }} />
@@ -361,35 +363,44 @@ function CustomRoleSection({ view }: { view: RoleView }) {
   const [name, setName] = useState(view.role);
   const [description, setDescription] = useState(custom.description ?? "");
   const [reason, setReason] = useState("");
+  // docs/08 § Errors: rename and deactivate are two small forms; each shows its problem on its field.
+  const renameFe = useFieldErrors({ schema: RenameRoleFormSchema, values: { name, description }, idPrefix: "role-rename" });
+  const reasonFe = useFieldErrors({ schema: DeactivateRoleFormSchema, values: { reason }, idPrefix: "role-deactivate" });
 
-  const patch = (body: Record<string, unknown>) =>
-    mutate(`/api/admin/roles/custom/${custom.id}`, "PATCH", body, { fallback: "Could not update the role." });
+  const patch = (body: Record<string, unknown>, fe?: { setServerErrors: (f: Record<string, string>, o?: string[]) => void }) =>
+    mutate(`/api/admin/roles/custom/${custom.id}`, "PATCH", body, {
+      fallback: "Could not update the role.",
+      onFieldErrors: fe ? (fields) => fe.setServerErrors(fields) : undefined,
+    });
 
   return (
     <DrawerSection title="Custom Role">
+      {error && <Banner tone="bad">{error}</Banner>}
       {!deactivated && (
         <>
-          <Field label="Name" hint="Renaming updates everyone who holds this role.">
-            <input className={FIELD_INPUT} value={name} maxLength={64} onChange={(e) => setName(e.target.value)} />
+          <Field label="Name" htmlFor={renameFe.idOf("name")} error={renameFe.errors.name} hint="Renaming updates everyone who holds this role.">
+            <input {...renameFe.bind("name")} className={FIELD_INPUT} value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
-          <Field label="Description (optional)">
-            <input className={FIELD_INPUT} value={description} maxLength={500} onChange={(e) => setDescription(e.target.value)} />
+          <Field label="Description (Optional)" htmlFor={renameFe.idOf("description")} error={renameFe.errors.description}>
+            <input {...renameFe.bind("description")} className={FIELD_INPUT} value={description} onChange={(e) => setDescription(e.target.value)} />
           </Field>
           <div className="flex justify-end">
             <button
               type="button"
               className={SECONDARY}
-              disabled={busy || name.trim().length < 2}
-              onClick={() => patch({ name: name.trim(), description: description.trim() || null })}
+              disabled={busy}
+              onClick={() => {
+                if (renameFe.validate()) void patch({ name: name.trim(), description: description.trim() || null }, renameFe);
+              }}
             >
               Save Name
             </button>
           </div>
-          <Field label="Reason to deactivate" hint={custom.assignedCount > 0 ? `${custom.assignedCount} ${custom.assignedCount === 1 ? "person keeps" : "people keep"} the role, but it grants nothing from their next sign-in.` : "The role keeps its permissions and can be reactivated later."}>
-            <input className={FIELD_INPUT} value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder="Why it is no longer needed" />
+          <Field label="Reason to Deactivate" htmlFor={reasonFe.idOf("reason")} error={reasonFe.errors.reason} hint={custom.assignedCount > 0 ? `${custom.assignedCount} ${custom.assignedCount === 1 ? "person keeps" : "people keep"} the role, but it grants nothing from their next sign-in.` : "The role keeps its permissions and can be reactivated later."}>
+            <input {...reasonFe.bind("reason")} className={FIELD_INPUT} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why it is no longer needed" />
           </Field>
           <div className="flex justify-end">
-            <button type="button" className={cn(SECONDARY, "text-[var(--ds-bad-text)]")} disabled={busy || !reason.trim()} onClick={() => patch({ status: "Deactivated", reason: reason.trim() })}>
+            <button type="button" className={cn(SECONDARY, "text-[var(--ds-bad-text)]")} disabled={busy} onClick={() => { if (reasonFe.validate()) void patch({ status: "Deactivated", reason: reason.trim() }, reasonFe); }}>
               Deactivate Role
             </button>
           </div>
@@ -402,7 +413,6 @@ function CustomRoleSection({ view }: { view: RoleView }) {
           </button>
         </div>
       )}
-      {error && <DrawerError>{error}</DrawerError>}
     </DrawerSection>
   );
 }
@@ -412,13 +422,17 @@ function NewRoleDrawer({ open, onClose, catalogue }: { open: boolean; onClose: (
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const fe = useFieldErrors({ schema: NewRoleFormSchema, values: { name, description }, idPrefix: "new-role" });
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!fe.validate()) return;
     await mutate("/api/admin/roles", "POST", { name: name.trim(), description: description.trim() || null, permissions: [...selected] }, {
       fallback: "Could not create the role.",
+      onFieldErrors: (fields) => fe.setServerErrors(fields, ["name", "description"]),
       onSuccess: () => {
+        fe.reset();
         setName("");
         setDescription("");
         setSelected(new Set());
@@ -437,19 +451,19 @@ function NewRoleDrawer({ open, onClose, catalogue }: { open: boolean; onClose: (
             <button type="button" className={SECONDARY} onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className={PRIMARY} disabled={busy || name.trim().length < 2}>
+            <button type="submit" className={PRIMARY} disabled={busy}>
               {busy ? "Creating…" : "Create Role"}
             </button>
           </DrawerFooter>
         }
       >
-        <Field label="Name">
-          <input className={FIELD_INPUT} value={name} maxLength={64} onChange={(e) => setName(e.target.value)} placeholder="For example, Finance Reviewer" />
+        {error && <Banner tone="bad">{error}</Banner>}
+        <Field label="Name" htmlFor={fe.idOf("name")} error={fe.errors.name}>
+          <input {...fe.bind("name")} className={FIELD_INPUT} value={name} onChange={(e) => setName(e.target.value)} placeholder="For example, Finance Reviewer" />
         </Field>
-        <Field label="Description (optional)">
-          <input className={FIELD_INPUT} value={description} maxLength={500} onChange={(e) => setDescription(e.target.value)} />
+        <Field label="Description (Optional)" htmlFor={fe.idOf("description")} error={fe.errors.description}>
+          <input {...fe.bind("description")} className={FIELD_INPUT} value={description} onChange={(e) => setDescription(e.target.value)} />
         </Field>
-        {error && <DrawerError>{error}</DrawerError>}
         <PermissionPicker catalogue={catalogue} selected={selected} onChange={setSelected} />
       </DrawerFrame>
     </Drawer>

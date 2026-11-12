@@ -3,6 +3,8 @@ import { requirePermission, forbidden } from "@/lib/api-guard";
 import { can } from "@/lib/rbac";
 import { grantAccessRequest, GrantAccessInput, AccessRequestError } from "@/server/access-requests";
 import { UserAdminError } from "@/server/users";
+import { validationError } from "@/server/errors";
+import { INVITE_ERROR_FIELD } from "@/lib/invite-schema";
 
 /**
  * POST /api/admin/access-requests/:id/grant — UX11 Admin home › Review › Grant access.
@@ -17,9 +19,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
 
   const parsed = GrantAccessInput.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json({ error: { code: "VALIDATION", message: "Choose a role." } }, { status: 400 });
-  }
+  if (!parsed.success) return validationError(parsed.error);
 
   try {
     const { created } = await grantAccessRequest(guard.ctx, id, parsed.data);
@@ -33,7 +33,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: { code: e.code, message: e.message } }, { status: e.code === "NOT_FOUND" ? 404 : 409 });
     }
     if (e instanceof UserAdminError) {
-      return NextResponse.json({ error: { code: e.code, message: e.message } }, { status: 400 });
+      // A role rejection belongs to the Role field; anything else (e.g. email in use) is form-level.
+      const field = INVITE_ERROR_FIELD[e.code] === "roles" ? "role" : undefined;
+      return NextResponse.json({ error: { code: e.code, message: e.message, ...(field ? { fields: { [field]: e.message } } : {}) } }, { status: 400 });
     }
     throw e;
   }

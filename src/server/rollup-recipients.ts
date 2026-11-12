@@ -1,6 +1,8 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
+import { formMessages } from "@/lib/form-messages";
+import { recipientEmail } from "@/lib/recipient-schema";
 import { audit } from "@/lib/audit";
 import { isHeadOfProjects } from "@/lib/rbac";
 import { withTenant, type TenantContext } from "@/lib/tenant";
@@ -38,8 +40,8 @@ export interface RecipientCandidate {
 
 export const AddRecipientInput = z
   .object({
-    userId: z.string().uuid().optional(),
-    email: z.string().trim().toLowerCase().email().max(254).optional(),
+    userId: z.string().uuid(formMessages.choose("a person")).optional(),
+    email: recipientEmail.optional(),
   })
   .refine((v) => Boolean(v.userId) !== Boolean(v.email), { message: "Pass a userId or an email, not both." });
 export type AddRecipientInput = z.infer<typeof AddRecipientInput>;

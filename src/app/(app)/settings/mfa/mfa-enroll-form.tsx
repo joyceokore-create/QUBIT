@@ -4,6 +4,11 @@ import { useState, type FormEvent } from "react";
 import { Check, Copy, KeyRound, QrCode, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Field } from "@/components/ui/drawer";
+import { Banner } from "@/components/ui/panel";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { readApiError } from "@/lib/form-errors";
+import { MfaCodeFormSchema } from "@/lib/mfa-schema";
 
 type Status = "idle" | "enrolling" | "verifying" | "done";
 
@@ -23,6 +28,8 @@ export function MfaEnrollForm() {
   const [error, setError] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
   const [copied, setCopied] = useState(false);
+  // docs/08 § Errors: a malformed or wrong code shows on the code field; Verify stays enabled.
+  const fe = useFieldErrors({ schema: MfaCodeFormSchema, values: { token }, idPrefix: "mfa" });
 
   async function startEnrollment() {
     setError(null);
@@ -42,6 +49,7 @@ export function MfaEnrollForm() {
     e.preventDefault();
     if (!secret) return;
     setError(null);
+    if (!fe.validate(["token"])) return;
     setStatus("verifying");
     const res = await fetch("/api/auth/mfa/verify", {
       method: "POST",
@@ -49,8 +57,14 @@ export function MfaEnrollForm() {
       body: JSON.stringify({ secret, token }),
     });
     if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      setError(body?.error?.message ?? "That code didn't match. Check your app and try again.");
+      const { message, fields } = readApiError(await res.json().catch(() => null), "That code didn’t match. Check your app and try again.");
+      const { _: root, ...onFields } = fields;
+      if (Object.keys(onFields).length > 0) {
+        fe.setServerErrors(onFields, ["token"]);
+        if (root) setError(root);
+      } else {
+        setError(message);
+      }
       setStatus("enrolling");
       return;
     }
@@ -93,6 +107,7 @@ export function MfaEnrollForm() {
     ];
     return (
       <div className="flex flex-col gap-5 text-left">
+        {error && <Banner tone="bad">{error}</Banner>}
         <ol className="flex flex-col gap-3">
           {steps.map((s, i) => (
             <li key={i} className="flex items-center gap-3">
@@ -157,28 +172,25 @@ export function MfaEnrollForm() {
       </section>
 
       {/* Step 2 — verify */}
-      <form onSubmit={verify} className="flex flex-col gap-3">
+      <form onSubmit={verify} className="flex flex-col gap-3" noValidate>
         <div className="flex items-center gap-2.5">
           <StepBadge n={2} />
           <h2 className="text-[14px] font-bold text-foreground">Enter the 6-digit code</h2>
         </div>
-        <Input
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          maxLength={6}
-          placeholder="123456"
-          value={token}
-          onChange={(e) => setToken(e.target.value.replace(/\D/g, ""))}
-          required
-          aria-label="6-digit authenticator code"
-          className="text-center text-lg font-semibold tracking-[0.4em]"
-        />
-        {error && (
-          <p role="alert" className="text-[13px] text-status-red">
-            {error}
-          </p>
-        )}
-        <Button className="w-full" type="submit" disabled={status === "verifying" || token.length < 6}>
+        {error && <Banner tone="bad">{error}</Banner>}
+        <Field label="Authenticator Code" htmlFor={fe.idOf("token")} error={fe.errors.token}>
+          <Input
+            {...fe.bind("token")}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            placeholder="123456"
+            value={token}
+            onChange={(e) => setToken(e.target.value.replace(/\D/g, ""))}
+            className="text-center text-lg font-semibold tracking-[0.4em]"
+          />
+        </Field>
+        <Button className="w-full" type="submit" disabled={status === "verifying"}>
           {status === "verifying" ? "Verifying…" : "Verify and enable"}
         </Button>
       </form>

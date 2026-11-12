@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { validationError } from "@/server/errors";
 import { can } from "@/lib/rbac";
 import { canWriteProject } from "@/lib/access";
 import { getTenantContext } from "@/lib/tenant";
@@ -22,10 +23,7 @@ export async function PUT(
 
   const parsed = MarketCheckInInput.safeParse(await req.json());
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: "VALIDATION", message: parsed.error.issues[0]?.message ?? "Invalid input." } },
-      { status: 400 },
-    );
+    return validationError(parsed.error);
   }
   const allowed = can(ctx, "project:stage") || (await canWriteProject(ctx, id));
   if (!allowed) return NextResponse.json({ error: { code: "FORBIDDEN" } }, { status: 403 });

@@ -4,8 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { Checklist, Drawer, DrawerError, DrawerFooter, DrawerFrame, DrawerHeader, DrawerSection, DrawerText, Field, FIELD_TEXTAREA, Kv } from "@/components/ui/drawer";
+import { Checklist, Drawer, DrawerFooter, DrawerFrame, DrawerHeader, DrawerSection, DrawerText, Field, FIELD_TEXTAREA, Kv } from "@/components/ui/drawer";
 import { Banner } from "@/components/ui/panel";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { readApiError } from "@/lib/form-errors";
+import { reasonMessage } from "@/lib/reason-schema";
+import { z } from "zod";
 import { Chip, HealthPill } from "@/components/ui/status-pill";
 import { ageDays, ageLabel, APPROVALS_CHANGED } from "@/lib/approvals";
 import { approvalChip, DECISION_NOTE_MAX, DECISION_NOTE_MIN } from "@/lib/gate-approval";
@@ -52,6 +56,8 @@ export function GateReviewDrawer({ target, onClose, onDone, timeZone }: { target
 
 type Decision = "approve" | "approve_exception" | "return";
 
+const NOTE_SCHEMA = z.object({ note: z.string().trim().max(DECISION_NOTE_MAX, `The note must be ${DECISION_NOTE_MAX} characters or fewer.`) });
+
 export function GateReviewBody({ target, onClose, onDone, onBack, timeZone }: { target: GateTarget; onClose: () => void; onDone?: () => void; onBack?: () => void; timeZone?: string }) {
   const tz = timeZone ?? browserTz();
   const [data, setData] = useState<GateReview | null>(null);
@@ -59,6 +65,10 @@ export function GateReviewBody({ target, onClose, onDone, onBack, timeZone }: { 
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<Decision | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // docs/08 § Errors: the Decision Note shows its problem on the field. Whether it is required
+  // depends on which button is pressed (Return / Sign Off with Exception), so that check is made
+  // in `decide` and shown through the field; the schema here only bounds the length.
+  const fe = useFieldErrors({ schema: NOTE_SCHEMA, values: { note }, idPrefix: "gate-note" });
 
   useEffect(() => {
     let alive = true;
@@ -74,18 +84,21 @@ export function GateReviewBody({ target, onClose, onDone, onBack, timeZone }: { 
   const decide = async (kind: Decision) => {
     if (!data) return;
     const trimmed = note.trim();
+    setError(null);
+    if (!fe.validate()) return;
     if ((kind === "return" || kind === "approve_exception") && trimmed.length < DECISION_NOTE_MIN) {
-      setError(kind === "return" ? "Say why it is going back to the PM (at least 5 characters)." : "Say why it is signed off with an exception (at least 5 characters).");
+      fe.setServerErrors({ note: reasonMessage(DECISION_NOTE_MIN) });
       return;
     }
     setBusy(kind);
-    setError(null);
     const url = `/api/projects/${target.projectId}/checkpoints/${target.statusId}/${kind === "return" ? "return" : "approve"}`;
     const body = kind === "return" ? { note: trimmed } : { exception: kind === "approve_exception", ...(trimmed ? { note: trimmed } : {}) };
     const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
     setBusy(null);
     if (!res?.ok) {
-      setError(((await res?.json().catch(() => null)) as { error?: { message?: string } } | null)?.error?.message ?? "Could not record the decision. Try again.");
+      const { message, fields } = readApiError(res ? await res.json().catch(() => null) : null, "Could not record the decision. Try again.");
+      if (fields.note) fe.setServerErrors({ note: fields.note });
+      else setError(message);
       return;
     }
     const it = data.item;
@@ -99,7 +112,7 @@ export function GateReviewBody({ target, onClose, onDone, onBack, timeZone }: { 
     return (
       <DrawerFrame header={<DrawerHeader step="Gate sign-off" title="Gate" onBack={onBack} />}>
         {loadError ? (
-          <DrawerError>{loadError}</DrawerError>
+          <Banner tone="bad">{loadError}</Banner>
         ) : (
           <p className="flex items-center gap-2 text-[12.5px] text-[var(--ds-ink3)]">
             <Loader2 className="size-3.5 animate-spin" aria-hidden /> Loading the gate…
@@ -174,6 +187,7 @@ export function GateReviewBody({ target, onClose, onDone, onBack, timeZone }: { 
       }
       footer={footer}
     >
+      {error && <Banner tone="bad">{error}</Banner>}
       {testing ? (
         <Kv
           rows={[
@@ -267,18 +281,17 @@ export function GateReviewBody({ target, onClose, onDone, onBack, timeZone }: { 
       </DrawerSection>
 
       {decide_ && (
-        <Field label="Decision Note" hint={exceptionOnly ? "Required to return or to sign off with an exception. The PM sees it." : "Required to return it. The PM sees it."}>
+        <Field label="Decision Note" htmlFor={fe.idOf("note")} error={fe.errors.note} hint={exceptionOnly ? "Required to return or to sign off with an exception. At least 5 characters. The PM sees it." : "Required to return it. At least 5 characters. The PM sees it."}>
           <textarea
+            {...fe.bind("note")}
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            maxLength={DECISION_NOTE_MAX}
             rows={3}
             placeholder={testing ? "For example: return until the session drop is fixed; the SMS issue can go live as a known issue." : "For example: approve once the branches confirm hardware, by Wednesday 17:00."}
             className={FIELD_TEXTAREA}
           />
         </Field>
       )}
-      {error && <DrawerError>{error}</DrawerError>}
     </DrawerFrame>
   );
 }

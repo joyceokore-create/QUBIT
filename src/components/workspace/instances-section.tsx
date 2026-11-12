@@ -1,10 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { InstanceNameFormSchema } from "@/lib/workspace-schema";
+import { readApiError } from "@/lib/form-errors";
+import { FieldError } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus, ShieldAlert, X } from "lucide-react";
 import type { NamedInstanceJson } from "@/components/panels/project-panel-json";
-import { CARD_GLASS as CARD, CARD_BG, FOCUS, PRIMARY, QUIET, SECONDARY } from "@/lib/surface";
+import { CARD_GLASS as CARD, CARD_BG, FIELD_INVALID, FOCUS, PRIMARY, QUIET, SECONDARY } from "@/lib/surface";
 
 /**
  * docs/38 — the Delivery tab's Instances grid: rows are the product's named instances
@@ -40,6 +44,8 @@ export function InstancesSection({
   const [name, setName] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // docs/08 § Errors: the name's problem shows on the field; Add stays enabled except while sending.
+  const fe = useFieldErrors({ schema: InstanceNameFormSchema("instance"), values: { name }, idPrefix: "instance" });
   // docs/38 — at All every market is a column (edit any); with a market selected, that
   // market alone is edited.
   const allColumns: { orgUnitId: string | null; label: string }[] = [{ orgUnitId: null, label: "Product" }, ...markets.map((m) => ({ orgUnitId: m.orgUnitId, label: `${m.flag ? `${m.flag} ` : ""}${m.code}` }))];
@@ -56,14 +62,15 @@ export function InstancesSection({
     return states.length === 1 ? states[0]! : states.length === 0 ? (cells.find((c) => c.orgUnitId === null)?.state ?? "Planned") : "";
   };
 
-  const call = async (key: string, url: string, init: RequestInit) => {
+  const call = async (key: string, url: string, init: RequestInit, onFields?: (f: Record<string, string>) => boolean) => {
     setBusy(key);
     setError(null);
     const res = await fetch(url, { headers: { "content-type": "application/json" }, ...init });
     const d = await res.json().catch(() => null);
     setBusy(null);
     if (!res.ok) {
-      setError(d?.error?.message ?? "Could not save.");
+      const { message, fields } = readApiError(d, "Could not save.");
+      if (!onFields?.(fields)) setError(message);
       return false;
     }
     if (Array.isArray(d?.data)) setRows(d.data);
@@ -71,9 +78,17 @@ export function InstancesSection({
     return true;
   };
   const add = async () => {
-    if (!name.trim()) return;
-    if (await call("add", `/api/projects/${projectId}/instances`, { method: "POST", body: JSON.stringify({ name: name.trim() }) })) {
+    if (busy !== null || !fe.validate()) return;
+    const ok = await call("add", `/api/projects/${projectId}/instances`, { method: "POST", body: JSON.stringify({ name: name.trim() }) }, (f) => {
+      const { _: root, ...onFields } = f;
+      if (Object.keys(onFields).length === 0) return false;
+      fe.setServerErrors(onFields);
+      if (root) setError(root);
+      return true;
+    });
+    if (ok) {
       setName("");
+      fe.reset();
       setAdding(false);
     }
   };
@@ -98,17 +113,21 @@ export function InstancesSection({
       </div>
       {adding && (
         <form
-          className="mb-3 flex flex-wrap items-center gap-2"
+          className="mb-3 flex flex-wrap items-start gap-2"
+          noValidate
           onSubmit={(e) => {
             e.preventDefault();
             void add();
           }}
         >
-          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} autoFocus placeholder="e.g. For Schools" aria-label="Instance name" className={`h-8 min-w-[220px] rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none`} />
-          <button type="submit" disabled={busy !== null || !name.trim()} className={PRIMARY}>
+          <div className="flex flex-col gap-1.5">
+            <input {...fe.bind("name")} value={name} onChange={(e) => setName(e.target.value)} maxLength={60} autoFocus placeholder="e.g. For Schools" aria-label="Instance name" className={`h-8 min-w-[220px] rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none ${FIELD_INVALID}`} />
+            {fe.errors.name && <FieldError id={`${fe.idOf("name")}-error`}>{fe.errors.name}</FieldError>}
+          </div>
+          <button type="submit" disabled={busy !== null} className={PRIMARY}>
             {busy === "add" ? "Adding…" : "Add"}
           </button>
-          <button type="button" onClick={() => setAdding(false)} className={QUIET}>
+          <button type="button" onClick={() => { setAdding(false); fe.reset(); }} className={QUIET}>
             Cancel
           </button>
         </form>

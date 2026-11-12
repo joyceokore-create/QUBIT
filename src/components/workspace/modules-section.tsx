@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { InstanceNameFormSchema } from "@/lib/workspace-schema";
+import { readApiError } from "@/lib/form-errors";
+import { FieldError } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
 import { useRouter } from "next/navigation";
 import { FileText, Loader2, Plus, ShieldAlert, X } from "lucide-react";
 import type { NamedInstanceJson } from "@/components/panels/project-panel-json";
-import { CARD_GLASS as CARD, CARD_BG, FOCUS, PRIMARY, QUIET, SECONDARY } from "@/lib/surface";
+import { CARD_GLASS as CARD, CARD_BG, FIELD_INVALID, FOCUS, PRIMARY, QUIET, SECONDARY } from "@/lib/surface";
 
 /**
  * docs/38 — the Delivery tab's Modules grid: the product's components or channels (Swipe
@@ -54,6 +58,9 @@ export function ModulesSection({
   const [draft, setDraft] = useState({ name: "", parentId: "", ownGates: false });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // docs/08 § Errors: the name's problem shows on the field; Add stays enabled except while sending.
+  const nameSchema = useMemo(() => InstanceNameFormSchema(singular(label)), [label]);
+  const fe = useFieldErrors({ schema: nameSchema, values: { name: draft.name }, idPrefix: "module" });
   // docs/38 — at All every market is a column (edit any); with a market selected, that
   // market alone is edited.
   const allColumns: { orgUnitId: string | null; label: string }[] = [{ orgUnitId: null, label: "Product" }, ...markets.map((m) => ({ orgUnitId: m.orgUnitId, label: `${m.flag ? `${m.flag} ` : ""}${m.code}` }))];
@@ -69,14 +76,15 @@ export function ModulesSection({
     ...instances.map((i) => ({ parentId: i.id, label: i.name, rows: rows.filter((r) => r.parentId === i.id) })),
   ].filter((g) => g.rows.length > 0 || g.parentId === null);
 
-  const call = async (key: string, url: string, init: RequestInit) => {
+  const call = async (key: string, url: string, init: RequestInit, onFields?: (f: Record<string, string>) => boolean) => {
     setBusy(key);
     setError(null);
     const res = await fetch(url, { headers: { "content-type": "application/json" }, ...init });
     const d = await res.json().catch(() => null);
     setBusy(null);
     if (!res.ok) {
-      setError(d?.error?.message ?? "Could not save.");
+      const { message, fields } = readApiError(d, "Could not save.");
+      if (!onFields?.(fields)) setError(message);
       return false;
     }
     if (Array.isArray(d?.data)) setRows(d.data);
@@ -84,9 +92,17 @@ export function ModulesSection({
     return true;
   };
   const add = async () => {
-    if (!draft.name.trim()) return;
-    if (await call("add", `/api/projects/${projectId}/instances`, { method: "POST", body: JSON.stringify({ name: draft.name.trim(), kind: "module", parentId: draft.parentId || null, ownGates: draft.ownGates }) })) {
+    if (busy !== null || !fe.validate()) return;
+    const ok = await call("add", `/api/projects/${projectId}/instances`, { method: "POST", body: JSON.stringify({ name: draft.name.trim(), kind: "module", parentId: draft.parentId || null, ownGates: draft.ownGates }) }, (f) => {
+      const { _: root, ...onFields } = f;
+      if (Object.keys(onFields).length === 0) return false;
+      fe.setServerErrors(onFields);
+      if (root) setError(root);
+      return true;
+    });
+    if (ok) {
       setDraft({ name: "", parentId: "", ownGates: false });
+      fe.reset();
       setAdding(false);
     }
   };
@@ -111,13 +127,17 @@ export function ModulesSection({
       </div>
       {adding && (
         <form
-          className="mb-3 flex flex-wrap items-center gap-2"
+          className="mb-3 flex flex-wrap items-start gap-2"
+          noValidate
           onSubmit={(e) => {
             e.preventDefault();
             void add();
           }}
         >
-          <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} maxLength={60} autoFocus placeholder="e.g. USSD" aria-label={`${singular(label)} name`} className={`${INPUT} min-w-[180px]`} />
+          <div className="flex flex-col gap-1.5">
+            <input {...fe.bind("name")} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} maxLength={60} autoFocus placeholder="e.g. USSD" aria-label={`${singular(label)} name`} className={`${INPUT} ${FIELD_INVALID} min-w-[180px]`} />
+            {fe.errors.name && <FieldError id={`${fe.idOf("name")}-error`}>{fe.errors.name}</FieldError>}
+          </div>
           {instances.length > 0 && (
             <select value={draft.parentId} onChange={(e) => setDraft({ ...draft, parentId: e.target.value })} aria-label="Under" className={INPUT}>
               <option value="">Under the product</option>
@@ -132,10 +152,10 @@ export function ModulesSection({
             <input type="checkbox" checked={draft.ownGates} onChange={(e) => setDraft({ ...draft, ownGates: e.target.checked })} className="size-3.5 accent-[var(--brand)]" />
             Its own gates
           </label>
-          <button type="submit" disabled={busy !== null || !draft.name.trim()} className={PRIMARY}>
+          <button type="submit" disabled={busy !== null} className={PRIMARY}>
             {busy === "add" ? "Adding…" : "Add"}
           </button>
-          <button type="button" onClick={() => setAdding(false)} className={QUIET}>
+          <button type="button" onClick={() => { setAdding(false); fe.reset(); }} className={QUIET}>
             Cancel
           </button>
         </form>

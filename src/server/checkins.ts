@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CHECKIN_NARRATIVE_MAX, CHECKIN_REASON_MIN, CHECKIN_REASON_REQUIRED, checkInNarrative } from "@/lib/checkin-schema";
 import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
@@ -246,12 +247,12 @@ export async function getCurrentCheckIn(ctx: TenantContext, projectId: string, n
 
 export const ConfirmCheckInInput = z
   .object({
-    narrative: z.string().trim().min(1, "The narrative line is the human part — say something.").max(500),
+    narrative: checkInNarrative,
     ragOverride: z.enum(RAGS).optional(),
-    overrideReason: z.string().trim().max(300).optional(),
+    overrideReason: z.string().trim().max(300, "The reason must be 300 characters or fewer.").optional(),
   })
-  .refine((v) => !v.ragOverride || (v.overrideReason && v.overrideReason.length >= 5), {
-    message: "A RAG override needs a reason.",
+  .refine((v) => !v.ragOverride || (v.overrideReason && v.overrideReason.length >= CHECKIN_REASON_MIN), {
+    message: CHECKIN_REASON_REQUIRED,
     path: ["overrideReason"],
   });
 export type ConfirmCheckInInputT = z.infer<typeof ConfirmCheckInInput>;
@@ -360,7 +361,7 @@ export async function confirmCheckIn(
 }
 
 export const SaveCheckInDraftInput = z.object({
-  narrative: z.string().trim().max(500).optional(),
+  narrative: z.string().trim().max(CHECKIN_NARRATIVE_MAX, "The line must be 500 characters or fewer.").optional(),
   /** null clears a previously saved override. */
   ragOverride: z.enum(RAGS).nullable().optional(),
   overrideReason: z.string().trim().max(300).nullable().optional(),

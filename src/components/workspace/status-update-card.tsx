@@ -2,9 +2,13 @@
 
 import { dispatchTourEvent } from "@/components/tour/tour-events";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Send } from "lucide-react";
-import { Choice, DrawerError, DrawerSection, Field, FIELD_TEXTAREA, Kv } from "@/components/ui/drawer";
+import { Choice, DrawerSection, Field, FIELD_TEXTAREA, Kv } from "@/components/ui/drawer";
+import { Banner } from "@/components/ui/panel";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { readApiError } from "@/lib/form-errors";
+import { checkInFormSchema } from "@/lib/checkin-schema";
 import { Chip, HealthPill } from "@/components/ui/status-pill";
 import { TextButton } from "@/components/ui/text-link";
 import { RAG_TONE, RAG_WORD, RAGS, RATING_REASON_MIN } from "@/components/reports/status-workspace-model";
@@ -22,7 +26,6 @@ import type { Rag } from "@/server/health";
  * expires in 7 days. "Save Draft" keeps it without sending. Everyone else sees it read-only.
  */
 
-const NARRATIVE_MAX = 500;
 
 /** Friday 17:00 local is the weekly deadline (docs/19 M3 — the nudger escalates past it).
  * Computed after mount: QUBIT is used across time zones and SSR would guess the wrong day. */
@@ -59,7 +62,6 @@ export function StatusUpdateCard({
   const [narrative, setNarrative] = useState(ci.narrative ?? "");
   const [rag, setRag] = useState<Rag>((ci.ragOverride as Rag | null) ?? ci.computedRag);
   const [reason, setReason] = useState(ci.overrideReason ?? "");
-  const [reasonTouched, setReasonTouched] = useState(false);
   const [busy, setBusy] = useState<"send" | "draft" | "resend" | "compose" | null>(null);
   const [composed, setComposed] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,8 +70,19 @@ export function StatusUpdateCard({
   useEffect(() => setMounted(true), []);
 
   const overridden = rag !== ci.computedRag;
-  const reasonOk = !overridden || reason.trim().length >= RATING_REASON_MIN;
-  const canSend = narrative.trim().length > 0 && reasonOk;
+  // docs/08 § Errors: the line for the Head and (when the status is changed) the reason show their
+  // problems on the field; Save Draft and Confirm & Send stay enabled.
+  const schema = useMemo(() => checkInFormSchema(overridden), [overridden]);
+  const fe = useFieldErrors({ schema, values: { narrative, overrideReason: reason }, idPrefix: `su-${projectId}` });
+  /** A rejection from the server: field messages go on their field, the rest in the banner. */
+  const fail = (d: unknown, fallback: string) => {
+    const { message, fields } = readApiError(d, fallback);
+    const { _: root, ...onFields } = fields;
+    if (Object.keys(onFields).length > 0) {
+      fe.setServerErrors(onFields, ["narrative", "overrideReason"]);
+      if (root) setError(root);
+    } else setError(message);
+  };
   const activeOverride = Boolean(ci.ragOverride && ci.overrideExpiresAt && new Date(ci.overrideExpiresAt) > new Date());
   const weekNo = Number(ci.isoWeek.split("-W")[1] ?? 0) || ci.isoWeek;
   const checkedIn = ci.markets.filter((m) => m.checkedIn).length;
@@ -85,7 +98,7 @@ export function StatusUpdateCard({
     const d = await res.json().catch(() => null);
     setBusy(null);
     if (!res.ok || !d?.data) {
-      setError(d?.error?.message ?? "Could not draft from the markets.");
+      fail(d, "Could not draft from the markets.");
       return;
     }
     setNarrative(d.data.narrative);
@@ -100,8 +113,9 @@ export function StatusUpdateCard({
   };
 
   const send = async () => {
-    setBusy("send");
     setError(null);
+    if (!fe.validate()) return;
+    setBusy("send");
     const res = await fetch(`/api/projects/${projectId}/checkin`, { method: "POST", headers: { "content-type": "application/json" }, body: body() });
     setBusy(null);
     const d = await res.json().catch(() => null);
@@ -111,13 +125,15 @@ export function StatusUpdateCard({
       setSavedAt(null);
       dispatchTourEvent("update-sent");
     } else {
-      setError(d?.error?.message ?? "Could not send the update. Try again.");
+      fail(d, "Could not send the update. Try again.");
     }
   };
 
   const saveDraft = async () => {
-    setBusy("draft");
     setError(null);
+    // A draft can be saved without the line, but not with a reason that is too short.
+    if (overridden && !fe.validate(["overrideReason"])) return;
+    setBusy("draft");
     const res = await fetch(`/api/projects/${projectId}/checkin`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -129,7 +145,7 @@ export function StatusUpdateCard({
       onChange(d.data as CheckInJson);
       setSavedAt(new Date());
     } else {
-      setError(d?.error?.message ?? "Could not save the draft. Try again.");
+      fail(d, "Could not save the draft. Try again.");
     }
   };
 
@@ -141,14 +157,14 @@ export function StatusUpdateCard({
     setBusy(null);
     const d = await res.json().catch(() => null);
     if (res.ok && d?.data?.submittedToHeadAt) onChange({ ...ci, submittedToHeadAt: d.data.submittedToHeadAt });
-    else setError(d?.error?.message ?? "Could not send. Try again.");
+    else fail(d, "Could not send. Try again.");
   };
 
   const startEdit = () => {
     setNarrative(ci.narrative ?? "");
     setRag((ci.ragOverride as Rag | null) ?? ci.computedRag);
     setReason(ci.overrideReason ?? "");
-    setReasonTouched(false);
+    fe.reset();
     setError(null);
     setMode("edit");
   };
@@ -176,6 +192,8 @@ export function StatusUpdateCard({
         {chip}
       </div>
 
+      {error && <Banner tone="bad">{error}</Banner>}
+
       <Kv rows={kv} />
 
       <DrawerSection title="Your Status">
@@ -196,12 +214,11 @@ export function StatusUpdateCard({
 
       {editing ? (
         <>
-          <Field label="Line for the Head" htmlFor={`su-line-${projectId}`}>
+          <Field label="Line for the Head" htmlFor={fe.idOf("narrative")} error={fe.errors.narrative}>
             <textarea
-              id={`su-line-${projectId}`}
+              {...fe.bind("narrative")}
               value={narrative}
               onChange={(e) => setNarrative(e.target.value)}
-              maxLength={NARRATIVE_MAX}
               rows={3}
               placeholder="One line in your own words: what should the Head take away this week?"
               className={cn(FIELD_TEXTAREA, "resize-y")}
@@ -209,22 +226,15 @@ export function StatusUpdateCard({
           </Field>
           <Field
             label="Reason"
-            htmlFor={`su-reason-${projectId}`}
-            hint={
-              overridden
-                ? reasonTouched && !reasonOk
-                  ? <span className="font-semibold text-[var(--ds-bad-text)]">Give at least {RATING_REASON_MIN} characters.</span>
-                  : `Needed because QUBIT calculates ${RAG_WORD[ci.computedRag].toLowerCase()}. At least ${RATING_REASON_MIN} characters; the change expires in 7 days.`
-                : "Only if you change the computed status."
-            }
+            htmlFor={fe.idOf("overrideReason")}
+            error={fe.errors.overrideReason}
+            hint={overridden ? `Needed because QUBIT calculates ${RAG_WORD[ci.computedRag].toLowerCase()}. At least ${RATING_REASON_MIN} characters; the change expires in 7 days.` : "Only if you change the computed status."}
           >
             <textarea
-              id={`su-reason-${projectId}`}
+              {...fe.bind("overrideReason")}
               value={overridden ? reason : ""}
               onChange={(e) => setReason(e.target.value)}
-              onBlur={() => setReasonTouched(true)}
               disabled={!overridden}
-              maxLength={300}
               rows={2}
               placeholder="Why the status differs from the computed one"
               className={cn(FIELD_TEXTAREA, "resize-y disabled:cursor-not-allowed disabled:bg-[var(--ds-surface2)]")}
@@ -250,8 +260,6 @@ export function StatusUpdateCard({
         </div>
       )}
 
-      {error && <DrawerError>{error}</DrawerError>}
-
       {ci.canConfirm && (
         <div className="flex flex-wrap items-center justify-end gap-2">
           {editing ? (
@@ -268,7 +276,7 @@ export function StatusUpdateCard({
                   {busy === "draft" ? "Saving…" : "Save Draft"}
                 </button>
               )}
-              <button type="button" onClick={() => void send()} disabled={busy !== null || !canSend} className={PRIMARY}>
+              <button type="button" onClick={() => void send()} disabled={busy !== null} className={PRIMARY}>
                 <Send className="size-3.5" aria-hidden /> {busy === "send" ? "Sending…" : "Confirm & Send to Head"}
               </button>
             </>

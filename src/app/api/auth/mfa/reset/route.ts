@@ -5,6 +5,8 @@ import { withTenant } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { decryptMfaSecret, verifyTotp } from "@/lib/mfa";
 import { emitDomainEvent } from "@/server/events";
+import { validationError } from "@/server/errors";
+import { mfaResetCode } from "@/lib/user-edit-schema";
 
 /**
  * POST /api/auth/mfa/reset — clear a user's second factor so they can re-enrol
@@ -21,16 +23,14 @@ import { emitDomainEvent } from "@/server/events";
  *  - no self-reset (use your recovery codes, or ask another admin);
  *  - the person is notified in-app that their second factor was reset.
  */
-const Body = z.object({ userId: z.string().min(1), code: z.string().regex(/^\d{6}$/).optional() });
+const Body = z.object({ userId: z.string().min(1), code: mfaResetCode.optional() });
 
 export async function POST(req: Request) {
   const guard = await requirePermission("users:reset");
   if ("response" in guard) return guard.response;
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json({ error: { code: "VALIDATION", message: "userId is required, and the code must be 6 digits." } }, { status: 400 });
-  }
+  if (!parsed.success) return validationError(parsed.error);
   if (parsed.data.userId === guard.ctx.userId) {
     return NextResponse.json({ error: { code: "SELF_RESET", message: "You can't reset your own MFA. Use a recovery code, or ask another administrator." } }, { status: 409 });
   }
@@ -70,7 +70,7 @@ export async function POST(req: Request) {
   });
 
   if (result === "STEP_UP") {
-    return NextResponse.json({ error: { code: "STEP_UP", message: "Enter the current code from your own authenticator app to confirm." } }, { status: 403 });
+    return NextResponse.json({ error: { code: "STEP_UP", message: "Enter the current code from your own authenticator app to confirm.", fields: { code: "Enter the current code from your own authenticator app to confirm." } } }, { status: 403 });
   }
   if (result === "NOT_FOUND") {
     return NextResponse.json({ error: { code: "NOT_FOUND", message: "User not found." } }, { status: 404 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { AtSign, CornerDownRight, Gavel, Send, Trash2, X } from "lucide-react";
 import {
   DropdownMenu,
@@ -9,6 +9,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Field, FieldError } from "@/components/ui/drawer";
+import { Banner } from "@/components/ui/panel";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { readApiError, type FieldErrors } from "@/lib/form-errors";
+import { CommentFormSchema, PromoteFormSchema } from "@/lib/comment-schema";
 
 // Conversation attached to work (M4, docs/16 §4): one-level threads, @mentions
 // (notification now, email with M5), promote-to-Decision for PMs. Mounted on projects,
@@ -47,10 +52,12 @@ function Composer({
   busy,
 }: {
   placeholder: string;
-  onPost: (body: string, mentionUserIds: string[]) => Promise<boolean>;
+  onPost: (body: string, mentionUserIds: string[]) => Promise<{ ok: true } | { ok: false; fields: FieldErrors }>;
   busy: boolean;
 }) {
   const [body, setBody] = useState("");
+  // docs/08 § Errors: an empty comment shows its problem on the box; Post stays enabled.
+  const fe = useFieldErrors({ schema: CommentFormSchema, values: { body }, idPrefix: useId() });
   const [mentions, setMentions] = useState<Person[]>([]);
   const [people, setPeople] = useState<Person[] | null>(null);
 
@@ -68,23 +75,27 @@ function Composer({
   };
 
   const post = async () => {
-    if (!body.trim()) return;
-    const ok = await onPost(body.trim(), mentions.map((m) => m.id));
-    if (ok) {
+    if (!fe.validate()) return;
+    const out = await onPost(body.trim(), mentions.map((m) => m.id));
+    if (out.ok) {
       setBody("");
       setMentions([]);
-    }
+      fe.reset();
+    } else if (out.fields.body) fe.setServerErrors({ body: out.fields.body });
   };
 
   return (
     <div className="flex flex-col gap-1.5">
       <textarea
+        {...fe.bind("body")}
+        aria-label={placeholder}
         value={body}
         onChange={(e) => setBody(e.target.value)}
         rows={2}
         placeholder={placeholder}
-        className="resize-none rounded-[8px] border border-ink-4 bg-background p-2.5 text-xs text-foreground outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none"
+        className="resize-none rounded-[8px] border border-ink-4 bg-background p-2.5 text-xs text-foreground outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none aria-invalid:border-[var(--ds-bad)] aria-invalid:focus:border-[var(--ds-bad)] aria-invalid:focus:ring-[var(--ds-bad)]"
       />
+      {fe.errors.body && <FieldError id={`${fe.idOf("body")}-error`}>{fe.errors.body}</FieldError>}
       <div className="flex flex-wrap items-center gap-1.5">
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -114,7 +125,7 @@ function Composer({
         <button
           type="button"
           onClick={() => void post()}
-          disabled={busy || !body.trim()}
+          disabled={busy}
           className="ml-auto flex items-center gap-1.5 rounded-[8px] bg-[var(--brand)] px-3 py-1.5 text-[11px] font-bold text-[var(--onbrand)] disabled:opacity-50"
         >
           <Send className="size-3" /> Post
@@ -139,7 +150,7 @@ export function CommentsSection({ entityType, entityId, viewerId, canPromote, co
     void load();
   }, [load]);
 
-  const post = async (body: string, mentionUserIds: string[], parentId?: string): Promise<boolean> => {
+  const post = async (body: string, mentionUserIds: string[], parentId?: string): Promise<{ ok: true } | { ok: false; fields: FieldErrors }> => {
     setBusy(true);
     setError(null);
     const res = await fetch("/api/comments", {
@@ -151,11 +162,12 @@ export function CommentsSection({ entityType, entityId, viewerId, canPromote, co
     if (res.ok) {
       setReplyTo(null);
       void load();
-      return true;
+      return { ok: true };
     }
-    const d = await res.json().catch(() => null);
-    setError(d?.error?.message ?? "Could not post the comment.");
-    return false;
+    const { message, fields } = readApiError(await res.json().catch(() => null), "Could not post the comment.");
+    // A problem with the text itself goes on the box; anything else is the banner above it.
+    if (!fields.body) setError(message);
+    return { ok: false, fields };
   };
 
   const remove = async (id: string) => {
@@ -215,8 +227,8 @@ export function CommentsSection({ entityType, entityId, viewerId, canPromote, co
   return (
     <div className={`flex flex-col ${compact ? "gap-2" : "gap-3"}`}>
       {!compact && <h2 className="text-[15px] rv:text-heading-xs font-bold text-[var(--qink)]">Discussion</h2>}
+      {error && <Banner tone="bad">{error}</Banner>}
       <Composer placeholder="Start the discussion — @mention someone to pull them in…" busy={busy} onPost={(b, m) => post(b, m)} />
-      {error && <p className="text-[11px] text-[var(--bad)]">{error}</p>}
       <div className="flex flex-col gap-2">
         {comments.map((c) => (
           <CommentRow key={c.id} c={c} />
@@ -249,10 +261,12 @@ function PromoteForm({ comment, onDone }: { comment: CommentJson; onDone: () => 
   const [rationale, setRationale] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fe = useFieldErrors({ schema: PromoteFormSchema, values: { title, rationale }, idPrefix: "promote" });
 
   const promote = async () => {
-    setBusy(true);
     setError(null);
+    if (!fe.validate()) return;
+    setBusy(true);
     const res = await fetch(`/api/comments/${comment.id}/promote`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -261,35 +275,39 @@ function PromoteForm({ comment, onDone }: { comment: CommentJson; onDone: () => 
     setBusy(false);
     if (res.ok) onDone();
     else {
-      const d = await res.json().catch(() => null);
-      setError(d?.error?.message ?? "Could not record the decision.");
+      const { message, fields } = readApiError(await res.json().catch(() => null), "Could not record the decision.");
+      const { _: root, ...onFields } = fields;
+      if (Object.keys(onFields).length > 0) {
+        fe.setServerErrors(onFields, ["title", "rationale"]);
+        if (root) setError(root);
+      } else setError(message);
     }
   };
 
   return (
     <div className="flex flex-col gap-2.5">
-      <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--ink3)]">
-        What was decided?
+      {error && <Banner tone="bad">{error}</Banner>}
+      <Field label="What Was Decided?" htmlFor={fe.idOf("title")} error={fe.errors.title}>
         <input
+          {...fe.bind("title")}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="rounded-[8px] border border-ink-4 bg-background px-2.5 py-2 text-xs font-normal text-foreground outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none"
+          className="rounded-[8px] border border-ink-4 bg-background px-2.5 py-2 text-xs font-normal text-foreground outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none aria-invalid:border-[var(--ds-bad)] aria-invalid:focus:border-[var(--ds-bad)] aria-invalid:focus:ring-[var(--ds-bad)]"
         />
-      </label>
-      <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--ink3)]">
-        Why? (defaults to the comment)
+      </Field>
+      <Field label="Why? (Defaults to the Comment)" htmlFor={fe.idOf("rationale")} error={fe.errors.rationale}>
         <textarea
+          {...fe.bind("rationale")}
           value={rationale}
           onChange={(e) => setRationale(e.target.value)}
           rows={3}
-          className="resize-none rounded-[8px] border border-ink-4 bg-background p-2.5 text-xs font-normal text-foreground outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none"
+          className="resize-none rounded-[8px] border border-ink-4 bg-background p-2.5 text-xs font-normal text-foreground outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none aria-invalid:border-[var(--ds-bad)] aria-invalid:focus:border-[var(--ds-bad)] aria-invalid:focus:ring-[var(--ds-bad)]"
         />
-      </label>
-      {error && <p className="text-[11px] text-[var(--bad)]">{error}</p>}
+      </Field>
       <button
         type="button"
         onClick={() => void promote()}
-        disabled={busy || !title.trim()}
+        disabled={busy}
         className="flex items-center justify-center gap-1.5 rounded-[8px] bg-[var(--brand)] px-3.5 py-2 text-xs font-bold text-[var(--onbrand)] disabled:opacity-50"
       >
         <Gavel className="size-3.5" /> {busy ? "Recording…" : "Record decision"}

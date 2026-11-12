@@ -7,6 +7,10 @@ import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { Chip, OptionCard, WizardCard, WizardShell } from "@/components/wizard/wizard-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FieldError } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { FIELD_INVALID } from "@/lib/surface";
+import { ProjectWizardFormSchema } from "@/lib/project-wizard-schema";
 import { assignmentWarnings } from "@/lib/capacity";
 import { PROJECT_ROLES } from "@/lib/roles";
 import { draftKey, nextStep, prevStep, type WizardStep } from "@/lib/wizard";
@@ -134,7 +138,14 @@ function codePreview(name: string): string {
 }
 
 const LABEL = "text-[11px] font-semibold tracking-[0.6px] text-[var(--ink4)] uppercase";
-const SELECT = "mt-1.5 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm";
+const SELECT = `mt-1.5 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm ${FIELD_INVALID}`;
+
+/** Server-reported field → the step it sits on (docs/08 § Errors: a Create rejection jumps back to it). */
+function stepOfField(field: string): number {
+  if (field.startsWith("team.")) return 2;
+  if (field === "marketIds" || field === "instanceLeads") return 1;
+  return 0;
+}
 
 export function ProjectWizard({
   userId,
@@ -171,6 +182,8 @@ export function ProjectWizard({
     description: fromIdea?.problem.slice(0, 500) ?? "",
   });
   const [loaded, setLoaded] = useState(false);
+  // A server rejection with no field on screen (shown as a banner above the step).
+  const [notice, setNotice] = useState<string | null>(null);
 
   // M-P4a seeds, hoisted so the resume effect can depend on plain strings (the fromIdea
   // object identity would change every render).
@@ -217,6 +230,26 @@ export function ProjectWizard({
   const filledTeam = d.team.filter((t) => t.userId);
   const unfilledSeats = d.team.filter((t) => !t.userId);
 
+  // docs/08 § Errors: problems show on their fields; you can't leave a step with errors. The flat
+  // `team.N.field` keys mirror the rows' values so a server error on a row clears when it's edited.
+  const teamKeys = d.team.flatMap((_, i) => [`team.${i}.startDate`, `team.${i}.endDate`, `team.${i}.allocationPct`]);
+  const feValues: Record<string, unknown> = {
+    name: d.name,
+    code: d.code,
+    portfolioId: d.portfolioId,
+    programmeId: d.programmeId,
+    checkpointTemplateId: d.checkpointTemplateId,
+    marketIds: effectiveMarkets,
+    team: d.team,
+  };
+  d.team.forEach((r, i) => {
+    feValues[`team.${i}.startDate`] = r.startDate;
+    feValues[`team.${i}.endDate`] = r.endDate;
+    feValues[`team.${i}.allocationPct`] = r.allocationPct;
+  });
+  const fe = useFieldErrors({ schema: ProjectWizardFormSchema, values: feValues, idPrefix: "pj" });
+  const STEP_FIELDS: Record<string, string[]> = { basics: ["name", "code", "portfolioId", "programmeId", "checkpointTemplateId"], structure: ["marketIds"], team: teamKeys, review: [] };
+
   // ── Capacity warnings (docs/26 §4.3): informative, acceptable, audited.
   // DM1.73 — computed by the shared src/lib/capacity.ts (leave-aware effectivePct).
   const warnings = useMemo(() => {
@@ -246,19 +279,20 @@ export function ProjectWizard({
       .slice(0, 2);
   }
 
+  /** Check one step's fields; errors show on them and the step doesn't advance. */
   function validate(stepKey: string): boolean {
-    if (stepKey === "basics") {
-      if (d.name.trim().length < 2) return setError("Name is required."), false;
-      if (!d.portfolioId) return setError("Every project belongs to a portfolio."), false;
-    }
     setError(null);
-    return true;
+    setNotice(null);
+    return fe.validate(STEP_FIELDS[stepKey] ?? []);
   }
 
   async function create() {
-    if (!validate("basics")) {
-      go(STEPS.findIndex((s) => s.key === "basics"));
-      return;
+    // Every step must be clean before anything is sent; the first with a problem is shown.
+    for (const [i, st] of STEPS.entries()) {
+      if (!validate(st.key)) {
+        go(i);
+        return;
+      }
     }
     // DM1.73 — the idea's expected value rides the description with an explicit prefix:
     // Project has no dedicated field for it (decision noted in project-wizard.ts).
@@ -307,6 +341,33 @@ export function ProjectWizard({
       },
       {
         fallback: "Could not create the project.",
+        // A rejection that belongs to a field jumps back to that field's step and shows there.
+        // Rows are renumbered from the server's filled-team / unfilled-seat arrays to the wizard's rows.
+        onFieldErrors: (raw) => {
+          const filledIdx = d.team.flatMap((t, i) => (t.userId ? [i] : []));
+          const unfilledIdx = d.team.flatMap((t, i) => (t.userId ? [] : [i]));
+          const mapped: Record<string, string> = {};
+          let unplaced: string | null = null;
+          for (const [k, msg] of Object.entries(raw)) {
+            const m = /^(team|unfilledSeats)\.(\d+)\.(\w+)$/.exec(k);
+            if (m) {
+              const row = (m[1] === "team" ? filledIdx : unfilledIdx)[Number(m[2])];
+              if (row !== undefined) mapped[`team.${row}.${m[3]}`] = msg;
+              else unplaced ??= msg;
+              continue;
+            }
+            const base = k.split(".")[0];
+            if (["name", "code", "portfolioId", "programmeId", "checkpointTemplateId", "marketIds"].includes(base)) mapped[base] ??= msg;
+            else unplaced ??= msg;
+          }
+          const keys = Object.keys(mapped);
+          if (keys.length > 0) {
+            go(Math.min(...keys.map(stepOfField)));
+            const order = ["name", "code", "portfolioId", "programmeId", "checkpointTemplateId", "marketIds", ...teamKeys];
+            fe.setServerErrors(mapped, order.filter((f) => f in mapped).length ? order : keys);
+          }
+          if (unplaced) setNotice(unplaced);
+        },
         onSuccess: (data) => {
           try {
             window.localStorage.removeItem(key);
@@ -343,7 +404,10 @@ export function ProjectWizard({
       steps={STEPS}
       current={step}
       skipped={NO_SKIPS}
-      onStep={go}
+      onStep={(i) => {
+        if (i > step && !validate(cur)) return;
+        go(i);
+      }}
       onBack={() => go(prevStep(STEPS, step, NO_SKIPS))}
       onNext={() => {
         if (!validate(cur)) return;
@@ -353,30 +417,33 @@ export function ProjectWizard({
       onCreateAnother={createAnother}
       createLabel="Create project"
       busy={busy}
-      error={error}
+      error={error ?? notice}
     >
       {cur === "basics" && (
         <WizardCard title="What is it, and where does it live?">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label htmlFor="pj-name" className={LABEL}>Project name</label>
-              <Input id="pj-name" value={d.name} maxLength={120} onChange={(e) => set({ name: e.target.value })} className="mt-1.5" autoFocus />
+              <label htmlFor={fe.idOf("name")} className={LABEL}>Project Name</label>
+              <Input {...fe.bind("name")} value={d.name} maxLength={120} onChange={(e) => set({ name: e.target.value })} className="mt-1.5" autoFocus />
+              <Err fe={fe} field="name" />
             </div>
             <div>
-              <label htmlFor="pj-code" className={LABEL}>Code · auto-suggested</label>
+              <label htmlFor={fe.idOf("code")} className={LABEL}>Code · Auto-Suggested</label>
               <Input
-                id="pj-code"
+                {...fe.bind("code")}
                 value={d.code}
                 onChange={(e) => set({ code: e.target.value.toUpperCase() })}
                 placeholder={d.name ? `auto: ${codePreview(d.name)}` : "auto from name"}
                 className="mt-1.5 font-mono"
               />
+              <Err fe={fe} field="code" />
             </div>
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <div>
-              <span className={LABEL}>Portfolio (required)</span>
+              <label htmlFor={fe.idOf("portfolioId")} className={LABEL}>Portfolio</label>
               <select
+                {...fe.bind("portfolioId")}
                 value={d.portfolioId}
                 onChange={(e) => set({ portfolioId: e.target.value, programmeId: "", marketsTouched: false, marketIds: [] })}
                 className={SELECT}
@@ -388,10 +455,12 @@ export function ProjectWizard({
                   </option>
                 ))}
               </select>
+              <Err fe={fe} field="portfolioId" />
             </div>
             <div>
-              <span className={LABEL}>Programme (optional)</span>
+              <label htmlFor={fe.idOf("programmeId")} className={LABEL}>Programme (Optional)</label>
               <select
+                {...fe.bind("programmeId")}
                 value={d.programmeId}
                 onChange={(e) => set({ programmeId: e.target.value })}
                 className={SELECT}
@@ -406,16 +475,17 @@ export function ProjectWizard({
                     </option>
                   ))}
               </select>
+              <Err fe={fe} field="programmeId" />
             </div>
           </div>
           <div className="mt-3">
-            <label htmlFor="pj-desc" className={LABEL}>Description (optional)</label>
+            <label htmlFor="pj-desc" className={LABEL}>Description (Optional)</label>
             <Input id="pj-desc" value={d.description} onChange={(e) => set({ description: e.target.value })} className="mt-1.5" />
           </div>
 
           {/* DM1.73 — Type & delivery folded in (was its own step). */}
           <div className="mt-4">
-            <span className={LABEL}>Delivery template</span>
+            <span className={LABEL}>Delivery Template</span>
             <div className="mt-2 grid gap-3 sm:grid-cols-2">
               {templates.map((t) => (
                 <OptionCard
@@ -427,9 +497,10 @@ export function ProjectWizard({
                 />
               ))}
             </div>
+            <Err fe={fe} field="checkpointTemplateId" />
           </div>
           <div className="mt-3">
-            <span className={LABEL}>Pipeline stage</span>
+            <span className={LABEL}>Pipeline Stage</span>
             <div className="mt-2">
               {["Exploring", "Evaluating", "Approved"].map((st) => (
                 <Chip key={st} on={d.pipelineStage === st} onClick={() => set({ pipelineStage: st })}>
@@ -472,6 +543,7 @@ export function ProjectWizard({
                 );
               })}
               {units.length === 0 && <p className="text-[11.5px] text-[var(--ink4)]">None defined yet — an admin adds them under Admin › Markets.</p>}
+              <Err fe={fe} field="marketIds" />
               <p className="mt-2 text-[11px] text-[var(--ink4)]">
                 {portfolio && !d.marketsTouched && (portfolio.defaultMarkets.length ?? 0) > 0
                   ? `Pre-filled from ${portfolio.name} — trim or extend per project.`
@@ -614,8 +686,8 @@ export function ProjectWizard({
                   <div key={i} className="rounded-[10px] border border-[var(--w08)] p-2.5">
                     <div className="grid items-end gap-2 sm:grid-cols-[1fr_150px_80px_110px_110px_32px]">
                       <div>
-                        <span className={LABEL}>Person</span>
-                        <select value={row.userId} onChange={(e) => setRow(i, { userId: e.target.value })} className={SELECT}>
+                        <label htmlFor={fe.idOf(`team.${i}.userId`)} className={LABEL}>Person</label>
+                        <select id={fe.idOf(`team.${i}.userId`)} value={row.userId} onChange={(e) => setRow(i, { userId: e.target.value })} className={SELECT}>
                           <option value="">— unfilled → resource request —</option>
                           {people.map((pp) => (
                             <option key={pp.userId} value={pp.userId} disabled={d.team.some((t, j) => j !== i && t.userId === pp.userId)}>
@@ -625,7 +697,7 @@ export function ProjectWizard({
                         </select>
                       </div>
                       <div>
-                        <span className={LABEL}>Role hat</span>
+                        <span className={LABEL}>Role Hat</span>
                         <select value={row.role} onChange={(e) => setRow(i, { role: e.target.value })} className={SELECT}>
                           {PROJECT_ROLES.map((r) => (
                             <option key={r}>{r}</option>
@@ -633,8 +705,9 @@ export function ProjectWizard({
                         </select>
                       </div>
                       <div>
-                        <span className={LABEL}>Alloc %</span>
+                        <label htmlFor={fe.idOf(`team.${i}.allocationPct`)} className={LABEL}>Alloc %</label>
                         <Input
+                          {...fe.bind(`team.${i}.allocationPct`)}
                           type="number"
                           min={1}
                           max={100}
@@ -644,12 +717,12 @@ export function ProjectWizard({
                         />
                       </div>
                       <div>
-                        <span className={LABEL}>Start</span>
-                        <Input type="date" value={row.startDate} onChange={(e) => setRow(i, { startDate: e.target.value })} className="mt-1.5" />
+                        <label htmlFor={fe.idOf(`team.${i}.startDate`)} className={LABEL}>Start</label>
+                        <Input {...fe.bind(`team.${i}.startDate`)} type="date" value={row.startDate} onChange={(e) => setRow(i, { startDate: e.target.value })} className="mt-1.5" />
                       </div>
                       <div>
-                        <span className={LABEL}>End</span>
-                        <Input type="date" value={row.endDate} onChange={(e) => setRow(i, { endDate: e.target.value })} className="mt-1.5" />
+                        <label htmlFor={fe.idOf(`team.${i}.endDate`)} className={LABEL}>End</label>
+                        <Input {...fe.bind(`team.${i}.endDate`)} type="date" value={row.endDate} onChange={(e) => setRow(i, { endDate: e.target.value })} className="mt-1.5" />
                       </div>
                       <Button
                         type="button"
@@ -661,6 +734,9 @@ export function ProjectWizard({
                         <Trash2 />
                       </Button>
                     </div>
+                    {(["startDate", "endDate", "allocationPct"] as const).map((f) => (
+                      <Err key={f} fe={fe} field={`team.${i}.${f}`} />
+                    ))}
                     {!row.userId && (
                       <p className="mt-2 text-[11.5px] text-[var(--ink4)]">
                         → will raise a resource request for 1 {row.role} · {row.allocationPct}% to the Head.
@@ -749,5 +825,16 @@ export function ProjectWizard({
         </WizardCard>
       )}
     </WizardShell>
+  );
+}
+
+/** The message under a wizard control (id `${id}-error`, matching the control's aria-describedby). */
+function Err({ fe, field }: { fe: { errors: Record<string, string>; idOf: (f: string) => string }; field: string }) {
+  const msg = fe.errors[field];
+  if (!msg) return null;
+  return (
+    <div className="mt-1">
+      <FieldError id={`${fe.idOf(field)}-error`}>{msg}</FieldError>
+    </div>
   );
 }

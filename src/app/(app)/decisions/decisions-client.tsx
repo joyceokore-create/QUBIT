@@ -12,7 +12,10 @@ import { useListUrl } from "@/components/list/use-list-url";
 import { Banner, ListRow } from "@/components/ui/panel";
 import { Chip } from "@/components/ui/status-pill";
 import { TabStrip } from "@/components/ui/tab-strip";
-import { Choice, Drawer, DrawerError, DrawerFooter, DrawerFrame, DrawerHeader, DrawerSection, DrawerText, Field, FIELD_INPUT, FIELD_TEXTAREA, Kv } from "@/components/ui/drawer";
+import { Choice, Drawer, DrawerFooter, DrawerFrame, DrawerHeader, DrawerSection, DrawerText, Field, FIELD_INPUT, FIELD_TEXTAREA, Kv } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { readApiError, type FieldErrors } from "@/lib/form-errors";
+import { decideFormSchema, NewActionFormSchema, raiseFormSchema } from "@/lib/decision-schema";
 import { dayKey, formatDate, formatDayMonth } from "@/lib/dates";
 import {
   canCompleteGlcAction,
@@ -55,6 +58,13 @@ async function post(url: string, body: unknown, fallback: string): Promise<strin
   if (res?.ok) return null;
   const data = res ? ((await res.json().catch(() => null)) as { error?: { message?: string } } | null) : null;
   return data?.error?.message ?? fallback;
+}
+
+/** POST JSON; on failure the form-level message plus any per-field messages (docs/08 § Errors). */
+async function postForm(url: string, body: unknown, fallback: string): Promise<{ message: string; fields: FieldErrors } | null> {
+  const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
+  if (res?.ok) return null;
+  return readApiError(res ? await res.json().catch(() => null) : null, fallback);
 }
 
 function useDone(onClose: () => void) {
@@ -270,6 +280,9 @@ function DecisionDrawer({ row, viewer, now, tz, onClose, onAddAction }: { row: D
   const decided = row.status === "decided";
   const canRecord = !decided && viewer.mayDecide;
   const todayKey = dayKey(now, tz);
+  // docs/08 § Errors: the note (decline / defer) and the new due date show their problems on the field.
+  const schema = useMemo(() => decideFormSchema(mode, todayKey), [mode, todayKey]);
+  const fe = useFieldErrors({ schema, values: { note, newDue }, idPrefix: "decision" });
   const overdue = !!row.dueDate && dayKey(row.dueDate, tz) < todayKey;
   const dueLine = row.dueDate ? `${overdue && !decided ? "was due" : "due"} ${weekdayDate(row.dueDate, tz)}` : "no due date";
   const subtitle = [row.projectName ?? "Group level", raisedByFull(row.raisedBy), dueLine].join(" · ");
@@ -281,14 +294,20 @@ function DecisionDrawer({ row, viewer, now, tz, onClose, onAddAction }: { row: D
     e.preventDefault();
     setError(null);
     const text = note.trim();
-    if (mode !== "approve" && text.length < 3) return setError(mode === "decline" ? "Say why it was declined — the note goes on the record." : "Say why it was deferred — the note goes on the record.");
-    if (mode === "defer" && !newDue) return setError("Choose the new due date.");
-    if (mode === "defer" && newDue <= todayKey) return setError("Defer to a day after today.");
+    if (!fe.validate()) return;
     setBusy(true);
     const body = mode === "defer" ? { action: "defer", note: text, dueDate: newDue } : { action: mode, ...(text && { note: text }) };
-    const err = await post(`/api/decisions/${row.id}/decide`, body, "Couldn't record the decision. Try again.");
+    const err = await postForm(`/api/decisions/${row.id}/decide`, body, "Could not record the decision. Try again.");
     setBusy(false);
-    if (err) return setError(err);
+    if (err) {
+      const { _: root, dueDate, ...rest } = err.fields;
+      const onFields = { ...rest, ...(dueDate ? { newDue: dueDate } : {}) };
+      if (Object.keys(onFields).length > 0) {
+        fe.setServerErrors(onFields, ["newDue", "note"]);
+        if (root) setError(root);
+      } else setError(err.message);
+      return;
+    }
     done(mode === "approve" ? `“${row.title}” approved.` : mode === "decline" ? `“${row.title}” declined.` : `“${row.title}” deferred to ${formatDayMonth(newDue + "T12:00:00Z", "UTC")}.`);
   }
 
@@ -334,6 +353,7 @@ function DecisionDrawer({ row, viewer, now, tz, onClose, onAddAction }: { row: D
         </DrawerFooter>
       }
     >
+      {error && <Banner tone="bad">{error}</Banner>}
       <DrawerSection title="What Is Being Asked">{row.context ? <DrawerText>{row.context}</DrawerText> : <DrawerText hint>No details were given.</DrawerText>}</DrawerSection>
       <Kv rows={details} />
       {decided ? (
@@ -358,19 +378,19 @@ function DecisionDrawer({ row, viewer, now, tz, onClose, onAddAction }: { row: D
               onChange={(m) => {
                 setMode(m);
                 setError(null);
+                fe.reset();
               }}
             />
           </DrawerSection>
           {mode === "defer" && (
-            <Field label="New Due Date" htmlFor="decision-new-due" hint="The decision stays in Waiting until this date.">
-              <input id="decision-new-due" type="date" min={addDay(todayKey)} value={newDue} onChange={(e) => setNewDue(e.target.value)} className={FIELD_INPUT} required />
+            <Field label="New Due Date" htmlFor={fe.idOf("newDue")} error={fe.errors.newDue} hint="The decision stays in Waiting until this date.">
+              <input {...fe.bind("newDue")} type="date" min={addDay(todayKey)} value={newDue} onChange={(e) => setNewDue(e.target.value)} className={FIELD_INPUT} />
             </Field>
           )}
-          <Field label="Note for the Record" htmlFor="decision-note" hint={mode === "approve" ? "Optional." : "Required."}>
+          <Field label="Note for the Record" htmlFor={fe.idOf("note")} error={fe.errors.note} hint={mode === "approve" ? "Optional." : "Required. At least 3 characters."}>
             <textarea
-              id="decision-note"
+              {...fe.bind("note")}
               rows={3}
-              maxLength={2000}
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder={NOTE_PLACEHOLDER[mode]}
@@ -381,7 +401,6 @@ function DecisionDrawer({ row, viewer, now, tz, onClose, onAddAction }: { row: D
             {told}
             {row.projectId && mode !== "defer" ? ", and the decision is added to the project's Register." : "."}
           </Banner>
-          {error && <DrawerError>{error}</DrawerError>}
         </>
       ) : null}
     </DrawerFrame>
@@ -405,20 +424,29 @@ function RaiseDrawer({ projects, headLevel, initialProjectId, todayKey, onClose 
   const [dueDate, setDueDate] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // docs/08 § Errors: Title (and Project, unless Group level) show their problems on the field.
+  const schema = useMemo(() => raiseFormSchema(headLevel), [headLevel]);
+  const fe = useFieldErrors({ schema, values: { title, projectId }, idPrefix: "raise" });
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (title.trim().length < 3) return setError("Give the decision a title (3 characters or more).");
-    if (!headLevel && !projectId) return setError("Choose the project this decision is for.");
+    if (!fe.validate(["projectId", "title"])) return;
     setBusy(true);
-    const err = await post(
+    const err = await postForm(
       "/api/decisions",
       { title: title.trim(), projectId: projectId || null, context: context.trim() || undefined, ifApproved: ifApproved.trim() || undefined, ifDeclined: ifDeclined.trim() || undefined, dueDate: dueDate || null },
-      "Couldn't raise the decision. Try again.",
+      "Could not raise the decision. Try again.",
     );
     setBusy(false);
-    if (err) return setError(err);
+    if (err) {
+      const { _: root, ...onFields } = err.fields;
+      if (Object.keys(onFields).length > 0) {
+        fe.setServerErrors(onFields, ["projectId", "title", "dueDate"]);
+        if (root) setError(root);
+      } else setError(err.message);
+      return;
+    }
     done(`“${title.trim()}” raised. Executives have been notified.`);
   }
 
@@ -437,8 +465,9 @@ function RaiseDrawer({ projects, headLevel, initialProjectId, todayKey, onClose 
         </DrawerFooter>
       }
     >
-      <Field label="Project" htmlFor="raise-project" hint={headLevel ? undefined : "Projects you run."}>
-        <select id="raise-project" value={projectId} onChange={(e) => setProjectId(e.target.value)} className={FIELD_INPUT}>
+      {error && <Banner tone="bad">{error}</Banner>}
+      <Field label="Project" htmlFor={fe.idOf("projectId")} error={fe.errors.projectId} hint={headLevel ? undefined : "Projects you run."}>
+        <select {...fe.bind("projectId")} value={projectId} onChange={(e) => setProjectId(e.target.value)} className={FIELD_INPUT}>
           {headLevel ? <option value="">No project (Group level)</option> : <option value="">Choose a project</option>}
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -447,8 +476,8 @@ function RaiseDrawer({ projects, headLevel, initialProjectId, todayKey, onClose 
           ))}
         </select>
       </Field>
-      <Field label="Title" htmlFor="raise-title">
-        <input id="raise-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={160} required placeholder="For example: Extra budget for data migration" className={FIELD_INPUT} />
+      <Field label="Title" htmlFor={fe.idOf("title")} error={fe.errors.title}>
+        <input {...fe.bind("title")} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="For example: Extra budget for data migration" className={FIELD_INPUT} />
       </Field>
       <Field label="What Is Being Asked" htmlFor="raise-context">
         <textarea id="raise-context" rows={3} maxLength={2000} value={context} onChange={(e) => setContext(e.target.value)} placeholder="The ask, in a sentence or two." className={FIELD_TEXTAREA} />
@@ -461,11 +490,10 @@ function RaiseDrawer({ projects, headLevel, initialProjectId, todayKey, onClose 
           <input id="raise-no" value={ifDeclined} onChange={(e) => setIfDeclined(e.target.value)} maxLength={300} placeholder="For example: go-live moves 3 weeks" className={FIELD_INPUT} />
         </Field>
       </div>
-      <Field label="Due Date" htmlFor="raise-due" hint="When the Group needs to decide. Optional.">
-        <input id="raise-due" type="date" min={todayKey} value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={FIELD_INPUT} />
+      <Field label="Due Date" htmlFor={fe.idOf("dueDate")} error={fe.errors.dueDate} hint="When the Group needs to decide. Optional.">
+        <input {...fe.bind("dueDate")} type="date" min={todayKey} value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={FIELD_INPUT} />
       </Field>
       <Banner>Executives are notified. You and the project&apos;s PM hear back when it is decided.</Banner>
-      {error && <DrawerError>{error}</DrawerError>}
     </DrawerFrame>
   );
 }
@@ -480,19 +508,27 @@ function ActionDrawer({ from, projects, owners, todayKey, onClose }: { from: Dec
   const [dueDate, setDueDate] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fe = useFieldErrors({ schema: NewActionFormSchema, values: { title }, idPrefix: "glc" });
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (title.trim().length < 3) return setError("Give the action a title (3 characters or more).");
+    if (!fe.validate()) return;
     setBusy(true);
-    const err = await post(
+    const err = await postForm(
       "/api/decisions/actions",
       { title: title.trim(), projectId: projectId || null, ownerId: ownerId || null, dueDate: dueDate || null, decisionRequestId: from?.id ?? null },
-      "Couldn't add the action. Try again.",
+      "Could not add the action. Try again.",
     );
     setBusy(false);
-    if (err) return setError(err);
+    if (err) {
+      const { _: root, ...onFields } = err.fields;
+      if (Object.keys(onFields).length > 0) {
+        fe.setServerErrors(onFields, ["title", "projectId", "ownerId", "dueDate"]);
+        if (root) setError(root);
+      } else setError(err.message);
+      return;
+    }
     done(`“${title.trim()}” added to GLC actions.${ownerId ? " The owner has been notified." : ""}`);
   }
 
@@ -511,11 +547,12 @@ function ActionDrawer({ from, projects, owners, todayKey, onClose }: { from: Dec
         </DrawerFooter>
       }
     >
-      <Field label="Title" htmlFor="glc-title">
-        <input id="glc-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} required placeholder="For example: Confirm vendor support terms" className={FIELD_INPUT} />
+      {error && <Banner tone="bad">{error}</Banner>}
+      <Field label="Title" htmlFor={fe.idOf("title")} error={fe.errors.title}>
+        <input {...fe.bind("title")} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="For example: Confirm vendor support terms" className={FIELD_INPUT} />
       </Field>
-      <Field label="Project" htmlFor="glc-project">
-        <select id="glc-project" value={projectId} onChange={(e) => setProjectId(e.target.value)} className={FIELD_INPUT}>
+      <Field label="Project" htmlFor={fe.idOf("projectId")} error={fe.errors.projectId}>
+        <select {...fe.bind("projectId")} value={projectId} onChange={(e) => setProjectId(e.target.value)} className={FIELD_INPUT}>
           <option value="">No project (Group level)</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -524,8 +561,8 @@ function ActionDrawer({ from, projects, owners, todayKey, onClose }: { from: Dec
           ))}
         </select>
       </Field>
-      <Field label="Owner" htmlFor="glc-owner">
-        <select id="glc-owner" value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className={FIELD_INPUT}>
+      <Field label="Owner" htmlFor={fe.idOf("ownerId")} error={fe.errors.ownerId}>
+        <select {...fe.bind("ownerId")} value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className={FIELD_INPUT}>
           <option value="">No owner yet</option>
           {owners.map((o) => (
             <option key={o.value} value={o.value}>
@@ -534,10 +571,9 @@ function ActionDrawer({ from, projects, owners, todayKey, onClose }: { from: Dec
           ))}
         </select>
       </Field>
-      <Field label="Due Date" htmlFor="glc-due" hint="Optional.">
-        <input id="glc-due" type="date" min={todayKey} value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={FIELD_INPUT} />
+      <Field label="Due Date" htmlFor={fe.idOf("dueDate")} error={fe.errors.dueDate} hint="Optional.">
+        <input {...fe.bind("dueDate")} type="date" min={todayKey} value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={FIELD_INPUT} />
       </Field>
-      {error && <DrawerError>{error}</DrawerError>}
     </DrawerFrame>
   );
 }

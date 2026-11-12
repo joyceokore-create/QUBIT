@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import { youtrackBaseUrl, youtrackToken } from "@/lib/youtrack-schema";
 import { Prisma } from "@prisma/client";
 import { can } from "@/lib/rbac";
 import { flagEnabled } from "@/lib/flags";
@@ -108,8 +109,8 @@ export async function getYoutrackStatus(ctx: TenantContext): Promise<YoutrackSta
 // ── Test / connect / replace / disconnect ────────────────────────────────────────────
 
 export const TestInput = z.object({
-  baseUrl: z.string().trim().url().max(300),
-  token: z.string().trim().min(1).max(500),
+  baseUrl: youtrackBaseUrl,
+  token: youtrackToken,
 });
 export type TestInput = z.infer<typeof TestInput>;
 

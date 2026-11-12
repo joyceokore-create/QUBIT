@@ -10,7 +10,10 @@ import { Bars, Meter, Spark } from "@/components/ui/kpi-charts";
 import { Chip } from "@/components/ui/status-pill";
 import { TextLink } from "@/components/ui/text-link";
 import { Banner, Columns, Foot, ListRow, Panel, PanelList, PanelRow } from "@/components/ui/panel";
-import { Choice, Drawer, DrawerError, DrawerFooter, DrawerFrame, DrawerHeader, DrawerSection, DrawerText, Field, FIELD_INPUT, FIELD_TEXTAREA, Kv } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { GrantAccessFormSchema } from "@/lib/grant-access-schema";
+import { readApiError } from "@/lib/form-errors";
+import { Choice, Drawer, DrawerFooter, DrawerFrame, DrawerHeader, DrawerSection, DrawerText, Field, FIELD_INPUT, FIELD_TEXTAREA, Kv } from "@/components/ui/drawer";
 import { PageHeader } from "@/components/list/page-header";
 import { useListUrl } from "@/components/list/use-list-url";
 import { formatDate, formatDayMonth } from "@/lib/dates";
@@ -253,8 +256,7 @@ async function send(url: string, method: string, body: unknown): Promise<{ ok: b
 }
 
 function errorOf(data: Record<string, unknown> | null, fallback: string): string {
-  const e = data?.error as { message?: unknown } | undefined;
-  return typeof e?.message === "string" ? e.message : fallback;
+  return readApiError(data, fallback).message;
 }
 
 function ReviewBody({ r, grant, tz, now, onClose }: { r: AdminRequestRow; grant: GrantOptions | null; tz: string; now: Date; onClose: () => void }) {
@@ -274,15 +276,23 @@ function ReviewBody({ r, grant, tz, now, onClose }: { r: AdminRequestRow; grant:
   const waiting = r.status === "NEW";
   const days = daysOld(r.createdAt, now, tz);
   const tiers = tiersAll;
+  // docs/08 § Errors: Role and Message show their problems on the field; Approve stays enabled.
+  const fe = useFieldErrors({ schema: GrantAccessFormSchema, values: { role, message }, idPrefix: "grant" });
 
   async function approve(e: FormEvent) {
     e.preventDefault();
-    setBusy(true);
     setError(null);
+    if (!fe.validate()) return;
+    setBusy(true);
     const { ok, data } = await send(`/api/admin/access-requests/${r.id}/grant`, "POST", { role, departmentId: departmentId || null, teamId: teamId || null, message: message.trim() || undefined });
     setBusy(false);
     if (!ok) {
-      setError(errorOf(data, "Couldn't create the account. The request is still waiting."));
+      const { message: msg, fields } = readApiError(data, "Could not create the account. The request is still waiting.");
+      const { _: root, ...onFields } = fields;
+      if (Object.keys(onFields).length > 0) {
+        fe.setServerErrors(onFields, ["role", "message"]);
+        if (root) setError(root);
+      } else setError(msg);
       return;
     }
     setDone({ emailed: data?.emailed === true, acceptUrl: typeof data?.acceptUrl === "string" ? data.acceptUrl : undefined, sso: data?.sso === true });
@@ -298,7 +308,7 @@ function ReviewBody({ r, grant, tz, now, onClose }: { r: AdminRequestRow; grant:
     const { ok, data } = await send(`/api/admin/access-requests/${r.id}`, "PATCH", { status: "DISMISSED", reasonCode: reasonCode ?? undefined });
     setBusy(false);
     if (!ok) {
-      setError(errorOf(data, "Couldn't decline the request. Try again."));
+      setError(errorOf(data, "Could not decline the request. Try again."));
       return;
     }
     toast.success("Request declined.");
@@ -380,12 +390,12 @@ function ReviewBody({ r, grant, tz, now, onClose }: { r: AdminRequestRow; grant:
           </DrawerFooter>
         }
       >
+        {error && <Banner tone="bad">{error}</Banner>}
         <DrawerText>No account is created. The request moves to Declined.</DrawerText>
         <DrawerSection title="Reason (Optional)">
           <Choice label="Reason" value={reasonCode} options={DECLINE_REASONS.map((d) => ({ value: d.value, label: d.label }))} onChange={setReasonCode} />
           <DrawerText hint>Kept in the audit log as one of these choices, never as free text.</DrawerText>
         </DrawerSection>
-        {error && <DrawerError>{error}</DrawerError>}
       </DrawerFrame>
     );
   }
@@ -434,10 +444,10 @@ function ReviewBody({ r, grant, tz, now, onClose }: { r: AdminRequestRow; grant:
           </DrawerFooter>
         }
       >
+        {error && <Banner tone="bad">{error}</Banner>}
         {details}
         {reasonGiven}
         {waiting && !grant && <DrawerText hint>Creating accounts needs the right to invite users. You can still decline the request.</DrawerText>}
-        {error && <DrawerError>{error}</DrawerError>}
       </DrawerFrame>
     );
   }
@@ -457,12 +467,13 @@ function ReviewBody({ r, grant, tz, now, onClose }: { r: AdminRequestRow; grant:
         </DrawerFooter>
       }
     >
+      {error && <Banner tone="bad">{error}</Banner>}
       {details}
       {reasonGiven}
       <DrawerSection title="Grant Access">
         <div className="flex flex-col gap-3">
-          <Field label="Role" hint={tiers.find((t) => t.key === role)?.desc}>
-            <select value={role} onChange={(e) => setRole(e.target.value)} className={FIELD_INPUT}>
+          <Field label="Role" htmlFor={fe.idOf("role")} error={fe.errors.role} hint={tiers.find((t) => t.key === role)?.desc}>
+            <select {...fe.bind("role")} value={role} onChange={(e) => setRole(e.target.value)} className={FIELD_INPUT}>
               {tiers.map((t) => (
                 <option key={t.key} value={t.key}>
                   {t.label}
@@ -470,7 +481,7 @@ function ReviewBody({ r, grant, tz, now, onClose }: { r: AdminRequestRow; grant:
               ))}
             </select>
           </Field>
-          <Field label="Team (optional)">
+          <Field label="Team (Optional)">
             <select value={teamId} onChange={(e) => setTeamId(e.target.value)} className={FIELD_INPUT}>
               <option value="">No team</option>
               {grant.teams.map((t) => (
@@ -492,11 +503,10 @@ function ReviewBody({ r, grant, tz, now, onClose }: { r: AdminRequestRow; grant:
           </Field>
         </div>
       </DrawerSection>
-      <Field label={`Message to ${r.fullName.split(/\s+/)[0]} (optional)`} hint="Added to the invite email. Not stored.">
-        <textarea value={message} onChange={(e) => setMessage(e.target.value)} maxLength={500} rows={2} placeholder="For example: Welcome to the Payments squad" className={FIELD_TEXTAREA} />
+      <Field label={`Message to ${r.fullName.split(/\s+/)[0]} (Optional)`} htmlFor={fe.idOf("message")} error={fe.errors.message} hint="Added to the invite email. Not stored.">
+        <textarea {...fe.bind("message")} value={message} onChange={(e) => setMessage(e.target.value)} rows={2} placeholder="For example: Welcome to the Payments squad" className={FIELD_TEXTAREA} />
       </Field>
       <Banner>{needsHeadApproval(role) ? "Project Manager and Head roles need a Head to approve first. That approval step isn't in QUBIT yet, so check with the Head before you approve." : "Member access can be approved now. Project Manager and Head roles need a Head to approve first."}</Banner>
-      {error && <DrawerError>{error}</DrawerError>}
     </DrawerFrame>
   );
 }

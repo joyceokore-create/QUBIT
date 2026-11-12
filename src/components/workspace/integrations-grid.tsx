@@ -1,8 +1,14 @@
 "use client";
 
 import { dispatchTourEvent } from "@/components/tour/tour-events";
+import { youtrackBaseUrl, integrationToken } from "@/lib/workspace-schema";
+import { readApiError } from "@/lib/form-errors";
+import { FIELD_INVALID } from "@/lib/surface";
+import { Field, FieldError } from "@/components/ui/drawer";
+import { useFieldErrors, type FieldBinding } from "@/components/forms/use-field-errors";
+import { z } from "zod";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +66,25 @@ export function parseMapLines(text: string, allowed: string[]): { map: Record<st
   return { map };
 }
 
+type SetResult = { ok: true } | { ok: false; message: string; fields: Record<string, string> };
+
+/** The connect dialog's rules: YouTrack needs a URL, a token (unless one is stored) and well-formed
+ * field-mapping lines; other providers only need a token when they have none stored. */
+function connectSchema(isYoutrack: boolean, hasToken: boolean) {
+  const mapLine = (allowed: string[]) =>
+    z.string().superRefine((v, ctx) => {
+      const r = parseMapLines(v, allowed);
+      if ("error" in r) ctx.addIssue({ code: "custom", message: r.error });
+    });
+  return z.object({
+    baseUrl: isYoutrack ? youtrackBaseUrl : z.string(),
+    token: isYoutrack && !hasToken ? integrationToken : z.string(),
+    stateMap: isYoutrack ? mapLine(STATUSES) : z.string(),
+    typeMap: isYoutrack ? mapLine(TYPES) : z.string(),
+    priorityMap: isYoutrack ? mapLine(PRIORITIES) : z.string(),
+  });
+}
+
 function toMapLines(map: Record<string, string> | undefined): string {
   return Object.entries(map ?? {}).map(([k, v]) => `${k} = ${v}`).join("\n");
 }
@@ -100,18 +125,21 @@ export function IntegrationsGrid({ projectId, canEdit }: { projectId: string; ca
     void load();
   }, [load]);
 
-  const set = async (provider: string, body: ConnectPayload) => {
+  const set = async (provider: string, body: ConnectPayload): Promise<SetResult> => {
     const res = await fetch(`/api/projects/${projectId}/integrations/${provider}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
-    });
-    if (res.ok) {
-      const d = await res.json().catch(() => ({}));
-      if (d.webhookSecretOnce) setWebhookSecretOnce(d.webhookSecretOnce);
+    }).catch(() => null);
+    const d = await res?.json().catch(() => null);
+    if (res?.ok) {
+      if (d?.webhookSecretOnce) setWebhookSecretOnce(d.webhookSecretOnce);
       if (provider === "github" && !body.connected) setWebhookSecretOnce(null);
       void load();
+      return { ok: true };
     }
+    const { message, fields } = readApiError(d, "Could not save the connection. Try again.");
+    return { ok: false, message, fields };
   };
 
   const syncNow = async (full: boolean) => {
@@ -262,9 +290,11 @@ export function IntegrationsGrid({ projectId, canEdit }: { projectId: string; ca
           card={connect}
           onClose={() => setConnect(null)}
           onConnect={async (payload) => {
-            await set(connect.provider, payload);
+            const result = await set(connect.provider, payload);
+            if (!result.ok) return result;
             if (connect.provider === "youtrack") dispatchTourEvent("youtrack-connected");
             setConnect(null);
+            return result;
           }}
         />
       )}
@@ -279,7 +309,7 @@ function ConnectDialog({
 }: {
   card: Card;
   onClose: () => void;
-  onConnect: (payload: ConnectPayload) => void;
+  onConnect: (payload: ConnectPayload) => Promise<SetResult>;
 }) {
   const isYoutrack = card.provider === YOUTRACK;
   const [resource, setResource] = useState(card.resource ?? "");
@@ -289,29 +319,42 @@ function ConnectDialog({
   const [typeMap, setTypeMap] = useState(toMapLines(card.config?.fieldMap?.type));
   const [priorityMap, setPriorityMap] = useState(toMapLines(card.config?.fieldMap?.priority));
   const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  // docs/08 § Errors: each problem shows on its field; Connect / Save stays enabled except while sending.
+  const schema = useMemo(() => connectSchema(isYoutrack, card.hasToken), [isYoutrack, card.hasToken]);
+  const fe = useFieldErrors({ schema, values: { baseUrl, token, stateMap, typeMap, priorityMap }, idPrefix: "integration" });
 
-  const submit = () => {
+  const submit = async () => {
     setError(null);
+    if (sending || !fe.validate(isYoutrack ? ["baseUrl", "token", "stateMap", "typeMap", "priorityMap"] : ["token"])) return;
     const payload: ConnectPayload = {
       connected: true,
       resource: resource.trim() || null,
       token: token.trim() || undefined,
     };
     if (isYoutrack) {
-      if (!baseUrl.trim()) return setError("The YouTrack instance URL is required.");
-      if (!card.hasToken && !token.trim()) return setError("A permanent token is required.");
+      // Already checked by the schema above, so these parse cleanly.
       const state = parseMapLines(stateMap, STATUSES);
-      if ("error" in state) return setError(`State mapping: ${state.error}`);
       const type = parseMapLines(typeMap, TYPES);
-      if ("error" in type) return setError(`Type mapping: ${type.error}`);
       const priority = parseMapLines(priorityMap, PRIORITIES);
-      if ("error" in priority) return setError(`Priority mapping: ${priority.error}`);
+      if ("error" in state || "error" in type || "error" in priority) return;
       payload.config = {
         baseUrl: baseUrl.trim().replace(/\/+$/, ""),
         fieldMap: { state: state.map, type: type.map, priority: priority.map },
       };
     }
-    onConnect(payload);
+    setSending(true);
+    const result = await onConnect(payload);
+    setSending(false);
+    if (result.ok) return;
+    const { _: root, ...onFields } = result.fields;
+    const named: Record<string, string> = {};
+    if (onFields["config.baseUrl"]) named.baseUrl = onFields["config.baseUrl"];
+    if (onFields.token) named.token = onFields.token;
+    if (Object.keys(named).length > 0) {
+      fe.setServerErrors(named, ["baseUrl", "token"]);
+      if (root) setError(root);
+    } else setError(result.message);
   };
 
   return (
@@ -331,13 +374,15 @@ function ConnectDialog({
         <div className="flex max-h-[65vh] flex-col gap-3 overflow-y-auto">
           {isYoutrack && (
             <>
-              <label className="text-sm font-medium text-ink-2">Instance URL</label>
-              <Input
-                value={baseUrl}
-                onChange={(e) => setBaseUrl(e.target.value)}
-                placeholder="https://yourcompany.youtrack.cloud"
-                autoFocus
-              />
+              <Field label="Instance URL" htmlFor={fe.idOf("baseUrl")} error={fe.errors.baseUrl}>
+                <Input
+                  {...fe.bind("baseUrl")}
+                  value={baseUrl}
+                  onChange={(e) => setBaseUrl(e.target.value)}
+                  placeholder="https://yourcompany.youtrack.cloud"
+                  autoFocus
+                />
+              </Field>
             </>
           )}
           <label className="text-sm font-medium text-ink-2">{card.resourceLabel}</label>
@@ -349,16 +394,24 @@ function ConnectDialog({
           />
           {card.live && (
             <>
-              <label className="text-sm font-medium text-ink-2">
-                {isYoutrack ? "Permanent token" : "Access token"}
-                {card.hasToken && <span className="ml-1.5 font-normal text-ink-4">(leave blank to keep the current one)</span>}
-              </label>
-              <Input
-                type="password"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder={isYoutrack ? "perm:… (read-only)" : "Fine-grained PAT (read-only)"}
-              />
+              <Field
+                label={
+                  <>
+                    {isYoutrack ? "Permanent token" : "Access token"}
+                    {card.hasToken && <span className="ml-1.5 font-normal text-ink-4">(leave blank to keep the current one)</span>}
+                  </>
+                }
+                htmlFor={fe.idOf("token")}
+                error={fe.errors.token}
+              >
+                <Input
+                  {...fe.bind("token")}
+                  type="password"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  placeholder={isYoutrack ? "perm:… (read-only)" : "Fine-grained PAT (read-only)"}
+                />
+              </Field>
               <p className="text-xs text-ink-3">
                 Stored encrypted at rest; used server-side only. Read access is enough — nothing is written back.
               </p>
@@ -370,14 +423,14 @@ function ConnectDialog({
                 Field mapping — one <span className="font-mono">YouTrack value = QUBIT value</span> per line. Stock
                 YouTrack workflows already map correctly; add lines only where yours differs.
               </p>
-              <MapField label={`State → ${STATUSES.join(" | ")}`} value={stateMap} onChange={setStateMap} placeholder="Ready for test = InQA" />
-              <MapField label={`Type → ${TYPES.join(" | ")}`} value={typeMap} onChange={setTypeMap} placeholder="Change request = Improvement" />
-              <MapField label={`Priority → ${PRIORITIES.join(" | ")}`} value={priorityMap} onChange={setPriorityMap} placeholder="P1 = Critical" />
+              <MapField label={`State → ${STATUSES.join(" | ")}`} value={stateMap} onChange={setStateMap} placeholder="Ready for test = InQA" binding={fe.bind("stateMap")} error={fe.errors.stateMap} />
+              <MapField label={`Type → ${TYPES.join(" | ")}`} value={typeMap} onChange={setTypeMap} placeholder="Change request = Improvement" binding={fe.bind("typeMap")} error={fe.errors.typeMap} />
+              <MapField label={`Priority → ${PRIORITIES.join(" | ")}`} value={priorityMap} onChange={setPriorityMap} placeholder="P1 = Critical" binding={fe.bind("priorityMap")} error={fe.errors.priorityMap} />
             </div>
           )}
-          {error && <p className="text-xs font-medium text-[var(--bad)]">{error}</p>}
-          <div className="flex justify-end">
-            <Button type="button" onClick={submit}>
+          <div className="flex items-center justify-end gap-3">
+            {error && <p role="alert" className="text-xs font-medium text-[var(--bad)]">{error}</p>}
+            <Button type="button" onClick={() => void submit()} disabled={sending}>
               {card.connected ? "Save" : "Connect"}
             </Button>
           </div>
@@ -392,22 +445,28 @@ function MapField({
   value,
   onChange,
   placeholder,
+  binding,
+  error,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
+  binding: FieldBinding;
+  error?: string;
 }) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="font-mono text-[10.5px] uppercase tracking-[0.5px] text-ink-4">{label}</span>
+    <div className="flex flex-col gap-1">
+      <label htmlFor={binding.id} className="font-mono text-[10.5px] uppercase tracking-[0.5px] text-ink-4">{label}</label>
       <textarea
+        {...binding}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         rows={2}
-        className="rounded-[8px] border border-[var(--w12)] bg-transparent p-2 font-mono text-[11.5px] text-[var(--qink)] outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none"
+        className={`rounded-[8px] border border-[var(--w12)] bg-transparent p-2 font-mono text-[11.5px] text-[var(--qink)] outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none ${FIELD_INVALID}`}
       />
-    </label>
+      {error && <FieldError id={`${binding.id}-error`}>{error}</FieldError>}
+    </div>
   );
 }

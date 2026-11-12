@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { userRoles } from "@/lib/user-edit-schema";
 import { inviteEmail, inviteName } from "@/lib/invite-schema";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -42,7 +43,7 @@ export type CreateUserInput = z.infer<typeof CreateUserInput>;
 
 export const UpdateRolesInput = z.object({
   // Validated in updateUserRoles against canonical + ACTIVE custom roles (see CreateUserInput).
-  roles: z.array(z.string().min(1)).min(1),
+  roles: userRoles,
 });
 export type UpdateRolesInput = z.infer<typeof UpdateRolesInput>;
 

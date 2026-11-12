@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
+import { documentTitle, documentHasBody, DOCUMENT_BODY_MESSAGE } from "@/lib/workspace-schema";
 import { emitDomainEvent } from "@/server/events";
 
 /**
@@ -156,7 +157,7 @@ export async function documentProjectId(ctx: TenantContext, id: string): Promise
 
 export const CreateDocumentInput = z
   .object({
-    title: z.string().min(1),
+    title: documentTitle,
     kind: z.enum(DOC_KINDS).optional(),
     format: z.enum(["text", "markdown", "pdf", "docx", "xlsx", "pptx"]).optional(),
     content: z.string().nullable().optional(),
@@ -164,9 +165,7 @@ export const CreateDocumentInput = z
     status: z.enum(DOC_STATUSES).optional(),
     source: z.enum(["Uploaded", "AIDrafted"]).optional(),
   })
-  .refine((v) => Boolean(v.content?.trim()) || Boolean(v.fileData), {
-    message: "A document needs text content or an attached file.",
-  });
+  .refine(documentHasBody, { path: ["content"], message: DOCUMENT_BODY_MESSAGE });
 export type CreateDocumentInput = z.infer<typeof CreateDocumentInput>;
 
 export async function createDocument(ctx: TenantContext, projectId: string, input: CreateDocumentInput) {

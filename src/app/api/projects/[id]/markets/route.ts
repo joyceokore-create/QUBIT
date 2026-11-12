@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { validationError } from "@/server/errors";
 import { can } from "@/lib/rbac";
 import { canWriteProject } from "@/lib/access";
 import { requirePermission } from "@/lib/api-guard";
@@ -32,7 +33,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: { code: "FORBIDDEN", message: "Only the project's PM can change its markets." } }, { status: 403 });
   }
   const parsed = AddMarketsInput.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: { code: "VALIDATION", message: "Pick at least one org unit." } }, { status: 400 });
+  if (!parsed.success) return validationError(parsed.error);
   try {
     return NextResponse.json({ data: await addMarkets(guard.ctx, id, parsed.data) }, { status: 201 });
   } catch (e) {

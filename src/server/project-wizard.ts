@@ -5,6 +5,7 @@
 // Capacity warnings the PM accepted are recorded in the audit blob — informed
 // overrides, never silent ones.
 import { z } from "zod";
+import { projectAllocation, projectCode, projectName, projectPortfolioId, refineWindow } from "@/lib/project-wizard-schema";
 import { audit } from "@/lib/audit";
 import { flagEnabled } from "@/lib/flags";
 import { marketKinds } from "@/server/markets";
@@ -17,29 +18,26 @@ import { acceptIdeaInTx } from "@/server/ideas";
 import { nextFreeCode, projectCodeBase, ProjectError } from "@/server/projects";
 import { createResourceRequestInTx } from "@/server/staffing";
 
-const TeamRow = z.object({
-  userId: z.string().uuid(),
+const SeatShape = {
   role: z.enum(PROJECT_ROLES),
-  allocationPct: z.number().int().min(1).max(100),
+  allocationPct: projectAllocation,
   startDate: z.string().datetime().nullable().optional(),
   endDate: z.string().datetime().nullable().optional(),
-});
+};
+// docs/08 § Errors: a window that ends before it starts is reported on that row's `endDate`
+// (path `team.N.endDate` / `unfilledSeats.N.endDate`), so the wizard can show it on the row.
+const TeamRow = z.object({ userId: z.string().uuid(), ...SeatShape }).superRefine(refineWindow);
 // DM1.73 (docs/30 §5) — a seat the PM shaped but couldn't fill: same row, no person.
-const UnfilledSeat = TeamRow.omit({ userId: true });
+const UnfilledSeat = z.object(SeatShape).superRefine(refineWindow);
 
 export const CreateProjectWizardInput = z.object({
-  name: z.string().trim().min(2, "Name is required.").max(120),
-  code: z
-    .string()
-    .trim()
-    .toUpperCase()
-    .regex(/^[A-Z0-9]{2,10}$/, "Code must be 2–10 letters/digits.")
-    .optional(),
+  name: projectName,
+  code: projectCode.optional(),
   description: z.string().trim().max(500).optional(),
   // DM1.73 — set from the accepted idea's sponsor (M-P4a handoff); editable later from
   // the workspace like any other project field.
   businessOwner: z.string().trim().max(120).nullable().optional(),
-  portfolioId: z.string().uuid({ message: "Every project belongs to a portfolio." }),
+  portfolioId: projectPortfolioId,
   // docs/27 §5 gap 2 (28-p1b §3): the stage may be chosen at create — Approved projects
   // exist on day one when the business case predates QUBIT. Paused is NOT offered:
   // creating a paused project is a contradiction.
@@ -117,6 +115,10 @@ export async function createProjectFromWizard(ctx: TenantContext, input: CreateP
 async function createOnce(ctx: TenantContext, input: CreateProjectWizardInputT) {
   return withTenant(ctx, async (tx) => {
     // ── Validate every reference under RLS before writing anything.
+    if (input.code) {
+      const taken = await tx.project.findUnique({ where: { tenantId_code: { tenantId: ctx.tenantId, code: input.code } }, select: { id: true } });
+      if (taken) throw new ProjectError("A project with this code already exists.", "CODE_TAKEN");
+    }
     await tx.portfolio.findUniqueOrThrow({ where: { id: input.portfolioId } }).catch(() => {
       throw new ProjectError("Portfolio not found.", "PORTFOLIO_NOT_FOUND");
     });

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { accessRequestSchema } from "@/lib/access-request-schema";
+import { validationError } from "@/server/errors";
 import { prisma } from "@/lib/db";
 import { checkRateLimit, recordFailure } from "@/lib/rate-limit";
 
@@ -36,7 +37,7 @@ export async function POST(req: Request) {
   const parsed = accessRequestSchema.safeParse(body);
   if (!parsed.success) {
     recordFailure(key);
-    return NextResponse.json({ error: { code: "VALIDATION", message: "Invalid request." } }, { status: 400 });
+    return validationError(parsed.error);
   }
 
   const { fullName, email, company, jobTitle, requestedRole, reason, companyUrl } = parsed.data;

@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import { reasonMessage } from "@/lib/reason-schema";
 import type { Prisma } from "@prisma/client";
 import { audit } from "@/lib/audit";
 import { withTenant, type TenantContext } from "@/lib/tenant";
@@ -40,10 +41,10 @@ export const ApproveInput = z.object({
   /** Approve with exception: allowed only when the checklist is unmet or (testing) critical
    * issues are open, and then the note is required. */
   exception: z.boolean().optional(),
-  note: z.string().trim().max(DECISION_NOTE_MAX).optional(),
+  note: z.string().trim().max(DECISION_NOTE_MAX, `The note must be ${DECISION_NOTE_MAX} characters or fewer.`).optional(),
 });
 export const ReturnInput = z.object({
-  note: z.string().trim().min(DECISION_NOTE_MIN, "Say why it is going back to the PM.").max(DECISION_NOTE_MAX),
+  note: z.string().trim().min(1, reasonMessage(DECISION_NOTE_MIN)).min(DECISION_NOTE_MIN, reasonMessage(DECISION_NOTE_MIN)).max(DECISION_NOTE_MAX, `The note must be ${DECISION_NOTE_MAX} characters or fewer.`),
 });
 export const SubmitInput = z.object({}).strict();
 

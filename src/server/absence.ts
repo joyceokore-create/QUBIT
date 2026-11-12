@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ABSENCE_MSG } from "@/lib/absence-schema";
 import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
@@ -257,14 +258,14 @@ export class AbsenceError extends Error {
 
 export const CreateAbsenceInput = z
   .object({
-    userId: z.string().uuid(),
+    userId: z.string().uuid(ABSENCE_MSG.person),
     type: z.enum(ABSENCE_TYPES),
-    startDate: z.string().datetime(),
-    endDate: z.string().datetime(),
-    note: z.string().trim().max(300).nullable().optional(),
+    startDate: z.string().datetime(ABSENCE_MSG.start),
+    endDate: z.string().datetime(ABSENCE_MSG.end),
+    note: z.string().trim().max(300, ABSENCE_MSG.note).nullable().optional(),
   })
   .refine((v) => new Date(v.endDate) >= new Date(v.startDate), {
-    message: "The last day away cannot be before the first.",
+    message: ABSENCE_MSG.order,
     path: ["endDate"],
   });
 export type CreateAbsenceInputT = z.infer<typeof CreateAbsenceInput>;

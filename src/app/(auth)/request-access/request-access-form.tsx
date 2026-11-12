@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { readApiError } from "@/lib/form-errors";
 import { AUTH_INPUT_CLASS, AUTH_LINK_CLASS, AUTH_PRIMARY_CLASS, AuthField, AuthHeading, AuthShell } from "@/components/auth/auth-shell";
 import { accessRequestSchema, REQUESTABLE_ROLES } from "@/lib/access-request-schema";
 
@@ -23,6 +25,9 @@ export function RequestAccessForm() {
   const [done, setDone] = useState(false);
   const [knownOrg, setKnownOrg] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // docs/08 § Errors: problems show on their field; the button stays enabled.
+  const fe = useFieldErrors({ schema: accessRequestSchema, values: { fullName, email, company, jobTitle, requestedRole, reason }, idPrefix: "" });
+  const FIELD_ORDER = ["fullName", "email", "company", "jobTitle", "requestedRole", "reason"];
 
   // Reuse the login org-resolver: if the work-email domain is already a QUBIT tenant, nudge
   // the visitor to sign in rather than request access.
@@ -55,11 +60,9 @@ export function RequestAccessForm() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!fe.validate(FIELD_ORDER)) return;
     const parsed = accessRequestSchema.safeParse({ fullName, email, company, jobTitle, requestedRole, reason, companyUrl });
-    if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? "Please check the form and try again.");
-      return;
-    }
+    if (!parsed.success) return;
     setLoading(true);
     try {
       const res = await fetch("/api/access-request", {
@@ -69,7 +72,14 @@ export function RequestAccessForm() {
       });
       setLoading(false);
       if (!res.ok) {
-        setError("Something went wrong. Please try again.");
+        const { message, fields } = readApiError(await res.json().catch(() => null), "Something went wrong. Please try again.");
+        const { _: root, ...onFields } = fields;
+        if (Object.keys(onFields).length > 0) {
+          fe.setServerErrors(onFields, FIELD_ORDER);
+          if (root) setError(root);
+        } else {
+          setError(message);
+        }
         return;
       }
       setDone(true);
@@ -102,14 +112,14 @@ export function RequestAccessForm() {
 
   return (
     <AuthShell {...shell}>
-      <AuthHeading title="Request access" lead="Tell us about your organisation and we&apos;ll reach out." />
+      <AuthHeading title="Request Access" lead="Tell us about your organisation and we&apos;ll reach out." />
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-        <AuthField id="fullName" label="Full name">
-          <input id="fullName" type="text" autoComplete="name" placeholder="Your first and last name" className={AUTH_INPUT_CLASS} value={fullName} onChange={(e) => setFullName(e.target.value)} />
+        <AuthField id={fe.idOf("fullName")} label="Full Name" error={fe.errors.fullName}>
+          <input {...fe.bind("fullName")} type="text" autoComplete="name" placeholder="Your first and last name" className={AUTH_INPUT_CLASS} value={fullName} onChange={(e) => setFullName(e.target.value)} />
         </AuthField>
-        <AuthField id="email" label="Work email">
-          <input id="email" type="email" autoComplete="email" placeholder="name@company.com" className={AUTH_INPUT_CLASS} value={email} onChange={(e) => setEmail(e.target.value)} />
+        <AuthField id={fe.idOf("email")} label="Work Email" error={fe.errors.email}>
+          <input {...fe.bind("email")} type="email" autoComplete="email" placeholder="name@company.com" className={AUTH_INPUT_CLASS} value={email} onChange={(e) => setEmail(e.target.value)} />
           {knownOrg && (
             <p className="text-[12px] text-[var(--l-ink-3)]" aria-live="polite">
               {knownOrg} already uses QUBIT.{" "}
@@ -117,15 +127,15 @@ export function RequestAccessForm() {
             </p>
           )}
         </AuthField>
-        <AuthField id="company" label="Company name">
-          <input id="company" type="text" autoComplete="organization" placeholder="For example: Northwind Ltd" className={AUTH_INPUT_CLASS} value={company} onChange={(e) => setCompany(e.target.value)} />
+        <AuthField id={fe.idOf("company")} label="Company Name" error={fe.errors.company}>
+          <input {...fe.bind("company")} type="text" autoComplete="organization" placeholder="For example: Northwind Ltd" className={AUTH_INPUT_CLASS} value={company} onChange={(e) => setCompany(e.target.value)} />
         </AuthField>
-        <AuthField id="jobTitle" label="Job title (optional)">
-          <input id="jobTitle" type="text" autoComplete="organization-title" placeholder="For example: Head of PMO" className={AUTH_INPUT_CLASS} value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
+        <AuthField id={fe.idOf("jobTitle")} label="Job Title (Optional)" error={fe.errors.jobTitle}>
+          <input {...fe.bind("jobTitle")} type="text" autoComplete="organization-title" placeholder="For example: Head of PMO" className={AUTH_INPUT_CLASS} value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
         </AuthField>
 
-        <AuthField id="requestedRole" label="Role you need (optional)">
-          <select id="requestedRole" className={AUTH_INPUT_CLASS} value={requestedRole} onChange={(e) => setRequestedRole(e.target.value)}>
+        <AuthField id={fe.idOf("requestedRole")} label="Role You Need (Optional)" error={fe.errors.requestedRole}>
+          <select {...fe.bind("requestedRole")} className={AUTH_INPUT_CLASS} value={requestedRole} onChange={(e) => setRequestedRole(e.target.value)}>
             <option value="">Not sure</option>
             {REQUESTABLE_ROLES.map((r) => (
               <option key={r.key} value={r.key}>
@@ -134,9 +144,9 @@ export function RequestAccessForm() {
             ))}
           </select>
         </AuthField>
-        <AuthField id="reason" label="Why you need access (optional)">
+        <AuthField id={fe.idOf("reason")} label="Why You Need Access (Optional)" error={fe.errors.reason} hint="Up to 300 characters. Please don’t include personal details.">
           <textarea
-            id="reason"
+            {...fe.bind("reason")}
             rows={3}
             maxLength={300}
             placeholder="For example: joining the Payments squad on Payments Hub"
@@ -144,7 +154,6 @@ export function RequestAccessForm() {
             value={reason}
             onChange={(e) => setReason(e.target.value)}
           />
-          <p className="text-[12px] text-[var(--l-ink-3)]">Up to 300 characters. Please don&apos;t include personal details.</p>
         </AuthField>
 
         {/* Honeypot — visually hidden, never shown to real users. */}
@@ -156,7 +165,7 @@ export function RequestAccessForm() {
         {error && <p role="alert" className="text-[12.5px] text-[var(--l-err)]">{error}</p>}
 
         <button type="submit" disabled={loading} aria-busy={loading} className={AUTH_PRIMARY_CLASS}>
-          {loading ? "Sending…" : "Request access"}
+          {loading ? "Sending…" : "Request Access"}
         </button>
       </form>
 

@@ -3,6 +3,7 @@
 // rows picked at org level and inherited by the project wizard.
 import { lifecycleStage } from "@/lib/lifecycle";
 import { z } from "zod";
+import { portfolioDescription, portfolioIdChoice, portfolioName, programmeName } from "@/lib/portfolio-schema";
 import { audit } from "@/lib/audit";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { emitDomainEvent } from "@/server/events";
@@ -19,8 +20,8 @@ export const CATEGORIES = ["Approved", "Exploring", "Shelved"] as const;
 export const VIEW_KINDS = ["Pipeline", "Rollout"] as const;
 
 export const CreatePortfolioSchema = z.object({
-  name: z.string().trim().min(2, "Name is required.").max(120),
-  description: z.string().trim().max(500).optional(),
+  name: portfolioName,
+  description: portfolioDescription.optional(),
   category: z.enum(CATEGORIES).default("Exploring"),
   viewKind: z.enum(VIEW_KINDS).default("Pipeline"),
   ownerId: z.string().uuid().optional(),
@@ -30,9 +31,9 @@ export const CreatePortfolioSchema = z.object({
 export type CreatePortfolioInput = z.infer<typeof CreatePortfolioSchema>;
 
 export const CreateProgrammeSchema = z.object({
-  name: z.string().trim().min(2, "Name is required.").max(120),
-  description: z.string().trim().max(500).optional(),
-  portfolioId: z.string().uuid(),
+  name: programmeName,
+  description: portfolioDescription.optional(),
+  portfolioId: portfolioIdChoice,
   category: z.enum(CATEGORIES).default("Exploring"),
 });
 export type CreateProgrammeInput = z.infer<typeof CreateProgrammeSchema>;
@@ -116,8 +117,8 @@ export async function createProgramme(ctx: TenantContext, input: CreateProgramme
 }
 
 export const UpdatePortfolioSchema = z.object({
-  name: z.string().trim().min(2).max(120).optional(),
-  description: z.string().trim().max(500).nullable().optional(),
+  name: portfolioName.optional(),
+  description: portfolioDescription.nullable().optional(),
   category: z.enum(CATEGORIES).optional(),
   viewKind: z.enum(VIEW_KINDS).optional(),
   ownerId: z.string().uuid().nullable().optional(),

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/api-guard";
+import { validationError } from "@/server/errors";
 import { CreateProgrammeSchema, createProgramme, PortfolioError } from "@/server/portfolios";
 
 // M-P1b (docs/27) — programme creation is deliberately light (docs/26 §5.2): a grouping,
@@ -9,12 +10,7 @@ export async function POST(req: Request) {
   if ("response" in guard) return guard.response;
 
   const parsed = CreateProgrammeSchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: "VALIDATION", message: parsed.error.issues[0]?.message ?? "Invalid input." } },
-      { status: 400 },
-    );
-  }
+  if (!parsed.success) return validationError(parsed.error);
   try {
     const programme = await createProgramme(guard.ctx, parsed.data);
     return NextResponse.json({ programme: { id: programme.id, name: programme.name } }, { status: 201 });

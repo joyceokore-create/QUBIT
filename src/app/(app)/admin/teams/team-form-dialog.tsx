@@ -3,6 +3,10 @@
 import { useEffect, useState, type FormEvent, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Field } from "@/components/ui/drawer";
+import { Banner } from "@/components/ui/panel";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { TeamFormSchema } from "@/lib/team-schema";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
@@ -43,6 +47,9 @@ export function TeamFormDialog({ users, teamId, trigger, open: openProp, onOpenC
   const [leadUserId, setLeadUserId] = useState("none");
   const [memberIds, setMemberIds] = useState<Set<string>>(new Set());
 
+  // docs/08 § Errors: Name (and Description length) show their problems on the field.
+  const fe = useFieldErrors({ schema: TeamFormSchema, values: { name, description }, idPrefix: "team" });
+
   // Load current values when editing.
   useEffect(() => {
     if (!open || !teamId) return;
@@ -65,6 +72,7 @@ export function TeamFormDialog({ users, teamId, trigger, open: openProp, onOpenC
     setLeadUserId("none");
     setMemberIds(new Set());
     setError(null);
+    fe.reset();
   }
 
   const toggleMember = (id: string) =>
@@ -77,6 +85,8 @@ export function TeamFormDialog({ users, teamId, trigger, open: openProp, onOpenC
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    setError(null);
+    if (!fe.validate()) return;
     await mutate(
       isEdit ? `/api/admin/teams/${teamId}` : "/api/admin/teams",
       isEdit ? "PATCH" : "POST",
@@ -87,7 +97,8 @@ export function TeamFormDialog({ users, teamId, trigger, open: openProp, onOpenC
         memberIds: [...memberIds],
       },
       {
-        fallback: "Could not save team.",
+        fallback: "Could not save the team.",
+        onFieldErrors: (fields) => fe.setServerErrors(fields, ["name", "description"]),
         onSuccess: () => {
           setOpen(false);
           if (!isEdit) reset();
@@ -113,16 +124,15 @@ export function TeamFormDialog({ users, teamId, trigger, open: openProp, onOpenC
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+          {error && <Banner tone="bad">{error}</Banner>}
+          <Field label="Name" htmlFor={fe.idOf("name")} error={fe.errors.name}>
+            <Input {...fe.bind("name")} required value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Field label="Description" htmlFor={fe.idOf("description")} error={fe.errors.description}>
+            <Input {...fe.bind("description")} value={description} onChange={(e) => setDescription(e.target.value)} />
+          </Field>
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-ink-2">Name</label>
-            <Input required value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-ink-2">Description</label>
-            <Input value={description} onChange={(e) => setDescription(e.target.value)} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-ink-2">Team lead</span>
+            <span className="text-sm font-medium text-ink-2">Team Lead</span>
             <Select
               value={leadUserId}
               onValueChange={(v) => setLeadUserId(v ?? "none")}
@@ -157,11 +167,6 @@ export function TeamFormDialog({ users, teamId, trigger, open: openProp, onOpenC
               ))}
             </div>
           </div>
-          {error && (
-            <p role="alert" className="text-sm text-status-red">
-              {error}
-            </p>
-          )}
           <DialogFooter>
             <Button type="submit" disabled={busy}>
               {busy ? "Saving…" : isEdit ? "Save Changes" : "Create Team"}

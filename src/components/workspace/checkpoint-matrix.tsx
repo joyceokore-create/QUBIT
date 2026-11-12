@@ -5,6 +5,11 @@ import { dispatchTourEvent } from "@/components/tour/tour-events";
 import { useEffect, useState } from "react";
 import { FileText, Loader2, ShieldAlert, TriangleAlert } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { FieldError } from "@/components/ui/drawer";
+import { FIELD_INVALID } from "@/lib/surface";
+import { readApiError } from "@/lib/form-errors";
+import { GateOverrideFormSchema } from "@/lib/workspace-schema";
 import type { CheckpointState, ProjectCheckpoints, TemplateOption } from "@/server/checkpoints";
 
 // The project's gate matrix (docs/18 §2 + §7 edit surface). Humans set gate STATE; the
@@ -37,6 +42,8 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
   // missing and ask for a reason rather than silently refusing or silently allowing.
   const [gateBlock, setGateBlock] = useState<{ checkpointId: string; unmet: { key: string; label: string; detail: string | null }[] } | null>(null);
   const [overrideReason, setOverrideReason] = useState("");
+  // docs/08 § Errors: the reason's problem shows on the field; the button stays enabled.
+  const fe = useFieldErrors({ schema: GateOverrideFormSchema, values: { overrideReason }, idPrefix: "gate-override" });
 
   useEffect(() => {
     let cancelled = false;
@@ -81,7 +88,13 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
       setGateBlock({ checkpointId: String(body.checkpointId), unmet: err?.unmet ?? [] });
       setError(null);
     } else if (!res.ok) {
-      setError((await res.json().catch(() => null))?.error?.message ?? "Could not save.");
+      const { message, fields } = readApiError(await res.json().catch(() => null), "Could not save.");
+      if (fields.overrideReason) {
+        fe.setServerErrors({ overrideReason: fields.overrideReason });
+        setError(null);
+      } else {
+        setError(message);
+      }
     } else if ("templateId" in body && moduleId) {
       // The row's track changed — reload the scoped matrix.
       const again = await fetch(`/api/projects/${projectId}/checkpoints?moduleId=${moduleId}${orgUnitId ? `&orgUnitId=${orgUnitId}` : ""}`);
@@ -95,6 +108,7 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
       setData((prev) => (prev ? { ...prev, ...next } : prev));
       setGateBlock(null);
       setOverrideReason("");
+      fe.reset();
       if (key === "template" && body.templateId) dispatchTourEvent("template-attached");
     }
     setBusy(null);
@@ -222,22 +236,26 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
                 ))}
               </ul>
               <input
+                {...fe.bind("overrideReason")}
                 value={overrideReason}
                 onChange={(e) => setOverrideReason(e.target.value)}
                 maxLength={300}
                 placeholder="Why is it being closed anyway? This is recorded."
-                className="h-8 rounded-[8px] border border-[var(--w07)] bg-[var(--wash)] px-2.5 text-[12px] text-[var(--ink2)] outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none"
+                aria-label="Reason for closing the gate early"
+                className={`h-8 rounded-[8px] border border-[var(--w07)] bg-[var(--wash)] px-2.5 text-[12px] text-[var(--ink2)] outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none ${FIELD_INVALID}`}
               />
+              {fe.errors.overrideReason && <FieldError id={`${fe.idOf("overrideReason")}-error`}>{fe.errors.overrideReason}</FieldError>}
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  disabled={overrideReason.trim().length < 5 || busy !== null}
-                  onClick={() =>
+                  disabled={busy !== null}
+                  onClick={() => {
+                    if (!fe.validate()) return;
                     void patch(
                       { checkpointId: gateBlock.checkpointId, state: "Done", overrideReason: overrideReason.trim() },
                       gateBlock.checkpointId,
-                    )
-                  }
+                    );
+                  }}
                   className="rounded-[8px] bg-[var(--warn)] px-3 py-1.5 text-[11.5px] font-bold text-[var(--onbrand)] disabled:opacity-60"
                 >
                   Close gate with reason
@@ -247,6 +265,7 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
                   onClick={() => {
                     setGateBlock(null);
                     setOverrideReason("");
+                    fe.reset();
                   }}
                   className="text-[11.5px] font-semibold text-[var(--ink4)] hover:text-[var(--qink)]"
                 >

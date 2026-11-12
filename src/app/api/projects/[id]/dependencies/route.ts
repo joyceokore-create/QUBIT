@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { formMessages as m } from "@/lib/form-messages";
+import { dependencyNote } from "@/lib/workspace-schema";
+import { validationError } from "@/server/errors";
 import { z } from "zod";
 import { requirePermission } from "@/lib/api-guard";
 import {
@@ -22,8 +25,8 @@ export async function GET(_req: Request, { params }: Ctx) {
 }
 
 const PostBody = z.object({
-  dependsOnProjectId: z.string().uuid(),
-  note: z.string().trim().max(200).optional(),
+  dependsOnProjectId: z.string().uuid(m.choose("a project")),
+  note: dependencyNote.optional(),
 });
 
 export async function POST(req: Request, { params }: Ctx) {
@@ -32,7 +35,7 @@ export async function POST(req: Request, { params }: Ctx) {
   const { id } = await params;
   const parsed = PostBody.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: { code: "VALIDATION", message: "Invalid input." } }, { status: 400 });
+    return validationError(parsed.error);
   }
   try {
     const dep = await addProjectDependency(guard.ctx, id, parsed.data.dependsOnProjectId, parsed.data.note);

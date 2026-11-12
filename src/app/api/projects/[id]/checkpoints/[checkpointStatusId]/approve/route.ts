@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-guard";
+import { validationError } from "@/server/errors";
 import { approveGate, ApproveInput } from "@/server/gate-approval";
 import { gateErrorResponse, validId, type GateParams } from "../respond";
 
@@ -13,7 +14,7 @@ export async function POST(req: Request, { params }: GateParams) {
   const { id, checkpointStatusId } = await params;
   if (!validId(id) || !validId(checkpointStatusId)) return NextResponse.json({ error: { code: "NOT_FOUND", message: "Gate not found." } }, { status: 404 });
   const body = ApproveInput.safeParse(await req.json().catch(() => null));
-  if (!body.success) return NextResponse.json({ error: { code: "VALIDATION", message: body.error.issues[0]?.message ?? "Invalid input." } }, { status: 400 });
+  if (!body.success) return validationError(body.error);
   try {
     return NextResponse.json(await approveGate(guard.ctx, id, checkpointStatusId, body.data));
   } catch (e) {

@@ -11,6 +11,11 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Markdown } from "@/components/q/markdown";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { Field } from "@/components/ui/drawer";
+import { FIELD_INVALID } from "@/lib/surface";
+import { readApiError } from "@/lib/form-errors";
+import { DocumentFormSchema } from "@/lib/workspace-schema";
 
 // Uploaded files kept as base64 (PDF since M8; the weekly status report arrives as Word/Excel too).
 const FILE_MIME: Record<string, string> = {
@@ -272,6 +277,8 @@ function AddDialog({ projectId, onClose, onAdded }: { projectId: string; onClose
   const [fileName, setFileName] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // docs/08 § Errors: problems show on their field; Save stays enabled except while sending.
+  const fe = useFieldErrors({ schema: DocumentFormSchema, values: { title, content, fileData }, idPrefix: "add-doc" });
 
   async function onFile(file: File | undefined) {
     if (!file) return;
@@ -285,10 +292,7 @@ function AddDialog({ projectId, onClose, onAdded }: { projectId: string; onClose
 
   async function save() {
     setError(null);
-    if (!title.trim() || (!content.trim() && !fileData)) {
-      setError("Give it a title and either text or a PDF.");
-      return;
-    }
+    if (!fe.validate()) return;
     setSaving(true);
     const res = await fetch(`/api/projects/${projectId}/documents`, {
       method: "POST",
@@ -302,8 +306,16 @@ function AddDialog({ projectId, onClose, onAdded }: { projectId: string; onClose
       }),
     });
     setSaving(false);
-    if (res.ok) onAdded();
-    else setError((await res.json().catch(() => null))?.error?.message ?? "Could not save.");
+    if (res.ok) {
+      onAdded();
+      return;
+    }
+    const { message, fields } = readApiError(await res.json().catch(() => null), "Could not save.");
+    const { _: root, ...onFields } = fields;
+    if (Object.keys(onFields).length > 0) {
+      fe.setServerErrors(onFields, ["title", "content"]);
+      if (root) setError(root);
+    } else setError(message);
   }
 
   return (
@@ -314,28 +326,35 @@ function AddDialog({ projectId, onClose, onAdded }: { projectId: string; onClose
           <DialogDescription>Paste the text (recommended — Q can read it) or attach a PDF.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
-          <div className="flex gap-2">
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title, e.g. Field Sales BRD" className="flex-1" />
+          <div className="flex items-start gap-2">
+            <div className="flex-1">
+              <Field label={<span className="sr-only">Title</span>} htmlFor={fe.idOf("title")} error={fe.errors.title}>
+                <Input {...fe.bind("title")} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title, e.g. Field Sales BRD" />
+              </Field>
+            </div>
             <Select value={kind} onValueChange={(v) => v && setKind(v)}>
               <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
               <SelectContent>{KINDS.map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            rows={8}
-            placeholder="Paste document text / markdown here…"
-            className="rounded-[10px] border border-ink-4 bg-background p-3 text-xs text-foreground outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none"
-          />
+          <Field label={<span className="sr-only">Document text</span>} htmlFor={fe.idOf("content")} error={fe.errors.content}>
+            <textarea
+              {...fe.bind("content")}
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              rows={8}
+              placeholder="Paste document text / markdown here…"
+              className={`rounded-[10px] border border-ink-4 bg-background p-3 text-xs text-foreground outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none ${FIELD_INVALID}`}
+            />
+          </Field>
           <label className="flex cursor-pointer items-center gap-2 text-xs text-ink-3">
             <input type="file" accept="application/pdf" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
             <span className="rounded-[8px] border border-dashed border-ink-4 px-3 py-1.5 hover:border-brand hover:text-brand">
               {fileName ? `📄 ${fileName}` : "Attach a PDF instead (optional)"}
             </span>
           </label>
-          {error && <p className="text-xs text-status-red">{error}</p>}
-          <div className="flex justify-end">
+          <div className="flex items-center justify-end gap-3">
+            {error && <p role="alert" className="text-xs text-status-red">{error}</p>}
             <Button type="button" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save document"}</Button>
           </div>
         </div>

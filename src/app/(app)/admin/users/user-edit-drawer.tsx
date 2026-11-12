@@ -8,9 +8,12 @@ import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Banner } from "@/components/ui/panel";
 import { Chip } from "@/components/ui/status-pill";
-import { Drawer, DrawerError, DrawerFooter, DrawerFrame, DrawerHeader, DrawerSection, DrawerText, Field, FIELD_INPUT, Kv } from "@/components/ui/drawer";
+import { Drawer, DrawerFooter, DrawerFrame, DrawerHeader, DrawerSection, DrawerText, Field, FieldError, FIELD_INPUT, Kv } from "@/components/ui/drawer";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ROLE_PERMISSIONS } from "@/lib/rbac";
+import { readApiError } from "@/lib/form-errors";
+import { MfaResetFormSchema, UserRolesFormSchema } from "@/lib/user-edit-schema";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
 import { formatDate } from "@/lib/dates";
 import { COMPACT, SECONDARY } from "@/lib/surface";
 import type { AdminUserSummary } from "@/server/users";
@@ -68,6 +71,11 @@ function Body({ user, onClose, currentUserId, timeZone, departments, managerOpti
   const [mfaCode, setMfaCode] = useState("");
   const [mfaBusy, setMfaBusy] = useState(false);
   const [mfaError, setMfaError] = useState<string | null>(null);
+  // docs/08 § Errors: each section is its own small form. Roles (a checkbox group) and the MFA
+  // code show their problem on the control; the section's Save stays enabled. Network / 403 /
+  // conflict problems sit in a banner at the top of the section.
+  const rolesFe = useFieldErrors({ schema: UserRolesFormSchema, values: { roles: picked }, idPrefix: "user-roles" });
+  const mfaFe = useFieldErrors({ schema: MfaResetFormSchema, values: { code: mfaCode }, idPrefix: "user-mfa" });
 
   useEffect(() => setPicked(user.roles), [user.roles]);
 
@@ -81,8 +89,13 @@ function Body({ user, onClose, currentUserId, timeZone, departments, managerOpti
   const statusWord = user.status === "ACTIVE" ? "Active" : user.status === "INVITED" ? "Invited" : user.status === "SUSPENDED" ? "Suspended" : user.status;
 
   async function saveRoles() {
-    if (picked.length === 0) return roles.setError("Select at least one role.");
-    await roles.mutate(`/api/admin/users/${user.id}/roles`, "PATCH", { roles: picked }, { fallback: "Could not update roles.", onSuccess: () => toast.success("Roles saved.") });
+    roles.setError(null);
+    if (!rolesFe.validate()) return;
+    await roles.mutate(`/api/admin/users/${user.id}/roles`, "PATCH", { roles: picked }, {
+      fallback: "Could not update the roles.",
+      onFieldErrors: (fields) => rolesFe.setServerErrors(fields, ["roles"]),
+      onSuccess: () => toast.success("Roles saved."),
+    });
   }
 
   async function saveDepartment() {
@@ -120,12 +133,18 @@ function Body({ user, onClose, currentUserId, timeZone, departments, managerOpti
   }
 
   async function resetMfa() {
-    setMfaBusy(true);
     setMfaError(null);
+    if (!mfaFe.validate()) return;
+    setMfaBusy(true);
     const res = await fetch("/api/auth/mfa/reset", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId: user.id, ...(mfaCode ? { code: mfaCode } : {}) }) }).catch(() => null);
     setMfaBusy(false);
     const body = res ? await res.json().catch(() => null) : null;
-    if (!res?.ok) return setMfaError(body?.error?.message ?? "Couldn't reset MFA. Try again.");
+    if (!res?.ok) {
+      const { message, fields } = readApiError(body, "Could not reset MFA. Try again.");
+      if (fields.code) mfaFe.setServerErrors({ code: fields.code });
+      else setMfaError(message);
+      return;
+    }
     setMfaCode("");
     toast.success(`MFA reset for ${user.name}. They set it up again at their next sign-in, and they've been told.`);
     onClose();
@@ -157,7 +176,8 @@ function Body({ user, onClose, currentUserId, timeZone, departments, managerOpti
 
         {canManage && (
           <DrawerSection title="Roles" aside={<button type="button" onClick={saveRoles} disabled={roles.busy} className={COMPACT}>{roles.busy ? "Saving…" : "Save Roles"}</button>}>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {roles.error && <Banner tone="bad">{roles.error}</Banner>}
+            <div role="group" aria-label="Roles" id={rolesFe.idOf("roles")} data-invalid={rolesFe.errors.roles ? true : undefined} aria-describedby={rolesFe.errors.roles ? `${rolesFe.idOf("roles")}-error` : undefined} className="grid grid-cols-1 gap-2 rounded-[10px] border border-transparent p-1 data-[invalid=true]:border-[var(--ds-bad)] sm:grid-cols-2">
               {visibleRoles.map((role) => {
                 const locked = role === SUPER_ADMIN_ROLE && !canGrantSuperAdmin;
                 return (
@@ -170,11 +190,12 @@ function Body({ user, onClose, currentUserId, timeZone, departments, managerOpti
                 );
               })}
             </div>
-            {roles.error && <DrawerError>{roles.error}</DrawerError>}
+            {rolesFe.errors.roles && <FieldError id={`${rolesFe.idOf("roles")}-error`}>{rolesFe.errors.roles}</FieldError>}
           </DrawerSection>
         )}
 
         <DrawerSection title="Department" aside={<button type="button" onClick={saveDepartment} disabled={dept.busy} className={COMPACT}>{dept.busy ? "Saving…" : "Save Department"}</button>}>
+          {dept.error && <Banner tone="bad">{dept.error}</Banner>}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Department">
               <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} className={FIELD_INPUT}>
@@ -200,10 +221,10 @@ function Body({ user, onClose, currentUserId, timeZone, departments, managerOpti
             </Field>
           </div>
           <DrawerText hint>Teams are managed in Administration › Teams.</DrawerText>
-          {dept.error && <DrawerError>{dept.error}</DrawerError>}
         </DrawerSection>
 
         <DrawerSection title="Account">
+          {account.error && <Banner tone="bad">{account.error}</Banner>}
           <div className="flex flex-wrap gap-2">
             {user.status === "INVITED" && (
               <button type="button" disabled={account.busy} onClick={() => void sendLink("resend")} className={COMPACT}>
@@ -250,7 +271,6 @@ function Body({ user, onClose, currentUserId, timeZone, departments, managerOpti
               )}
             </Banner>
           )}
-          {account.error && <DrawerError>{account.error}</DrawerError>}
         </DrawerSection>
 
         {canResetPassword && !sso && user.mfaEnabled && (
@@ -260,15 +280,15 @@ function Body({ user, onClose, currentUserId, timeZone, departments, managerOpti
             ) : (
               <>
                 <DrawerText>Removes {user.name}&apos;s authenticator so they can set it up again at their next sign-in. They&apos;re told, and the change is audited.</DrawerText>
-                <div className="flex flex-wrap items-end gap-2">
-                  <Field label="Your authenticator code" hint="Confirms it's you. Needed when you use an authenticator.">
-                    <input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mfaCode} onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="6 digits" className={`${FIELD_INPUT} w-[140px]`} />
+                {mfaError && <Banner tone="bad">{mfaError}</Banner>}
+                <div className="flex flex-wrap items-start gap-2">
+                  <Field label="Your Authenticator Code" htmlFor={mfaFe.idOf("code")} error={mfaFe.errors.code} hint="Confirms it's you. Needed when you use an authenticator.">
+                    <input {...mfaFe.bind("code")} inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mfaCode} onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="6 digits" className={`${FIELD_INPUT} w-[140px]`} />
                   </Field>
-                  <button type="button" disabled={mfaBusy} onClick={resetMfa} className={`${COMPACT} mb-[21px] h-[var(--ds-control-h)]`}>
+                  <button type="button" disabled={mfaBusy} onClick={resetMfa} className={`${COMPACT} mt-[21px] h-[var(--ds-control-h)]`}>
                     {mfaBusy ? "Resetting…" : "Reset MFA"}
                   </button>
                 </div>
-                {mfaError && <DrawerError>{mfaError}</DrawerError>}
               </>
             )}
           </DrawerSection>

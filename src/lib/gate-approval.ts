@@ -1,3 +1,4 @@
+import { reasonMessage } from "@/lib/reason-schema";
 import { gateKeyOf } from "@/lib/cockpit-gates";
 
 /**
@@ -112,14 +113,14 @@ export function checkDecision(
   }
   if (f.submittedById && f.submittedById === actor.userId) return { code: "FOUR_EYES", message: "You submitted this gate, so someone else signs it off." };
   const hasNote = (note ?? "").trim().length >= DECISION_NOTE_MIN;
-  if (kind === "return") return hasNote ? null : { code: "NOTE_REQUIRED", message: "Say why it is going back to the PM." };
+  if (kind === "return") return hasNote ? null : { code: "NOTE_REQUIRED", message: reasonMessage(DECISION_NOTE_MIN) };
   const except = exceptionAllowed(f);
   if (kind === "approve" && except) {
     return { code: "NEEDS_EXCEPTION", message: f.testing && f.criticalOpen > 0 ? "Critical issues are open — sign off with exception and say why." : "The checklist is not met — approve with exception and say why." };
   }
   if (kind === "approve_exception") {
     if (!except) return { code: "NO_EXCEPTION", message: "Nothing to except: the checklist is met." };
-    if (!hasNote) return { code: "NOTE_REQUIRED", message: "Say why it is signed off with an exception." };
+    if (!hasNote) return { code: "NOTE_REQUIRED", message: reasonMessage(DECISION_NOTE_MIN) };
   }
   return null;
 }

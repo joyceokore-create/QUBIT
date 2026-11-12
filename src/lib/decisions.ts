@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { actionTitle, decisionNote, decisionNoteMessage, decisionTitle, DEFER_DATE_REQUIRED } from "@/lib/decision-schema";
 import { dayKey, formatDayMonth } from "@/lib/dates";
 import type { ChipTone } from "@/components/ui/status-pill";
 
@@ -51,7 +52,7 @@ const ID = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, "Invalid id.");
 const TEXT = (max: number) => z.string().trim().max(max);
 
 export const RaiseInput = z.object({
-  title: TEXT(160).min(3, "Give the decision a title (3 characters or more)."),
+  title: decisionTitle,
   projectId: ID.nullable().optional(),
   context: TEXT(2000).optional(),
   ifApproved: TEXT(300).optional(),
@@ -60,16 +61,16 @@ export const RaiseInput = z.object({
 });
 export type RaiseInputT = z.infer<typeof RaiseInput>;
 
-const NOTE = (why: string) => z.string({ required_error: why }).trim().max(2000).min(3, why);
+const NOTE = (_why: string) => z.string({ required_error: decisionNoteMessage }).pipe(decisionNote);
 export const DecideInput = z.discriminatedUnion("action", [
   z.object({ action: z.literal("approve"), note: TEXT(2000).optional() }),
   z.object({ action: z.literal("decline"), note: NOTE("Say why it was declined — the note goes on the record.") }),
-  z.object({ action: z.literal("defer"), note: NOTE("Say why it was deferred — the note goes on the record."), dueDate: z.string({ required_error: "Choose the new due date." }).regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date like 2026-11-20.") }),
+  z.object({ action: z.literal("defer"), note: NOTE("Say why it was deferred — the note goes on the record."), dueDate: z.string({ required_error: DEFER_DATE_REQUIRED }).regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date like 2026-11-20.") }),
 ]);
 export type DecideInputT = z.infer<typeof DecideInput>;
 
 export const GlcCreateInput = z.object({
-  title: TEXT(200).min(3, "Give the action a title (3 characters or more)."),
+  title: actionTitle,
   projectId: ID.nullable().optional(),
   decisionRequestId: ID.nullable().optional(),
   ownerId: ID.nullable().optional(),

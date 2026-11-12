@@ -107,7 +107,7 @@ export async function listAddableMarkets(ctx: TenantContext, projectId: string):
 }
 
 export const AddMarketsInput = z.object({
-  orgUnitIds: z.array(z.string().uuid()).min(1).max(30),
+  orgUnitIds: z.array(z.string().uuid()).min(1, "Choose at least one.").max(30, "Choose 30 or fewer at a time."),
 });
 
 /** Add markets (or revive retired ones). Audited per market; event `market.added`. */

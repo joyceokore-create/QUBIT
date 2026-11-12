@@ -1,11 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { DeclineFormSchema } from "@/lib/staffing-schema";
+import { ParkIdeaFormSchema, MergeIdeaFormSchema } from "@/lib/idea-schema";
+import { readApiError, type FieldErrors } from "@/lib/form-errors";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { z } from "zod";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Info } from "lucide-react";
 import { toast } from "sonner";
-import { Drawer, DrawerHeader } from "@/components/ui/drawer";
+import { Drawer, DrawerHeader, FieldError } from "@/components/ui/drawer";
 import { Chip as StatusChip } from "@/components/ui/status-pill";
 import { GateReviewDrawer } from "@/components/gates/gate-review";
 import { approvalChip } from "@/lib/gate-approval";
@@ -35,7 +40,7 @@ import {
   type ApprovalTab,
   type RollupSummary,
 } from "@/lib/approvals";
-import { FOCUS, PRIMARY, SECONDARY, TAB, TAB_ACTIVE, TAB_COUNT, TABS_ROW } from "@/lib/surface";
+import { FIELD_INVALID, FOCUS, PRIMARY, SECONDARY, TAB, TAB_ACTIVE, TAB_COUNT, TABS_ROW } from "@/lib/surface";
 import { cn } from "@/lib/utils";
 
 /**
@@ -55,7 +60,7 @@ type FilterKey = (typeof FILTER_KEYS)[number];
 const FILTER_LABEL: Record<FilterKey, string> = { project: "Project", age: "Age" };
 
 const COMPACT_SECONDARY = `inline-flex h-[var(--control-h-compact)] items-center justify-center whitespace-nowrap rounded-[8px] border border-[var(--input)] bg-[var(--qcard)] px-2.5 text-[12px] font-semibold text-[var(--ink2)] hover:text-[var(--qink)] ${FOCUS}`;
-const FIELD = `w-full rounded-[var(--control-r)] border border-[var(--input)] bg-[var(--qcard)] px-3 text-[13px] text-[var(--qink)] placeholder:text-[var(--ink3)] ${FOCUS}`;
+const FIELD = `w-full rounded-[var(--control-r)] border border-[var(--input)] bg-[var(--qcard)] px-3 text-[13px] text-[var(--qink)] placeholder:text-[var(--ink3)] ${FOCUS} ${FIELD_INVALID}`;
 const NOTE = "rounded-[var(--control-r)] bg-[color-mix(in_oklab,var(--stage-exploring)_8%,transparent)] px-3 py-2.5 text-[12.5px] text-[var(--qink)]";
 
 // Ideas: New in the intake grey, Reviewing in the exploring blue (as on the Ideas page);
@@ -79,12 +84,11 @@ function sentenceList(words: string[]): string {
   return s ? s[0]!.toUpperCase() + s.slice(1) : s;
 }
 
-/** POST JSON to an existing decision route; the route's own message on failure. */
-async function post(url: string, body: unknown, fallback: string): Promise<string | null> {
+/** POST JSON to an existing decision route; on failure the route's own message plus any field messages (docs/08 § Errors). */
+async function post(url: string, body: unknown, fallback: string): Promise<{ message: string; fields: FieldErrors } | null> {
   const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
   if (res?.ok) return null;
-  const data = res ? ((await res.json().catch(() => null)) as { error?: { message?: string } } | null) : null;
-  return data?.error?.message ?? fallback;
+  return readApiError(res ? await res.json().catch(() => null) : null, fallback);
 }
 
 export function ApprovalsClient({
@@ -380,6 +384,9 @@ function TriageDrawer({ idea, projects, tz, now, onDone }: { idea: ApprovalIdea;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const days = ageDays(idea.createdAt, now, tz);
+  // docs/08 § Errors: each decision's problem shows on its field; the button stays enabled except while saving.
+  const schema = useMemo(() => (mode === "park" ? ParkIdeaFormSchema : mode === "merge" ? MergeIdeaFormSchema : z.object({})), [mode]);
+  const fe = useFieldErrors({ schema, values: { reason, projectId: target }, idPrefix: `triage-${idea.id}` });
   const reviewing = idea.status === "Reviewing";
 
   async function triage(body: Record<string, unknown>, message: string) {
@@ -387,24 +394,31 @@ function TriageDrawer({ idea, projects, tz, now, onDone }: { idea: ApprovalIdea;
     setError(null);
     const err = await post(`/api/ideas/${idea.id}/triage`, body, "Triage failed. Try again.");
     setBusy(false);
-    if (err) return setError(err);
+    if (err) {
+      const { _: root, ...onFields } = err.fields;
+      if (Object.keys(onFields).length > 0) {
+        fe.setServerErrors(onFields, ["reason", "projectId"]);
+        if (root) setError(root);
+      } else setError(err.message);
+      return;
+    }
     done(message);
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    setError(null);
+    if (busy || !fe.validate()) return;
     if (mode === "park") {
-      if (reason.trim().length < 5) return setError("Say why it is being parked (at least 5 characters).");
       await triage({ action: "park", reason: reason.trim() }, `“${idea.title}” parked. The submitter has been told why.`);
     } else if (mode === "merge") {
-      if (!target) return setError("Choose the project to merge into.");
       const p = projects.find((x) => x.id === target);
       await triage({ action: "merge", projectId: target }, `“${idea.title}” merged into ${p?.name ?? "the project"}.`);
     }
   }
 
   return (
-    <form onSubmit={submit} className="flex h-full flex-col">
+    <form onSubmit={submit} noValidate className="flex h-full flex-col">
       <DrawerHead step={`Idea · ${idea.status}`} title={idea.title} sub={`Submitted${idea.personName ? ` by ${idea.personName}` : ""} · ${ago(days)}`} />
       <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-4">
         <section>
@@ -435,19 +449,20 @@ function TriageDrawer({ idea, projects, tz, now, onDone }: { idea: ApprovalIdea;
           <Segmented label="Decision" options={TRIAGE} value={mode} onChange={(m) => {
               setMode(m);
               setError(null);
+              fe.reset();
             }} render={(m) => TRIAGE_LABEL[m]} />
           {mode === "accept" && <p className={NOTE}>Accepting opens the project wizard with this idea filled in. The idea is marked Accepted when you create the project.</p>}
           {mode === "park" && (
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[13px] font-semibold text-[var(--qink)]">Why is it parked?</span>
-              <textarea rows={3} maxLength={1000} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="For example: good idea, wrong quarter. Revisit after the migration." className={cn(FIELD, "py-2")} />
-              <span className="text-[12px] text-[var(--ink3)]">The submitter is told why. At least 5 characters.</span>
-            </label>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor={fe.idOf("reason")} className="text-[13px] font-semibold text-[var(--qink)]">Why is it parked?</label>
+              <textarea {...fe.bind("reason")} rows={3} maxLength={1000} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="For example: good idea, wrong quarter. Revisit after the migration." className={cn(FIELD, "py-2")} />
+              {fe.errors.reason ? <FieldError id={`${fe.idOf("reason")}-error`}>{fe.errors.reason}</FieldError> : <span className="text-[12px] text-[var(--ink3)]">The submitter is told why. At least 5 characters.</span>}
+            </div>
           )}
           {mode === "merge" && (
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[13px] font-semibold text-[var(--qink)]">Merge into which project?</span>
-              <select value={target} onChange={(e) => setTarget(e.target.value)} className={cn(FIELD, "h-[var(--control-h)]")}>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor={fe.idOf("projectId")} className="text-[13px] font-semibold text-[var(--qink)]">Merge into which project?</label>
+              <select {...fe.bind("projectId")} value={target} onChange={(e) => setTarget(e.target.value)} className={cn(FIELD, "h-[var(--control-h)]")}>
                 <option value="">Choose a project</option>
                 {projects.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -455,8 +470,8 @@ function TriageDrawer({ idea, projects, tz, now, onDone }: { idea: ApprovalIdea;
                   </option>
                 ))}
               </select>
-              <span className="text-[12px] text-[var(--ink3)]">The idea is kept on that project&apos;s record. Active projects only.</span>
-            </label>
+              {fe.errors.projectId ? <FieldError id={`${fe.idOf("projectId")}-error`}>{fe.errors.projectId}</FieldError> : <span className="text-[12px] text-[var(--ink3)]">The idea is kept on that project&apos;s record. Active projects only.</span>}
+            </div>
           )}
         </section>
         <ErrorLine error={error} />
@@ -499,7 +514,10 @@ function ReviewDrawer({ req, tz, now, onDone }: { req: ApprovalStaffing; tz: str
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pickError, setPickError] = useState<string | null>(null);
   const days = ageDays(req.createdAt, now, tz);
+  // docs/08 § Errors: the reason shows its problem on the field; "choose who fills it" shows under the list.
+  const fe = useFieldErrors({ schema: mode === "decline" ? DeclineFormSchema : z.object({}), values: { reason }, idPrefix: `review-${req.id}` });
   const windowText = `${formatDayMonth(req.windowStart, tz)} – ${formatDate(req.windowEnd, tz)}`;
 
   // Candidates for the window: people who've held the role first, then least booked; leave surfaced.
@@ -523,22 +541,30 @@ function ReviewDrawer({ req, tz, now, onDone }: { req: ApprovalStaffing; tz: str
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (mode === "fill" && !chosen) return setError("Choose who fills it.");
-    if (mode === "decline" && reason.trim().length < 3) return setError("Say why it is declined (at least 3 characters).");
-    setBusy(true);
     setError(null);
+    if (busy) return;
+    if (mode === "fill" && !chosen) return setPickError("Choose who fills it.");
+    if (mode === "decline" && !fe.validate()) return;
+    setBusy(true);
     const err = await post(
       `/api/staffing/requests/${req.id}`,
       mode === "fill" ? { action: "fill", userId: pick } : { action: "decline", reason: reason.trim() },
       "Couldn't resolve the request. Try again.",
     );
     setBusy(false);
-    if (err) return setError(err);
+    if (err) {
+      const { _: root, ...onFields } = err.fields;
+      if (onFields.userId) setPickError(onFields.userId);
+      if (onFields.reason) fe.setServerErrors({ reason: onFields.reason });
+      if (!onFields.userId && !onFields.reason) setError(err.message);
+      else if (root) setError(root);
+      return;
+    }
     done(mode === "fill" ? `${chosen?.name ?? "They"} added to ${req.projectName} as ${req.role}.` : `Request declined. ${req.personName} has been told why.`);
   }
 
   return (
-    <form onSubmit={submit} className="flex h-full flex-col">
+    <form onSubmit={submit} noValidate className="flex h-full flex-col">
       <DrawerHead step="Staffing request" title={approvalTitle(req)} sub={`Requested by ${req.personName} · ${ago(days)}`} />
       <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-4">
         <section>
@@ -565,6 +591,8 @@ function ReviewDrawer({ req, tz, now, onDone }: { req: ApprovalStaffing; tz: str
           <Segmented label="Decision" options={REVIEW} value={mode} onChange={(m) => {
               setMode(m);
               setError(null);
+              setPickError(null);
+              fe.reset();
             }} render={(m) => REVIEW_LABEL[m]} />
           {mode === "fill" ? (
             <div className="flex flex-col gap-2">
@@ -576,10 +604,13 @@ function ReviewDrawer({ req, tz, now, onDone }: { req: ApprovalStaffing; tz: str
               ) : bench.length === 0 ? (
                 <p className="text-[12.5px] text-[var(--ink3)]">{benchError ? "Couldn't load people. Close and try again." : "No active people to choose from."}</p>
               ) : (
-                <div role="radiogroup" aria-label="Fill with" className="max-h-[320px] overflow-y-auto rounded-[var(--control-r)] border border-[var(--border)]">
+                <div role="radiogroup" aria-label="Fill with" aria-describedby={pickError ? "review-pick-error" : undefined} className="max-h-[320px] overflow-y-auto rounded-[var(--control-r)] border border-[var(--border)]">
                   {bench.map((b) => (
                     <label key={b.userId} className={cn("flex cursor-pointer items-center gap-3 border-b border-[var(--border)] px-3 py-2 last:border-0", pick === b.userId && "bg-[color-mix(in_oklab,var(--brand)_6%,transparent)]")}>
-                      <input type="radio" name="fill-with" value={b.userId} checked={pick === b.userId} onChange={() => setPick(b.userId)} className="accent-[var(--brand)]" />
+                      <input type="radio" name="fill-with" value={b.userId} checked={pick === b.userId} onChange={() => {
+                        setPick(b.userId);
+                        setPickError(null);
+                      }} className="accent-[var(--brand)]" />
                       <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[var(--qink)]">{b.name}</span>
                       {b.awayDaysInWindow > 0 && (
                         <span className="whitespace-nowrap rounded-full bg-[color-mix(in_oklab,var(--warn-ink)_12%,transparent)] px-2 py-0.5 text-[11px] font-semibold text-[var(--warn-ink)]">
@@ -591,13 +622,14 @@ function ReviewDrawer({ req, tz, now, onDone }: { req: ApprovalStaffing; tz: str
                   ))}
                 </div>
               )}
+              {pickError && <FieldError id="review-pick-error">{pickError}</FieldError>}
             </div>
           ) : (
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[13px] font-semibold text-[var(--qink)]">Why is it declined?</span>
-              <textarea rows={3} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="For example: no testers free until next quarter." className={cn(FIELD, "py-2")} />
-              <span className="text-[12px] text-[var(--ink3)]">{req.personName} is told why. Up to 300 characters.</span>
-            </label>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor={fe.idOf("reason")} className="text-[13px] font-semibold text-[var(--qink)]">Why is it declined?</label>
+              <textarea {...fe.bind("reason")} rows={3} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="For example: no testers free until next quarter." className={cn(FIELD, "py-2")} />
+              {fe.errors.reason ? <FieldError id={`${fe.idOf("reason")}-error`}>{fe.errors.reason}</FieldError> : <span className="text-[12px] text-[var(--ink3)]">{req.personName} is told why. Up to 300 characters.</span>}
+            </div>
           )}
         </section>
         <ErrorLine error={error} />
@@ -606,7 +638,7 @@ function ReviewDrawer({ req, tz, now, onDone }: { req: ApprovalStaffing; tz: str
         <button type="button" onClick={onDone} className={SECONDARY}>
           Cancel
         </button>
-        <button type="submit" disabled={busy || (mode === "fill" && !chosen)} className={PRIMARY}>
+        <button type="submit" disabled={busy} className={PRIMARY}>
           {busy ? "Saving…" : mode === "fill" ? (chosen ? `Fill with ${chosen.name}` : "Fill request") : "Decline request"}
         </button>
       </div>

@@ -1,5 +1,7 @@
 import { lifecycleStage } from "@/lib/lifecycle";
+import { statusNote as statusNoteRule, moduleLabel as moduleLabelRule } from "@/lib/workspace-schema";
 import { z } from "zod";
+import { projectName } from "@/lib/project-schema";
 import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
@@ -49,14 +51,14 @@ export type CreateProjectInput = z.infer<typeof CreateProjectInput>;
 // name/description and a real project lead (Project.leadUserId), so PMs can maintain
 // projects fully from the UI. Per-person resourcing lives in ProjectMember (resources.ts).
 export const UpdateProjectInput = z.object({
-  name: z.string().min(1).optional(),
+  name: projectName.optional(),
   description: z.string().nullable().optional(),
   status: z.enum(PROJECT_STATUSES).optional(),
   priority: z.enum(PROJECT_PRIORITIES).optional(),
   // docs/18 §7 governance fields — PM/lead via canWriteProject, heads/execs via
   // the project:stage permission (route-enforced).
   pipelineStage: z.enum(PIPELINE_STAGES).optional(),
-  statusNote: z.string().trim().max(200).nullable().optional(),
+  statusNote: statusNoteRule.nullable().optional(),
   // docs/18 §0.5: moving between portfolios is a normal audited edit; never null —
   // every project belongs to a portfolio.
   portfolioId: z.string().uuid().optional(),
@@ -68,7 +70,7 @@ export const UpdateProjectInput = z.object({
   moduleTracking: z.enum(["state", "gates"]).optional(),
   instanceTagging: z.boolean().optional(),
   pmScope: z.enum(["product", "instance"]).optional(),
-  moduleLabel: z.string().trim().min(2).max(30).optional(),
+  moduleLabel: moduleLabelRule.optional(),
   ...ProjectDefinitionFields,
 });
 export type UpdateProjectInput = z.infer<typeof UpdateProjectInput>;

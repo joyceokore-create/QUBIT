@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Banner } from "@/components/ui/panel";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/drawer-dialog";
 import { effectiveGroups, landingPersona, USER_GROUPS, type UserGroup } from "@/lib/personas";
 import { useAdminMutation } from "@/components/admin/use-admin-mutation";
@@ -44,7 +45,7 @@ export function EditGroupsDialog({
       `/api/admin/users/${user.id}/groups`,
       "PATCH",
       { userGroups: declared ? [declared] : [], primaryGroup: declared },
-      { fallback: "Could not save groups.", onSuccess: () => onOpenChange(false) },
+      { fallback: "Could not save the groups.", onSuccess: () => onOpenChange(false) },
     );
 
   return (
@@ -56,6 +57,8 @@ export function EditGroupsDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
+          {/* No required field here (an empty group is valid), so only form-level problems show. */}
+          {error && <Banner tone="bad">{error}</Banner>}
           <div>
             <p className="mb-1.5 text-[11.5px] font-semibold text-ink-2">Declared</p>
             <GroupPicker value={declared} onChange={setDeclared} />
@@ -82,7 +85,6 @@ export function EditGroupsDialog({
             <span className="text-ink-4">(next sign-in)</span>
           </p>
 
-          {error && <p role="alert" className="text-sm text-status-red">{error}</p>}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="button" onClick={() => void save()} disabled={busy}>{busy ? "Saving…" : "Save Groups"}</Button>

@@ -9,6 +9,9 @@ import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
 import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Field, FIELD_INPUT, FIELD_TEXTAREA } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { MergeIdeaFormSchema, NewIdeaFormSchema, ParkIdeaFormSchema } from "@/lib/idea-schema";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PageHeader } from "@/components/list/page-header";
 import { FilterChips, FilterSelect, ListToolbar, SearchField, type ActiveFilter, type FilterOption } from "@/components/list/list-toolbar";
@@ -70,9 +73,6 @@ const FILTER_KEYS = ["sponsor", "stage", "submitted"] as const;
 type FilterKey = (typeof FILTER_KEYS)[number];
 const FILTER_LABEL: Record<FilterKey, string> = { sponsor: "Sponsor", stage: "Stage", submitted: "Submitted" };
 
-const FIELD_LABEL = "text-sm font-medium text-ink-2";
-const TEXTAREA = "w-full rounded-lg border border-input bg-background p-2.5 text-sm placeholder:text-muted-foreground";
-const SELECT = "h-9 w-full rounded-lg border border-input bg-background px-3 text-sm";
 
 function StatusPill({ status }: { status: IdeaStatus }) {
   const tok = STATUS_TOKEN[status];
@@ -307,6 +307,8 @@ export function NewIdeaDialog({
   const [problem, setProblem] = useState("");
   const [value, setValue] = useState("");
   const [portfolioId, setPortfolioId] = useState("");
+  // docs/08 § Errors: Title, Sponsor and Problem show their problems on the field.
+  const fe = useFieldErrors({ schema: NewIdeaFormSchema, values: { title, sponsor, problem, expectedValue: value }, idPrefix: "idea" });
 
   // Fresh form on every open so a second idea doesn't inherit the last attempt.
   useEffect(() => {
@@ -317,14 +319,22 @@ export function NewIdeaDialog({
     setValue("");
     setPortfolioId("");
     setError(null);
+    fe.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when the dialog opens
   }, [open, setError]);
 
   async function submit() {
+    setError(null);
+    if (!fe.validate()) return;
     const ok = await mutate(
       "/api/ideas",
       "POST",
       { title, sponsor, problem, expectedValue: value.trim() || null, suggestedPortfolioId: portfolioId || null },
-      { fallback: "Could not submit the idea.", refresh: false },
+      {
+        fallback: "Could not submit the idea.",
+        refresh: false,
+        onFieldErrors: (fields) => fe.setServerErrors(fields, ["title", "sponsor", "problem", "expectedValue", "suggestedPortfolioId"]),
+      },
     );
     if (ok) {
       onOpenChange(false);
@@ -346,34 +356,27 @@ export function NewIdeaDialog({
       onSubmit={submit}
       className="sm:max-w-[520px]"
     >
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="idea-title" className={FIELD_LABEL}>Title</label>
-        <Input id="idea-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="For example: Instant merchant settlement" />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="idea-sponsor" className={FIELD_LABEL}>Sponsor</label>
-        <Input id="idea-sponsor" value={sponsor} onChange={(e) => setSponsor(e.target.value)} placeholder="For example: Head of Merchant Banking" />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="idea-problem" className={FIELD_LABEL}>Problem it solves</label>
+      <Field label="Title" htmlFor={fe.idOf("title")} error={fe.errors.title}>
+        <Input {...fe.bind("title")} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="For example: Instant merchant settlement" />
+      </Field>
+      <Field label="Sponsor" htmlFor={fe.idOf("sponsor")} error={fe.errors.sponsor}>
+        <Input {...fe.bind("sponsor")} value={sponsor} onChange={(e) => setSponsor(e.target.value)} placeholder="For example: Head of Merchant Banking" />
+      </Field>
+      <Field label="Problem It Solves" htmlFor={fe.idOf("problem")} error={fe.errors.problem}>
         <textarea
-          id="idea-problem"
+          {...fe.bind("problem")}
           rows={4}
           value={problem}
           onChange={(e) => setProblem(e.target.value)}
           placeholder="For example: Merchants wait T+1 for settlement; competitors offer instant."
-          className={TEXTAREA}
+          className={FIELD_TEXTAREA}
         />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="idea-value" className={FIELD_LABEL}>
-          Expected value <span className="font-normal text-[var(--ink4)]">(optional)</span>
-        </label>
-        <Input id="idea-value" value={value} onChange={(e) => setValue(e.target.value)} placeholder="For example: Retain 200+ merchants; fee upside" />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="idea-portfolio" className={FIELD_LABEL}>Portfolio it might belong to</label>
-        <select id="idea-portfolio" value={portfolioId} onChange={(e) => setPortfolioId(e.target.value)} className={SELECT}>
+      </Field>
+      <Field label="Expected Value (Optional)" htmlFor={fe.idOf("expectedValue")} error={fe.errors.expectedValue}>
+        <Input {...fe.bind("expectedValue")} value={value} onChange={(e) => setValue(e.target.value)} placeholder="For example: Retain 200+ merchants; fee upside" />
+      </Field>
+      <Field label="Portfolio It Might Belong To" htmlFor={fe.idOf("suggestedPortfolioId")} error={fe.errors.suggestedPortfolioId} hint="Your suggestion, not a decision — triage confirms it.">
+        <select {...fe.bind("suggestedPortfolioId")} value={portfolioId} onChange={(e) => setPortfolioId(e.target.value)} className={FIELD_INPUT}>
           <option value="">No suggestion</option>
           {portfolios.map((p) => (
             <option key={p.id} value={p.id}>
@@ -381,8 +384,7 @@ export function NewIdeaDialog({
             </option>
           ))}
         </select>
-        <p className="text-[12px] text-[var(--ink3)]">Your suggestion, not a decision — triage confirms it.</p>
-      </div>
+      </Field>
     </AdminFormDialog>
   );
 }
@@ -402,12 +404,17 @@ function TriageDialog({
   const { busy, error, setError, mutate } = useAdminMutation();
   const [reason, setReason] = useState("");
   const [target, setTarget] = useState("");
+  const parkFe = useFieldErrors({ schema: ParkIdeaFormSchema, values: { reason }, idPrefix: "park" });
+  const mergeFe = useFieldErrors({ schema: MergeIdeaFormSchema, values: { projectId: target }, idPrefix: "merge" });
 
   useEffect(() => {
     if (!pending) return;
     setReason("");
     setTarget("");
     setError(null);
+    parkFe.reset();
+    mergeFe.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when a new idea is opened
   }, [pending, setError]);
 
   if (!pending) return null;
@@ -415,19 +422,17 @@ function TriageDialog({
 
   async function submit() {
     if (!pending) return;
-    if (park && reason.trim().length < 5) {
-      setError("Say why it is being parked — the reason is the record.");
-      return;
-    }
-    if (!park && !target) {
-      setError("Choose the project to merge into.");
-      return;
-    }
+    setError(null);
+    if (!(park ? parkFe : mergeFe).validate()) return;
     const ok = await mutate(
       `/api/ideas/${pending.idea.id}/triage`,
       "POST",
       park ? { action: "park", reason } : { action: "merge", projectId: target },
-      { fallback: "Triage failed.", refresh: false },
+      {
+        fallback: "Could not save the decision.",
+        refresh: false,
+        onFieldErrors: (fields) => (park ? parkFe : mergeFe).setServerErrors(fields),
+      },
     );
     if (ok) {
       onClose();
@@ -448,22 +453,19 @@ function TriageDialog({
       onSubmit={submit}
     >
       {park ? (
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="park-reason" className={FIELD_LABEL}>Why is it parked?</label>
+        <Field label="Why Is It Parked?" htmlFor={parkFe.idOf("reason")} error={parkFe.errors.reason} hint="The submitter is told why. At least 5 characters.">
           <textarea
-            id="park-reason"
+            {...parkFe.bind("reason")}
             rows={3}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="For example: Good idea, wrong quarter — revisit after the FAL migration."
-            className={TEXTAREA}
+            className={FIELD_TEXTAREA}
           />
-          <p className="text-[12px] text-[var(--ink3)]">The submitter is told why. At least 5 characters.</p>
-        </div>
+        </Field>
       ) : (
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="merge-target" className={FIELD_LABEL}>Fold into which project?</label>
-          <select id="merge-target" value={target} onChange={(e) => setTarget(e.target.value)} className={SELECT}>
+        <Field label="Fold Into Which Project?" htmlFor={mergeFe.idOf("projectId")} error={mergeFe.errors.projectId}>
+          <select {...mergeFe.bind("projectId")} value={target} onChange={(e) => setTarget(e.target.value)} className={FIELD_INPUT}>
             <option value="">Choose a project…</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
@@ -471,7 +473,7 @@ function TriageDialog({
               </option>
             ))}
           </select>
-        </div>
+        </Field>
       )}
     </AdminFormDialog>
   );

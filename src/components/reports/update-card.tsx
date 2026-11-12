@@ -7,6 +7,8 @@ import { Choice, Field, FIELD_INPUT, FIELD_TEXTAREA, Kv } from "@/components/ui/
 import { Chip, HealthPill, type ChipTone } from "@/components/ui/status-pill";
 import { TEXT_LINK } from "@/components/ui/text-link";
 import { FilterSelect } from "@/components/list/list-toolbar";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { RatingReasonFormSchema } from "@/lib/rating-reason-schema";
 import { FOCUS, PRIMARY, SECONDARY } from "@/lib/surface";
 import { cn } from "@/lib/utils";
 import { GATE_STATE_LABEL, MODULE_STATE_LABEL, type CatalogMarket } from "@/lib/status-report-delivery";
@@ -91,6 +93,10 @@ export function UpdateCard({
   // A closed week has no drafts: its line goes with Confirm & Send, so Save Draft keeps the rest.
   const saveable = d.count - (past && d.product ? 1 : 0);
   const canSend = Boolean(c.narrative.trim()) && (!p.product.alreadySent || c.resend);
+  // docs/08 § Errors: the rating reason shows its problem on the field. Save Draft and Confirm &
+  // Send stay enabled; pressing either with the reason missing or short marks the field and stops.
+  const ratingFe = useFieldErrors({ schema: RatingReasonFormSchema, values: { ratingReason: c.ratingReason }, idPrefix: `rating-${p.catalog.projectId}` });
+  const reasonOk = () => !needsRatingReason(p, c) || ratingFe.validate();
   const moreChanged = d.stage || d.markets.length > 0 || d.modules.length > 0;
   const moreLabel = ["Stage", p.catalog.markets.length ? "Markets" : null, p.catalog.modules.length ? "Channels" : null].filter(Boolean).join(", ").replace(/, ([^,]*)$/, " and $1");
 
@@ -227,8 +233,8 @@ export function UpdateCard({
         </span>
         <Choice label={`Status for ${p.catalog.name}`} rag value={c.rag} options={RAGS.map((r) => ({ value: r, label: RAG_WORD[r], tone: RAG_TONE[r] }))} onChange={(r) => onPatch((x) => ({ ...x, rag: r }))} />
         {needsRatingReason(p, c) && (
-          <Field label="Why your rating differs" hint={`The Head sees this. At least ${RATING_REASON_MIN} characters.`}>
-            <textarea value={c.ratingReason} maxLength={300} rows={2} onChange={(e) => onPatch((x) => ({ ...x, ratingReason: e.target.value }))} placeholder="For example: the blocker clears on Monday; the vendor confirmed" className={FIELD_TEXTAREA} />
+          <Field label="Why Your Rating Differs" htmlFor={ratingFe.idOf("ratingReason")} error={ratingFe.errors.ratingReason} hint={`The Head sees this. At least ${RATING_REASON_MIN} characters.`}>
+            <textarea {...ratingFe.bind("ratingReason")} value={c.ratingReason} rows={2} onChange={(e) => onPatch((x) => ({ ...x, ratingReason: e.target.value }))} placeholder="For example: the blocker clears on Monday; the vendor confirmed" className={FIELD_TEXTAREA} />
           </Field>
         )}
       </div>
@@ -332,10 +338,10 @@ export function UpdateCard({
             {notice.text}
           </span>
         )}
-        <button type="button" onClick={onSave} disabled={locked || saveable === 0} className={SECONDARY} title={past && d.product ? "A past week's line is sent with Confirm & Send" : undefined}>
+        <button type="button" onClick={() => reasonOk() && onSave()} disabled={locked || saveable === 0} className={SECONDARY} title={past && d.product ? "A past week's line is sent with Confirm & Send" : undefined}>
           {busy === "save" ? "Saving…" : "Save Draft"}
         </button>
-        <button type="button" onClick={onSend} disabled={locked || !canSend} className={PRIMARY} title={p.product.alreadySent && !c.resend ? "Already sent this week. Tick Replace to resend it." : !c.narrative.trim() ? "Write the line for the Head first" : undefined}>
+        <button type="button" onClick={() => reasonOk() && onSend()} disabled={locked || !canSend} className={PRIMARY} title={p.product.alreadySent && !c.resend ? "Already sent this week. Tick Replace to resend it." : !c.narrative.trim() ? "Write the line for the Head first" : undefined}>
           <Send className="size-3.5" aria-hidden /> {busy === "send" ? "Sending…" : p.product.alreadySent ? "Confirm & Resend" : "Confirm & Send"}
         </button>
       </div>

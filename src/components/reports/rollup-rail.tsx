@@ -1,12 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { RollupFormSchema } from "@/lib/workspace-schema";
+import { readApiError } from "@/lib/form-errors";
+import { FieldError } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
 import { useRouter } from "next/navigation";
 import { Check, Download, FileText } from "lucide-react";
 import { LocalTime } from "@/components/reports/local-time";
 import { ReportEmailButton } from "@/components/reports/report-email-button";
 import { RecipientsDialog, type RecipientJson } from "@/components/reports/recipients-dialog";
-import { CARD, CARD_BG, PRIMARY, QUIET, SECONDARY, ragChipStyle, ragFill } from "@/lib/surface";
+import { CARD, CARD_BG, FIELD_INVALID, PRIMARY, QUIET, SECONDARY, ragChipStyle, ragFill } from "@/lib/surface";
 
 /**
  * Milestone B — the Head's roll-up rail: the week's spread, the one line for the
@@ -55,14 +59,17 @@ export function RollupRail({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsAck, setNeedsAck] = useState(false);
+  // docs/08 § Errors: the line's problem shows on the field; Approve stays enabled except while sending.
+  const fe = useFieldErrors({ schema: RollupFormSchema, values: { narrative }, idPrefix: "rollup" });
   const n = isoWeek.split("-W")[1];
   const approved = rollup.status === "Approved";
   const c = rollup.ragCounts;
   const sum = c.green + c.amber + c.red || 1;
 
   const approve = async () => {
-    setBusy(true);
     setError(null);
+    if (!fe.validate()) return;
+    setBusy(true);
     const res = await fetch("/api/rollup/approve", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -74,9 +81,12 @@ export function RollupRail({
       router.refresh();
       return;
     }
-    const err = (await res.json().catch(() => null))?.error;
+    const payload = await res.json().catch(() => null);
+    const err = payload?.error;
     if (err?.code === "UNSENT_CHECKINS") setNeedsAck(true);
-    setError(err?.message ?? "Could not approve — try again.");
+    const { message, fields } = readApiError(payload, "Could not approve. Try again.");
+    if (fields.narrative) fe.setServerErrors({ narrative: fields.narrative });
+    else setError(message);
   };
 
   return (
@@ -112,7 +122,7 @@ export function RollupRail({
         </div>
 
         <div>
-          <label htmlFor="rollup-line" className="mb-1.5 block text-[11.5px] font-semibold text-[var(--ink4)]">
+          <label htmlFor={fe.idOf("narrative")} className="mb-1.5 block text-[11.5px] font-semibold text-[var(--ink4)]">
             The week in one line, for the executive
           </label>
           {approved || !canApprove ? (
@@ -136,14 +146,21 @@ export function RollupRail({
               {!approved && !isCurrent && <p className="mt-1.5 text-[12px] text-[var(--ink4)]">Not approved — the week closed without a signed roll-up.</p>}
             </>
           ) : (
-            <textarea
-              id="rollup-line"
-              rows={3}
-              maxLength={1000}
-              value={narrative}
-              onChange={(e) => setNarrative(e.target.value)}
-              className={`w-full resize-none rounded-[8px] border border-[var(--input)] bg-background px-3 py-2.5 text-[13px] leading-[1.5] text-foreground focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none`}
-            />
+            <>
+              <textarea
+                {...fe.bind("narrative")}
+                rows={3}
+                maxLength={1000}
+                value={narrative}
+                onChange={(e) => setNarrative(e.target.value)}
+                className={`w-full resize-none rounded-[8px] border border-[var(--input)] bg-background px-3 py-2.5 text-[13px] leading-[1.5] text-foreground focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none ${FIELD_INVALID}`}
+              />
+              {fe.errors.narrative && (
+                <div className="mt-1.5">
+                  <FieldError id={`${fe.idOf("narrative")}-error`}>{fe.errors.narrative}</FieldError>
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -194,7 +211,7 @@ export function RollupRail({
           </div>
         ) : canApprove ? (
           <div className="flex flex-col gap-2">
-            <button type="button" onClick={() => void approve()} disabled={busy || narrative.trim().length < 5} className={`${PRIMARY} w-full justify-center`}>
+            <button type="button" onClick={() => void approve()} disabled={busy} className={`${PRIMARY} w-full justify-center`}>
               {busy ? "Approving…" : needsAck ? "Approve anyway (include unsent)" : "Approve roll-up"}
             </button>
             <p className="text-center text-[12px] text-[var(--ink4)]">

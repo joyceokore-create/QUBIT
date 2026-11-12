@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/api-guard";
+import { validationError } from "@/server/errors";
 import { canManageTeam } from "@/lib/access";
 import { updateTeam, deleteTeam, getTeam, UpdateTeamInput, TeamError } from "@/server/teams";
 
@@ -28,8 +29,8 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if ("response" in guard) return guard.response;
   const { id } = await params;
   if (!(await canManageTeam(guard.ctx, id))) return forbidden();
-  const parsed = UpdateTeamInput.safeParse(await req.json());
-  if (!parsed.success) return NextResponse.json({ error: { code: "VALIDATION", message: "Invalid input." } }, { status: 400 });
+  const parsed = UpdateTeamInput.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return validationError(parsed.error);
   try {
     await updateTeam(guard.ctx, id, parsed.data);
     return NextResponse.json({ ok: true });

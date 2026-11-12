@@ -1,6 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { BlockerFormSchema } from "@/lib/workspace-schema";
+import { readApiError } from "@/lib/form-errors";
+import { FieldError } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
 import { Check, Plus, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
@@ -22,6 +26,10 @@ export function ProjectBlockersSection({ projectId, canEdit }: { projectId: stri
   const [blockers, setBlockers] = useState<Blocker[]>([]);
   const [desc, setDesc] = useState("");
   const [severity, setSeverity] = useState<string>("Medium");
+  const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  // docs/08 § Errors: the description's problem shows on the field; Add stays enabled except while sending.
+  const fe = useFieldErrors({ schema: BlockerFormSchema, values: { description: desc }, idPrefix: "blocker" });
 
   const load = useCallback(async () => {
     const d = await fetch(`/api/projects/${projectId}/blockers`).then((r) => r.json());
@@ -33,17 +41,25 @@ export function ProjectBlockersSection({ projectId, canEdit }: { projectId: stri
   }, [load]);
 
   const add = async () => {
-    if (!desc.trim()) return;
+    setError(null);
+    if (adding || !fe.validate()) return;
+    setAdding(true);
     const res = await fetch(`/api/projects/${projectId}/blockers`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ description: desc.trim(), severity }),
-    });
-    if (res.ok) {
+    }).catch(() => null);
+    setAdding(false);
+    if (res?.ok) {
       setDesc("");
       setSeverity("Medium");
+      fe.reset();
       void load();
+      return;
     }
+    const { message, fields } = readApiError(await res?.json().catch(() => null), "Could not raise the blocker. Try again.");
+    if (fields.description) fe.setServerErrors({ description: fields.description });
+    else setError(message);
   };
   const resolve = async (id: string) => {
     if (await fetch(`/api/blockers/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: "Resolved" }) }).then((r) => r.ok)) void load();
@@ -104,17 +120,23 @@ export function ProjectBlockersSection({ projectId, canEdit }: { projectId: stri
       </div>
 
       {canEdit && (
-        <div className="flex items-center gap-2">
-          <Input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Raise a blocker…" className="h-8 flex-1 text-xs" onKeyDown={(e) => e.key === "Enter" && add()} />
+        <div className="flex flex-col gap-1.5">
+        <div className="flex items-start gap-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <Input {...fe.bind("description")} aria-label="Blocker" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Raise a blocker…" className="h-8 text-xs" onKeyDown={(e) => e.key === "Enter" && add()} />
+            {fe.errors.description && <FieldError id={`${fe.idOf("description")}-error`}>{fe.errors.description}</FieldError>}
+          </div>
           <Select value={severity} onValueChange={(v) => v && setSeverity(v)}>
             <SelectTrigger className="h-8 w-[110px] text-[11px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               {SEVERITIES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
             </SelectContent>
           </Select>
-          <button type="button" onClick={add} className="flex items-center gap-1 rounded-[8px] bg-[color-mix(in_oklab,var(--brand)_14%,transparent)] px-3 py-1.5 text-xs font-semibold text-brand">
+          <button type="button" onClick={add} disabled={adding} className="flex items-center gap-1 rounded-[8px] bg-[color-mix(in_oklab,var(--brand)_14%,transparent)] px-3 py-1.5 text-xs font-semibold text-brand disabled:opacity-60">
             <Plus className="size-3.5" /> Add
           </button>
+        </div>
+        {error && <p role="alert" className="text-[11.5px] text-[var(--bad)]">{error}</p>}
         </div>
       )}
     </div>

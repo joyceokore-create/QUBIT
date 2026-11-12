@@ -3,8 +3,11 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { Checklist, Choice, Drawer, DrawerError, DrawerFooter, DrawerFrame, DrawerHeader, DrawerSection, DrawerText, Field, FIELD_TEXTAREA, Kv } from "@/components/ui/drawer";
+import { Checklist, Choice, Drawer, DrawerFooter, DrawerFrame, DrawerHeader, DrawerSection, DrawerText, Field, FIELD_TEXTAREA, Kv } from "@/components/ui/drawer";
 import { Banner } from "@/components/ui/panel";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { readApiError } from "@/lib/form-errors";
+import { GateOverrideFormSchema } from "@/lib/workspace-schema";
 import { Chip } from "@/components/ui/status-pill";
 import { GateReviewBody, type GateTarget } from "@/components/gates/gate-review";
 import { CHECKPOINT_STATE_LABEL } from "@/lib/checkpoint-view";
@@ -50,7 +53,6 @@ interface Payload {
 
 // Blocked needs a linked blocker, which is raised from the Register; it is shown, not chosen.
 const CHOICES: CheckpointState[] = ["NotStarted", "InProgress", "Done"];
-const REASON_MIN = 5;
 
 export function GateDrawer({ projectId, gate, onClose, onSaved }: { projectId: string; gate: OpenGate | null; onClose: () => void; onSaved: () => void }) {
   const [review, setReview] = useState<GateTarget | null>(null);
@@ -107,7 +109,8 @@ function GateBody({ projectId, gate, onClose, onSaved, onReview }: { projectId: 
   const canEdit = Boolean(data?.canGovern && row && (!data.testingOnly || row.testing));
   const changed = row !== null && state !== null && state !== row.state;
   const needsReason = unmet !== null;
-  const reasonOk = !needsReason || reason.trim().length >= REASON_MIN;
+  // docs/08 § Errors: the early-close reason shows its problem on the field; Close Gate stays enabled.
+  const fe = useFieldErrors({ schema: GateOverrideFormSchema, values: { overrideReason: reason }, idPrefix: "gate" });
 
   // WS1 — the viewer's part in this gate's sign-off.
   const signOff = Boolean(row?.signOff);
@@ -123,9 +126,10 @@ function GateBody({ projectId, gate, onClose, onSaved, onReview }: { projectId: 
     fetch(`/api/projects/${projectId}/checkpoints`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, ...scopeBody }) });
 
   const save = async () => {
-    if (!row || !state || !changed || !reasonOk) return;
-    setBusy("save");
+    if (!row || !state || !changed) return;
     setError(null);
+    if (needsReason && !fe.validate()) return;
+    setBusy("save");
     // A later gate done closes the earlier ones still open — on the server, which stops at a
     // sign-off gate (submitted instead) and leaves a gate whose checklist refuses as it was.
     const res = await patch({ checkpointId: row.checkpointId, state, ...(state === "Done" ? { cascade: true } : {}), ...(needsReason ? { overrideReason: reason.trim() } : {}) });
@@ -136,7 +140,9 @@ function GateBody({ projectId, gate, onClose, onSaved, onReview }: { projectId: 
       return;
     }
     if (!res.ok) {
-      setError((await res.json().catch(() => null))?.error?.message ?? "Could not save the gate. Try again.");
+      const { message, fields } = readApiError(await res.json().catch(() => null), "Could not save the gate. Try again.");
+      if (fields.overrideReason) fe.setServerErrors({ overrideReason: fields.overrideReason });
+      else setError(message);
       setBusy(null);
       return;
     }
@@ -197,7 +203,7 @@ function GateBody({ projectId, gate, onClose, onSaved, onReview }: { projectId: 
               Cancel
             </button>
             {canEdit && (changed || !(canSubmit || canReview)) && (
-              <button type="button" onClick={() => void save()} disabled={!!busy || !changed || !reasonOk} className={canSubmit || canReview ? SECONDARY : PRIMARY}>
+              <button type="button" onClick={() => void save()} disabled={!!busy || !changed} className={canSubmit || canReview ? SECONDARY : PRIMARY}>
                 {busy === "save" ? "Saving…" : needsReason ? "Close Gate with Reason" : "Save Gate"}
               </button>
             )}
@@ -222,13 +228,14 @@ function GateBody({ projectId, gate, onClose, onSaved, onReview }: { projectId: 
       }
     >
       {loadError ? (
-        <DrawerError>Could not load this gate. Close the drawer and try again.</DrawerError>
+        <Banner tone="bad">Could not load this gate. Close the drawer and try again.</Banner>
       ) : !data || !row || !state ? (
         <p className="flex items-center gap-2 text-[12.5px] text-[var(--ds-ink3)]">
           <Loader2 className="size-3.5 animate-spin" aria-hidden /> Loading the gate…
         </p>
       ) : (
         <>
+          {error && <Banner tone="bad">{error}</Banner>}
           <Kv
             rows={[
               [gate.orgUnitId ? "Market" : "Track", gate.label],
@@ -260,6 +267,7 @@ function GateBody({ projectId, gate, onClose, onSaved, onReview }: { projectId: 
                   setState(s);
                   setUnmet(null);
                   setReason("");
+                  fe.reset();
                 }}
               />
             ) : (
@@ -288,13 +296,12 @@ function GateBody({ projectId, gate, onClose, onSaved, onReview }: { projectId: 
               <Banner tone="warn">
                 This gate is not satisfied yet{unmet.length ? `: ${unmet.map((u) => u.label).join("; ")}` : ""}. You can close it anyway with a reason; the reason is recorded.
               </Banner>
-              <Field label="Why Close It Anyway" hint={`At least ${REASON_MIN} characters. The Head sees this.`}>
-                <textarea value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} rows={2} placeholder="For example: the client signed off by email" className={FIELD_TEXTAREA} />
+              <Field label="Why Close It Anyway" htmlFor={fe.idOf("overrideReason")} error={fe.errors.overrideReason} hint="At least 5 characters. The Head sees this.">
+                <textarea {...fe.bind("overrideReason")} value={reason} onChange={(e) => setReason(e.target.value)} rows={2} placeholder="For example: the client signed off by email" className={FIELD_TEXTAREA} />
               </Field>
             </>
           )}
           {gate.orgUnitId && canEdit && <DrawerText hint>This changes {gate.label} only. To change every market at once, use the Product Track below the grid.</DrawerText>}
-          {error && <DrawerError>{error}</DrawerError>}
         </>
       )}
     </DrawerFrame>

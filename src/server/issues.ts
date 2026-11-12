@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { issueTitle } from "@/lib/issue-schema";
 import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
@@ -23,7 +24,7 @@ export const ISSUE_STATUS_FILTERS = [NOT_CLOSED, ...ISSUE_STATUSES] as const;
 /** UX fidelity Tier 2 — "+ New Issue" (design: Head of QA › Risks & Issues). */
 export const CreateIssueInput = z.object({
   projectId: z.string().uuid().nullable().optional(),
-  title: z.string().trim().min(3, "Give the issue a title of at least 3 characters.").max(200),
+  title: issueTitle,
   severity: z.enum(SEVERITY_ORDER),
   ownerId: z.string().uuid().nullable().optional(),
 });

@@ -1,6 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { BlockerFormSchema } from "@/lib/workspace-schema";
+import { readApiError } from "@/lib/form-errors";
+import { FIELD_INVALID } from "@/lib/surface";
+import { FieldError } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
 import Link from "next/link";
 import { ExternalLink, Flag, GitCommitHorizontal, MessageSquare, TriangleAlert } from "lucide-react";
 import { ConversationDrawer } from "@/components/conversation/conversation-drawer";
@@ -123,6 +128,10 @@ export function ProjectBoard({
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [flaggingId, setFlaggingId] = useState<string | null>(null);
   const [flagReason, setFlagReason] = useState("");
+  const [flagError, setFlagError] = useState<string | null>(null);
+  const [flagBusy, setFlagBusy] = useState(false);
+  // docs/08 § Errors: the reason's problem shows under the field; Flag stays enabled except while sending.
+  const fe = useFieldErrors({ schema: BlockerFormSchema, values: { description: flagReason }, idPrefix: "flag-blocked" });
 
   const load = useCallback(async () => {
     const d = await fetch(`/api/projects/${projectId}/tasks`).then((r) => r.json());
@@ -171,17 +180,31 @@ export function ProjectBoard({
   }, [focusTaskId, tasks.length > 0]);
 
   const flagBlocked = async (id: string) => {
-    if (!flagReason.trim()) return;
-    const ok = await fetch(`/api/tasks/${id}/block`, {
+    setFlagError(null);
+    if (flagBusy || !fe.validate()) return;
+    setFlagBusy(true);
+    const res = await fetch(`/api/tasks/${id}/block`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ description: flagReason.trim() }),
-    }).then((r) => r.ok);
-    if (ok) {
+    }).catch(() => null);
+    setFlagBusy(false);
+    if (res?.ok) {
       setFlaggingId(null);
       setFlagReason("");
+      fe.reset();
       void load();
+      return;
     }
+    const { message, fields } = readApiError(await res?.json().catch(() => null), "Could not flag the task. Try again.");
+    if (fields.description) fe.setServerErrors({ description: fields.description });
+    else setFlagError(message);
+  };
+  const closeFlag = () => {
+    setFlaggingId(null);
+    setFlagReason("");
+    setFlagError(null);
+    fe.reset();
   };
   const unflagBlocked = async (id: string) => {
     const ok = await fetch(`/api/tasks/${id}/block`, { method: "DELETE" }).then((r) => r.ok);
@@ -479,31 +502,34 @@ export function ProjectBoard({
                           Resolve blocker
                         </button>
                       ) : flaggingId === t.id ? (
-                        <div className="flex items-center gap-1">
-                          <input
-                            value={flagReason}
-                            onChange={(e) => setFlagReason(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") void flagBlocked(t.id);
-                              if (e.key === "Escape") {
-                                setFlaggingId(null);
-                                setFlagReason("");
-                              }
-                            }}
-                            placeholder="Blocked by…"
-                            autoFocus
-                            className="h-6 min-w-0 flex-1 rounded-[5px] border border-ink-4 bg-background px-1.5 text-[10.5px] text-foreground outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none"
-                          />
-                          <button type="button" onClick={() => flagBlocked(t.id)} className="text-[10px] font-semibold text-[var(--bad)]" aria-label="Confirm blocked">
-                            Flag
-                          </button>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1">
+                            <input
+                              {...fe.bind("description")}
+                              aria-label="What is blocking this task"
+                              value={flagReason}
+                              onChange={(e) => setFlagReason(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") void flagBlocked(t.id);
+                                if (e.key === "Escape") closeFlag();
+                              }}
+                              placeholder="Blocked by…"
+                              autoFocus
+                              className={`h-6 min-w-0 flex-1 rounded-[5px] border border-ink-4 bg-background px-1.5 text-[10.5px] text-foreground outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none ${FIELD_INVALID}`}
+                            />
+                            <button type="button" onClick={() => flagBlocked(t.id)} disabled={flagBusy} className="text-[10px] font-semibold text-[var(--bad)] disabled:opacity-60" aria-label="Confirm blocked">
+                              Flag
+                            </button>
+                          </div>
+                          {fe.errors.description && <FieldError id={`${fe.idOf("description")}-error`}>{fe.errors.description}</FieldError>}
+                          {flagError && <p role="alert" className="text-[10.5px] text-[var(--bad)]">{flagError}</p>}
                         </div>
                       ) : (
                         <button
                           type="button"
                           onClick={() => {
+                            closeFlag();
                             setFlaggingId(t.id);
-                            setFlagReason("");
                           }}
                           className="flex items-center gap-1 self-start text-[10px] text-[var(--ink5)] hover:text-[var(--bad)]"
                         >
