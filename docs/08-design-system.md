@@ -389,3 +389,22 @@ Tailwind theme extension maps `brand` colour utilities to `var(--brand)` so `bg-
 - Colour is never the only signal — pair RAG colour with a text label (as the reference does).
 - Focus states visible; panels trap focus and close on Esc; overlay click closes.
 - Sufficient contrast for text on brand backgrounds.
+
+### Errors (designer, 12 Nov 2026)
+Errors sit **on the field**, not at the bottom of the form (plan: `mwashukes-desk/plans/error-states-plan.md`).
+- **Field error:** the control gets `aria-invalid="true"` → border `--ds-bad` (#dc2626 light, #f87171 dark), and
+  while focused a 2px red border (`FIELD_INVALID` in `surface.ts`; `.ds-form` rules for drawer forms). The
+  message replaces the hint under the control: 12px `--ds-bad-text` (#b91c1c, 5.7:1) with a `CircleAlert`
+  icon (colour is never the only signal), id `${fieldId}-error`, referenced by `aria-describedby`.
+  Components: `Field` / `FieldError` (`ui/drawer.tsx`), `AuthField` (sign-in, `--l-err`).
+- **When:** submit and Next stay enabled (disabled only while sending). Clicking validates the form (or
+  the wizard step), shows every problem and focuses the first; a wizard step with errors can't be left.
+  While typing, an error appears after the person leaves the field or pauses ~1 s, and clears on the
+  keystroke that fixes it. Hook: `useFieldErrors` (`components/forms/use-field-errors.ts`).
+- **Server:** `validationError()` (`server/errors.ts`) returns `{ error: { code, message, fields } }`
+  (first issue per field); field-specific domain errors (e.g. email already in use) also send `fields`.
+  `useAdminMutation({ onFieldErrors })` routes them to the fields. Client checks are format only; the
+  server re-validates everything.
+- **Form-level** (network, permission, conflict): `Banner tone="bad"` at the top of the form. Sign-in
+  keeps one generic credentials message (never which part was wrong).
+- **Copy:** `form-messages.ts` — sentence case, specific, full stop, restates any limit.

@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { CircleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -92,16 +93,25 @@ export function AuthShell({ brand, art, heading, sentence, footer, children }: A
 /* ── Form pieces shared by the pre-auth screens (labels above, placeholders inside, U2/U3) ── */
 
 export const AUTH_INPUT_CLASS =
-  "box-border h-9 w-full rounded-[10px] border border-[var(--l-field-bd)] bg-[var(--l-field-bg)] px-3 text-[14px] text-[var(--l-ink)] outline-none transition-colors placeholder:text-[var(--l-ph)] focus:border-[var(--login-brand)] focus-visible:ring-[3px] focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_22%,transparent)]";
+  "box-border h-9 w-full rounded-[10px] border border-[var(--l-field-bd)] bg-[var(--l-field-bg)] px-3 text-[14px] text-[var(--l-ink)] outline-none transition-colors placeholder:text-[var(--l-ph)] focus:border-[var(--login-brand)] focus-visible:ring-[3px] focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_22%,transparent)] aria-invalid:border-[var(--l-err)] aria-invalid:focus:border-[var(--l-err)] aria-invalid:focus-visible:ring-[color-mix(in_oklab,var(--l-err)_22%,transparent)]";
 
-export function AuthField({ id, label, hint, children }: { id: string; label: string; hint?: string; children: ReactNode }) {
+/** Sign-in field. `error` (docs/08 § Errors) replaces the hint with a message under the control
+ * (id `${id}-error`); the control marks itself with aria-invalid for the red border. */
+export function AuthField({ id, label, hint, error, children }: { id: string; label: string; hint?: string; error?: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
       <label htmlFor={id} className="text-[12.5px] font-semibold text-[var(--l-ink-2)]">
         {label}
       </label>
       {children}
-      {hint && <p className="text-[12px] text-[var(--l-ink-3)]">{hint}</p>}
+      {error ? (
+        <p id={`${id}-error`} className="flex items-start gap-1 text-[12px] leading-[1.4] text-[var(--l-err)]">
+          <CircleAlert className="mt-[1.5px] size-3.5 flex-none" aria-hidden />
+          <span>{error}</span>
+        </p>
+      ) : (
+        hint && <p className="text-[12px] text-[var(--l-ink-3)]">{hint}</p>
+      )}
     </div>
   );
 }

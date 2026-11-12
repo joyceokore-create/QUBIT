@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { riskScore, riskTitle } from "@/lib/risk-schema";
 import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
@@ -17,10 +18,11 @@ export const RISK_STATUSES = ["Open", "Monitoring", "Mitigated", "Closed"] as co
 
 export const CreateRiskInput = z.object({
   projectId: z.string().uuid().nullable().optional(),
-  title: z.string().min(3),
+  // Same rules and copy as the New Risk form (src/lib/risk-schema.ts).
+  title: riskTitle,
   category: z.string().nullable().optional(),
-  probability: z.number().int().min(1).max(5),
-  impact: z.number().int().min(1).max(5),
+  probability: riskScore("a probability"),
+  impact: riskScore("an impact"),
   mitigation: z.string().nullable().optional(),
   ownerId: z.string().uuid().nullable().optional(),
 });

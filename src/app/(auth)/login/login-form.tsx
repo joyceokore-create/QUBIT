@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
+import { z } from "zod";
+import { useFieldErrors, type FieldBinding } from "@/components/forms/use-field-errors";
 import { SSO_PROVIDER_ID } from "@/lib/sso";
 import {
   AUTH_INPUT_CLASS,
@@ -50,6 +52,17 @@ function looksLikeCompleteDomain(email: string): boolean {
   return Boolean(domain && domain.includes(".") && !domain.endsWith("."));
 }
 
+const SignInEmailSchema = z.object({
+  email: z
+    .string()
+    .trim()
+    .min(1, "Enter your work email.")
+    .refine(looksLikeCompleteDomain, "Enter your full work email, for example name@company.com."),
+});
+const SignInCodeSchema = z.object({
+  totpCode: z.string().regex(/^\d{6}$/, "Enter the 6-digit code from your authenticator app."),
+});
+
 function MicrosoftMark() {
   return (
     <svg width="15" height="15" viewBox="0 0 21 21" aria-hidden="true">
@@ -77,6 +90,10 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null, de
   const [org, setOrg] = useState<OrgLookup>({ status: "idle" });
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focusRef = useRef<HTMLInputElement | null>(null);
+  // docs/08 § Errors: format problems show on the field. Wrong email/password/code stays ONE
+  // generic form-level message (never which part was wrong).
+  const emailErrors = useFieldErrors({ schema: SignInEmailSchema, values: { email }, idPrefix: "" });
+  const codeErrors = useFieldErrors({ schema: SignInCodeSchema, values: { totpCode }, idPrefix: "" });
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -113,8 +130,9 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null, de
   function goToPassword(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!looksLikeCompleteDomain(email)) {
-      setError("Enter your full work email, for example name@company.com.");
+    if (!emailErrors.validate()) return;
+    if (org.status === "not-found") {
+      emailErrors.setServerErrors({ email: "No organisation uses that email domain. Check it, or request access." });
       return;
     }
     setStep("password");
@@ -123,6 +141,7 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null, de
   async function submitCredentials(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    if (step === "code" && !codeErrors.validate()) return;
     setLoading(true);
     const result = await signIn("credentials", { email, password, totpCode: totpCode || undefined, redirect: false });
     setLoading(false);
@@ -200,10 +219,10 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null, de
       {!ssoEnabled && step === "email" && (
         <form onSubmit={goToPassword} className="flex flex-col gap-4" noValidate>
           <AuthHeading title="Sign In to QUBIT" lead="Use your work email to continue." />
-          <AuthField id="email" label="Work email" hint="Your email domain identifies your organisation.">
+          <AuthField id="email" label="Work email" hint="Your email domain identifies your organisation." error={emailErrors.errors.email}>
             <input
               ref={focusRef}
-              id="email"
+              {...emailErrors.bind("email")}
               type="email"
               autoComplete="email"
               required
@@ -213,13 +232,8 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null, de
               onChange={(e) => setEmail(e.target.value)}
             />
           </AuthField>
-          {org.status === "not-found" && (
-            <p className="text-[12.5px] text-[var(--l-ink-3)]" aria-live="polite">
-              No organisation uses that email domain.
-            </p>
-          )}
           {errorLine}
-          <button type="submit" className={AUTH_PRIMARY_CLASS} disabled={org.status === "not-found"}>
+          <button type="submit" className={AUTH_PRIMARY_CLASS}>
             Continue
           </button>
           <div className="flex items-center justify-between text-[12.5px] text-[var(--l-ink-3)]">
@@ -271,11 +285,11 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null, de
       {!ssoEnabled && step === "code" && (
         <form onSubmit={submitCredentials} className="flex flex-col gap-4" noValidate>
           <AuthHeading title="Enter Your Code" lead="Open your authenticator app and enter the 6-digit code for QUBIT." />
-          <AuthField id="totpCode" label="Authenticator code">
-            <OtpBoxes inputRef={focusRef} value={totpCode} onChange={setTotpCode} />
+          <AuthField id="totpCode" label="Authenticator code" error={codeErrors.errors.totpCode}>
+            <OtpBoxes inputRef={focusRef} value={totpCode} onChange={setTotpCode} binding={codeErrors.bind("totpCode")} />
           </AuthField>
           {errorLine}
-          <button type="submit" disabled={loading || totpCode.length !== 6} aria-busy={loading} className={AUTH_PRIMARY_CLASS}>
+          <button type="submit" disabled={loading} aria-busy={loading} className={AUTH_PRIMARY_CLASS}>
             {loading ? <><Spinner />Verifying…</> : "Verify"}
           </button>
           <div className="flex items-center justify-between text-[12.5px] text-[var(--l-ink-3)]">
@@ -331,8 +345,10 @@ function ForgotPassword() {
 
 /** Design spec v2 code entry: six boxes, the current one ringed in brand. One real input sits
  * over the boxes (transparent text), so paste, autofill and screen readers work as normal. */
-function OtpBoxes({ value, onChange, inputRef }: { value: string; onChange: (v: string) => void; inputRef?: React.Ref<HTMLInputElement> }) {
+function OtpBoxes({ value, onChange, inputRef, binding }: { value: string; onChange: (v: string) => void; inputRef?: React.Ref<HTMLInputElement>; binding?: FieldBinding }) {
   const [focused, setFocused] = useState(false);
+  // docs/08 § Errors: the whole group turns red when the code is invalid (one message under it).
+  const invalid = Boolean(binding?.["aria-invalid"]);
   return (
     <div className="relative">
       <div aria-hidden className="flex gap-2">
@@ -342,7 +358,13 @@ function OtpBoxes({ value, onChange, inputRef }: { value: string; onChange: (v: 
             <span
               key={i}
               className="grid h-12 flex-1 place-items-center rounded-[10px] border bg-[var(--l-field-bg)] text-[20px] font-bold text-[var(--l-ink)]"
-              style={current ? { borderColor: "var(--login-brand)", boxShadow: "0 0 0 3px color-mix(in oklab, var(--login-brand) 18%, transparent)" } : { borderColor: "var(--l-field-bd)" }}
+              style={
+                invalid
+                  ? { borderColor: "var(--l-err)", boxShadow: current ? "0 0 0 3px color-mix(in oklab, var(--l-err) 18%, transparent)" : undefined }
+                  : current
+                    ? { borderColor: "var(--login-brand)", boxShadow: "0 0 0 3px color-mix(in oklab, var(--login-brand) 18%, transparent)" }
+                    : { borderColor: "var(--l-field-bd)" }
+              }
             >
               {value[i] ?? ""}
             </span>
@@ -352,6 +374,8 @@ function OtpBoxes({ value, onChange, inputRef }: { value: string; onChange: (v: 
       <input
         ref={inputRef}
         id="totpCode"
+        aria-invalid={binding?.["aria-invalid"]}
+        aria-describedby={binding?.["aria-describedby"]}
         inputMode="numeric"
         autoComplete="one-time-code"
         maxLength={6}
@@ -359,7 +383,10 @@ function OtpBoxes({ value, onChange, inputRef }: { value: string; onChange: (v: 
         className="absolute inset-0 h-full w-full cursor-text bg-transparent text-transparent caret-transparent outline-none selection:bg-transparent"
         value={value}
         onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
+        onBlur={() => {
+          setFocused(false);
+          binding?.onBlur();
+        }}
         onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, 6))}
       />
     </div>

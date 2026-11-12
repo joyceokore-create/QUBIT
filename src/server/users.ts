@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { inviteEmail, inviteName } from "@/lib/invite-schema";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { withTenant, type TenantContext } from "@/lib/tenant";
@@ -14,8 +15,9 @@ import { pageInfo, type PageInfo } from "@/lib/list-state";
 import { containsText } from "@/lib/list-query";
 
 export const CreateUserInput = z.object({
-  name: z.string().min(1),
-  email: z.string().email(),
+  // Same rules and copy as the Invite form (src/lib/invite-schema.ts).
+  name: inviteName,
+  email: inviteEmail,
   // No admin-supplied password, ever. Under SSO the person signs in with Microsoft; without
   // SSO they set their own password via an emailed one-time link (M-O3, docs/22). A temp
   // password is never generated, displayed, or transported. Role names are validated in the

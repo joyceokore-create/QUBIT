@@ -1,9 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ArrowLeft, Check, Circle } from "lucide-react";
+import { ArrowLeft, Check, Circle, CircleAlert } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
-import { FIELD_FOCUS, FOCUS } from "@/lib/surface";
+import { FIELD_FOCUS, FIELD_INVALID, FOCUS } from "@/lib/surface";
 import { cn } from "@/lib/utils";
 
 /**
@@ -98,26 +98,47 @@ export function Kv({ rows }: { rows: [string, ReactNode][] }) {
   );
 }
 
-/** A labelled field (`.f`): label 11.5/600 ink3 above the control, optional hint under it. */
-export function Field({ label, hint, children, htmlFor }: { label: ReactNode; hint?: ReactNode; children: ReactNode; htmlFor?: string }) {
-  const Tag = htmlFor ? "div" : "label";
-  return (
-    <Tag className="flex flex-col gap-[5px]">
-      {htmlFor ? (
+/** A labelled field (`.f`): label 11.5/600 ink3 above the control, then the hint — or, when
+ * `error` is set, the error in its place (docs/08 § Errors: red border on the control via
+ * `aria-invalid`, message under it with id `${htmlFor}-error`). The hint and error always sit
+ * OUTSIDE the <label>, so they never become part of the field's accessible name. */
+export function Field({ label, hint, error, children, htmlFor }: { label: ReactNode; hint?: ReactNode; error?: string; children: ReactNode; htmlFor?: string }) {
+  const under = error ? <FieldError id={htmlFor ? `${htmlFor}-error` : undefined}>{error}</FieldError> : hint ? <span className="text-[12px] text-[var(--ds-ink3)]">{hint}</span> : null;
+  if (htmlFor) {
+    return (
+      <div className="flex flex-col gap-[5px]">
         <label htmlFor={htmlFor} className="text-[11.5px] font-semibold text-[var(--ds-ink3)]">
           {label}
         </label>
-      ) : (
+        {children}
+        {under}
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-[5px]">
+      <label className="flex flex-col gap-[5px]">
         <span className="text-[11.5px] font-semibold text-[var(--ds-ink3)]">{label}</span>
-      )}
-      {children}
-      {hint && <span className="text-[12px] text-[var(--ds-ink3)]">{hint}</span>}
-    </Tag>
+        {children}
+      </label>
+      {under}
+    </div>
+  );
+}
+
+/** The message under an invalid field: 12px `--ds-bad-text` with an alert icon (colour is never
+ * the only signal — the brand red is close to the error red). */
+export function FieldError({ id, children }: { id?: string; children: ReactNode }) {
+  return (
+    <span id={id} className="flex items-start gap-1 text-[12px] leading-[1.4] text-[var(--ds-bad-text)]">
+      <CircleAlert className="mt-[1.5px] size-3.5 flex-none" aria-hidden />
+      <span>{children}</span>
+    </span>
   );
 }
 
 /** Field control classes (`.fi`): 36px, line border, radius 10, 13px ink. */
-export const FIELD_INPUT = `min-h-[var(--ds-control-h)] w-full rounded-[var(--ds-radius-control)] border border-[var(--ds-line)] bg-[var(--ds-card)] px-[11px] text-[13px] text-[var(--ds-ink)] placeholder:text-[var(--ds-placeholder)] ${FIELD_FOCUS}`;
+export const FIELD_INPUT = `min-h-[var(--ds-control-h)] w-full rounded-[var(--ds-radius-control)] border border-[var(--ds-line)] bg-[var(--ds-card)] px-[11px] text-[13px] text-[var(--ds-ink)] placeholder:text-[var(--ds-placeholder)] ${FIELD_FOCUS} ${FIELD_INVALID}`;
 export const FIELD_TEXTAREA = `${FIELD_INPUT} min-h-16 py-[9px] leading-[1.5]`;
 
 export interface ChoiceOption<T extends string> {

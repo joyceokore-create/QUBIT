@@ -33,7 +33,12 @@ describe("LoginForm (two-panel, one step per screen — UX plan D8c)", () => {
   it("refuses to continue without a complete email domain", () => {
     render(<LoginForm callbackUrl="/dashboard" />);
     continueWith("user@");
-    expect(screen.getByRole("alert").textContent).toMatch(/full work email/i);
+    // docs/08 § Errors: the problem shows on the field, not as a form-level alert.
+    const email = screen.getByLabelText("Work email");
+    expect(email).toHaveAttribute("aria-invalid", "true");
+    expect(email).toHaveAttribute("aria-describedby", "email-error");
+    expect(document.getElementById("email-error")?.textContent).toMatch(/full work email/i);
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(document.querySelector("#password")).toBeNull();
   });
 

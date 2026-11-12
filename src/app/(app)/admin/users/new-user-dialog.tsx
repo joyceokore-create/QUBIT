@@ -1,6 +1,10 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { Field } from "@/components/ui/drawer";
+import { Banner } from "@/components/ui/panel";
+import { InviteDetailsSchema } from "@/lib/invite-schema";
 import { ArrowLeft, ArrowRight, Check, Copy, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -88,7 +92,8 @@ export function NewUserDialog({
     primaryView,
     null,
   );
-  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  // docs/08 § Errors: Name and Email show their problems on the field (Next stays enabled).
+  const fe = useFieldErrors({ schema: InviteDetailsSchema, values: { name, email }, idPrefix: "nu" });
 
   // Superadmin is a role, not a view (docs/17 §1) — it derives every view and lands on the
   // executive cockpit. Surfacing it as a "dashboard view" is a shortcut: selecting it sets
@@ -112,16 +117,15 @@ export function NewUserDialog({
     setRole("Member");
     setDeclaredViews([]);
     setError(null);
+    fe.reset();
     setCopied(false);
     setCreated(null);
   }
 
   function next() {
     setError(null);
-    if (step === 0 && (!name.trim() || !emailValid)) {
-      setError(!name.trim() ? "Enter a full name." : "Enter a valid work email.");
-      return;
-    }
+    // Can't leave a step with errors (decision #10): they show on the step's own fields.
+    if (step === 0 && !fe.validate(["name", "email"])) return;
     setStep((s) => Math.min(STEPS.length - 1, s + 1));
   }
 
@@ -143,6 +147,14 @@ export function NewUserDialog({
       },
       {
         fallback: "Could not create the user.",
+        // A rejection that belongs to Name or Email (e.g. already in use) jumps back to that step
+        // and shows on the field; anything else is the banner at the top.
+        onFieldErrors: (fields) => {
+          if (fields.name || fields.email) setStep(0);
+          else if (fields.roles) setStep(1);
+          fe.setServerErrors(fields, ["name", "email"]);
+          if (!fields.name && !fields.email && fields.roles) setError(fields.roles);
+        },
         onSuccess: (data) => {
           const d = (data ?? {}) as { emailed?: boolean; acceptUrl?: string; sso?: boolean };
           setCreated({ email, emailed: Boolean(d.emailed), acceptUrl: d.acceptUrl, sso: Boolean(d.sso) });
@@ -196,14 +208,14 @@ export function NewUserDialog({
             </div>
 
             <form onSubmit={handleSubmit} className="mt-1 flex flex-col gap-4" noValidate>
+              {error && <Banner tone="bad">{error}</Banner>}
               {step === 0 && (
                 <>
-                  <Field label="Full name" htmlFor="nu-name">
-                    <Input id="nu-name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" autoFocus />
+                  <Field label="Full Name" htmlFor={fe.idOf("name")} error={fe.errors.name}>
+                    <Input {...fe.bind("name")} required value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" autoComplete="off" autoFocus />
                   </Field>
-                  <Field label="Work email" htmlFor="nu-email">
-                    <Input id="nu-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@company.com" />
-                    <p className="text-xs text-ink-3">Their email domain routes them to this organization at sign-in.</p>
+                  <Field label="Work Email" htmlFor={fe.idOf("email")} error={fe.errors.email} hint="Their email domain routes them to this organization at sign-in.">
+                    <Input {...fe.bind("email")} type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@company.com" autoComplete="off" />
                   </Field>
                 </>
               )}
@@ -276,16 +288,17 @@ export function NewUserDialog({
                 </>
               )}
 
-              {error && <p role="alert" className="text-sm text-status-red">{error}</p>}
-
               <div className="flex items-center justify-between">
                 <Button type="button" variant="ghost" disabled={step === 0} onClick={() => { setError(null); setStep((s) => Math.max(0, s - 1)); }}>
                   <ArrowLeft className="size-4" /> Back
                 </Button>
+                {/* Distinct keys: without them React reuses one <button> and flips its type to
+                    "submit" during the Next click, so the browser submits on that same click and
+                    the Review step is skipped. */}
                 {step < STEPS.length - 1 ? (
-                  <Button type="button" onClick={next}>Next <ArrowRight className="size-4" /></Button>
+                  <Button key="next" type="button" onClick={next}>Next <ArrowRight className="size-4" /></Button>
                 ) : (
-                  <Button type="submit" disabled={busy}>{busy ? "Inviting…" : "Invite User"}</Button>
+                  <Button key="submit" type="submit" disabled={busy}>{busy ? "Inviting…" : "Invite User"}</Button>
                 )}
               </div>
             </form>
@@ -331,15 +344,6 @@ export function NewUserDialog({
         )}
       </DialogContent>
     </Dialog>
-  );
-}
-
-function Field({ label, htmlFor, children }: { label: string; htmlFor: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={htmlFor} className="text-sm font-medium text-ink-2">{label}</label>
-      {children}
-    </div>
   );
 }
 

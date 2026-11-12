@@ -49,6 +49,12 @@ export const FOCUS =
 export const FIELD_FOCUS =
   "outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0";
 
+/** Invalid text field (docs/08 § Errors): keyed on `aria-invalid="true"`, so a form only sets the
+ * attribute. Red 1px border at rest; red 2px (border + ring) while focused — replaces the ink
+ * focus border while the field is wrong. Pair with FIELD_FOCUS. */
+export const FIELD_INVALID =
+  "aria-invalid:border-[var(--ds-bad)] aria-invalid:focus:border-[var(--ds-bad)] aria-invalid:focus:ring-[var(--ds-bad)]";
+
 // ── Buttons, tabs, inputs and table headers — design spec v2 (docs/08 § Components).
 // Controls are 36px with a 10px radius; compact (in-row) controls 28px / 8px. The primary
 // keeps the brand fill in both themes (deviation 4) and darkens on hover, never lightens.
@@ -79,7 +85,7 @@ export const COMPACT = `inline-flex h-[var(--ds-control-h-compact)] items-center
 /** The compact primary (an in-row "Confirm & Send"). */
 export const COMPACT_PRIMARY = `inline-flex h-[var(--ds-control-h-compact)] items-center justify-center gap-1 whitespace-nowrap rounded-[var(--ds-radius-compact)] px-[11px] text-[12px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${PRIMARY_FILL} ${FOCUS}`;
 /** U3 — a text input / select at the control size and radius. */
-export const INPUT = `h-[var(--ds-control-h)] rounded-[var(--ds-radius-control)] border border-[var(--ds-line)] bg-[var(--ds-card)] px-3 text-[13px] text-[var(--ds-ink)] placeholder:text-[var(--ds-placeholder)] ${FIELD_FOCUS}`;
+export const INPUT = `h-[var(--ds-control-h)] rounded-[var(--ds-radius-control)] border border-[var(--ds-line)] bg-[var(--ds-card)] px-3 text-[13px] text-[var(--ds-ink)] placeholder:text-[var(--ds-placeholder)] ${FIELD_FOCUS} ${FIELD_INVALID}`;
 /** Table header row (put on <thead>): its own grey band (`--ds-thead`, a step darker than the
  * row hover so the two never look alike), rounded ends, 12.5px/600 ink2 Title Case labels —
  * not uppercase. Designer, 12 Nov 2026: larger and roomier than the design's 11px `.sgt`. */

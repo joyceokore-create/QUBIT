@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Sparkles } from "lucide-react";
+import { CircleAlert, Sparkles } from "lucide-react";
 import { CARD } from "@/lib/surface";
 import { cn } from "@/lib/utils";
 
@@ -99,11 +99,14 @@ export function SuggestedPill({ children = "Suggested from project signals" }: {
   );
 }
 
-/** Banner (`.banner`): info or warn wash, 12.5 ink, no icon. */
-export function Banner({ tone = "info", children, className }: { tone?: "info" | "warn"; children: ReactNode; className?: string }) {
+/** Banner (`.banner`): info / warn / bad wash, 12.5 ink. `bad` is the form-level error (network,
+ * permission, conflict — never a single field's problem): red wash with an alert icon. */
+const BANNER_BG = { info: "var(--ds-infow)", warn: "var(--ds-warnw)", bad: "var(--ds-badw)" } as const;
+export function Banner({ tone = "info", children, className, id }: { tone?: "info" | "warn" | "bad"; children: ReactNode; className?: string; id?: string }) {
   return (
-    <div role={tone === "warn" ? "alert" : "note"} className={cn("rounded-[10px] px-3 py-2.5 text-[12.5px] text-[var(--ds-ink)]", className)} style={{ background: tone === "warn" ? "var(--ds-warnw)" : "var(--ds-infow)" }}>
-      {children}
+    <div id={id} role={tone === "info" ? "note" : "alert"} className={cn("flex items-start gap-2 rounded-[10px] px-3 py-2.5 text-[12.5px] text-[var(--ds-ink)]", className)} style={{ background: BANNER_BG[tone] }}>
+      {tone === "bad" && <CircleAlert className="mt-px size-4 flex-none text-[var(--ds-bad-text)]" aria-hidden />}
+      <div className="min-w-0">{children}</div>
     </div>
   );
 }
