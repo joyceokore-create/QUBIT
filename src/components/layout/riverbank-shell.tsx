@@ -492,7 +492,7 @@ export function RiverbankShell({
       {/* Content column, offset by the sidebar on desktop */}
       <div className={`flex min-h-screen flex-col transition-[margin] duration-300 motion-reduce:transition-none ${open ? (newNav ? "md:ml-[var(--ds-sidebar-w)]" : "md:ml-64") : "md:ml-20"}`}>
         {newNav ? (
-          /* Design spec v2 top bar: white, 58px — search, "+ New", Ask Q, bell, account. */
+          /* Design spec v2 top bar: white, 58px — organisation, search, "+ New" (ink), Ask Q, bell, account. */
           <header className="sticky top-0 z-30 flex h-[var(--ds-topbar-h)] items-center gap-2.5 border-b border-[var(--ds-line)] bg-[var(--ds-card)] px-4 md:px-[22px]">
             <button
               type="button"
@@ -502,8 +502,9 @@ export function RiverbankShell({
             >
               <Menu className="size-5" />
             </button>
+            {/* Designer, 12 Nov 2026: the organisation name on the left (as before), search on the right. */}
+            <p className="min-w-0 flex-1 truncate text-[15px] font-bold tracking-[-.01em] text-[var(--ds-ink)]">{tenantName}</p>
             <CommandPalette menu={newNav.groups} variant="light" />
-            <span className="flex-1" aria-hidden />
             <SetupNudge />
             {newNav.create && newNav.create.length > 0 && <NewMenu items={newNav.create} />}
             <AskQButton variant="secondary" />

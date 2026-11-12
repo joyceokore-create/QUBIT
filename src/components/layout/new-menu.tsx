@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { PRIMARY } from "@/lib/surface";
+import { INK_BUTTON } from "@/lib/surface";
 
 export interface NewMenuItem {
   key: string;
@@ -17,7 +17,7 @@ export interface NewMenuItem {
 export function NewMenu({ items }: { items: NewMenuItem[] }) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger aria-label="Create new" className={PRIMARY}>
+      <DropdownMenuTrigger aria-label="Create new" className={INK_BUTTON}>
         <Plus className="size-3.5" aria-hidden />
         <span className="max-sm:sr-only">New</span>
       </DropdownMenuTrigger>

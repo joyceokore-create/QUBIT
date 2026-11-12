@@ -117,11 +117,19 @@ export function UserMenu({
           <ChevronDown className="size-[13px] flex-none opacity-70 max-sm:hidden" />
         </DropdownMenuTrigger>
       ) : variant === "light" ? (
+        // Designer, 12 Nov 2026: avatar + name (email muted underneath) + arrow.
         <DropdownMenuTrigger
           aria-label="Account menu"
-          className="flex size-[var(--ds-control-h)] flex-none items-center justify-center rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface2)] text-[11px] font-bold text-[var(--ds-ink2)] transition-colors hover:border-[var(--ds-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-brand)]"
+          className="flex flex-none items-center gap-2 rounded-[var(--ds-radius-control)] py-1 pl-1 pr-1.5 text-left transition-colors hover:bg-[var(--ds-surface2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-brand)]"
         >
-          {getInitials(name)}
+          <span className="flex size-[var(--ds-control-h)] flex-none items-center justify-center rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface2)] text-[11px] font-bold text-[var(--ds-ink2)]">
+            {getInitials(name)}
+          </span>
+          <span className="flex min-w-0 flex-col leading-tight max-xl:hidden">
+            <span className="max-w-[220px] truncate text-[13px] font-semibold text-[var(--ds-ink)]">{name || "Account"}</span>
+            {email && <span className="max-w-[220px] truncate text-[11.5px] text-[var(--ds-ink3)]">{email}</span>}
+          </span>
+          <ChevronDown className="size-3.5 flex-none text-[var(--ds-ink3)] max-md:hidden" aria-hidden />
         </DropdownMenuTrigger>
       ) : (
         <DropdownMenuTrigger

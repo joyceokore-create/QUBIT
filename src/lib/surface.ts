@@ -48,6 +48,9 @@ export const FOCUS =
 // keeps the brand fill in both themes (deviation 4) and darkens on hover, never lightens.
 const PRIMARY_FILL = "bg-[var(--ds-brand)] text-[var(--ds-on-brand)] hover:bg-[color-mix(in_oklab,var(--ds-brand)_86%,black)]";
 export const PRIMARY = `inline-flex h-[var(--ds-control-h)] items-center justify-center gap-1 whitespace-nowrap rounded-[var(--ds-radius-control)] px-3.5 text-[12.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${PRIMARY_FILL} ${FOCUS}`;
+/** Ink-filled button (light mode near-black; dark mode inverts). The top bar's "+ New", kept
+ * apart from the brand-red primaries on the page (designer, 12 Nov 2026). */
+export const INK_BUTTON = `inline-flex h-[var(--ds-control-h)] items-center justify-center gap-1 whitespace-nowrap rounded-[var(--ds-radius-control)] bg-[var(--ds-ink)] px-3.5 text-[12.5px] font-semibold text-[var(--ds-card)] transition-colors hover:bg-[color-mix(in_oklab,var(--ds-ink)_82%,var(--ds-card))] disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`;
 export const SECONDARY = `inline-flex h-[var(--ds-control-h)] items-center justify-center gap-1 whitespace-nowrap rounded-[var(--ds-radius-control)] border border-[var(--ds-line)] bg-[var(--ds-card)] px-3.5 text-[12.5px] font-semibold text-[var(--ds-ink)] transition-colors hover:bg-[var(--ds-surface2)] disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`;
 export const QUIET = `rounded-[6px] px-1.5 py-1 text-[12.5px] font-semibold text-[var(--ds-ink3)] transition-colors hover:text-[var(--ds-brand-ink)] ${FOCUS}`;
 

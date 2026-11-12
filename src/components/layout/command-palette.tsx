@@ -126,7 +126,7 @@ export function CommandPalette({ menu, variant = "dark" }: { menu: MenuGroup[]; 
         onClick={() => setOpen(true)}
         className={
           variant === "light"
-            ? "hidden h-[var(--ds-control-h)] max-w-[420px] flex-1 items-center gap-2 rounded-[var(--ds-radius-control)] border border-[var(--ds-line)] bg-[var(--ds-surface2)] px-2.5 text-left text-[12.5px] text-[var(--ds-ink3)] outline-none transition-colors hover:bg-[var(--ds-card)] focus-visible:ring-2 focus-visible:ring-[var(--ds-brand)] md:flex"
+            ? "hidden h-[var(--ds-control-h)] w-[min(300px,22vw)] flex-none items-center gap-2 rounded-[var(--ds-radius-control)] border border-[var(--ds-line)] bg-[var(--ds-surface2)] px-2.5 text-left text-[12.5px] text-[var(--ds-ink3)] outline-none transition-colors hover:bg-[var(--ds-card)] focus-visible:ring-2 focus-visible:ring-[var(--ds-brand)] md:flex"
             : "hidden h-[var(--control-h)] w-[min(280px,28vw)] items-center gap-2 rounded-[var(--control-r)] border border-white/20 bg-white/[.08] px-3 text-left text-[13px] text-white/75 outline-none transition-colors hover:bg-white/[.14] focus-visible:ring-2 focus-visible:ring-white/70 md:flex"
         }
       >
