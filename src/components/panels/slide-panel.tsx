@@ -39,10 +39,10 @@ export function SlidePanel() {
 
   return (
     <Sheet open={!!state} onOpenChange={(open) => !open && close()}>
-      <SheetContent side="right" className="w-[660px] gap-0 overflow-hidden p-0 sm:max-w-[660px]">
+      <SheetContent side="right" className="w-full gap-0 overflow-hidden p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-[var(--ds-drawer-w-wide)]">
         {/* SheetContent requires an accessible title; the real one renders inside the panel header. */}
         <SheetTitle className="sr-only">Details panel</SheetTitle>
-        {error && <p className="p-[26px] text-sm text-status-red">{error}</p>}
+        {error && <p className="p-[26px] text-[12.5px] font-semibold text-[var(--ds-bad-text)]">{error}</p>}
         {!error && !data && <PanelSkeleton />}
         {!error && data && <ProgrammePanelContent data={data} onProjectClick={openProject} />}
       </SheetContent>
@@ -53,14 +53,14 @@ export function SlidePanel() {
 function PanelSkeleton() {
   return (
     <div className="flex flex-col gap-[22px] p-[22px_26px]">
-      <div className="h-4 w-24 animate-pulse rounded bg-background" />
-      <div className="h-6 w-2/3 animate-pulse rounded bg-background" />
+      <div className="h-4 w-24 animate-pulse rounded bg-[var(--ds-surface2)]" />
+      <div className="h-6 w-2/3 animate-pulse rounded bg-[var(--ds-surface2)]" />
       <div className="grid grid-cols-4 gap-2.5">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-16 animate-pulse rounded-[6px] bg-background" />
+          <div key={i} className="h-16 animate-pulse rounded-[6px] bg-[var(--ds-surface2)]" />
         ))}
       </div>
-      <div className="h-32 animate-pulse rounded-[6px] bg-background" />
+      <div className="h-32 animate-pulse rounded-[6px] bg-[var(--ds-surface2)]" />
     </div>
   );
 }
