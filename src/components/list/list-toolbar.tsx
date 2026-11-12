@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronDown, Search, X } from "lucide-react";
+import { Check, ChevronDown, ListFilter, Search, X } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { FIELD_FOCUS, FOCUS } from "@/lib/surface";
 import { cn } from "@/lib/utils";
@@ -109,6 +109,8 @@ export function FilterSelect({
           aria-label={on ? `${label}: ${current?.label ?? value}. Change filter` : `Filter by ${label}`}
           className={cn("inline-flex h-full max-w-[240px] items-center gap-[5px] rounded-[var(--ds-radius-control)] pl-3", on ? "pr-1" : "pr-3", FOCUS)}
         >
+          {/* Designer, 12 Nov 2026: a filter icon on every filter chip so it reads as a filter. */}
+          <ListFilter className="size-3.5 flex-none opacity-80" aria-hidden />
           <span className="truncate">{on ? `${label}: ${current?.label ?? value}` : label}</span>
           {!on && <ChevronDown className="size-[11px] flex-none" aria-hidden />}
         </DropdownMenuTrigger>
@@ -139,7 +141,7 @@ export function FilterSelect({
 export function FilterToggle({ label, pressed, onChange, count }: { label: string; pressed: boolean; onChange: (on: boolean) => void; count?: number }) {
   return (
     <button type="button" data-filter aria-pressed={pressed} onClick={() => onChange(!pressed)} className={cn(CHIP_BASE, pressed ? CHIP_ON : CHIP_OFF, "px-3", FOCUS)}>
-      {pressed && <Check className="size-3.5" aria-hidden />}
+      {pressed ? <Check className="size-3.5 flex-none" aria-hidden /> : <ListFilter className="size-3.5 flex-none opacity-80" aria-hidden />}
       {label}
       {count !== undefined && <span className="text-[11px] font-bold tabular-nums opacity-80">{count}</span>}
     </button>
