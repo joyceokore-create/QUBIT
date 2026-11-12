@@ -8,7 +8,7 @@ import { Checklist, Drawer, DrawerFooter, DrawerFrame, DrawerHeader, DrawerSecti
 import { Banner } from "@/components/ui/panel";
 import { useFieldErrors } from "@/components/forms/use-field-errors";
 import { readApiError } from "@/lib/form-errors";
-import { reasonMessage } from "@/lib/reason-schema";
+import { reasonField } from "@/lib/reason-schema";
 import { z } from "zod";
 import { Chip, HealthPill } from "@/components/ui/status-pill";
 import { ageDays, ageLabel, APPROVALS_CHANGED } from "@/lib/approvals";
@@ -57,6 +57,9 @@ export function GateReviewDrawer({ target, onClose, onDone, timeZone }: { target
 type Decision = "approve" | "approve_exception" | "return";
 
 const NOTE_SCHEMA = z.object({ note: z.string().trim().max(DECISION_NOTE_MAX, `The note must be ${DECISION_NOTE_MAX} characters or fewer.`) });
+/** Return / Sign Off with Exception: the note becomes a required reason (same rule as the server's
+ * NOTE_REQUIRED in src/lib/gate-approval.ts). */
+const REQUIRED_NOTE_SCHEMA = z.object({ note: reasonField(DECISION_NOTE_MIN, DECISION_NOTE_MAX) });
 
 export function GateReviewBody({ target, onClose, onDone, onBack, timeZone }: { target: GateTarget; onClose: () => void; onDone?: () => void; onBack?: () => void; timeZone?: string }) {
   const tz = timeZone ?? browserTz();
@@ -66,8 +69,8 @@ export function GateReviewBody({ target, onClose, onDone, onBack, timeZone }: { 
   const [busy, setBusy] = useState<Decision | null>(null);
   const [error, setError] = useState<string | null>(null);
   // docs/08 § Errors: the Decision Note shows its problem on the field. Whether it is required
-  // depends on which button is pressed (Return / Sign Off with Exception), so that check is made
-  // in `decide` and shown through the field; the schema here only bounds the length.
+  // depends on which button is pressed (Return / Sign Off with Exception): `decide` validates with
+  // that action's schema, which then also drives the live re-check while the person types.
   const fe = useFieldErrors({ schema: NOTE_SCHEMA, values: { note }, idPrefix: "gate-note" });
 
   useEffect(() => {
@@ -85,11 +88,8 @@ export function GateReviewBody({ target, onClose, onDone, onBack, timeZone }: { 
     if (!data) return;
     const trimmed = note.trim();
     setError(null);
-    if (!fe.validate()) return;
-    if ((kind === "return" || kind === "approve_exception") && trimmed.length < DECISION_NOTE_MIN) {
-      fe.setServerErrors({ note: reasonMessage(DECISION_NOTE_MIN) });
-      return;
-    }
+    const needsReason = kind === "return" || kind === "approve_exception";
+    if (!fe.validate(undefined, { schema: needsReason ? REQUIRED_NOTE_SCHEMA : NOTE_SCHEMA })) return;
     setBusy(kind);
     const url = `/api/projects/${target.projectId}/checkpoints/${target.statusId}/${kind === "return" ? "return" : "approve"}`;
     const body = kind === "return" ? { note: trimmed } : { exception: kind === "approve_exception", ...(trimmed ? { note: trimmed } : {}) };

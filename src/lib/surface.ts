@@ -55,6 +55,12 @@ export const FIELD_FOCUS =
 export const FIELD_INVALID =
   "aria-invalid:border-[var(--ds-bad)] aria-invalid:focus:border-[var(--ds-bad)] aria-invalid:focus:ring-[var(--ds-bad)]";
 
+/** Invalid GROUP of controls (checkbox list, chip picker, drop zone) — keyed on `data-invalid`
+ * (from `useFieldErrors().bindGroup`): a 1px red outline just outside the group, no focus ring
+ * when focus is moved to it. */
+export const GROUP_INVALID =
+  "outline-none data-[invalid]:rounded-[10px] data-[invalid]:outline data-[invalid]:outline-1 data-[invalid]:outline-offset-2 data-[invalid]:outline-[var(--ds-bad)]";
+
 // ── Buttons, tabs, inputs and table headers — design spec v2 (docs/08 § Components).
 // Controls are 36px with a 10px radius; compact (in-row) controls 28px / 8px. The primary
 // keeps the brand fill in both themes (deviation 4) and darkens on hover, never lightens.

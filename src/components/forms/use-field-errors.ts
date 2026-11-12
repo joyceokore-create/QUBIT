@@ -29,6 +29,14 @@ export interface FieldBinding {
   onBlur: () => void;
 }
 
+export interface GroupBinding {
+  id: string;
+  role: "group";
+  tabIndex: -1;
+  "data-invalid": true | undefined;
+  "aria-describedby": string | undefined;
+}
+
 export function useFieldErrors<V extends Record<string, unknown>>({
   schema,
   values,
@@ -50,10 +58,13 @@ export function useFieldErrors<V extends Record<string, unknown>>({
   const prev = useRef(values);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pathsKey = JSON.stringify(paths ?? {});
+  // The schema in force: the hook's own, or the one the last `validate(…, { schema })` used
+  // (e.g. a note required only for "Return"), so live re-checks follow that action's rules.
+  const activeSchema = useRef<ZodType | null>(null);
 
   const compute = useCallback(
     (v: V): FieldErrors => {
-      const r = schema.safeParse(v);
+      const r = (activeSchema.current ?? schema).safeParse(v);
       return r.success ? {} : fieldErrorsFromIssues(r.error.issues, JSON.parse(pathsKey) as Record<string, string>);
     },
     [schema, pathsKey],
@@ -129,9 +140,12 @@ export function useFieldErrors<V extends Record<string, unknown>>({
   );
 
   /** Check the whole form, or only `fields` (a wizard step). Returns true when clean; otherwise
-   * shows every problem in scope and focuses the first. */
+   * shows every problem in scope and focuses the first. `schema` applies rules for one action
+   * (e.g. a reason required only when returning) and stays in force for live re-checks until
+   * `reset()` or the next `validate` without it. */
   const validate = useCallback(
-    (fields?: string[]): boolean => {
+    (fields?: string[], opts?: { schema?: ZodType }): boolean => {
+      activeSchema.current = opts?.schema ?? null;
       const all = compute(latest.current);
       const scope = fields ?? Array.from(new Set([...Object.keys(latest.current), ...Object.keys(all)]));
       for (const f of scope) armed.current.add(f);
@@ -162,6 +176,7 @@ export function useFieldErrors<V extends Record<string, unknown>>({
   );
 
   const reset = useCallback(() => {
+    activeSchema.current = null;
     armed.current.clear();
     pending.current.clear();
     if (timer.current) clearTimeout(timer.current);
@@ -181,5 +196,19 @@ export function useFieldErrors<V extends Record<string, unknown>>({
     [errors, idOf, onBlur],
   );
 
-  return { errors, bind, idOf, validate, setServerErrors, reset, hasErrors: Object.keys(errors).length > 0 };
+  /** For a group of controls (checkbox list, chip picker, radio cards): `aria-invalid` isn't
+   * allowed on role="group", so the group carries `data-invalid` (style with GROUP_INVALID in
+   * surface.ts) and points at its message; tabIndex -1 lets `validate()` move focus to it. */
+  const bindGroup = useCallback(
+    (field: string): GroupBinding => ({
+      id: idOf(field),
+      role: "group",
+      tabIndex: -1,
+      "data-invalid": errors[field] ? true : undefined,
+      "aria-describedby": errors[field] ? `${idOf(field)}-error` : undefined,
+    }),
+    [errors, idOf],
+  );
+
+  return { errors, bind, bindGroup, idOf, validate, setServerErrors, reset, hasErrors: Object.keys(errors).length > 0 };
 }

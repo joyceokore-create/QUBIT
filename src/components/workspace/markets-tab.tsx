@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 import { readApiError } from "@/lib/form-errors";
 import { FieldError } from "@/components/ui/drawer";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, Plus, ShieldAlert, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CARD_GLASS as CARD, CARD_BG, FOCUS, PRIMARY, QUIET, SECONDARY, ragFill } from "@/lib/surface";
+import { CARD_GLASS as CARD, CARD_BG, FOCUS, PRIMARY, QUIET, SECONDARY, ragFill, GROUP_INVALID } from "@/lib/surface";
 
 /**
  * docs/38 — the Markets tab: where the product ships (Kenya, Uganda …), each with its lead
@@ -265,7 +266,7 @@ export function MarketsTab({
             <DialogTitle>Add {plural}</DialogTitle>
             <DialogDescription>Each one gets its own gates, weekly check-in and set-up checklist. Missing one? Admin › Markets holds the list.</DialogDescription>
           </DialogHeader>
-          <div role="group" aria-label={`${plural} to add`} aria-describedby={pickError ? "markets-add-error" : undefined} className="flex flex-wrap gap-1.5">
+          <div role="group" tabIndex={-1} aria-label={`${plural} to add`} data-invalid={pickError ? true : undefined} aria-describedby={pickError ? "markets-add-error" : undefined} className={cn("flex flex-wrap gap-1.5", GROUP_INVALID)}>
             {addable.map((u) => {
               const on = picked.includes(u.id);
               return (

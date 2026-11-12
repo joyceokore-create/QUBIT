@@ -79,3 +79,51 @@ describe("useFieldErrors (docs/08 § Errors)", () => {
     expect(document.getElementById("t-email-error")).toBeNull();
   });
 });
+
+import { z } from "zod";
+import { FieldError } from "@/components/ui/drawer";
+
+const BASE = z.object({ note: z.string().max(10, "Too long."), picks: z.array(z.string()) });
+const NEEDS_NOTE = z.object({ note: z.string().trim().min(5, "Enter a reason of at least 5 characters."), picks: z.array(z.string()).min(1, "Choose at least one.") });
+
+function ActionForm() {
+  const [note, setNote] = useState("");
+  const [picks, setPicks] = useState<string[]>([]);
+  const fe = useFieldErrors({ schema: BASE, values: { note, picks }, idPrefix: "a" });
+  return (
+    <div>
+      <input aria-label="Note" {...fe.bind("note")} value={note} onChange={(e) => setNote(e.target.value)} />
+      {fe.errors.note && <FieldError id="a-note-error">{fe.errors.note}</FieldError>}
+      <div {...fe.bindGroup("picks")} aria-label="Picks">
+        <button type="button" onClick={() => setPicks(["x"])}>Pick</button>
+      </div>
+      {fe.errors.picks && <FieldError id="a-picks-error">{fe.errors.picks}</FieldError>}
+      <button type="button" onClick={() => fe.validate()}>Approve</button>
+      <button type="button" onClick={() => fe.validate(undefined, { schema: NEEDS_NOTE })}>Return</button>
+    </div>
+  );
+}
+
+describe("useFieldErrors — per-action schema and groups", () => {
+  it("a reason is required only for the action that needs it, and live re-checks follow it", () => {
+    render(<ActionForm />);
+    fireEvent.click(screen.getByText("Approve"));
+    expect(screen.getByLabelText("Note")).not.toHaveAttribute("aria-invalid");
+    fireEvent.click(screen.getByText("Return"));
+    expect(document.getElementById("a-note-error")?.textContent).toBe("Enter a reason of at least 5 characters.");
+    fireEvent.change(screen.getByLabelText("Note"), { target: { value: "Needs work" } });
+    expect(document.getElementById("a-note-error")).toBeNull();
+  });
+
+  it("bindGroup marks the group with data-invalid (not aria-invalid) and links its message", () => {
+    render(<ActionForm />);
+    fireEvent.click(screen.getByText("Return"));
+    const group = screen.getByRole("group", { name: "Picks" });
+    expect(group).toHaveAttribute("data-invalid", "true");
+    expect(group).not.toHaveAttribute("aria-invalid");
+    expect(group).toHaveAttribute("aria-describedby", "a-picks-error");
+    expect(group).toHaveAttribute("tabindex", "-1");
+    fireEvent.click(screen.getByText("Pick"));
+    expect(group).not.toHaveAttribute("data-invalid");
+  });
+});

@@ -276,10 +276,9 @@ export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantN
 
   async function saveCard(id: string) {
     const p = ws.projects.find((x) => x.catalog.projectId === id)!;
-    if (ratingReasonMissing(p, cards[id]!)) {
-      setNotices((n) => ({ ...n, [id]: { tone: "bad", text: "Say why your rating differs from QUBIT's (at least 5 characters)." } }));
-      return;
-    }
+    // The card shows "Why your rating differs" on its own field before calling this (docs/08 §
+    // Errors); this is only a safety net, so it never posts an override without a reason.
+    if (ratingReasonMissing(p, cards[id]!)) return;
     const row = applyRowFor(p, cards[id]!, diffs[id]!);
     if (ws.past) row.narrative = "";
     setBusy({ kind: "card", id, action: "save" });
@@ -299,10 +298,9 @@ export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantN
 
   async function sendCard(id: string) {
     const p = ws.projects.find((x) => x.catalog.projectId === id)!;
-    if (ratingReasonMissing(p, cards[id]!)) {
-      setNotices((n) => ({ ...n, [id]: { tone: "bad", text: "Say why your rating differs from QUBIT's (at least 5 characters)." } }));
-      return;
-    }
+    // The card shows "Why your rating differs" on its own field before calling this (docs/08 §
+    // Errors); this is only a safety net, so it never posts an override without a reason.
+    if (ratingReasonMissing(p, cards[id]!)) return;
     const d = diffs[id]!;
     setBusy({ kind: "card", id, action: "send" });
     setError(null);

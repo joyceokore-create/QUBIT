@@ -206,12 +206,10 @@ export function AssignMembersDialog({
           <Input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a person…" aria-label="Find a person" className="h-8" />
         )}
         <div
-          id={fe.idOf("members")}
-          role="group"
+          {...fe.bindGroup("members")}
           aria-label="People"
-          data-invalid={fe.errors.members ? true : undefined}
-          aria-describedby={fe.errors.members ? `${fe.idOf("members")}-error` : undefined}
-          className="max-h-[180px] flex-none overflow-auto rounded-[10px] border border-[var(--w08)] aria-invalid:border-[var(--ds-bad)]"
+          // data-invalid (from bindGroup), not aria-invalid: the old aria-invalid: class never matched.
+          className="max-h-[180px] flex-none overflow-auto rounded-[10px] border border-[var(--w08)] outline-none data-[invalid]:border-[var(--ds-bad)]"
         >
           {benchState === "loading" ? (
             <p className="p-3 text-[12px] text-[var(--ink4)]">Loading people…</p>

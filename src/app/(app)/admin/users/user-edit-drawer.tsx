@@ -177,7 +177,7 @@ function Body({ user, onClose, currentUserId, timeZone, departments, managerOpti
         {canManage && (
           <DrawerSection title="Roles" aside={<button type="button" onClick={saveRoles} disabled={roles.busy} className={COMPACT}>{roles.busy ? "Saving…" : "Save Roles"}</button>}>
             {roles.error && <Banner tone="bad">{roles.error}</Banner>}
-            <div role="group" aria-label="Roles" id={rolesFe.idOf("roles")} data-invalid={rolesFe.errors.roles ? true : undefined} aria-describedby={rolesFe.errors.roles ? `${rolesFe.idOf("roles")}-error` : undefined} className="grid grid-cols-1 gap-2 rounded-[10px] border border-transparent p-1 data-[invalid=true]:border-[var(--ds-bad)] sm:grid-cols-2">
+            <div {...rolesFe.bindGroup("roles")} aria-label="Roles" className="grid grid-cols-1 gap-2 rounded-[10px] border border-transparent p-1 outline-none data-[invalid]:border-[var(--ds-bad)] sm:grid-cols-2">
               {visibleRoles.map((role) => {
                 const locked = role === SUPER_ADMIN_ROLE && !canGrantSuperAdmin;
                 return (
