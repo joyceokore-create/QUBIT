@@ -3,12 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ChevronDown, Compass, LogOut, Monitor, Moon, ShieldCheck, ClipboardCheck, LayoutDashboard, Rows3, Sparkles, Sun } from "lucide-react";
+import { ChevronDown, Compass, LogOut, Monitor, Moon, ShieldCheck, ClipboardCheck, LayoutDashboard, Rows3, Sparkles, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import type { UiMode } from "@/lib/ui-mode";
 import { DENSITY_EVENT, DENSITY_KEY } from "@/lib/density";
 import { useTour } from "@/components/tour/tour-provider";
-import { signOut } from "next-auth/react";
 import { signOutAction } from "@/lib/auth-actions";
 import {
   DropdownMenu,
@@ -23,23 +22,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { getInitials } from "@/lib/format";
 
-interface TenantOption {
-  slug: string;
-  name: string;
-}
 
 interface UserMenuProps {
   name: string;
   email: string;
   /** Display role shown beneath the name in the chip variant (e.g. "Project Manager"). */
   role?: string;
-  /**
-   * When the viewer can switch tenants, the tenant switcher is folded into this
-   * menu (the standalone chip is gone). Supply the tenant list + current slug.
-   */
-  tenants?: TenantOption[];
-  canSwitchTenant?: boolean;
-  currentSlug?: string;
   /**
    * "avatar" (default) — bare initials circle (sidebar footer, default topbar).
    * "chip" — a profile pill with avatar + name + chevron, for the branded
@@ -51,25 +39,17 @@ interface UserMenuProps {
   uiMode?: UiMode;
 }
 
-// Each tenant carries its own brand disc colour, independent of the active theme brand.
-function discColor(slug: string): string {
-  return slug === "riverbank" ? "var(--rbrand)" : "var(--pbrand)";
-}
 
 export function UserMenu({
   name,
   email,
   role,
-  tenants = [],
-  canSwitchTenant = false,
-  currentSlug,
   variant = "avatar",
   uiMode,
 }: UserMenuProps) {
   const tour = useTour();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
-  const showSwitch = canSwitchTenant && tenants.length > 0;
   const [compact, setCompact] = useState(false);
   useEffect(() => {
     try {
@@ -140,14 +120,10 @@ export function UserMenu({
           {getInitials(name)}
         </DropdownMenuTrigger>
       )}
-      <DropdownMenuContent align="end" className="w-[250px]">
-        <DropdownMenuLabel>
-          <div className="flex flex-col">
-            <span className="font-semibold text-foreground">{name}</span>
-            <span className="text-xs font-normal text-ink-3">{email}</span>
-          </div>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
+      {/* Designer, 12 Nov 2026: same card as the filter dropdowns; no name/email header (the top bar
+          shows them); roomier, lighter rows (.ds-menu in design-spec.css). The old "Switch tenant"
+          list is gone: an account belongs to one organisation, so it could only sign you out. */}
+      <DropdownMenuContent align="end" sideOffset={8} className="ds-menu w-[240px] rounded-[12px] bg-[var(--ds-card)] p-1.5 text-[var(--ds-ink)] shadow-[var(--ds-shadow-menu)] ring-1 ring-[var(--ds-line)]">
         <DropdownMenuItem render={<Link href="/settings/mfa" />}>
           <ShieldCheck />
           Two-factor authentication
@@ -169,7 +145,7 @@ export function UserMenu({
           <>
             <DropdownMenuSeparator />
             {/* UX fidelity F1 (D-F9): Light / Dark / System, default Light. */}
-            <DropdownMenuLabel className="text-[11px] font-semibold text-[var(--ds-ink3)]">Theme</DropdownMenuLabel>
+            <DropdownMenuLabel>Theme</DropdownMenuLabel>
             <DropdownMenuRadioGroup value={theme ?? "light"} onValueChange={(v) => setTheme(String(v))}>
               <DropdownMenuRadioItem value="light">
                 <Sun />
@@ -202,48 +178,6 @@ export function UserMenu({
               <Sparkles />
               Try the new layout
             </DropdownMenuItem>
-          </>
-        )}
-
-        {showSwitch && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-[10.5px] uppercase tracking-[1.5px] text-[var(--ink5)]">
-              Switch tenant
-            </DropdownMenuLabel>
-            {tenants.map((t) => {
-              const isCurrent = t.slug === currentSlug;
-              return (
-                <DropdownMenuItem
-                  key={t.slug}
-                  className="gap-[10px] py-[9px]"
-                  onSelect={() => {
-                    if (isCurrent) return;
-                    // A user belongs to one tenant; switching signs out so you can sign in as
-                    // that organization's account. Tenant isolation (RLS) is never crossed.
-                    void signOut({ callbackUrl: `/login?tenant=${t.slug}` });
-                  }}
-                >
-                  <span
-                    className="flex size-6 items-center justify-center rounded-full text-[10px] font-extrabold text-[var(--onbrand)]!"
-                    style={{ background: discColor(t.slug) }}
-                  >
-                    {t.name.charAt(0).toUpperCase()}
-                  </span>
-                  <span className="flex-1">
-                    <span className="block text-[13px] font-semibold text-[var(--qink)]">{t.name}</span>
-                    <span className="block text-[11px] text-[var(--ink4)]!">
-                      {isCurrent ? "current" : "sign in to switch"}
-                    </span>
-                  </span>
-                  {isCurrent ? (
-                    <Check className="size-3 text-brand" />
-                  ) : (
-                    <LogOut className="size-3 text-[var(--ink5)]!" />
-                  )}
-                </DropdownMenuItem>
-              );
-            })}
           </>
         )}
 

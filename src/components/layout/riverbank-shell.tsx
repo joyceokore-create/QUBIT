@@ -57,9 +57,6 @@ interface RiverbankShellProps {
   memberOnly: boolean;
   roles?: readonly string[];
   moduleAllowedRoles?: Record<string, readonly string[]>;
-  canSwitchTenant: boolean;
-  tenants: { slug: string; name: string }[];
-  tenantSlug: string;
   tenantName: string;
   userName: string;
   userEmail: string;
@@ -121,9 +118,6 @@ export function RiverbankShell({
   memberOnly,
   roles,
   moduleAllowedRoles,
-  canSwitchTenant,
-  tenants,
-  tenantSlug,
   tenantName,
   userName,
   userEmail,
@@ -514,9 +508,6 @@ export function RiverbankShell({
               name={userName}
               email={userEmail}
               role={userRole}
-              tenants={tenants}
-              canSwitchTenant={canSwitchTenant}
-              currentSlug={tenantSlug}
               uiMode={uiMode}
             />
           </header>
@@ -545,9 +536,6 @@ export function RiverbankShell({
               name={userName}
               email={userEmail}
               role={userRole}
-              tenants={tenants}
-              canSwitchTenant={canSwitchTenant}
-              currentSlug={tenantSlug}
               uiMode={uiMode}
             />
             <AskQButton />

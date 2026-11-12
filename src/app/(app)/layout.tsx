@@ -49,10 +49,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const canAccessAdmin = can(ctx, "admin:access");
   const canStaff = can(ctx, "project:create") || can(ctx, "staffing:manage");
   const memberOnly = isMemberOnly(session.user.personas ?? []);
-  const canSwitchTenant = can(ctx, "tenant:switch");
-  const tenants = isRiverbank && canSwitchTenant
-    ? await prisma.tenant.findMany({ orderBy: { name: "asc" }, select: { slug: true, name: true } })
-    : [];
 
   // Module registry (global, no RLS) → nav gating by each module's allowedRoles.
   const moduleRows = isRiverbank
@@ -97,9 +93,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 memberOnly={memberOnly}
                 roles={session.user.roles}
                 moduleAllowedRoles={moduleAllowedRoles}
-                canSwitchTenant={canSwitchTenant}
-                tenants={tenants}
-                tenantSlug={session.user.tenantSlug}
                 tenantName={session.user.tenantName ?? ""}
                 userName={session.user.name ?? ""}
                 userEmail={session.user.email ?? ""}
