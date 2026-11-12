@@ -5,6 +5,8 @@ import Link from "next/link";
 import { ExternalLink, ShieldAlert } from "lucide-react";
 import { FilterSelect } from "@/components/list/list-toolbar";
 import { Chip } from "@/components/ui/status-pill";
+import { CARD, CARD_BG } from "@/lib/surface";
+import { cn } from "@/lib/utils";
 
 // The personal board (docs/18 §4): lanes To do · Doing · Done as VIEWS over the
 // 5-status taxonomy (docs/15 6.1 untouched) — Doing wears an InProgress/InReview/InQA
@@ -93,14 +95,16 @@ export function PersonalBoard({ viewerName: _viewerName }: { viewerName: string 
             .filter((t) => (lane.statuses as readonly string[]).includes(t.status))
             .filter((t) => lane.key !== "done" || !t.updatedAt || new Date(t.updatedAt).getTime() >= monday);
           return (
-            <section key={lane.key} aria-label={lane.label} className="flex min-h-[180px] flex-col gap-2 rounded-[14px] bg-[var(--ds-surface2)] p-3">
+            // Designer, 12 Nov 2026: lanes are standard cards (white, card shadow); tasks inside are flat
+            // grey tiles (no border, no shadow) that step darker on hover — one elevation level.
+            <section key={lane.key} aria-label={lane.label} className={cn(CARD, "flex min-h-[180px] flex-col gap-2 p-3.5")} style={CARD_BG}>
               <div className="flex items-center justify-between px-0.5 pb-0.5 text-[13px]">
                 <b className="font-bold text-[var(--ds-ink)]">{lane.label}</b>
-                <span className="rounded-full bg-[var(--ds-card)] px-[7px] text-[11px] font-bold tabular-nums text-[var(--ds-ink2)]">{laneTasks.length}</span>
+                <span className="rounded-full bg-[var(--ds-mutedw)] px-[7px] text-[11px] font-bold tabular-nums text-[var(--ds-ink2)]">{laneTasks.length}</span>
               </div>
               {laneTasks.length === 0 && <p className="px-1 py-2 text-[12px] text-[var(--ds-ink3)]">{lane.key === "done" ? "Nothing finished yet this week." : "Nothing here."}</p>}
               {laneTasks.map((t) => (
-                <article key={t.id} className="flex flex-col gap-[3px] rounded-[11px] border border-[var(--ds-bd)] bg-[var(--ds-card)] px-3 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,.05)]">
+                <article key={t.id} className="flex flex-col gap-[3px] rounded-[11px] bg-[var(--ds-surface2)] px-3 py-2.5 transition-colors hover:bg-[var(--ds-thead)]">
                   <Link href={`/projects/${t.projectId}?tab=Board&task=${t.id}`} className="rounded-[3px] text-[13px] font-semibold leading-[1.35] text-[var(--ds-ink)] hover:underline">
                     {t.title}
                   </Link>
