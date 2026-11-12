@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { declineReason } from "@/lib/staffing-schema";
+import { validationError } from "@/server/errors";
 import { z } from "zod";
 import { requireSession } from "@/lib/api-guard";
 import { cancelResourceRequest, declineResourceRequest, fillResourceRequest, StaffingError } from "@/server/staffing";
@@ -9,7 +11,7 @@ import { cancelResourceRequest, declineResourceRequest, fillResourceRequest, Sta
 
 const Body = z.discriminatedUnion("action", [
   z.object({ action: z.literal("fill"), userId: z.string().uuid() }),
-  z.object({ action: z.literal("decline"), reason: z.string().min(1).max(300) }),
+  z.object({ action: z.literal("decline"), reason: declineReason }),
   z.object({ action: z.literal("cancel"), reason: z.string().max(300).optional() }),
 ]);
 
@@ -20,7 +22,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: { code: "VALIDATION", message: "Invalid input." } }, { status: 400 });
+    return validationError(parsed.error);
   }
   try {
     const result =

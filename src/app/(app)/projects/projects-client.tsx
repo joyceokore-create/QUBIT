@@ -1,13 +1,33 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
-import { ChevronRight, Plus, Search } from "lucide-react";
+import { ChevronRight, Plus } from "lucide-react";
 import { usePanel } from "@/components/panels/panel-context";
 import { ExportButton } from "@/components/export-button";
 import { Button } from "@/components/ui/button";
-import { projectRank, statusBarTok, statusMeta } from "@/lib/project-view";
-import { RAG_TOKEN } from "@/lib/surface";
+import { Chip, HealthPill } from "@/components/ui/status-pill";
+import { PageHeader } from "@/components/list/page-header";
+import { FilterChips, FilterSelect, FilterToggle, ListToolbar, SearchField, type ActiveFilter, type FilterOption } from "@/components/list/list-toolbar";
+import { ListEmpty, TableCard, TableFooter } from "@/components/list/table-footer";
+import { useListUrl } from "@/components/list/use-list-url";
+import { matchesSearch, paginate } from "@/lib/list-state";
+import { COCKPIT_PHASES } from "@/lib/cockpit-gates";
+import { RAG_TOKEN, THEAD, TROW } from "@/lib/surface";
+import { cn } from "@/lib/utils";
+import { healthWord } from "@/lib/status-words";
+import { TabStrip } from "@/components/ui/tab-strip";
+import { HEALTH_LABEL, HEALTH_ORDER, healthOf, type GateViewRow, type HealthBucket } from "@/lib/project-gate-view";
+import { ProjectsGateView } from "./projects-gate-view";
+
+// docs/38 milestone 2 — a project's STATUS is its confirmed weekly check-in, not the typed
+// lifecycle field. No confirmed report this week reads "No report" (neutral), never a
+// misleading Green.
+//
+// UX5 (L1–L5): the shared header / toolbar / always-visible pagination, all state in the URL.
+// ~40 bounded rows, health is worked out in code, so it loads once and pages in the browser.
+//
+// UX8 — List · Gate view tabs share this header; the Gate view lives in projects-gate-view.tsx.
 
 interface ProjectRow {
   id: string;
@@ -20,180 +40,230 @@ interface ProjectRow {
   budget: string | null;
   avgProgress: number;
   memberCount: number;
-  /** The viewer leads this project or is allocated to it — powers the MINE chip. */
+  /** The viewer leads this project or is allocated to it — powers the Mine filter. */
   isMine: boolean;
+  portfolio: string | null;
+  pm: string | null;
+  /** Phase from the project's real gates (stageOf): Planning · Execution · … · Not gated. */
+  stage: string;
   /** DM1.73 (Wave C, C4): this week's check-in, or null when none exists yet. */
   checkin: { rag: "Green" | "Amber" | "Red"; confirmed: boolean } | null;
 }
 
-const ROW_GRID = "grid grid-cols-[62px_minmax(0,1fr)_150px_90px_100px_60px_24px] items-center gap-3.5";
+const FILTER_KEYS = ["portfolio", "pm", "stage", "health", "priority", "mine"] as const;
+const NONE = "__none";
+
+const options = (values: (string | null)[], noneLabel: string): FilterOption[] => {
+  const set = [...new Set(values.map((v) => v ?? NONE))].sort((a, b) => (a === NONE ? 1 : b === NONE ? -1 : a.localeCompare(b)));
+  return set.map((v) => ({ value: v, label: v === NONE ? noneLabel : v }));
+};
 
 export function ProjectsClient({
   projects,
   canCreate,
-  tenantName,
+  tenantName: _tenantName,
+  view,
+  gateRows,
 }: {
   projects: ProjectRow[];
   canCreate: boolean;
   tenantName: string;
+  view: "list" | "gates";
+  gateRows: GateViewRow[];
 }) {
+  return (
+    <main className="mx-auto flex w-full min-w-0 max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
+      <PageHeader
+        title="Projects"
+        description={
+          view === "gates"
+            ? `${projects.length} projects. Gates come from checkpoint records; a project in several markets shows its furthest-behind market.`
+            : `${projects.length} projects. Status is this week's confirmed check-in.`
+        }
+        actions={
+          <>
+            <ExportButton href="/api/export?kind=projects" />
+            {canCreate && (
+              <Button nativeButton={false} render={<Link href="/projects/new" />}>
+                <Plus /> New Project
+              </Button>
+            )}
+          </>
+        }
+      />
+
+      <TabStrip
+        label="Project views"
+        active={view}
+        tabs={[
+          { key: "list", label: "List", href: "/projects" },
+          { key: "gates", label: "Gate View", href: "/projects?view=gates" },
+          // Design: List · Gate View · Board. The Board is My Board across these projects (D-F4).
+          { key: "board", label: "Board", href: "/board" },
+        ]}
+      />
+
+      {view === "gates" ? <ProjectsGateView rows={gateRows} canCreate={canCreate} /> : <ProjectsListView projects={projects} canCreate={canCreate} />}
+    </main>
+  );
+}
+
+function ProjectsListView({ projects, canCreate }: { projects: ProjectRow[]; canCreate: boolean }) {
   const { openProject } = usePanel();
-  const [q, setQ] = useState("");
-  const [status, setStatus] = useState("all");
-  const [mineOnly, setMineOnly] = useState(false);
+  const list = useListUrl("projects", 10);
+  const f = Object.fromEntries(FILTER_KEYS.map((k) => [k, list.get(k)])) as Record<(typeof FILTER_KEYS)[number], string>;
 
-  // Filter chips: All + each status present in the data, worst-status first, with counts.
-  const chips = useMemo(() => {
-    const present = Array.from(new Set(projects.map((p) => p.status))).sort((a, b) => projectRank(b) - projectRank(a));
-    return [
-      { key: "all", label: "ALL", count: projects.length },
-      ...present.map((s) => ({ key: s, label: statusMeta(s).label, count: projects.filter((p) => p.status === s).length })),
-    ];
-  }, [projects]);
-  const mineCount = useMemo(() => projects.filter((p) => p.isMine).length, [projects]);
+  // A row's health: the CONFIRMED check-in's RAG, else "None" (no report yet).
+  const health = (p: ProjectRow): HealthBucket => healthOf(p.checkin);
 
+  const opts = useMemo(
+    () => ({
+      portfolio: options(projects.map((p) => p.portfolio), "No portfolio"),
+      pm: options(projects.map((p) => p.pm), "No PM"),
+      stage: COCKPIT_PHASES.filter((s) => projects.some((p) => p.stage === s)).map((s) => ({ value: s, label: s })),
+      health: HEALTH_ORDER.map((h) => ({ value: h, label: HEALTH_LABEL[h] })),
+      priority: options(projects.map((p) => p.priority), "None"),
+    }),
+    [projects],
+  );
+
+  const eq = (value: string | null, filter: string) => !filter || (value ?? NONE) === filter;
   const filtered = useMemo(
     () =>
       projects
         .filter(
           (p) =>
-            (status === "all" || p.status === status) &&
-            (!mineOnly || p.isMine) &&
-            (q === "" || p.name.toLowerCase().includes(q.toLowerCase()) || p.code.toLowerCase().includes(q.toLowerCase())),
+            matchesSearch(list.q, p.name, p.code, p.pm, p.portfolio) &&
+            eq(p.portfolio, f.portfolio) &&
+            eq(p.pm, f.pm) &&
+            eq(p.stage, f.stage) &&
+            eq(health(p), f.health) &&
+            eq(p.priority, f.priority) &&
+            (f.mine !== "1" || p.isMine),
         )
-        .sort((a, b) => projectRank(b.status) - projectRank(a.status) || a.name.localeCompare(b.name)),
-    [projects, q, status, mineOnly],
+        .sort((a, b) => HEALTH_ORDER.indexOf(health(a)) - HEALTH_ORDER.indexOf(health(b)) || a.name.localeCompare(b.name)),
+    [projects, list.q, f.portfolio, f.pm, f.stage, f.health, f.priority, f.mine],
   );
+  const { rows, info } = paginate(filtered, list.page, list.size);
+
+  const labelOf = (key: keyof typeof opts, v: string) => opts[key].find((o) => o.value === v)?.label ?? v;
+  const active: ActiveFilter[] = [
+    ...(["portfolio", "pm", "stage", "health", "priority"] as const)
+      .filter((k) => f[k])
+      .map((k) => ({ key: k, label: `${{ portfolio: "Portfolio", pm: "PM", stage: "Stage", health: "Health", priority: "Priority" }[k]}: ${labelOf(k, f[k])}` })),
+    ...(f.mine === "1" ? [{ key: "mine", label: "Mine" }] : []),
+  ];
+  const isFiltered = active.length > 0 || !!list.q;
+  const mineCount = projects.filter((p) => p.isMine).length;
 
   return (
-    <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-3.5 p-[22px_24px_90px]">
-      <div className="flex items-end justify-between gap-5 [animation:rise_.5s_cubic-bezier(.22,1,.36,1)_both]">
-        <div>
-          <div className="mb-1.5 font-mono rv:font-sans text-[10px] rv:text-overline font-semibold uppercase tracking-[2.4px] text-[var(--ink4)]">
-            Portfolio / {tenantName}
-          </div>
-          <h1 className="font-heading text-[27px] rv:text-heading-lg font-bold tracking-[-.8px] text-[var(--qink)]">Projects</h1>
-        </div>
-        {canCreate && (
-          <Button nativeButton={false} render={<Link href="/projects/new" />}>
-            <Plus /> New project
-          </Button>
-        )}
+    <>
+      <div className="flex flex-col gap-2">
+        <ListToolbar>
+          <SearchField value={list.q} onChange={(q) => list.set({ q })} placeholder="Search projects or PMs" label="Search projects" />
+          {/* Design order: PM · Priority · Stage · Status; Portfolio and Mine follow. */}
+          <FilterSelect label="PM" allLabel="All PMs" value={f.pm} options={opts.pm} onChange={(v) => list.set({ pm: v })} />
+          <FilterSelect label="Priority" allLabel="All priorities" value={f.priority} options={opts.priority} onChange={(v) => list.set({ priority: v })} />
+          <FilterSelect label="Stage" allLabel="All stages" value={f.stage} options={opts.stage} onChange={(v) => list.set({ stage: v })} />
+          <FilterSelect label="Status" allLabel="All statuses" value={f.health} options={opts.health} onChange={(v) => list.set({ health: v })} />
+          <FilterSelect label="Portfolio" allLabel="All portfolios" value={f.portfolio} options={opts.portfolio} onChange={(v) => list.set({ portfolio: v })} />
+          <span data-tour="mine" title="Projects you lead or are allocated to">
+            <FilterToggle label="Mine" count={mineCount} pressed={f.mine === "1"} onChange={(on) => list.set({ mine: on ? "1" : null })} />
+          </span>
+          <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={() => list.clear([...FILTER_KEYS])} />
+        </ListToolbar>
       </div>
 
-      {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-2 [animation:rise_.5s_cubic-bezier(.22,1,.36,1)_.05s_both]">
-        <div className="relative flex-none">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[var(--ink4)]" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search projects…"
-            className="w-[250px] rounded-[10px] border border-[var(--hair)] bg-[var(--cardbg)] py-[9px] pl-8 pr-3 text-[12.5px] text-[var(--qink)] outline-none backdrop-blur-[var(--glassblur)] focus:border-[color-mix(in_oklab,var(--brand)_50%,transparent)]"
+      <TableCard footer={<TableFooter info={info} noun="projects" onPage={list.setPage} onSize={list.setSize} />}>
+        {rows.length === 0 ? (
+          <ListEmpty
+            filtered={isFiltered}
+            noun="projects"
+            onClear={() => list.clear([...FILTER_KEYS])}
+            action={
+              canCreate && (
+                <Button variant="outline" nativeButton={false} render={<Link href="/projects/new" />}>
+                  <Plus /> New Project
+                </Button>
+              )
+            }
           />
-        </div>
-        {chips.map((c) => {
-          const active = status === c.key;
-          return (
-            <button
-              key={c.key}
-              type="button"
-              onClick={() => setStatus(c.key)}
-              className="flex items-center gap-1.5 rounded-full border px-[13px] py-[7px] font-mono text-[10px] font-semibold tracking-[1px] transition-colors"
-              style={{
-                borderColor: active ? "var(--brand)" : "var(--hair)",
-                background: active ? "color-mix(in oklab, var(--brand) 10%, transparent)" : "transparent",
-                color: active ? "var(--brand)" : "var(--ink3)",
-              }}
-            >
-              {c.label} <span className="opacity-55">{c.count}</span>
-            </button>
-          );
-        })}
-        <button
-          type="button"
-          onClick={() => setMineOnly((m) => !m)}
-          title="Projects you lead or are allocated to"
-          className="flex items-center gap-1.5 rounded-full border px-[13px] py-[7px] font-mono text-[10px] font-semibold tracking-[1px] transition-colors"
-          style={{
-            borderColor: mineOnly ? "var(--brand)" : "var(--hair)",
-            background: mineOnly ? "color-mix(in oklab, var(--brand) 10%, transparent)" : "transparent",
-            color: mineOnly ? "var(--brand)" : "var(--ink3)",
-          }}
-        >
-          MINE <span className="opacity-55">{mineCount}</span>
-        </button>
-        <ExportButton href="/api/export?kind=projects" />
-        <span className="flex-1" />
-        <span className="font-mono text-[10px] tracking-[1px] text-[var(--ink4)]">{filtered.length} SHOWN</span>
-      </div>
-
-      {/* Glass gate-table */}
-      <div
-        className="overflow-hidden rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25] [animation:rise_.55s_cubic-bezier(.22,1,.36,1)_.1s_both]"
-        style={{ background: "var(--cardbg)" }}
-      >
-        <div className={`${ROW_GRID} border-b border-[var(--hair)] p-[10px_18px] font-mono rv:font-sans text-[9px] rv:text-overline font-semibold uppercase tracking-[1.6px] text-[var(--ink4)]`}>
-          <span>CODE</span>
-          <span>PROJECT</span>
-          <span>PROGRESS</span>
-          <span>STATUS</span>
-          <span>CHECK-IN</span>
-          <span className="text-right">TEAM</span>
-          <span />
-        </div>
-        {filtered.map((p) => {
-          const m = statusMeta(p.status);
-          return (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => openProject(p.id)}
-              className={`${ROW_GRID} w-full border-b border-[var(--hair2)] p-[11px_18px] text-left transition-[transform,background] duration-200 last:border-0 hover:translate-x-[3px] hover:bg-[var(--wash)]`}
-            >
-              <span className="font-mono text-[10.5px] tracking-[.5px] text-[var(--ink4)]">{p.code}</span>
-              <span className="min-w-0">
-                <span className="block truncate text-[13px] font-semibold tracking-[-.1px] text-[var(--qink)]">{p.name}</span>
-                <span className="block truncate text-[11px] text-[var(--ink4)]">{p.type} · {p.priority} priority</span>
-              </span>
-              <span className="flex items-center gap-2">
-                <span className="h-[3px] flex-1 overflow-hidden rounded-full bg-[var(--wash2)]">
-                  <span className="block h-full rounded-full" style={{ width: `${p.avgProgress}%`, background: `var(${statusBarTok(p.status)})` }} />
-                </span>
-                <span className="w-[30px] text-right font-mono text-[10.5px] tabular-nums text-[var(--ink3)]">{p.avgProgress}%</span>
-              </span>
-              <span
-                className="justify-self-start rounded-[5px] p-[3px_7px] font-mono text-[9px] font-semibold tracking-[1px]"
-                style={{ color: `var(${m.tok})`, border: `1px solid color-mix(in oklab, var(${m.tok}) 35%, transparent)`, background: `color-mix(in oklab, var(${m.tok}) 9%, transparent)` }}
-              >
-                {m.label}
-              </span>
-              {/* DM1.73 (Wave C, C4): this week's check-in — RAG dot + confirmation state. */}
-              {p.checkin ? (
-                <span className="flex items-center gap-1.5" title="This week's check-in">
-                  <span
-                    className="size-2 flex-none rounded-full"
-                    style={{ background: `var(${RAG_TOKEN[p.checkin.rag]})` }}
-                  />
-                  <span
-                    className="font-mono text-[9px] font-semibold uppercase tracking-[.8px]"
-                    style={{ color: p.checkin.confirmed ? "var(--ink4)" : "var(--warn)" }}
+        ) : (
+          <table className="w-full min-w-[860px] border-separate border-spacing-0 text-left text-[12.5px]">
+            <thead className={THEAD}>
+              <tr>
+                <th scope="col" className="w-[76px]">Code</th>
+                <th scope="col">Project</th>
+                <th scope="col">PM</th>
+                <th scope="col">Stage</th>
+                <th scope="col" className="w-[150px]">Progress</th>
+                <th scope="col">Status</th>
+                <th scope="col">Check-In</th>
+                <th scope="col" className="text-right">Team</th>
+                <th scope="col" className="w-8"><span className="sr-only">Open</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((p) => {
+                const h = health(p);
+                return (
+                  <tr
+                    key={p.id}
+                    onClick={() => openProject(p.id)}
+                    className={cn(TROW, "cursor-pointer transition-colors hover:bg-[var(--ds-surface2)]")}
                   >
-                    {p.checkin.confirmed ? "confirmed" : "unconfirmed"}
-                  </span>
-                </span>
-              ) : (
-                <span className="font-mono text-[10.5px] text-[var(--ink5)]" title="No check-in this week">—</span>
-              )}
-              <span className="text-right font-mono text-[10.5px] text-[var(--ink4)]">{p.memberCount}</span>
-              <ChevronRight className="size-3 text-[var(--ink5)]" />
-            </button>
-          );
-        })}
-        {filtered.length === 0 && (
-          <div className="p-10 text-center text-[13px] text-[var(--ink4)]">No projects match your search.</div>
+                    <td className="font-mono text-[11.5px] text-[var(--ds-ink3)]">{p.code}</td>
+                    <td className="max-w-[320px]">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openProject(p.id);
+                        }}
+                        className="block max-w-full truncate rounded-sm text-left text-[13px] font-semibold text-[var(--ds-ink)] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[var(--ds-brand)]"
+                      >
+                        {p.name}
+                      </button>
+                      <span className="block truncate text-[12px] text-[var(--ds-ink3)]">
+                        {p.portfolio ?? "No portfolio"} · {p.priority} priority
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap text-[var(--ds-ink2)]">{p.pm ?? "—"}</td>
+                    <td className="whitespace-nowrap text-[var(--ds-ink2)]">{p.stage}</td>
+                    <td>
+                      <span className="flex items-center gap-2">
+                        <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--ds-mutedw)]">
+                          <span className="block h-full rounded-full bg-[var(--ds-info)]" style={{ width: `${p.avgProgress}%` }} />
+                        </span>
+                        <span className="w-[34px] text-right text-[12px] tabular-nums text-[var(--ds-ink2)]">{p.avgProgress}%</span>
+                      </span>
+                    </td>
+                    <td title={h === "None" ? "No confirmed weekly report yet" : "This week's confirmed status"}>
+                      {h === "None" ? <Chip tone="muted">No report</Chip> : <HealthPill value={h} />}
+                    </td>
+                    <td className="whitespace-nowrap" title="This week's check-in">
+                      {p.checkin ? (
+                        <span className="flex items-center gap-1.5 text-[12px]">
+                          <span className="size-2 flex-none rounded-full" style={{ background: `var(${RAG_TOKEN[p.checkin.rag]})` }} aria-hidden />
+                          <span className={p.checkin.confirmed ? "text-[var(--ds-ink3)]" : "font-semibold text-[var(--ds-warn-text)]"}>
+                            {p.checkin.confirmed ? "Confirmed" : `Draft: ${healthWord(p.checkin.rag)}`}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-[var(--ds-ink3)]">None this week</span>
+                      )}
+                    </td>
+                    <td className="text-right tabular-nums text-[var(--ds-ink2)]">{p.memberCount}</td>
+                    <td>
+                      <ChevronRight className="size-4 text-[var(--ds-ink3)]" aria-hidden />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
-      </div>
-    </main>
+      </TableCard>
+    </>
   );
 }

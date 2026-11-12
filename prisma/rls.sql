@@ -45,6 +45,7 @@ BEGIN
     'project_document',
     'notification',
     'project_integration',
+    'tenant_integration',
     'project_milestone',
     'project_status_update',
     'shared_report',
@@ -81,6 +82,9 @@ BEGIN
     'checkpoint',
     'checkpoint_status',
     'market_check_in',
+    'project_module',
+    'module_instance_status',
+    'stage_term',
     -- Revamp M8 — document approvals, requirements traceability, closure lessons.
     'document_approval',
     'requirement',
@@ -99,10 +103,14 @@ BEGIN
     'project_dependency',
     -- M-P3b (docs/34) — the Head of PMs' weekly roll-up.
     'portfolio_report',
+    'rollup_recipient',
     -- M-P4a (docs/35) — idea intake & triage, the front of the funnel.
     'idea',
     -- Custom roles (tuma-style permission bundles) — admin-created, deactivate-only.
-    'custom_role'
+    'custom_role',
+    -- WS2 (UX fidelity Tier 4) — decisions waiting on the Group, and GLC actions.
+    'decision_request',
+    'glc_action'
     -- NOTE: `app_module` and `permission` are deliberately NOT listed. They are the GLOBAL
     -- platform catalogue (tuma's app_modules/permissions) — identical for every tenant, not
     -- tenant data, and carry no tenant_id — exactly like the `tenant` table, which is also

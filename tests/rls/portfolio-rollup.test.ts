@@ -4,7 +4,15 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { withTenant, type TenantContext } from "@/lib/tenant";
-import { approveRollup, buildRollup, getApprovedRollup, getRollup } from "@/server/portfolio-reports";
+import {
+  approveRollup,
+  buildRollup,
+  getApprovedRollup,
+  getApprovedRollupForWeek,
+  getRollup,
+  getRollupForWeek,
+  portfolioOf,
+} from "@/server/portfolio-reports";
 import { confirmCheckIn } from "@/server/checkins";
 import { createUsers, cleanupFixtureUsers } from "./_users";
 
@@ -18,6 +26,7 @@ describe("M-P3b portfolio roll-up", () => {
   let headCtx: TenantContext;
   let execId: string;
   let projectId: string;
+  let portfolioId: string;
 
   beforeAll(async () => {
     const [rb, db] = await Promise.all([
@@ -33,10 +42,12 @@ describe("M-P3b portfolio roll-up", () => {
     await withTenant(headCtx, (tx) =>
       tx.roleAssignment.create({ data: { tenantId: rbId, userId: execId, role: "Executive" } }),
     );
+    // Milestone B: the row carries its portfolio for the grouped inbox.
+    portfolioId = (await withTenant(headCtx, (tx) => tx.portfolio.create({ data: { tenantId: rbId, name: "RLP portfolio" }, select: { id: true } }))).id;
     projectId = (
       await withTenant(headCtx, (tx) =>
         tx.project.create({
-          data: { tenantId: rbId, code: "RLP1", name: "rollup fixture", type: "Project", priority: "Med", status: "AtRisk", leadUserId: head.id },
+          data: { tenantId: rbId, code: "RLP1", name: "rollup fixture", type: "Project", priority: "Med", status: "AtRisk", leadUserId: head.id, portfolioId },
           select: { id: true },
         }),
       )
@@ -49,6 +60,7 @@ describe("M-P3b portfolio roll-up", () => {
       await tx.checkIn.deleteMany({ where: { projectId } });
       await tx.roleAssignment.deleteMany({ where: { userId: execId } });
       await tx.project.deleteMany({ where: { id: projectId } });
+      await tx.portfolio.deleteMany({ where: { id: portfolioId } });
     });
     await cleanupFixtureUsers(rbId);
     await prisma.$disconnect();
@@ -70,8 +82,14 @@ describe("M-P3b portfolio roll-up", () => {
 
   it("approve freezes the payload: later check-in changes do not mutate what was signed", async () => {
     await confirmCheckIn(headCtx, projectId, { narrative: "signed state" }, NOW);
-    // DM1.73 (T7): the check-in was confirmed but never SENT to the Head — approving
-    // without acknowledging that is now refused, so "Send to the Head" means something.
+    // Since Milestone A confirmCheckIn also sends. Rows confirmed BEFORE that change can
+    // still sit confirmed-but-unsent in prod, so the DM1.73 (T7) guard stays — put the row
+    // back into that legacy state to keep it covered.
+    await withTenant(headCtx, (tx) =>
+      tx.checkIn.updateMany({ where: { projectId, isoWeek: "2027-W10" }, data: { submittedToHeadAt: null } }),
+    );
+    // DM1.73 (T7): a confirmed-but-never-sent check-in — approving without acknowledging
+    // that is refused, so "Send to the Head" means something.
     await expect(
       approveRollup(headCtx, "Week held steady; RLP1 needs watching.", NOW),
     ).rejects.toMatchObject({ code: "UNSENT_CHECKINS" });
@@ -93,11 +111,27 @@ describe("M-P3b portfolio roll-up", () => {
     await expect(buildRollup(headCtx, NOW)).rejects.toMatchObject({ code: "ALREADY_APPROVED" });
   });
 
+  it("Milestone B: rows carry their portfolio and the view its RAG tally; any week can be read", async () => {
+    const signed = await getRollupForWeek(headCtx, "2027-W10", NOW);
+    expect(signed.status).toBe("Approved"); // the frozen payload
+    const row = signed.rows.find((r) => r.code === "RLP1")!;
+    expect(portfolioOf(row)).toBe("RLP portfolio");
+    expect(signed.ragCounts.green + signed.ragCounts.amber + signed.ragCounts.red).toBe(signed.total);
+    expect(signed.ragCounts.computed).toBe(signed.rows.filter((r) => r.checkIn !== "Confirmed").length);
+    const approved = await getApprovedRollupForWeek(headCtx, "2027-W10");
+    expect(approved?.ragCounts).toEqual(signed.ragCounts);
+    // A week that was never built reads live, as "None".
+    const prior = await getRollupForWeek(headCtx, "2027-W09", NOW);
+    expect(prior.status).toBe("None");
+    expect(prior.rows.some((r) => r.code === "RLP1")).toBe(true);
+  });
+
   it("executives were notified and the hero read is available", async () => {
     const note = await withTenant(headCtx, (tx) =>
       tx.notification.findFirst({ where: { userId: execId, kind: "rollup.approved" } }),
     );
     expect(note?.message).toContain("roll-up is approved");
+    expect(note?.link).toBe("/reports"); // Milestone B: the exec reads it on /reports
     const hero = await getApprovedRollup(headCtx, NOW);
     expect(hero?.narrative).toContain("held steady");
   });

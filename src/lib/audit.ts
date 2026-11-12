@@ -9,7 +9,20 @@ export type AuditAction =
   | "mfa_enroll"
   | "role_grant"
   | "role_revoke"
-  | "access_request_review";
+  | "access_request_review"
+  | "view_switch" // UX3 (D2a): a "Viewing as" / "Preview home as…" change — presentation only
+  | "mfa_reminder" // UX fidelity Tier 1: a bulk "set up MFA" reminder (one row per batch)
+  // WS1 (Tier 4) gate sign-off: one row per transition, with before/after approval state.
+  | "gate.submit"
+  | "gate.approve"
+  | "gate.approve_exception"
+  | "gate.return"
+  // WS2 (Tier 4) decisions waiting on the Group, and GLC actions.
+  | "decision.raise"
+  | "decision.decide"
+  | "decision.defer"
+  | "glc_action.create"
+  | "glc_action.complete";
 
 export interface AuditEntry {
   action: AuditAction;

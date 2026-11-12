@@ -41,6 +41,8 @@ pnpm add bcryptjs                # password hashing (Milestone 2) — this doc m
 | class-variance-authority, clsx, tailwind-merge | latest | component variants/classes |
 | date-fns | 3.x | date formatting (due dates, milestones) |
 | otplib, qrcode | latest | TOTP MFA enrolment |
+| pdfjs-dist | 6.x | text extraction for the PDF variant of the weekly status-report upload (`src/server/status-report/parse.ts`); Word/Excel are read with a stdlib ZIP reader, no library |
+| playwright-core | 1.61.1 (exact, = @playwright/test's) | drives the Chromium in the production image for server-side PDF export (`src/server/pdf/render.ts`, Milestone D / M9-B); no browser download — Alpine's `chromium` package in the image, the ms-playwright cache locally |
 
 ## UI component library (shadcn/ui)
 

@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Banner } from "@/components/ui/panel";
+import { readApiError } from "@/lib/form-errors";
 import {
   Select,
   SelectContent,
@@ -17,7 +19,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/ui/drawer-dialog";
 import { ISSUE_STATUSES, type IssueListItem } from "@/server/issues";
 import { SEVERITY_ORDER } from "@/components/raid/severity";
 import type { AdminUserSummary } from "@/server/users";
@@ -46,7 +48,10 @@ export function EditIssueDialog({ issue, users, open, onOpenChange }: EditIssueD
     }
   }, [open, issue]);
 
-  async function handleSave() {
+  // Every control is a fixed choice, so there is nothing to check on a field; a rejection is
+  // form-level and sits in the banner at the top.
+  async function handleSave(e: FormEvent) {
+    e.preventDefault();
     setLoading(true);
     setError(null);
     const res = await fetch(`/api/issues/${issue.id}`, {
@@ -57,8 +62,7 @@ export function EditIssueDialog({ issue, users, open, onOpenChange }: EditIssueD
     setLoading(false);
 
     if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      setError(body?.error?.message ?? "Could not update issue.");
+      setError(readApiError(await res.json().catch(() => null), "Could not update the issue.").message);
       return;
     }
 
@@ -70,10 +74,11 @@ export function EditIssueDialog({ issue, users, open, onOpenChange }: EditIssueD
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit issue — {issue.title}</DialogTitle>
-          <DialogDescription>Changes are audited.</DialogDescription>
+          <DialogTitle>Edit Issue</DialogTitle>
+          <DialogDescription>{issue.title}. Changes are audited.</DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-4">
+        <form onSubmit={handleSave} className="flex flex-col gap-4" noValidate>
+          {error && <Banner tone="bad">{error}</Banner>}
           <div className="flex gap-3">
             <div className="flex flex-1 flex-col gap-1.5">
               <span className="text-sm font-medium text-ink-2">Status</span>
@@ -127,19 +132,13 @@ export function EditIssueDialog({ issue, users, open, onOpenChange }: EditIssueD
               </SelectContent>
             </Select>
           </div>
-        </div>
 
-        {error && (
-          <p role="alert" className="text-sm text-status-red">
-            {error}
-          </p>
-        )}
-
-        <DialogFooter>
-          <Button onClick={handleSave} disabled={loading}>
-            {loading ? "Saving…" : "Save"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button type="submit" disabled={loading}>
+              {loading ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

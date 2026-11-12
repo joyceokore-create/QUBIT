@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+/* UX fidelity: the design's --ds-* tokens (docs/08 § "Design spec v2"). Opt-in only. */
+@import "../styles/design-spec.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -229,7 +231,7 @@
 }
 
 /* ── LIGHT theme (default `:root` scope) ────────────────────────────────
-   Dark is the design's default *appearance* (next-themes defaultTheme=dark),
+   Light is the default *appearance* (next-themes defaultTheme=light; dark on request),
    but light lives on :root as the token fallback per the handoff. Values are
    the canonical palette from `QUBIT Command Center.dc.html` → applyTheme(). */
 :root {
@@ -519,56 +521,46 @@
   --tbactivebg: color-mix(in oklab, var(--brand) 14%, transparent);
 }
 
-/* ── LOGIN canvas (auth) — bespoke branded surface, theme-aware ───────────────
-   The sign-in screen is its own product-forward canvas, not the
-   app shell, so it carries a scoped --l-* token set instead of the q-tokens.
-   Both themes share ONE markup (login-form.tsx).
-
-   The atmospheric BACKGROUND (near-black base + navy/brand glows + ghost
-   wordmark) is intentionally shared across BOTH themes — the dark backdrop is
-   part of the brand. What flips is the CARD: dark mode floats a translucent
-   dark-glass card; light mode floats a bright light card on the same backdrop,
-   so "light" reads as a brighter focal surface rather than a whole new canvas.
+/* Pre-auth two-panel canvas (UX plan D8c): both panels sit on the card surface and
+   follow light/dark; the form floats in a bordered card with the standard shadow.
    Brand hue (--login-brand), --pbrand, --onbrand are already theme-aware.
-   Contrast on the light card: --l-ink 15:1, --l-ink-2 ≥7:1, --l-ph ≥4.5:1. */
+   Contrast on the light surface: --l-ink 15:1, --l-ink-2 ≥7:1, --l-ink-3/--l-ph ≥4.5:1. */
 .login-shell {
-  /* Shared backdrop (both themes) */
-  --l-bg: #050810;
-  --l-glow-navy: rgba(11, 34, 57, 0.85);
-  --l-glow-brand: color-mix(in oklab, var(--pbrand) 30%, transparent);
-  --l-wm: rgba(255, 255, 255, 0.03);
-
-  /* Light-theme card (default :root) — bright surface on the dark backdrop */
-  --l-card-bg: rgba(255, 255, 255, 0.96);
-  --l-card-bd: rgba(11, 34, 57, 0.1);
-  --l-card-sh: 0 30px 70px -24px rgba(0, 0, 0, 0.6), 0 2px 10px rgba(11, 34, 57, 0.08);
-  --l-card-glow: color-mix(in oklab, var(--pbrand) 22%, transparent);
+  --l-bg: var(--qcard);
+  --l-card-bg: var(--qcard);
+  --l-card-bd: var(--w08);
+  --l-card-sh: 0 2px 8px rgba(17, 27, 21, 0.07), 0 12px 32px -12px rgba(17, 27, 21, 0.14);
   --l-ink: #14202e;
   --l-ink-2: #45586b;
   --l-ink-3: #55657a;
-  --l-ph: #6a7789;
-  --l-field-bg: rgba(11, 34, 57, 0.04);
-  --l-field-bd: rgba(11, 34, 57, 0.14);
+  --l-ph: #64748b;
+  --l-field-bg: var(--qcard);
+  --l-field-bd: rgba(11, 34, 57, 0.18);
   --l-hair: rgba(11, 34, 57, 0.1);
-  --l-chip-bg: rgba(11, 34, 57, 0.03);
-  --l-err: #c0362c;
+  --l-chip-bg: rgba(11, 34, 57, 0.04);
+  --l-err: #b42318;
 }
 .dark .login-shell {
-  /* Backdrop tokens inherit from .login-shell above (identical in both themes).
-     Only the card flips to translucent dark glass. */
-  --l-card-bg: rgba(255, 255, 255, 0.04);
-  --l-card-bd: rgba(255, 255, 255, 0.1);
-  --l-card-sh: 0 30px 60px -20px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.02);
-  --l-card-glow: color-mix(in oklab, var(--pbrand) 30%, transparent);
+  --l-card-sh: 0 2px 8px rgba(0, 0, 0, 0.35), 0 12px 32px -12px rgba(0, 0, 0, 0.55);
   --l-ink: #ffffff;
-  --l-ink-2: rgba(255, 255, 255, 0.62);
-  --l-ink-3: rgba(255, 255, 255, 0.5);
-  --l-ph: rgba(255, 255, 255, 0.4);
-  --l-field-bg: rgba(255, 255, 255, 0.05);
-  --l-field-bd: rgba(255, 255, 255, 0.1);
+  --l-ink-2: rgba(255, 255, 255, 0.72);
+  --l-ink-3: rgba(255, 255, 255, 0.62);
+  --l-ph: rgba(255, 255, 255, 0.5);
+  --l-field-bd: rgba(255, 255, 255, 0.16);
   --l-hair: rgba(255, 255, 255, 0.1);
-  --l-chip-bg: rgba(255, 255, 255, 0.03);
+  --l-chip-bg: rgba(255, 255, 255, 0.05);
   --l-err: #ff8a8a;
+}
+/* MFA illustration: the coral circle sits behind the transparent cut-out (D8c). */
+.login-shell .auth-art-circle::before {
+  content: "";
+  position: absolute;
+  width: 78%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #f4846f;
+  top: 6%;
+  left: 11%;
 }
 
 /* Motion primitives from the prototype (design_handoff). pulseGlow reads
@@ -633,6 +625,22 @@
   to {
     opacity: 1;
     transform: none;
+  }
+}
+/* First-week setup nudge: drops into the header with a little overshoot — the one thing
+   that bounces, so it reads as "this needs you" without a modal. */
+@keyframes nudgeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-28px) scale(0.92);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(6px) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 @keyframes arcIn {
@@ -786,7 +794,11 @@
 
   /* Surfaces — Material-style: a cool-gray page so solid white cards separate
      with real elevation (no glass/blur). */
-  --qbg: #f3f5f8;
+  --qbg: #fafafa; /* designer, 12 Nov 2026: neutral and lighter than the design's cool #f3f5f8 */
+  /* Designer, 12 Nov 2026: only the brand-red accent glow; navy and green dropped so the page
+     stays light and grey chips/counts read against it (no extra borders). */
+  --amb2: transparent;
+  --amb3: transparent;
   --qcard: #ffffff;
   --card2: #f8fafc;
   --drawer: #ffffff;
@@ -839,9 +851,12 @@
 .dark [data-tenant="riverbank"] {
   --rbrand: #ed1c24;            /* guide keeps brand red on primary buttons */
   --onbrand: #ffffff;
+  /* Designer, 12 Nov 2026: red accent glow only, in dark mode too. */
+  --amb2: transparent;
+  --amb3: transparent;
 
   /* Slate near-black dark ramp (slate-950 based; deeper = darker) */
-  --qbg: #020617;
+  --qbg: #01030a; /* designer, 12 Nov 2026: a touch darker than #020617 so counts/chips read */
   --qcard: #0f172a;
   --card2: #0b1120;
   --drawer: #1e293b;
@@ -890,17 +905,65 @@
 /* Artifact-style data table — the dashboard cockpit's .sgt look (grey rounded header
    band, uppercase letter-spaced labels, dotted row separators, bold name + desc line)
    rebuilt on the APP's tokens so pages outside .pmv3 (Risks & Issues) can match it. */
-.sgt-app { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sgt-app { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
+/* Design spec v2 (.sgt): grey band header with rounded ends, 11px/700, Title Case labels —
+   not uppercase; 10px cells with dotted rules. */
 .sgt-app th {
-  background: var(--wash2); color: var(--ink3);
-  font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600;
-  text-align: left; padding: 12px 14px; white-space: nowrap;
+  background: var(--ds-surface2); color: var(--ds-ink3);
+  font-size: 11px; letter-spacing: 0.03em; font-weight: 700;
+  text-align: left; padding: 8px 10px; white-space: nowrap;
 }
 .sgt-app th:first-child { border-radius: 8px 0 0 8px; }
 .sgt-app th:last-child { border-radius: 0 8px 8px 0; }
-.sgt-app td { padding: 14px; border-bottom: 1px dotted var(--hair); vertical-align: middle; white-space: nowrap; }
+.sgt-app td { padding: 10px; border-bottom: 1px dotted var(--ds-line); vertical-align: middle; white-space: nowrap; }
 .sgt-app tbody tr:last-child td { border-bottom: none; }
-.sgt-app td .name { font-weight: 600; color: var(--qink); }
-.sgt-app td .desc { display: block; color: var(--ink4); font-size: 12px; font-weight: 400; white-space: normal; max-width: 44ch; }
+.sgt-app td .name { font-weight: 600; color: var(--ds-ink); }
+.sgt-app td .desc { display: block; color: var(--ds-ink3); font-size: 12px; font-weight: 400; white-space: normal; max-width: 44ch; }
 .sgt-app th.r, .sgt-app td.r { text-align: right; }
 
+/* Browser surfaces carry the design too. Selection and the caret are tinted from the
+   tenant's brand token, so Riverbank selects red and the default tenant selects green
+   with no per-theme rule. */
+::selection { background: color-mix(in oklab, var(--brand) 22%, transparent); color: var(--qink); }
+input, textarea, [contenteditable="true"] { caret-color: var(--brand); }
+
+
+/* ── UX2 foundations (UX plan U1–U4, U8, D8a; docs/08 "Controls, tabs and status") ──
+   One control size, one tab surface, status words that pass WCAG AA as text, and the
+   lifecycle stage colours. Theme-aware; tenant-independent (the brand still comes from
+   --brand). Contrast notes are measured on white / the dark card. */
+:root {
+  /* U3 — every search field, filter, input, select and default button. */
+  --control-h: 36px;
+  --control-h-compact: 28px; /* only inside table rows and list items */
+  --control-r: var(--radius); /* 10px */
+  /* U1 — the active tab's fill when the strip sits inside a white card. */
+  --surface-2: color-mix(in oklab, var(--qink) 5%, var(--qcard));
+  /* U4 — status text on a 12% wash of its own hue: On track / At risk / Off track. */
+  --ok-ink: #166534;   /* 7.1:1 */
+  --warn-ink: #92400e; /* 7.0:1 (Riverbank's --warn #d97706 is only 3.2:1 as text) */
+  --bad-ink: #b91c1c;  /* 6.5:1 */
+  /* D8a — lifecycle stages. Amber/red/green stay reserved for health. */
+  --stage-intake: #57534e;     /* grey   7.6:1 */
+  --stage-exploring: #1d4ed8;  /* blue   6.7:1 */
+  --stage-evaluating: #6d28d9; /* violet 7.1:1 */
+  --stage-approved: #0f766e;   /* teal   5.5:1 */
+  --stage-live: #15803d;       /* green  5.0:1 */
+}
+.dark {
+  --ok-ink: #6dd49a;
+  --warn-ink: #f4b96a;
+  --bad-ink: #f08080;
+  --stage-intake: #a8a29e;
+  --stage-exploring: #60a5fa;
+  --stage-evaluating: #a78bfa;
+  --stage-approved: #2dd4bf;
+  --stage-live: #6dd49a;
+}
+
+/* ── UX4 Daily Brief (UX plan D4) ──
+   The one bold element on a home page: a SOLID dark brand surface (no gradient) with
+   full-opacity white text, footer and timestamp included. Riverbank #a3161c is 7.8:1 with
+   white; any other tenant's brand is darkened to 60% so white text stays above 4.5:1. */
+:root { --brief-bg: color-mix(in oklab, var(--brand) 60%, black); --brief-ink: #ffffff; }
+[data-tenant="riverbank"] { --brief-bg: #a3161c; }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { UserPlus } from "lucide-react";
+import { SECONDARY } from "@/lib/surface";
 
 // Shown on a project a viewer isn't part of (PROMPT §5). Sends a join request for the project's
 // lead/PM to approve; on approval they become a member (Executives default to Stakeholder).
@@ -48,9 +49,9 @@ export function RequestToJoinButton({ projectId }: { projectId: string }) {
         type="button"
         onClick={request}
         disabled={state === "busy"}
-        className="flex items-center gap-1.5 rounded-full border border-[var(--hair)] px-3.5 py-1.5 text-[12px] font-semibold text-[var(--ink2)] transition-colors hover:border-brand hover:text-brand disabled:opacity-60"
+        className={SECONDARY}
       >
-        <UserPlus className="size-3.5" /> {state === "busy" ? "Sending…" : "Request to join"}
+        <UserPlus className="size-3.5" aria-hidden /> {state === "busy" ? "Sending…" : "Request to Join"}
       </button>
       {state === "error" && <span className="text-[10.5px] text-[var(--bad)]">{msg}</span>}
     </span>

@@ -3,6 +3,7 @@ import { requirePermission, forbidden } from "@/lib/api-guard";
 import { can } from "@/lib/rbac";
 import { canContributeToProject } from "@/lib/access";
 import { listRisks, createRisk, CreateRiskInput, RiskError } from "@/server/risks";
+import { validationError } from "@/server/errors";
 
 export async function GET(req: Request) {
   const guard = await requirePermission("risk:read");
@@ -25,13 +26,8 @@ export async function POST(req: Request) {
   const guard = await requirePermission("risk:read");
   if ("response" in guard) return guard.response;
 
-  const parsed = CreateRiskInput.safeParse(await req.json());
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: "VALIDATION", message: "Invalid input." } },
-      { status: 400 },
-    );
-  }
+  const parsed = CreateRiskInput.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return validationError(parsed.error);
 
   // A project-scoped risk needs project membership; a tenant-level risk (no project) is a
   // management action.

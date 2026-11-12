@@ -12,10 +12,20 @@ export default defineConfig(({ mode }) => {
   delete env.Q_AI_API_KEY;
   delete env.Q_AI_BASE_URL;
   delete env.ANTHROPIC_API_KEY;
+  // Same discipline for Entra SSO: the credentials-based invite/onboarding suites assert
+  // the non-SSO flow, so strip AZURE_AD_* before any worker spawns — otherwise a local
+  // .env with SSO configured would flip createUser to the SSO path and break them. A test
+  // that wants SSO stubs these on itself with vi.stubEnv.
+  delete env.AZURE_AD_CLIENT_ID;
+  delete env.AZURE_AD_CLIENT_SECRET;
+  delete env.AZURE_AD_TENANT_ID;
   Object.assign(process.env, env);
   delete process.env.Q_AI_API_KEY;
   delete process.env.Q_AI_BASE_URL;
   delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.AZURE_AD_CLIENT_ID;
+  delete process.env.AZURE_AD_CLIENT_SECRET;
+  delete process.env.AZURE_AD_TENANT_ID;
 
   return {
     plugins: [react()],

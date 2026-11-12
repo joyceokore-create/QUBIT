@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { commentBody, promoteRationale, promoteTitle } from "@/lib/comment-schema";
 import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
@@ -123,7 +124,7 @@ export const PostCommentInput = z.object({
   entityType: z.enum(COMMENT_ENTITY_TYPES),
   entityId: z.string().min(1),
   parentId: z.string().nullable().optional(),
-  body: z.string().trim().min(1, "Say something.").max(4000),
+  body: commentBody,
   mentionUserIds: z.array(z.string()).max(20).default([]),
 });
 export type PostCommentInputT = z.infer<typeof PostCommentInput>;
@@ -235,8 +236,8 @@ export async function deleteComment(ctx: TenantContext, commentId: string): Prom
 }
 
 export const PromoteInput = z.object({
-  title: z.string().trim().min(1).max(200),
-  rationale: z.string().trim().max(2000).optional(),
+  title: promoteTitle,
+  rationale: promoteRationale.optional(),
 });
 export type PromoteInputT = z.infer<typeof PromoteInput>;
 

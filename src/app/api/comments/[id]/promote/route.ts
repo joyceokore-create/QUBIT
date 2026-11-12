@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getTenantContext } from "@/lib/tenant";
+import { validationError } from "@/server/errors";
 import { ConversationError, promoteToDecision, PromoteInput } from "@/server/conversation";
 
 // POST /api/comments/[id]/promote — one click turns a thread's outcome into a Decision
@@ -15,12 +16,7 @@ export async function POST(req: Request, { params }: Ctx) {
     return NextResponse.json({ error: { code: "UNAUTHENTICATED" } }, { status: 401 });
   }
   const parsed = PromoteInput.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: "VALIDATION", message: parsed.error.issues[0]?.message ?? "A decision needs a title." } },
-      { status: 400 },
-    );
-  }
+  if (!parsed.success) return validationError(parsed.error);
   const { id } = await params;
   try {
     return NextResponse.json({ data: await promoteToDecision(ctx, id, parsed.data) }, { status: 201 });

@@ -1,79 +1,49 @@
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SeverityPill } from "@/components/raid/severity-pill";
-import type { GapReportSummary } from "@/server/raid";
+import { RaidTh, RAID_ROW, RAID_THEAD } from "@/components/raid/raid-table-parts";
+import { IssueStatus } from "@/components/raid/issue-table";
+import type { IssuePageRow } from "@/server/issues";
+import type { GapReason } from "@/server/raid";
 
-const GAP_REASON_LABEL: Record<string, string> = {
+const GAP_REASON_LABEL: Record<GapReason, string> = {
   no_origin_risk: "No prior risk was tracked",
   risk_unowned_or_unmitigated: "Origin risk had no owner or mitigation",
 };
 
-export function GapReportView({ report }: { report: GapReportSummary }) {
-  if (report.totalIssues === 0) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-[10px] border border-ink-4 bg-white p-16 text-center">
-        <h2 className="font-heading text-lg text-foreground">No issues recorded yet</h2>
-        <p className="max-w-sm text-sm text-ink-2">
-          The gap report will populate once issues exist — materialise a risk or raise one
-          directly to see post-implementation review coverage here.
-        </p>
-      </div>
-    );
-  }
-
+/**
+ * UX5 — one server-sliced page of the Gap report: issues with no owned, mitigated risk
+ * behind them (src/server/raid.ts GAP_ISSUE_WHERE, paged by listIssuesPage({ gap: true })).
+ */
+export function GapReportTable({ rows }: { rows: IssuePageRow[] }) {
   return (
-    <div className="flex flex-col gap-[18px]">
-      <div className="grid grid-cols-3 gap-2.5">
-        <div className="rounded-[6px] bg-background p-[12px_14px]">
-          <div className="mb-1 text-[9px] font-bold tracking-[0.7px] text-ink-3 uppercase">Total Issues</div>
-          <div className="text-[21px] font-bold tracking-[-0.8px] text-foreground">{report.totalIssues}</div>
-        </div>
-        <div className="rounded-[6px] bg-background p-[12px_14px]">
-          <div className="mb-1 text-[9px] font-bold tracking-[0.7px] text-ink-3 uppercase">Traced to a Risk</div>
-          <div className="text-[21px] font-bold tracking-[-0.8px] text-status-green">{report.traced}</div>
-        </div>
-        <div className="rounded-[6px] bg-background p-[12px_14px]">
-          <div className="mb-1 text-[9px] font-bold tracking-[0.7px] text-ink-3 uppercase">Gaps</div>
-          <div className="text-[21px] font-bold tracking-[-0.8px] text-status-red">{report.gapCount}</div>
-        </div>
-      </div>
-
-      {report.gapCount === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-[10px] border border-ink-4 bg-white p-16 text-center">
-          <h2 className="font-heading text-lg text-foreground">No gaps</h2>
-          <p className="max-w-sm text-sm text-ink-2">
-            Every issue traces back to an owned, mitigated risk.
-          </p>
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-[10px] border border-ink-4 bg-white">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Issue</TableHead>
-                <TableHead>Project</TableHead>
-                <TableHead>Severity</TableHead>
-                <TableHead>Origin Risk</TableHead>
-                <TableHead>Gap Reason</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {report.items.map((item) => (
-                <TableRow key={item.issueId}>
-                  <TableCell className="font-medium">{item.issueTitle}</TableCell>
-                  <TableCell className="text-ink-2">{item.projectCode ?? "—"}</TableCell>
-                  <TableCell>
-                    <SeverityPill severity={item.severity} />
-                  </TableCell>
-                  <TableCell className="text-ink-3">{item.originRiskTitle ?? "None"}</TableCell>
-                  <TableCell className="text-[11px] text-status-red">
-                    {GAP_REASON_LABEL[item.gapReason] ?? item.gapReason}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-    </div>
+    <table className="w-full min-w-[820px] text-left text-[13px]">
+      <thead className={RAID_THEAD}>
+        <tr>
+          <RaidTh className="pl-4">Issue</RaidTh>
+          <RaidTh>Project</RaidTh>
+          <RaidTh>Severity</RaidTh>
+          <RaidTh>Status</RaidTh>
+          <RaidTh>Origin risk</RaidTh>
+          <RaidTh className="pr-4">Gap reason</RaidTh>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((item) => (
+          <tr key={item.id} className={RAID_ROW}>
+            <td className="max-w-[320px] py-2.5 pl-4 pr-3 font-semibold text-[var(--qink)]">{item.title}</td>
+            <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[11.5px] text-[var(--ink3)]">{item.projectCode ?? "—"}</td>
+            <td className="whitespace-nowrap px-3 py-2.5">
+              <SeverityPill severity={item.severity} />
+            </td>
+            <td className="whitespace-nowrap px-3 py-2.5">
+              <IssueStatus status={item.status} />
+            </td>
+            <td className="max-w-[240px] px-3 py-2.5 text-[12px] text-[var(--ink3)]">
+              <span className="line-clamp-1">{item.originRiskTitle ?? "None"}</span>
+            </td>
+            <td className="py-2.5 pl-3 pr-4 text-[12px] font-semibold text-[var(--bad-ink)]">{item.gapReason ? GAP_REASON_LABEL[item.gapReason] : "—"}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }

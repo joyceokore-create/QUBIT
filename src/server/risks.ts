@@ -1,17 +1,28 @@
 import { z } from "zod";
+import { riskScore, riskTitle } from "@/lib/risk-schema";
+import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
-import { ownerNamesById } from "@/server/raid-shared";
-import { heatBucket, SEVERITY_ORDER } from "@/components/raid/severity";
+import { pageInfo, type PageInfo } from "@/lib/list-state";
+import {
+  containsText,
+  idOrNull,
+  ownerIdsMatching,
+  ownerNamesById,
+  RaidPageBase,
+  type RaidPageQuery,
+} from "@/server/raid-shared";
+import { heatBucket, SEVERITY_ORDER, type SeverityLevel } from "@/components/raid/severity";
 
 export const RISK_STATUSES = ["Open", "Monitoring", "Mitigated", "Closed"] as const;
 
 export const CreateRiskInput = z.object({
   projectId: z.string().uuid().nullable().optional(),
-  title: z.string().min(3),
+  // Same rules and copy as the New Risk form (src/lib/risk-schema.ts).
+  title: riskTitle,
   category: z.string().nullable().optional(),
-  probability: z.number().int().min(1).max(5),
-  impact: z.number().int().min(1).max(5),
+  probability: riskScore("a probability"),
+  impact: riskScore("an impact"),
   mitigation: z.string().nullable().optional(),
   ownerId: z.string().uuid().nullable().optional(),
 });
@@ -21,8 +32,8 @@ export const UpdateRiskInput = z.object({
   status: z.enum(RISK_STATUSES).optional(),
   ownerId: z.string().uuid().nullable().optional(),
   mitigation: z.string().nullable().optional(),
-  probability: z.number().int().min(1).max(5).optional(),
-  impact: z.number().int().min(1).max(5).optional(),
+  probability: riskScore("a probability").optional(),
+  impact: riskScore("an impact").optional(),
 });
 export type UpdateRiskInput = z.infer<typeof UpdateRiskInput>;
 
@@ -63,6 +74,13 @@ export interface RiskListFilters {
   q?: string;
 }
 
+const RISK_LIST_INCLUDE = {
+  project: { select: { code: true } },
+  issue: { select: { id: true } },
+} satisfies Prisma.RiskInclude;
+
+type RiskWithListInclude = Prisma.RiskGetPayload<{ include: typeof RISK_LIST_INCLUDE }>;
+
 export async function listRisks(ctx: TenantContext, filters: RiskListFilters = {}): Promise<RiskListItem[]> {
   return withTenant(ctx, async (tx) => {
     const risks = await tx.risk.findMany({
@@ -70,32 +88,100 @@ export async function listRisks(ctx: TenantContext, filters: RiskListFilters = {
         status: filters.status || undefined,
         ownerId: filters.ownerId || undefined,
         projectId: filters.projectId || undefined,
-        title: filters.q ? { contains: filters.q, mode: "insensitive" } : undefined,
+        title: filters.q ? containsText(filters.q) : undefined,
       },
-      include: {
-        project: { select: { code: true } },
-        issue: { select: { id: true } },
-      },
+      include: RISK_LIST_INCLUDE,
       orderBy: { createdAt: "desc" },
     });
 
-    const ownerNames = await ownerNamesById(tx, risks.map((r) => r.ownerId));
+    return toRiskListItems(tx, risks);
+  });
+}
 
-    return risks.map((r) => ({
-      id: r.id,
-      title: r.title,
-      category: r.category,
-      probability: r.probability,
-      impact: r.impact,
-      mitigation: r.mitigation,
-      status: r.status,
-      ownerId: r.ownerId,
-      ownerName: r.ownerId ? (ownerNames.get(r.ownerId) ?? null) : null,
-      projectId: r.projectId,
-      projectCode: r.project?.code ?? null,
-      createdAt: r.createdAt,
-      materialised: !!r.issue,
-    }));
+async function toRiskListItems(tx: Prisma.TransactionClient, risks: RiskWithListInclude[]): Promise<RiskListItem[]> {
+  const ownerNames = await ownerNamesById(tx, risks.map((r) => r.ownerId));
+
+  return risks.map((r) => ({
+    id: r.id,
+    title: r.title,
+    category: r.category,
+    probability: r.probability,
+    impact: r.impact,
+    mitigation: r.mitigation,
+    status: r.status,
+    ownerId: r.ownerId,
+    ownerName: r.ownerId ? (ownerNames.get(r.ownerId) ?? null) : null,
+    projectId: r.projectId,
+    projectCode: r.project?.code ?? null,
+    createdAt: r.createdAt,
+    materialised: !!r.issue,
+  }));
+}
+
+// ── UX5 (L4) — the Risks tab pages, searches and filters on the server ───────────
+
+export const RiskPageParams = RaidPageBase.extend({ status: z.enum(RISK_STATUSES).optional() });
+
+export interface RiskPage {
+  rows: RiskListItem[];
+  /** Clamped page maths: an out-of-range page reads as the last page. */
+  info: PageInfo;
+}
+
+/**
+ * Risk severity is not a column — it is the heat bucket of probability × impact (1–5 each).
+ * Filter on it by listing the (probability, impact) pairs that land in the bucket, which
+ * keeps the filter a plain parameterised Prisma `OR` (at most 25 pairs).
+ */
+export function heatPairs(severity: SeverityLevel): Prisma.RiskWhereInput[] {
+  const pairs: Prisma.RiskWhereInput[] = [];
+  for (let probability = 1; probability <= 5; probability++) {
+    for (let impact = 1; impact <= 5; impact++) {
+      if (heatBucket(probability, impact) === severity) pairs.push({ probability, impact });
+    }
+  }
+  return pairs;
+}
+
+/**
+ * One page of the tenant's risks plus the total that match. Search covers title, category,
+ * mitigation, project code/name and owner name across ALL rows (not just the page). Runs
+ * under the tenant's RLS context; `where` only ever narrows within it.
+ */
+export async function listRisksPage(ctx: TenantContext, query: RaidPageQuery): Promise<RiskPage> {
+  const p = RiskPageParams.parse(query);
+  return withTenant(ctx, async (tx) => {
+    const and: Prisma.RiskWhereInput[] = [];
+    if (p.projectId) and.push({ projectId: idOrNull(p.projectId) });
+    if (p.ownerId) and.push({ ownerId: idOrNull(p.ownerId) });
+    if (p.status) and.push({ status: p.status });
+    if (p.severity) and.push({ OR: heatPairs(p.severity) });
+    if (p.q) {
+      const c = containsText(p.q);
+      const owners = await ownerIdsMatching(tx, p.q);
+      and.push({
+        OR: [
+          { title: c },
+          { category: c },
+          { mitigation: c },
+          { project: { is: { code: c } } },
+          { project: { is: { name: c } } },
+          ...(owners.length ? [{ ownerId: { in: owners } }] : []),
+        ],
+      });
+    }
+    const where: Prisma.RiskWhereInput = and.length ? { AND: and } : {};
+
+    const total = await tx.risk.count({ where });
+    const info = pageInfo(total, p.page, p.size);
+    const risks = await tx.risk.findMany({
+      where,
+      include: RISK_LIST_INCLUDE,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: info.skip,
+      take: info.size,
+    });
+    return { rows: await toRiskListItems(tx, risks), info };
   });
 }
 

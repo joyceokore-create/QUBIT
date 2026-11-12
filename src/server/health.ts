@@ -45,6 +45,23 @@ export function derivedRag(s: RagSignals): Rag {
   return "Green";
 }
 
+/**
+ * UX7 — the reasons behind derivedRag, in plain words, so a RAG dispute can say WHY QUBIT
+ * calculates what it does. Same thresholds as derivedRag; empty when it calculates Green.
+ */
+export function derivedRagReasons(s: RagSignals): string[] {
+  if (s.status === "Completed" || s.status === "Cancelled") return [];
+  const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
+  const out: string[] = [];
+  if (s.status === "Overdue") out.push("The project's status is Overdue");
+  else if (s.status === "AtRisk") out.push("The project's status is At risk");
+  if ((s.gatesBlocked ?? 0) > 0) out.push(n(s.gatesBlocked!, "gate is blocked", "gates are blocked"));
+  if ((s.openBlockers ?? 0) > 0) out.push(n(s.openBlockers!, "open blocker", "open blockers"));
+  if ((s.overdueTasks ?? 0) > 0) out.push(n(s.overdueTasks!, "task is overdue", "tasks are overdue"));
+  if ((s.milestonesSlipped ?? 0) > 0) out.push(n(s.milestonesSlipped!, "milestone is past its date", "milestones are past their date"));
+  return out;
+}
+
 /** True when the project belongs in every "needs attention" list. */
 export function needsAttention(status: string): boolean {
   return projectRag(status) !== "Green";
@@ -96,4 +113,23 @@ export function ragCounts(items: { status: string }[]) {
     planning: items.filter((i) => i.status === "Planning").length,
     done: items.filter((i) => i.status === "Completed" || i.status === "Cancelled").length,
   };
+}
+
+// ── Milestone B: a RAG tally over check-in-aware rows (distinct from ragCounts, which
+// counts typed project statuses). `computed` = rows whose RAG is derived, not confirmed.
+export interface RagTally {
+  green: number;
+  amber: number;
+  red: number;
+  computed: number;
+}
+export function tallyRag(items: { rag: Rag; computed: boolean }[]): RagTally {
+  const t: RagTally = { green: 0, amber: 0, red: 0, computed: 0 };
+  for (const i of items) {
+    if (i.rag === "Green") t.green++;
+    else if (i.rag === "Amber") t.amber++;
+    else t.red++;
+    if (i.computed) t.computed++;
+  }
+  return t;
 }

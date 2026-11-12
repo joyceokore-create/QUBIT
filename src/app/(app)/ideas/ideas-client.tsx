@@ -1,27 +1,47 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { MoreHorizontal, Plus } from "lucide-react";
+import { toast } from "sonner";
+import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
 import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CARD } from "@/lib/surface";
+import { Field, FIELD_INPUT, FIELD_TEXTAREA } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { MergeIdeaFormSchema, NewIdeaFormSchema, ParkIdeaFormSchema } from "@/lib/idea-schema";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { PageHeader } from "@/components/list/page-header";
+import { FilterChips, FilterSelect, ListToolbar, SearchField, type ActiveFilter, type FilterOption } from "@/components/list/list-toolbar";
+import { ListEmpty, TableCard, TableFooter } from "@/components/list/table-footer";
+import { useListUrl } from "@/components/list/use-list-url";
+import { matchesSearch, paginate } from "@/lib/list-state";
+import { matchesSubmitted, SUBMITTED_BUCKETS, SUBMITTED_LABEL } from "@/lib/list-buckets";
+import { formatDate } from "@/lib/dates";
+import { THEAD, TROW } from "@/lib/surface";
+import { cn } from "@/lib/utils";
 
 /**
- * M-P4a (docs/35 §1) — idea intake & triage, laid out as the wizards wireframe draws it:
- * submit form on the left, the two-lane triage board on the right, the three actions
- * under it. "Accept" routes to the project wizard pre-filled (?fromIdea=) — nothing is
- * retyped between intake and delivery.
+ * M-P4a (docs/35 §1) — idea intake & triage. "Accept" routes to the project wizard
+ * pre-filled (?fromIdea=) — nothing is retyped between intake and delivery; "Park" needs a
+ * reason; "Merge" folds the idea into a live project.
+ *
+ * UX5 (L1–L5): the submit form moves behind "+ New idea" (the header's primary action) and
+ * the New / Reviewing lanes plus the Decided list become one table — search, Sponsor ·
+ * Stage · Submitted filters, always-visible pagination, all view state in the URL. The
+ * Head sees every idea; anyone else sees the ones they submitted (getIdeaBoard decides).
  */
 
+type IdeaStatus = "New" | "Reviewing" | "Accepted" | "Parked" | "Merged";
 interface IdeaRow {
   id: string;
   title: string;
   sponsor: string;
   problem: string;
   expectedValue: string | null;
-  status: "New" | "Reviewing" | "Accepted" | "Parked" | "Merged";
+  status: IdeaStatus;
   parkReason: string | null;
   summary: string | null;
   suggestedPortfolio: { id: string; name: string } | null;
@@ -38,391 +58,423 @@ interface Board {
   decided: IdeaRow[];
 }
 
-const LABEL = "text-[11px] font-semibold tracking-[0.6px] text-[var(--ink4)] uppercase";
-const TEXTAREA = "mt-1.5 w-full rounded-lg border border-input bg-background p-2.5 text-sm";
-const SELECT = "mt-1.5 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm";
-
-const STATUS_TOK: Record<string, string> = {
-  New: "--qinfo",
-  Reviewing: "--warn",
-  Accepted: "--ok",
-  Parked: "--ink4",
-  Merged: "--ink4",
+const STATUS_ORDER: IdeaStatus[] = ["New", "Reviewing", "Accepted", "Parked", "Merged"];
+// Open ideas sit in the Intake stage: New in the intake grey, Reviewing in the exploring
+// blue; Accepted takes the approved teal. Parked and Merged are closed, so they stay neutral.
+const STATUS_TOKEN: Record<IdeaStatus, string> = {
+  New: "--stage-intake",
+  Reviewing: "--stage-exploring",
+  Accepted: "--stage-approved",
+  Parked: "--ink3",
+  Merged: "--ink3",
 };
+
+const FILTER_KEYS = ["sponsor", "stage", "submitted"] as const;
+type FilterKey = (typeof FILTER_KEYS)[number];
+const FILTER_LABEL: Record<FilterKey, string> = { sponsor: "Sponsor", stage: "Stage", submitted: "Submitted" };
+
+
+function StatusPill({ status }: { status: IdeaStatus }) {
+  const tok = STATUS_TOKEN[status];
+  return (
+    <span
+      className="inline-flex h-[22px] items-center whitespace-nowrap rounded-full px-2 text-[12px] font-semibold"
+      style={{ color: `var(${tok})`, background: `color-mix(in oklab, var(${tok}) 12%, transparent)` }}
+    >
+      {status}
+    </span>
+  );
+}
 
 export function IdeasClient({
   initial,
   portfolios,
   projects,
+  tenantName,
+  timeZone,
 }: {
   initial: Board;
   portfolios: { id: string; name: string }[];
   projects: { id: string; code: string; name: string }[];
+  tenantName: string;
+  timeZone: string;
 }) {
   const router = useRouter();
-  const { busy, error, setError, mutate } = useAdminMutation();
+  const list = useListUrl("ideas", 10);
   const [board, setBoard] = useState<Board>(initial);
+  // The top bar's "+ New › Idea" lands here with ?new=1 (UX fidelity F1).
+  const searchParams = useSearchParams();
+  const [newOpen, setNewOpen] = useState(searchParams.get("new") === "1");
+  const [pending, setPending] = useState<{ mode: "park" | "merge"; idea: IdeaRow } | null>(null);
+  const row = useAdminMutation();
 
-  const [title, setTitle] = useState("");
-  const [sponsor, setSponsor] = useState("");
-  const [problem, setProblem] = useState("");
-  const [value, setValue] = useState("");
-  const [portfolioId, setPortfolioId] = useState("");
-  const [sent, setSent] = useState(false);
+  const f = Object.fromEntries(FILTER_KEYS.map((k) => [k, list.get(k)])) as Record<FilterKey, string>;
 
   async function reload() {
     const res = await fetch("/api/ideas");
     if (res.ok) setBoard(((await res.json()) as { data: Board }).data);
   }
 
-  async function submit() {
-    setSent(false);
-    const ok = await mutate(
-      "/api/ideas",
-      "POST",
-      {
-        title,
-        sponsor,
-        problem,
-        expectedValue: value.trim() || null,
-        suggestedPortfolioId: portfolioId || null,
-      },
-      { fallback: "Could not submit the idea." },
-    );
-    if (ok) {
-      setTitle("");
-      setSponsor("");
-      setProblem("");
-      setValue("");
-      setPortfolioId("");
-      setSent(true);
-      await reload();
-    }
-  }
+  // Row actions surface failures as a toast — the table card holds only the table.
+  useEffect(() => {
+    if (row.error) toast.error(row.error);
+  }, [row.error]);
 
-  async function triage(id: string, body: Record<string, unknown>) {
-    const ok = await mutate(`/api/ideas/${id}/triage`, "POST", body, { fallback: "Triage failed." });
+  async function review(id: string, reviewing: boolean) {
+    const ok = await row.mutate(`/api/ideas/${id}/triage`, "POST", { action: "review", reviewing }, { fallback: "Triage failed.", refresh: false });
     if (ok) await reload();
   }
 
+  const ideas = useMemo(() => [...board.lanes.flatMap((l) => l.ideas), ...board.decided], [board]);
+
+  const opts = useMemo<Record<FilterKey, FilterOption[]>>(
+    () => ({
+      sponsor: [...new Set(ideas.map((i) => i.sponsor))].sort((a, b) => a.localeCompare(b)).map((s) => ({ value: s, label: s })),
+      stage: STATUS_ORDER.map((s) => ({ value: s, label: s })),
+      submitted: SUBMITTED_BUCKETS.map((b) => ({ value: b, label: SUBMITTED_LABEL[b] })),
+    }),
+    [ideas],
+  );
+
+  const filtered = useMemo(
+    () =>
+      ideas
+        .filter(
+          (i) =>
+            matchesSearch(list.q, i.title, i.sponsor, i.problem) &&
+            (!f.sponsor || i.sponsor === f.sponsor) &&
+            (!f.stage || i.status === f.stage) &&
+            matchesSubmitted(f.submitted, i.submittedAt),
+        )
+        // Waiting for triage first, then decided; newest first within each.
+        .sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) || b.submittedAt.localeCompare(a.submittedAt)),
+    [ideas, list.q, f.sponsor, f.stage, f.submitted],
+  );
+  const { rows, info } = paginate(filtered, list.page, list.size);
+
+  const active: ActiveFilter[] = FILTER_KEYS.filter((k) => f[k]).map((k) => ({
+    key: k,
+    label: `${FILTER_LABEL[k]}: ${opts[k].find((o) => o.value === f[k])?.label ?? f[k]}`,
+  }));
+  const isFiltered = active.length > 0 || !!list.q;
+
   return (
-    <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] lg:items-start">
-      {/* ── Submit an idea ─────────────────────────────────────────────── */}
-      <section className={`${CARD} p-4`} style={{ background: "var(--cardbg)" }}>
-        <h2 className="mb-3 text-[14px] font-bold text-[var(--qink)]">Submit an idea</h2>
-        <div className="flex flex-col gap-3">
-          <div>
-            <label htmlFor="idea-title" className={LABEL}>Title</label>
-            <Input
-              id="idea-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Instant merchant settlement"
-              className="mt-1.5"
-            />
-          </div>
-          <div>
-            <label htmlFor="idea-sponsor" className={LABEL}>Sponsor</label>
-            <Input
-              id="idea-sponsor"
-              value={sponsor}
-              onChange={(e) => setSponsor(e.target.value)}
-              placeholder="Head of Merchant Banking"
-              className="mt-1.5"
-            />
-          </div>
-          <div>
-            <label htmlFor="idea-problem" className={LABEL}>Problem it solves</label>
-            <textarea
-              id="idea-problem"
-              rows={4}
-              value={problem}
-              onChange={(e) => setProblem(e.target.value)}
-              placeholder="Merchants wait T+1 for settlement; competitors offer instant."
-              className={TEXTAREA}
-            />
-          </div>
-          <div>
-            <label htmlFor="idea-value" className={LABEL}>Expected value</label>
-            <Input
-              id="idea-value"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder="Retain 200+ merchants; fee upside"
-              className="mt-1.5"
-            />
-          </div>
-          <div>
-            <label htmlFor="idea-portfolio" className={LABEL}>Portfolio it might belong to</label>
-            <select
-              id="idea-portfolio"
-              value={portfolioId}
-              onChange={(e) => setPortfolioId(e.target.value)}
-              className={SELECT}
-            >
-              <option value="">No suggestion</option>
-              {portfolios.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-            <p className="mt-1 text-[10.5px] text-[var(--ink4)]">Your suggestion, not a decision — triage confirms it.</p>
-          </div>
-          {error && <p className="text-[11.5px] text-[var(--bad)]">{error}</p>}
-          {sent && <p className="text-[11.5px] text-[var(--ok)]">Submitted — the Head of PMs has been notified.</p>}
-          <div>
-            <Button type="button" disabled={busy} onClick={() => void submit()}>
-              Submit idea
-            </Button>
-          </div>
-        </div>
-      </section>
+    <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
+      <PageHeader
+        eyebrow={board.canTriage ? "Ideas" : tenantName}
+        title={board.canTriage ? "Triage Board" : "Ideas"}
+        description={
+          board.canTriage
+            ? "Where projects are born. Accept an idea and the project wizard opens pre-filled; park it and the reason stays on the record."
+            : "Submit an idea — anyone can. The Head triages it, and you'll be told what was decided and why."
+        }
+        actions={
+          <Button type="button" onClick={() => setNewOpen(true)}>
+            <Plus /> New Idea
+          </Button>
+        }
+      />
 
-      {/* ── Triage board ───────────────────────────────────────────────── */}
-      <section className="flex min-w-0 flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <h2 className="text-[14px] font-bold text-[var(--qink)]">
-            {board.canTriage ? "Triage board" : "My ideas"}
-          </h2>
-          {board.canTriage && (
-            <span
-              className="rounded-[5px] px-1.5 py-0.5 font-mono text-[8.5px] font-bold uppercase tracking-[.6px]"
-              style={{ color: "var(--qinfo)", background: "color-mix(in oklab, var(--qinfo) 12%, transparent)" }}
-            >
-              Head / PMO
-            </span>
-          )}
-        </div>
+      <div className="flex flex-col gap-2">
+        <ListToolbar>
+          <SearchField value={list.q} onChange={(q) => list.set({ q })} placeholder="Search ideas or sponsors" label="Search ideas" />
+          <FilterSelect label="Sponsor" allLabel="All sponsors" value={f.sponsor} options={opts.sponsor} onChange={(v) => list.set({ sponsor: v })} />
+          <FilterSelect label="Stage" allLabel="All stages" value={f.stage} options={opts.stage} onChange={(v) => list.set({ stage: v })} />
+          <FilterSelect label="Submitted" allLabel="Any time" value={f.submitted} options={opts.submitted} onChange={(v) => list.set({ submitted: v })} />
+          <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={() => list.clear([...FILTER_KEYS])} />
+        </ListToolbar>
+      </div>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {board.lanes.map((lane) => (
-            <div key={lane.key} className={`${CARD} flex flex-col p-3`} style={{ background: "var(--cardbg)" }}>
-              <div className="mb-2 flex items-center justify-between">
-                <span className="font-mono text-[10px] font-bold uppercase tracking-[1.2px] text-[var(--ink3)]">
-                  {lane.key}
-                </span>
-                <span className="font-mono text-[10px] tabular-nums text-[var(--ink4)]">{lane.ideas.length}</span>
-              </div>
-              {lane.ideas.length === 0 ? (
-                <p className="text-[11.5px] text-[var(--ink5)]">
-                  {lane.key === "New" ? "Nothing waiting — submit one on the left." : "Nothing under review."}
-                </p>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {lane.ideas.map((idea) => (
-                    <IdeaCard
-                      key={idea.id}
-                      idea={idea}
-                      canTriage={board.canTriage}
-                      projects={projects}
-                      busy={busy}
-                      onTriage={triage}
-                      onAccept={() => router.push(`/projects/new?fromIdea=${idea.id}`)}
-                      onError={setError}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+      <TableCard footer={<TableFooter info={info} noun="ideas" onPage={list.setPage} onSize={list.setSize} />}>
+        {rows.length === 0 ? (
+          <ListEmpty
+            filtered={isFiltered}
+            noun="ideas"
+            onClear={() => list.clear([...FILTER_KEYS])}
+            hint={!isFiltered && !board.canTriage ? "Ideas you submit appear here, with what was decided and why." : undefined}
+            action={
+              // The header keeps the page's one filled primary; this repeat is outlined.
+              <Button type="button" variant="outline" onClick={() => setNewOpen(true)}>
+                <Plus /> New Idea
+              </Button>
+            }
+          />
+        ) : (
+          <table className="relative w-full min-w-[920px] border-separate border-spacing-0 text-left text-[12.5px]">
+            <thead className={THEAD}>
+              <tr>
+                <th scope="col">Idea</th>
+                <th scope="col">Sponsor</th>
+                <th scope="col">Stage</th>
+                <th scope="col">Submitted</th>
+                <th scope="col">Outcome</th>
+                {board.canTriage && (
+                  <th scope="col" className="text-right">
+                    <span className="sr-only">Triage</span>
+                  </th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((idea) => {
+                const open = idea.status === "New" || idea.status === "Reviewing";
+                return (
+                  <tr key={idea.id} className={cn(TROW, "align-top transition-colors hover:[&>td]:bg-[var(--ds-surface2)] [&>td]:align-top")}>
+                    <td className="max-w-[420px]">
+                      <span className="flex items-baseline gap-2">
+                        <span className="min-w-0 font-semibold text-[var(--ds-ink)]">{idea.title}</span>
+                        {idea.mine && <span className="flex-none text-[11px] font-semibold text-[var(--ds-ink3)]">Yours</span>}
+                      </span>
+                      <span className="line-clamp-2 text-[12px] text-[var(--ds-ink3)]" title={idea.expectedValue ? `${idea.problem}\nValue: ${idea.expectedValue}` : idea.problem}>
+                        {idea.problem}
+                      </span>
+                      {idea.suggestedPortfolio && <span className="block truncate text-[12px] text-[var(--ds-ink3)]">Suggested portfolio: {idea.suggestedPortfolio.name}</span>}
+                      {/* An empty summary says "not summarised" — never a fabricated line (docs/35 §3). */}
+                      {idea.summary && <span className="block text-[12px] italic text-[var(--ds-ink3)]">{idea.summary}</span>}
+                    </td>
+                    <td className="text-[var(--ds-ink2)]">{idea.sponsor}</td>
+                    <td>
+                      <StatusPill status={idea.status} />
+                    </td>
+                    <td className="whitespace-nowrap">
+                      <span className="block tabular-nums text-[var(--ds-ink2)]">{formatDate(idea.submittedAt, timeZone)}</span>
+                      {idea.submittedByName && <span className="block text-[12px] text-[var(--ds-ink3)]">by {idea.submittedByName}</span>}
+                    </td>
+                    <td className="max-w-[260px] text-[12.5px]">
+                      {idea.outcomeProject ? (
+                        <Link href={`/projects/${idea.outcomeProject.id}`} className="font-semibold text-[var(--ds-ink)] hover:underline" title={idea.outcomeProject.name}>
+                          {idea.outcomeProject.code} · <span className="font-normal text-[var(--ds-ink2)]">{idea.outcomeProject.name}</span>
+                        </Link>
+                      ) : idea.parkReason ? (
+                        <span className="line-clamp-2 italic text-[var(--ds-ink3)]" title={idea.parkReason}>
+                          “{idea.parkReason}”
+                        </span>
+                      ) : (
+                        <span className="text-[var(--ds-ink3)]">{idea.status === "Reviewing" ? "Under review" : open ? "Waiting for triage" : "—"}</span>
+                      )}
+                    </td>
+                    {board.canTriage && (
+                      <td className="whitespace-nowrap text-right">
+                        {open && (
+                          <span className="inline-flex items-center gap-2">
+                            <Button type="button" size="sm" variant="outline" disabled={row.busy} onClick={() => router.push(`/projects/new?fromIdea=${idea.id}`)}>
+                              Accept
+                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger render={<Button type="button" size="icon-sm" variant="outline" disabled={row.busy} aria-label={`More triage actions for ${idea.title}`} />}>
+                                <MoreHorizontal />
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => void review(idea.id, idea.status === "New")}>
+                                  {idea.status === "New" ? "Mark as reviewing" : "Back to New"}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setPending({ mode: "park", idea })}>Park…</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setPending({ mode: "merge", idea })}>Merge into a project…</DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </span>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </TableCard>
 
-        <div className={`${CARD} p-3`} style={{ background: "var(--cardbg)" }}>
-          <div className="mb-2 font-mono text-[10px] font-bold uppercase tracking-[1.2px] text-[var(--ink3)]">
-            Decided
-          </div>
-          {board.decided.length === 0 ? (
-            <p className="text-[11.5px] text-[var(--ink5)]">Nothing decided yet.</p>
-          ) : (
-            <div className="flex flex-col">
-              {board.decided.map((idea) => (
-                <div key={idea.id} className="flex flex-wrap items-baseline gap-2 border-b border-[var(--hair2)] py-2 last:border-0">
-                  <span
-                    className="flex-none rounded-[5px] px-1.5 py-0.5 font-mono text-[8.5px] font-bold uppercase tracking-[.6px]"
-                    style={{
-                      color: `var(${STATUS_TOK[idea.status]})`,
-                      background: `color-mix(in oklab, var(${STATUS_TOK[idea.status]}) 10%, transparent)`,
-                    }}
-                  >
-                    {idea.status}
-                  </span>
-                  <span className="min-w-0 flex-1 text-[12.5px] font-semibold text-[var(--qink)]">{idea.title}</span>
-                  {idea.outcomeProject && (
-                    <Link
-                      href={`/projects/${idea.outcomeProject.id}`}
-                      className="flex-none font-mono text-[10px] uppercase text-[var(--ink4)] hover:text-[var(--qink)] hover:underline"
-                    >
-                      {idea.outcomeProject.code}
-                    </Link>
-                  )}
-                  {idea.parkReason && (
-                    <span className="w-full text-[11.5px] italic text-[var(--ink4)]">“{idea.parkReason}”</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-    </div>
+      <NewIdeaDialog open={newOpen} onOpenChange={setNewOpen} portfolios={portfolios} onSubmitted={reload} />
+      {board.canTriage && <TriageDialog pending={pending} onClose={() => setPending(null)} projects={projects} onDone={reload} />}
+    </main>
   );
 }
 
-function IdeaCard({
-  idea,
-  canTriage,
-  projects,
-  busy,
-  onTriage,
-  onAccept,
-  onError,
+export function NewIdeaDialog({
+  open,
+  onOpenChange,
+  portfolios,
+  onSubmitted,
 }: {
-  idea: IdeaRow;
-  canTriage: boolean;
-  projects: { id: string; code: string; name: string }[];
-  busy: boolean;
-  onTriage: (id: string, body: Record<string, unknown>) => Promise<void>;
-  onAccept: () => void;
-  onError: (m: string | null) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  portfolios: { id: string; name: string }[];
+  onSubmitted: () => Promise<void>;
 }) {
-  const [open, setOpen] = useState<"park" | "merge" | null>(null);
-  const [reason, setReason] = useState("");
-  const [target, setTarget] = useState("");
+  const { busy, error, setError, mutate } = useAdminMutation();
+  const [title, setTitle] = useState("");
+  const [sponsor, setSponsor] = useState("");
+  const [problem, setProblem] = useState("");
+  const [value, setValue] = useState("");
+  const [portfolioId, setPortfolioId] = useState("");
+  // docs/08 § Errors: Title, Sponsor and Problem show their problems on the field.
+  const fe = useFieldErrors({ schema: NewIdeaFormSchema, values: { title, sponsor, problem, expectedValue: value }, idPrefix: "idea" });
+
+  // Fresh form on every open so a second idea doesn't inherit the last attempt.
+  useEffect(() => {
+    if (!open) return;
+    setTitle("");
+    setSponsor("");
+    setProblem("");
+    setValue("");
+    setPortfolioId("");
+    setError(null);
+    fe.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when the dialog opens
+  }, [open, setError]);
+
+  async function submit() {
+    setError(null);
+    if (!fe.validate()) return;
+    const ok = await mutate(
+      "/api/ideas",
+      "POST",
+      { title, sponsor, problem, expectedValue: value.trim() || null, suggestedPortfolioId: portfolioId || null },
+      {
+        fallback: "Could not submit the idea.",
+        refresh: false,
+        onFieldErrors: (fields) => fe.setServerErrors(fields, ["title", "sponsor", "problem", "expectedValue", "suggestedPortfolioId"]),
+      },
+    );
+    if (ok) {
+      onOpenChange(false);
+      toast.success("Idea submitted — the Head has been notified.");
+      await onSubmitted();
+    }
+  }
 
   return (
-    <div className="rounded-[10px] border border-[var(--w07)] p-2.5">
-      <div className="flex items-baseline gap-2">
-        <span className="min-w-0 flex-1 text-[12.5px] font-semibold text-[var(--qink)]">{idea.title}</span>
-        {idea.mine && (
-          <span className="flex-none font-mono text-[8.5px] font-bold uppercase tracking-[.6px] text-[var(--ink5)]">
-            yours
-          </span>
-        )}
-      </div>
-      <p className="mt-1 text-[11px] text-[var(--ink4)]">
-        {idea.sponsor}
-        {idea.expectedValue && ` · value: ${idea.expectedValue}`}
-      </p>
-      <p className="mt-1.5 text-[11.5px] leading-[1.45] text-[var(--ink3)]">{idea.problem}</p>
-      {idea.suggestedPortfolio && (
-        <p className="mt-1 font-mono text-[9.5px] uppercase tracking-[.8px] text-[var(--ink5)]">
-          suggested: {idea.suggestedPortfolio.name}
-        </p>
+    <AdminFormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="New Idea"
+      description="Anyone can submit one. The Head triages it and you'll be told what was decided."
+      error={error}
+      busy={busy}
+      submitLabel="Submit Idea"
+      busyLabel="Submitting…"
+      onSubmit={submit}
+      className="sm:max-w-[520px]"
+    >
+      <Field label="Title" htmlFor={fe.idOf("title")} error={fe.errors.title}>
+        <Input {...fe.bind("title")} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="For example: Instant merchant settlement" />
+      </Field>
+      <Field label="Sponsor" htmlFor={fe.idOf("sponsor")} error={fe.errors.sponsor}>
+        <Input {...fe.bind("sponsor")} value={sponsor} onChange={(e) => setSponsor(e.target.value)} placeholder="For example: Head of Merchant Banking" />
+      </Field>
+      <Field label="Problem It Solves" htmlFor={fe.idOf("problem")} error={fe.errors.problem}>
+        <textarea
+          {...fe.bind("problem")}
+          rows={4}
+          value={problem}
+          onChange={(e) => setProblem(e.target.value)}
+          placeholder="For example: Merchants wait T+1 for settlement; competitors offer instant."
+          className={FIELD_TEXTAREA}
+        />
+      </Field>
+      <Field label="Expected Value (Optional)" htmlFor={fe.idOf("expectedValue")} error={fe.errors.expectedValue}>
+        <Input {...fe.bind("expectedValue")} value={value} onChange={(e) => setValue(e.target.value)} placeholder="For example: Retain 200+ merchants; fee upside" />
+      </Field>
+      <Field label="Portfolio It Might Belong To" htmlFor={fe.idOf("suggestedPortfolioId")} error={fe.errors.suggestedPortfolioId} hint="Your suggestion, not a decision — triage confirms it.">
+        <select {...fe.bind("suggestedPortfolioId")} value={portfolioId} onChange={(e) => setPortfolioId(e.target.value)} className={FIELD_INPUT}>
+          <option value="">No suggestion</option>
+          {portfolios.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      </Field>
+    </AdminFormDialog>
+  );
+}
+
+/** Head-only: park (with the required reason) or merge into a live project. */
+function TriageDialog({
+  pending,
+  onClose,
+  projects,
+  onDone,
+}: {
+  pending: { mode: "park" | "merge"; idea: IdeaRow } | null;
+  onClose: () => void;
+  projects: { id: string; code: string; name: string }[];
+  onDone: () => Promise<void>;
+}) {
+  const { busy, error, setError, mutate } = useAdminMutation();
+  const [reason, setReason] = useState("");
+  const [target, setTarget] = useState("");
+  const parkFe = useFieldErrors({ schema: ParkIdeaFormSchema, values: { reason }, idPrefix: "park" });
+  const mergeFe = useFieldErrors({ schema: MergeIdeaFormSchema, values: { projectId: target }, idPrefix: "merge" });
+
+  useEffect(() => {
+    if (!pending) return;
+    setReason("");
+    setTarget("");
+    setError(null);
+    parkFe.reset();
+    mergeFe.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when a new idea is opened
+  }, [pending, setError]);
+
+  if (!pending) return null;
+  const park = pending.mode === "park";
+
+  async function submit() {
+    if (!pending) return;
+    setError(null);
+    if (!(park ? parkFe : mergeFe).validate()) return;
+    const ok = await mutate(
+      `/api/ideas/${pending.idea.id}/triage`,
+      "POST",
+      park ? { action: "park", reason } : { action: "merge", projectId: target },
+      {
+        fallback: "Could not save the decision.",
+        refresh: false,
+        onFieldErrors: (fields) => (park ? parkFe : mergeFe).setServerErrors(fields),
+      },
+    );
+    if (ok) {
+      onClose();
+      await onDone();
+    }
+  }
+
+  return (
+    <AdminFormDialog
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title={park ? "Park This Idea" : "Merge Into a Project"}
+      description={pending.idea.title}
+      error={error}
+      busy={busy}
+      submitLabel={park ? "Park Idea" : "Merge Into This Project"}
+      busyLabel={park ? "Parking…" : "Merging…"}
+      onSubmit={submit}
+    >
+      {park ? (
+        <Field label="Why Is It Parked?" htmlFor={parkFe.idOf("reason")} error={parkFe.errors.reason} hint="The submitter is told why. At least 5 characters.">
+          <textarea
+            {...parkFe.bind("reason")}
+            rows={3}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="For example: Good idea, wrong quarter — revisit after the FAL migration."
+            className={FIELD_TEXTAREA}
+          />
+        </Field>
+      ) : (
+        <Field label="Fold Into Which Project?" htmlFor={mergeFe.idOf("projectId")} error={mergeFe.errors.projectId}>
+          <select {...mergeFe.bind("projectId")} value={target} onChange={(e) => setTarget(e.target.value)} className={FIELD_INPUT}>
+            <option value="">Choose a project…</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.code} — {p.name}
+              </option>
+            ))}
+          </select>
+        </Field>
       )}
-      {/* An empty summary says "not summarised" — never a fabricated line (docs/35 §3). */}
-      {idea.summary && <p className="mt-1.5 text-[11.5px] italic text-[var(--ink3)]">{idea.summary}</p>}
-
-      {canTriage && (
-        <>
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={onAccept}
-              className="rounded-[7px] bg-[var(--brand)] px-2.5 py-1 text-[11px] font-bold text-[var(--onbrand)] disabled:opacity-60"
-            >
-              Accept → new project
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                onError(null);
-                setOpen(open === "park" ? null : "park");
-              }}
-              className="rounded-[7px] border border-[var(--w07)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)] disabled:opacity-60"
-            >
-              Park
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                onError(null);
-                setOpen(open === "merge" ? null : "merge");
-              }}
-              className="rounded-[7px] border border-[var(--w07)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)] disabled:opacity-60"
-            >
-              Merge
-            </button>
-            {idea.status === "New" ? (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void onTriage(idea.id, { action: "review", reviewing: true })}
-                className="rounded-[7px] border border-[var(--w07)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)] disabled:opacity-60"
-              >
-                Reviewing →
-              </button>
-            ) : (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void onTriage(idea.id, { action: "review", reviewing: false })}
-                className="rounded-[7px] border border-[var(--w07)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)] disabled:opacity-60"
-              >
-                ← Back to New
-              </button>
-            )}
-          </div>
-
-          {open === "park" && (
-            <div className="mt-2 flex flex-col gap-1.5">
-              <label htmlFor={`park-${idea.id}`} className={LABEL}>Why is it parked?</label>
-              <textarea
-                id={`park-${idea.id}`}
-                rows={2}
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="Good idea, wrong quarter — revisit after the FAL migration."
-                className="w-full rounded-lg border border-input bg-background p-2 text-[11.5px]"
-              />
-              <div>
-                <button
-                  type="button"
-                  disabled={busy || reason.trim().length < 5}
-                  onClick={() => void onTriage(idea.id, { action: "park", reason }).then(() => setOpen(null))}
-                  className="rounded-[7px] bg-[var(--ink2)] px-2.5 py-1 text-[11px] font-bold text-[var(--cardbg)] disabled:opacity-50"
-                >
-                  Park with this reason
-                </button>
-              </div>
-            </div>
-          )}
-
-          {open === "merge" && (
-            <div className="mt-2 flex flex-col gap-1.5">
-              <label htmlFor={`merge-${idea.id}`} className={LABEL}>Fold into which project?</label>
-              <select
-                id={`merge-${idea.id}`}
-                value={target}
-                onChange={(e) => setTarget(e.target.value)}
-                className="h-9 w-full rounded-lg border border-input bg-background px-2 text-[12px]"
-              >
-                <option value="">Choose a project…</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.code} — {p.name}
-                  </option>
-                ))}
-              </select>
-              <div>
-                <button
-                  type="button"
-                  disabled={busy || !target}
-                  onClick={() => void onTriage(idea.id, { action: "merge", projectId: target }).then(() => setOpen(null))}
-                  className="rounded-[7px] bg-[var(--ink2)] px-2.5 py-1 text-[11px] font-bold text-[var(--cardbg)] disabled:opacity-50"
-                >
-                  Merge into this project
-                </button>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      {!canTriage && idea.status === "Reviewing" && (
-        <p className="mt-2 font-mono text-[9.5px] uppercase tracking-[.8px] text-[var(--ink5)]">under review</p>
-      )}
-    </div>
+    </AdminFormDialog>
   );
 }

@@ -4,7 +4,7 @@
 // by the client wrapper via event delegation; cards/rows here just carry data-open / data-jump.
 
 import type { CockpitProject } from "@/server/dashboard-cockpit";
-import { GATE_KEYS, GATE_LABELS } from "@/server/dashboard-cockpit";
+import { GATE_KEYS, GATE_LABELS } from "@/lib/cockpit-gates";
 import type { DimRag } from "@/server/rag-dimensions";
 import { DIMENSIONS } from "@/server/rag-dimensions";
 

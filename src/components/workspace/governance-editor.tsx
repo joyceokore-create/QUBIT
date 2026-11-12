@@ -4,6 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Pencil } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { FieldError } from "@/components/ui/drawer";
+import { FIELD_INVALID } from "@/lib/surface";
+import { readApiError } from "@/lib/form-errors";
+import { moduleLabel as moduleLabelRule, StatusNoteFormSchema, ModuleLabelFormSchema } from "@/lib/workspace-schema";
 
 // docs/18 §7 — the workspace edit surface for governance facts: pipeline stage,
 // priority, portfolio (§0.5 — every project belongs to one), one-line status note.
@@ -23,7 +28,10 @@ export function GovernanceEditor({
   portfolios = [],
   budget = null,
   canGovern,
+  shape,
 }: {
+  /** docs/38 — the product's shape; edits go through the same PATCH. */
+  shape?: { instanceTagging: boolean; pmScope: string; moduleLabel: string };
   projectId: string;
   pipelineStage: string;
   priority: string;
@@ -40,7 +48,10 @@ export function GovernanceEditor({
   const [pf, setPf] = useState(portfolioId ?? "");
   const [note, setNote] = useState(statusNote ?? "");
   const [editingNote, setEditingNote] = useState(false);
+  const [modLabel, setModLabel] = useState(shape?.moduleLabel ?? "");
   const [error, setError] = useState<string | null>(null);
+  // docs/08 § Errors: a bad note / name shows under its own field; saving is never gated.
+  const fe = useFieldErrors({ schema: StatusNoteFormSchema.merge(ModuleLabelFormSchema), values: { statusNote: note, moduleLabel: modLabel }, idPrefix: "gov" });
 
   const patch = async (body: Record<string, unknown>) => {
     setError(null);
@@ -50,11 +61,28 @@ export function GovernanceEditor({
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      setError((await res.json().catch(() => null))?.error?.message ?? "Could not save.");
+      const { message, fields } = readApiError(await res.json().catch(() => null), "Could not save.");
+      const onField = Object.fromEntries(Object.entries(fields).filter(([k]) => k === "statusNote" || k === "moduleLabel"));
+      if (Object.keys(onField).length > 0) fe.setServerErrors(onField);
+      else setError(message);
       return false;
     }
     router.refresh();
     return true;
+  };
+
+  const saveNote = () => {
+    if (!fe.validate(["statusNote"])) return;
+    void patch({ statusNote: note.trim() || null }).then((ok) => ok && setEditingNote(false));
+  };
+
+  const saveModuleLabel = () => {
+    const b = fe.bind("moduleLabel");
+    if (!shape) return;
+    if (modLabel.trim() === "") return setModLabel(shape.moduleLabel); // nothing to save: put the current name back
+    b.onBlur();
+    const r = moduleLabelRule.safeParse(modLabel);
+    if (r.success && r.data !== shape.moduleLabel) void patch({ moduleLabel: r.data });
   };
 
   const portfolioName = portfolios.find((p) => p.id === pf)?.name ?? null;
@@ -135,29 +163,32 @@ export function GovernanceEditor({
         </span>
       </div>
       {editingNote ? (
+        <div className="flex flex-col gap-1">
         <div className="flex items-center gap-1.5">
           <input
+            {...fe.bind("statusNote")}
+            aria-label="Status note"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             maxLength={200}
             autoFocus
             placeholder="One line for the pipeline table — what should the portfolio read this week?"
-            className="h-7 min-w-0 flex-1 rounded-[7px] border border-ink-4 bg-background px-2 text-[11.5px] text-foreground outline-none focus:border-brand"
+            className={`h-7 min-w-0 flex-1 rounded-[7px] border border-ink-4 bg-background px-2 text-[11.5px] text-foreground outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none ${FIELD_INVALID}`}
             onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                void patch({ statusNote: note.trim() || null }).then((ok) => ok && setEditingNote(false));
-              }
+              if (e.key === "Enter") saveNote();
               if (e.key === "Escape") setEditingNote(false);
             }}
           />
           <button
             type="button"
             aria-label="Save status note"
-            onClick={() => void patch({ statusNote: note.trim() || null }).then((ok) => ok && setEditingNote(false))}
+            onClick={saveNote}
             className="rounded p-1 text-[var(--ok)] hover:bg-[var(--wash)]"
           >
             <Check className="size-3.5" />
           </button>
+        </div>
+        {fe.errors.statusNote && <FieldError id={`${fe.idOf("statusNote")}-error`}>{fe.errors.statusNote}</FieldError>}
         </div>
       ) : (
         <button
@@ -168,6 +199,38 @@ export function GovernanceEditor({
           {note ? `“${note}”` : "Add a one-line status note…"}
           <Pencil className="size-2.5 opacity-0 transition-opacity group-hover:opacity-100" />
         </button>
+      )}
+      {shape && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-[var(--hair2)] pt-2">
+          <span className="text-[10.5px] font-semibold uppercase tracking-[.8px] text-[var(--ink5)]">Shape</span>
+          <Select value={shape.pmScope} onValueChange={(v) => v && void patch({ pmScope: v })}>
+            <SelectTrigger className="h-7 w-[150px] text-[11px]" aria-label="PM scope"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="product">One PM for the product</SelectItem>
+              <SelectItem value="instance">A lead per market</SelectItem>
+            </SelectContent>
+          </Select>
+          <label className="flex items-center gap-1.5 text-[11px] text-[var(--ink3)]">
+            <input type="checkbox" checked={shape.instanceTagging} onChange={(e) => void patch({ instanceTagging: e.target.checked })} className="size-3.5 accent-[var(--brand)]" />
+            Tag work by market and instance
+          </label>
+          <div className="flex flex-col gap-1">
+            <label className="flex items-center gap-1.5 text-[11px] text-[var(--ink3)]">
+              Modules are called
+              <input
+                {...fe.bind("moduleLabel")}
+                value={modLabel}
+                onChange={(e) => setModLabel(e.target.value)}
+                maxLength={30}
+                aria-label="What this product calls its modules"
+                onBlur={saveModuleLabel}
+                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                className={`h-7 w-[140px] rounded-[7px] border border-[var(--input)] bg-background px-2 text-[11px] text-foreground focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none ${FIELD_INVALID}`}
+              />
+            </label>
+            {fe.errors.moduleLabel && <FieldError id={`${fe.idOf("moduleLabel")}-error`}>{fe.errors.moduleLabel}</FieldError>}
+          </div>
+        </div>
       )}
       {error && <p className="text-[11px] text-[var(--bad)]">{error}</p>}
     </div>

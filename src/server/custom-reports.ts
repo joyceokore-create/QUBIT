@@ -1,15 +1,26 @@
+import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
-import { can } from "@/lib/rbac";
+import { can, primaryRoleLabel } from "@/lib/rbac";
+import { ssoEnabled } from "@/lib/sso";
 import { taskVisibleTo, type LensTask } from "@/lib/board-lens";
 import { projectRoleCategory, type ProjectRoleCategory } from "@/lib/roles";
 import {
+  MY_DATASET_KEYS,
+  myProjectRole,
   reportDataset,
   type ReportDatasetKey,
 } from "@/lib/report-catalogue";
+import { customReportsOnly } from "@/lib/reports-view";
 import { ownerNamesById } from "@/server/raid-shared";
 import { listRisks } from "@/server/risks";
 import { listIssues } from "@/server/issues";
 import { listWorkload } from "@/server/resources";
+import { listUsersForReport } from "@/server/users";
+import { listAccessRequests } from "@/server/access-requests";
+import { TEST_WORK } from "@/server/quality";
+import { raidRef } from "@/lib/raid-ref";
+import { healthWord } from "@/lib/status-words";
+import { projectStatusLabel, taskStatusLabel } from "@/lib/project-enums";
 
 // Custom Reports engine — binds each dataset in src/lib/report-catalogue.ts to a
 // tenant-scoped row builder. Requested column keys are validated against the registry
@@ -41,14 +52,41 @@ export const DATASET_PERMISSION: Record<ReportDatasetKey, string | null> = {
   issues: "issue:read",
   tasks: "task:read",
   workload: null,
+  // UX6 — any signed-in user; each builder filters to ctx.userId's OWN rows, so these can
+  // never widen what anyone sees (the tenant-wide sets above keep their own gates).
+  myTasks: null,
+  myProjects: null,
+  myBlockers: null,
+  // UX11 — admin datasets: the Users page's gate, and the Access requests page's gate.
+  users: "admin:access",
+  accessRequests: "iam:manage",
+  // UX fidelity Tier 3 — tenant-wide reads under RLS, each behind its module's read gate.
+  // Check-ins are the weekly status reports, so they sit behind reports:read.
+  riskIssues: "risk:read",
+  milestones: "milestone:read",
+  checkins: "reports:read",
+  requirements: "project:read",
+  testTasks: "task:read",
 };
 
-/** Datasets this viewer may run — drives which options the builder offers. */
+/** Datasets this viewer may run (the route-level gate; the API door honours exactly this). */
 export function allowedDatasetKeys(ctx: TenantContext): ReportDatasetKey[] {
   return (Object.keys(DATASET_PERMISSION) as ReportDatasetKey[]).filter((k) => {
     const perm = DATASET_PERMISSION[k];
     return perm === null || can(ctx, perm);
   });
+}
+
+/**
+ * Datasets the builder OFFERS (UX plan D13). A viewer without reports:read (a Member) is
+ * offered only the "My …" datasets, even though BASE read permissions would let them run
+ * the tenant-wide ones through the API (unchanged behaviour). Report readers get every
+ * dataset they may run, the "My …" ones included.
+ */
+export function offeredDatasetKeys(ctx: TenantContext): ReportDatasetKey[] {
+  const allowed = allowedDatasetKeys(ctx);
+  if (!customReportsOnly(ctx)) return allowed;
+  return allowed.filter((k) => (MY_DATASET_KEYS as readonly string[]).includes(k));
 }
 
 async function projectRows(ctx: TenantContext): Promise<ReportRow[]> {
@@ -87,7 +125,7 @@ async function projectRows(ctx: TenantContext): Promise<ReportRow[]> {
       client: p.client,
       businessOwner: p.businessOwner,
       type: p.type,
-      status: p.status,
+      status: projectStatusLabel(p.status),
       priority: p.priority,
       pipelineStage: p.pipelineStage,
       portfolio: p.portfolio?.name ?? null,
@@ -182,6 +220,7 @@ async function riskRows(ctx: TenantContext): Promise<ReportRow[]> {
 async function issueRows(ctx: TenantContext): Promise<ReportRow[]> {
   const issues = await listIssues(ctx);
   return issues.map((i) => ({
+    ref: raidRef(i.id),
     title: i.title,
     project: i.projectCode,
     severity: i.severity,
@@ -197,7 +236,7 @@ async function issueRows(ctx: TenantContext): Promise<ReportRow[]> {
  * per-project role category decides which lanes they may see (their own tasks always),
  * exactly as on the boards — and Draft tasks never appear in reports at all.
  */
-async function taskRows(ctx: TenantContext): Promise<ReportRow[]> {
+async function taskRows(ctx: TenantContext, extraWhere: Prisma.ProjectTaskWhereInput = {}): Promise<ReportRow[]> {
   // Tenant-wide project:write (PlatformSuperAdmin, HeadOfProjects) = PM on every board;
   // project-independent, so checked once (canWriteProject's other half is per-project).
   const tenantPm = can(ctx, "project:write");
@@ -205,7 +244,7 @@ async function taskRows(ctx: TenantContext): Promise<ReportRow[]> {
   const { tasks, memberships, leads } = await withTenant(ctx, async (tx) => {
     const [tasks, memberships, leads] = await Promise.all([
       tx.projectTask.findMany({
-        where: { approvalStatus: "Published" },
+        where: { AND: [{ approvalStatus: "Published" }, extraWhere] },
         select: {
           taskKey: true,
           externalKey: true,
@@ -258,7 +297,7 @@ async function taskRows(ctx: TenantContext): Promise<ReportRow[]> {
       title: t.title,
       project: t.project.code,
       type: t.type,
-      status: t.status,
+      status: taskStatusLabel(t.status),
       priority: t.priority,
       severity: t.severity,
       phase: t.phase,
@@ -288,6 +327,313 @@ async function workloadRows(ctx: TenantContext): Promise<ReportRow[]> {
   }));
 }
 
+// ── UX6: the "My …" datasets ─────────────────────────────────────────────────────────
+// Every query below is filtered to ctx.userId inside withTenant, so a row is returned only
+// when it is BOTH in the caller's tenant (RLS) AND the caller's own (the where clause).
+
+/** Tasks assigned to me — Published only (Drafts never reach reports), done ones included. */
+async function myTaskRows(ctx: TenantContext): Promise<ReportRow[]> {
+  const tasks = await withTenant(ctx, (tx) =>
+    tx.projectTask.findMany({
+      where: { assigneeId: ctx.userId, approvalStatus: "Published" },
+      select: {
+        taskKey: true,
+        externalKey: true,
+        title: true,
+        type: true,
+        status: true,
+        priority: true,
+        phase: true,
+        estimate: true,
+        dueDate: true,
+        lastActivityAt: true,
+        milestone: { select: { name: true } },
+        project: { select: { code: true } },
+        // "Blocked" is a flag: an Open blocker pointing at the task (or the legacy status).
+        blockers: { where: { status: "Open" }, select: { id: true }, take: 1 },
+      },
+      orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { lastActivityAt: "desc" }],
+    }),
+  );
+  return tasks.map((t) => ({
+    title: t.title,
+    key: t.taskKey ?? t.externalKey,
+    project: t.project.code,
+    status: taskStatusLabel(t.status),
+    dueDate: t.dueDate,
+    estimate: t.estimate,
+    priority: t.priority,
+    type: t.type,
+    blocked: t.status === "Blocked" || t.blockers.length > 0,
+    phase: t.phase,
+    milestone: t.milestone?.name ?? null,
+    lastActivityAt: t.lastActivityAt,
+  }));
+}
+
+/** Projects I am a member of or lead, with my role(s) and my open (not Completed) tasks. */
+async function myProjectRows(ctx: TenantContext): Promise<ReportRow[]> {
+  const projects = await withTenant(ctx, (tx) =>
+    tx.project.findMany({
+      where: { OR: [{ leadUserId: ctx.userId }, { members: { some: { userId: ctx.userId } } }] },
+      select: {
+        code: true,
+        name: true,
+        status: true,
+        priority: true,
+        dueDate: true,
+        leadUserId: true,
+        lead: { select: { name: true } },
+        portfolio: { select: { name: true } },
+        members: { where: { userId: ctx.userId }, select: { role: true } },
+        _count: {
+          select: {
+            projectTasks: { where: { assigneeId: ctx.userId, approvalStatus: "Published", status: { not: "Completed" } } },
+          },
+        },
+      },
+      orderBy: { name: "asc" },
+    }),
+  );
+  return projects.map((p) => ({
+    code: p.code,
+    name: p.name,
+    role: myProjectRole(p.leadUserId === ctx.userId, p.members.map((m) => m.role)),
+    status: projectStatusLabel(p.status),
+    dueDate: p.dueDate,
+    openTasks: p._count.projectTasks,
+    lead: p.lead?.name ?? null,
+    portfolio: p.portfolio?.name ?? null,
+    priority: p.priority,
+  }));
+}
+
+/**
+ * Blockers I raised. The rule:
+ *   - raisedById = me (every blocker raised since UX6 records its raiser); or
+ *   - for rows raised BEFORE UX6 (raisedById IS NULL — the raiser was never stored), the
+ *     best honest proxy: ownerId = me AND the blocked task is assigned to me (the old
+ *     "flag my own task as blocked" flow made the assignee the owner).
+ * A legacy row owned by me on someone else's task, or with no task, is NOT counted — it
+ * was most likely raised AT me, not BY me. Machine-raised blockers stay NULL and only
+ * match through that same fallback.
+ */
+export function myBlockersWhere(userId: string): Prisma.BlockerWhereInput {
+  return {
+    OR: [{ raisedById: userId }, { raisedById: null, ownerId: userId, task: { is: { assigneeId: userId } } }],
+  };
+}
+
+async function myBlockerRows(ctx: TenantContext): Promise<ReportRow[]> {
+  const blockers = await withTenant(ctx, (tx) =>
+    tx.blocker.findMany({
+      where: myBlockersWhere(ctx.userId),
+      select: {
+        description: true,
+        severity: true,
+        status: true,
+        dateRaised: true,
+        resolutionNotes: true,
+        project: { select: { code: true } },
+        task: { select: { taskKey: true, externalKey: true, title: true } },
+        owner: { select: { name: true } },
+      },
+      orderBy: { dateRaised: "desc" },
+    }),
+  );
+  return blockers.map((b) => {
+    const taskKey = b.task ? (b.task.taskKey ?? b.task.externalKey) : null;
+    return {
+      description: b.description,
+      project: b.project.code,
+      task: b.task ? (taskKey ? `${taskKey} ${b.task.title}` : b.task.title) : null,
+      severity: b.severity,
+      status: b.status,
+      dateRaised: b.dateRaised,
+      owner: b.owner?.name ?? null,
+      resolutionNotes: b.resolutionNotes,
+    };
+  });
+}
+
+// ── UX11: the admin datasets ─────────────────────────────────────────────────────────
+
+const USER_STATUS_LABEL: Record<string, string> = { ACTIVE: "Active", INVITED: "Invited", SUSPENDED: "Suspended" };
+
+/**
+ * The user directory (status ≠ DELETED) under the tenant's RLS context, through the same
+ * read the Users page uses (roles, department, counts) plus team names. MFA is a STATUS —
+ * On / Off, or "SSO" when the identity provider enforces it — never the secret.
+ */
+async function userRows(ctx: TenantContext): Promise<ReportRow[]> {
+  const sso = ssoEnabled();
+  const users = await listUsersForReport(ctx);
+  return users.map((u) => ({
+    name: u.name,
+    email: u.email,
+    roles: u.roles.map((r) => primaryRoleLabel([r])).join(", ") || null,
+    department: u.departmentName,
+    status: USER_STATUS_LABEL[u.status] ?? u.status,
+    mfa: sso ? "SSO" : u.mfaEnabled ? "On" : "Off",
+    lastActive: u.lastLoginAt,
+    createdAt: u.createdAt,
+    teams: u.teamNames.join(", ") || null,
+  }));
+}
+
+const ACCESS_REQUEST_STATUS_LABEL: Record<string, string> = { NEW: "New", REVIEWED: "Reviewed", DISMISSED: "Dismissed" };
+
+/**
+ * The request-access queue. access_request is a SYSTEM table with no tenant_id (requests
+ * arrive before any tenant exists), so it is read through access-requests.ts's system read,
+ * exactly as the Access requests page does — the gate is iam:manage (DATASET_PERMISSION,
+ * re-checked in runCustomReport), not tenant scoping.
+ */
+async function accessRequestRows(): Promise<ReportRow[]> {
+  const requests = await listAccessRequests();
+  return requests.map((r) => ({
+    name: r.fullName,
+    email: r.email,
+    company: r.company,
+    jobTitle: r.jobTitle,
+    status: ACCESS_REQUEST_STATUS_LABEL[r.status] ?? r.status,
+    submittedAt: r.createdAt,
+    reviewedAt: r.reviewedAt,
+  }));
+}
+
+
+// ── UX fidelity Tier 3: the design's builder datasets ─────────────────────────────────
+
+const DAY_MS = 86_400_000;
+
+/** Risks and issues in one list, through the same reads as the Risks & Issues page. */
+async function riskIssueRows(ctx: TenantContext): Promise<ReportRow[]> {
+  const now = Date.now();
+  const age = (d: Date) => Math.max(0, Math.floor((now - new Date(d).getTime()) / DAY_MS));
+  const [risks, issues] = await Promise.all([listRisks(ctx), can(ctx, "issue:read") ? listIssues(ctx) : Promise.resolve([])]);
+  return [
+    ...issues.map((i) => ({
+      ref: raidRef(i.id),
+      kind: "Issue",
+      title: i.title,
+      project: i.projectCode,
+      severity: i.severity,
+      score: null,
+      status: i.status,
+      owner: i.ownerName,
+      createdAt: i.createdAt,
+      ageDays: age(i.createdAt),
+    })),
+    ...risks.map((r) => ({
+      ref: raidRef(r.id),
+      kind: "Risk",
+      title: r.title,
+      project: r.projectCode,
+      severity: null,
+      score: r.probability * r.impact,
+      status: r.status,
+      owner: r.ownerName,
+      createdAt: r.createdAt,
+      ageDays: age(r.createdAt),
+    })),
+  ];
+}
+
+async function milestoneRows(ctx: TenantContext): Promise<ReportRow[]> {
+  const now = new Date();
+  const milestones = await withTenant(ctx, (tx) =>
+    tx.projectMilestone.findMany({
+      select: {
+        name: true,
+        dueDate: true,
+        status: true,
+        project: { select: { code: true, name: true } },
+        orgUnit: { select: { name: true } },
+        _count: { select: { tasks: true } },
+      },
+      orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { orderIndex: "asc" }],
+    }),
+  );
+  return milestones.map((m) => ({
+    project: m.project.name,
+    name: m.name,
+    market: m.orgUnit?.name ?? null,
+    dueDate: m.dueDate,
+    status: m.status,
+    late: m.status !== "Done" && !!m.dueDate && m.dueDate < now,
+    tasks: m._count.tasks,
+  }));
+}
+
+async function checkinRows(ctx: TenantContext): Promise<ReportRow[]> {
+  const checkins = await withTenant(ctx, (tx) =>
+    tx.checkIn.findMany({
+      select: {
+        isoWeek: true,
+        status: true,
+        computedRag: true,
+        ragOverride: true,
+        overrideReason: true,
+        narrative: true,
+        confirmedAt: true,
+        submittedToHeadAt: true,
+        confirmedBy: { select: { name: true } },
+        project: { select: { name: true } },
+      },
+      orderBy: [{ isoWeek: "desc" }, { project: { name: "asc" } }],
+    }),
+  );
+  return checkins.map((c) => ({
+    project: c.project.name,
+    week: c.isoWeek,
+    status: c.status,
+    computed: healthWord(c.computedRag),
+    rating: healthWord(c.ragOverride ?? c.computedRag),
+    reason: c.overrideReason,
+    narrative: c.narrative,
+    confirmedBy: c.confirmedBy?.name ?? null,
+    confirmedAt: c.confirmedAt,
+    sentAt: c.submittedToHeadAt,
+  }));
+}
+
+/** Requirements with coverage: covered = at least one PUBLISHED task is linked (docs/16 §6). */
+async function requirementRows(ctx: TenantContext): Promise<ReportRow[]> {
+  const requirements = await withTenant(ctx, (tx) =>
+    tx.requirement.findMany({
+      select: {
+        ref: true,
+        text: true,
+        status: true,
+        sectionAnchor: true,
+        createdAt: true,
+        project: { select: { name: true } },
+        taskLinks: { select: { task: { select: { approvalStatus: true } } } },
+      },
+      orderBy: [{ project: { name: "asc" } }, { ref: "asc" }],
+    }),
+  );
+  return requirements.map((r) => {
+    const linked = r.taskLinks.filter((l) => l.task.approvalStatus === "Published").length;
+    return {
+      ref: r.ref,
+      text: r.text,
+      project: r.project.name,
+      status: r.status,
+      section: r.sectionAnchor,
+      covered: linked > 0,
+      linkedTasks: linked,
+      createdAt: r.createdAt,
+    };
+  });
+}
+
+/** The QA queue's test work, behind the same board wall as the Tasks dataset. */
+async function testTaskRows(ctx: TenantContext): Promise<ReportRow[]> {
+  return taskRows(ctx, TEST_WORK);
+}
+
 const BUILDERS: Record<ReportDatasetKey, (ctx: TenantContext) => Promise<ReportRow[]>> = {
   projects: projectRows,
   portfolios: portfolioRows,
@@ -296,6 +642,16 @@ const BUILDERS: Record<ReportDatasetKey, (ctx: TenantContext) => Promise<ReportR
   issues: issueRows,
   tasks: taskRows,
   workload: workloadRows,
+  myTasks: myTaskRows,
+  myProjects: myProjectRows,
+  myBlockers: myBlockerRows,
+  users: userRows,
+  accessRequests: accessRequestRows,
+  riskIssues: riskIssueRows,
+  milestones: milestoneRows,
+  checkins: checkinRows,
+  requirements: requirementRows,
+  testTasks: testTaskRows,
 };
 
 export interface CustomReportResult {
@@ -309,6 +665,12 @@ export async function runCustomReport(
   dataset: ReportDatasetKey,
   columnKeys: string[],
 ): Promise<CustomReportResult> {
+  // Defence in depth: every door (the JSON/CSV route, the PDF export, the email action)
+  // already checks DATASET_PERMISSION, but the engine refuses on its own too, so no future
+  // caller can run e.g. the admin datasets for a viewer without the gate.
+  if (!allowedDatasetKeys(ctx).includes(dataset)) {
+    throw new CustomReportError("That dataset is not yours to report on.", "FORBIDDEN");
+  }
   const meta = reportDataset(dataset);
   const byKey = new Map(meta.columns.map((c) => [c.key, c]));
   const unknown = columnKeys.filter((k) => !byKey.has(k));

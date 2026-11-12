@@ -34,3 +34,43 @@ describe("weekWindow", () => {
     expect(w.isoWeek).toBe("2026-W31");
   });
 });
+
+// Milestone B — week-id arithmetic for the /reports week switcher.
+import { isValidIsoWeek, isoWeekMonday, shiftIsoWeek } from "@/lib/iso-week";
+
+describe("isoWeekMonday", () => {
+  it("finds the UTC Monday of a week id, across year boundaries", () => {
+    expect(isoWeekMonday("2026-W41").toISOString()).toBe("2026-10-05T00:00:00.000Z");
+    expect(isoWeekMonday("2027-W01").toISOString()).toBe("2027-01-04T00:00:00.000Z");
+    expect(isoWeekMonday("2026-W01").toISOString()).toBe("2025-12-29T00:00:00.000Z");
+    expect(isoWeekMonday("2026-W53").toISOString()).toBe("2026-12-28T00:00:00.000Z");
+  });
+
+  it("round-trips through isoWeekId and weekWindow", () => {
+    for (const id of ["2026-W01", "2026-W31", "2026-W53", "2027-W01", "2028-W17"]) {
+      expect(isoWeekId(isoWeekMonday(id))).toBe(id);
+      expect(weekWindow(isoWeekMonday(id)).start.getTime()).toBe(isoWeekMonday(id).getTime());
+    }
+  });
+
+  it("throws on an id that is not a real week", () => {
+    expect(() => isoWeekMonday("nope")).toThrow(RangeError);
+    expect(() => isoWeekMonday("2027-W53")).toThrow(RangeError); // 2027 has 52 weeks
+  });
+});
+
+describe("shiftIsoWeek", () => {
+  it("steps across year boundaries, including 53-week years", () => {
+    expect(shiftIsoWeek("2027-W01", -1)).toBe("2026-W53");
+    expect(shiftIsoWeek("2026-W53", 1)).toBe("2027-W01");
+    expect(shiftIsoWeek("2026-W41", -8)).toBe("2026-W33");
+    expect(shiftIsoWeek("2026-W01", -1)).toBe("2025-W52");
+  });
+});
+
+describe("isValidIsoWeek", () => {
+  it("accepts real weeks and rejects the rest", () => {
+    for (const ok of ["2026-W01", "2026-W53", "2026-W41"]) expect(isValidIsoWeek(ok)).toBe(true);
+    for (const bad of ["2027-W53", "2026-W00", "2026-W54", "2026-41", "26-W41", "", "2026-W4"]) expect(isValidIsoWeek(bad)).toBe(false);
+  });
+});

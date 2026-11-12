@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import {
   listAccessRequests,
+  listAccessRequestsPaged,
   countNewAccessRequests,
   reviewAccessRequest,
   AccessRequestError,
@@ -67,5 +68,14 @@ describe("access-request admin service", () => {
     const firstNewIdx = list.findIndex((r) => r.status === "NEW");
     const firstReviewedIdx = list.findIndex((r) => r.status !== "NEW");
     if (firstReviewedIdx !== -1) expect(firstNewIdx).toBeLessThan(firstReviewedIdx);
+  });
+
+  it("filters by the requested role (UX fidelity D-F3)", async () => {
+    const pm = await prisma.accessRequest.create({ data: { fullName: "user_ar_pm", email: EMAIL, company: "Acme", requestedRole: "ProjectManager", reason: "Runs Payments Hub" } });
+    const mem = await prisma.accessRequest.create({ data: { fullName: "user_ar_mem", email: EMAIL, company: "Acme", requestedRole: "Member" } });
+    const { rows } = await listAccessRequestsPaged({ q: "user_ar_", size: 50, role: "ProjectManager" });
+    expect(rows.map((r) => r.id)).toContain(pm.id);
+    expect(rows.map((r) => r.id)).not.toContain(mem.id);
+    expect(rows.find((r) => r.id === pm.id)?.reason).toBe("Runs Payments Hub");
   });
 });

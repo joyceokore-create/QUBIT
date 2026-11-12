@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { PEOPLE_REQUIRED } from "@/lib/assign-members-schema";
+import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { availabilityFactor } from "@/server/absence";
 import { audit } from "@/lib/audit";
@@ -63,7 +65,7 @@ export async function setProjectMember(
   input: SetProjectMemberInput,
 ) {
   return withTenant(ctx, async (tx) => {
-    await tx.project.findUniqueOrThrow({ where: { id: projectId } });
+    const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { leadUserId: true } });
     await tx.user.findUniqueOrThrow({ where: { id: userId } });
     const member = await tx.projectMember.upsert({
       where: { projectId_userId: { projectId, userId } },
@@ -90,8 +92,26 @@ export async function setProjectMember(
       before: null,
       after: { role: member.role, allocationPct: member.allocationPct, startDate: member.startDate, endDate: member.endDate },
     });
+    await leadFromFirstPm(tx, ctx, projectId, project.leadUserId, [member]);
     return member;
   });
+}
+
+/** A project is run by its PM: the first "Project Manager" assigned to a lead-less project
+ * becomes its lead (the inbox, the digest, the PDF header and the PM dashboard all read
+ * the lead). Audited on the project; never changes an existing lead. */
+async function leadFromFirstPm(
+  tx: Prisma.TransactionClient,
+  ctx: TenantContext,
+  projectId: string,
+  leadUserId: string | null,
+  members: { userId: string; role: string }[],
+): Promise<void> {
+  if (leadUserId) return;
+  const pm = members.find((m) => m.role === "Project Manager");
+  if (!pm) return;
+  await tx.project.update({ where: { id: projectId }, data: { leadUserId: pm.userId } });
+  await audit(tx, ctx, { action: "update", entityType: "project", entityId: projectId, before: { leadUserId: null }, after: { leadUserId: pm.userId, reason: "first Project Manager assigned" } });
 }
 
 /** M-P1d — bulk assignment (docs/26 §4.3): several people onto one project in ONE
@@ -102,7 +122,7 @@ export const BulkAddMembersInput = z.object({
     .array(
       SetProjectMemberInput.extend({ userId: z.string().uuid() }),
     )
-    .min(1)
+    .min(1, PEOPLE_REQUIRED)
     .max(20),
   acceptedWarnings: z.array(z.string().max(200)).max(20).default([]),
 });
@@ -112,7 +132,7 @@ export async function addProjectMembers(ctx: TenantContext, projectId: string, i
   return withTenant(ctx, async (tx) => {
     const project = await tx.project.findUniqueOrThrow({
       where: { id: projectId },
-      select: { id: true, code: true, name: true },
+      select: { id: true, code: true, name: true, leadUserId: true },
     });
     const ids = input.members.map((m) => m.userId);
     const found = await tx.user.count({ where: { id: { in: ids }, status: { not: "DELETED" } } });
@@ -160,6 +180,7 @@ export async function addProjectMembers(ctx: TenantContext, projectId: string, i
           link: `/projects/${projectId}`,
         })),
     });
+    await leadFromFirstPm(tx, ctx, projectId, project.leadUserId, input.members);
     return { count: input.members.length };
   });
 }

@@ -1,11 +1,31 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { BrandLogo } from "@/components/brand/brand-logo";
+import { z } from "zod";
+import { useFieldErrors, type FieldBinding } from "@/components/forms/use-field-errors";
 import { SSO_PROVIDER_ID } from "@/lib/sso";
-import { AuthShell } from "../auth-shell";
+import {
+  AUTH_INPUT_CLASS,
+  AUTH_LINK_CLASS,
+  AUTH_PRIMARY_CLASS,
+  AUTH_SECONDARY_CLASS,
+  AuthField,
+  AuthHeading,
+  AuthShell,
+  OrgChip,
+} from "@/components/auth/auth-shell";
+
+/** A synthetic demo identity for the quick sign-in (built server-side, non-production). */
+export interface DemoAccount {
+  name: string;
+  email: string;
+  password: string;
+  initial: string;
+  brand: string;
+}
 
 interface LoginFormProps {
   callbackUrl: string;
@@ -13,6 +33,8 @@ interface LoginFormProps {
   ssoEnabled?: boolean;
   /** Pre-mapped message for an ?error= carried back from the OAuth callback. */
   ssoError?: string | null;
+  /** Empty in production. */
+  demoAccounts?: DemoAccount[];
 }
 
 type OrgLookup =
@@ -21,22 +43,25 @@ type OrgLookup =
   | { status: "found"; tenantName: string; tenantSlug: string }
   | { status: "not-found" };
 
+/** UX plan D8c: one screen per step, each with its own illustration and line. */
+type Step = "email" | "password" | "code";
+
 // A domain needs at least one dot to be worth looking up — skips a request per keystroke.
 function looksLikeCompleteDomain(email: string): boolean {
   const domain = email.split("@")[1];
   return Boolean(domain && domain.includes(".") && !domain.endsWith("."));
 }
 
-// Demo quick sign-in — fills each tenant's super-admin email + demo password in one click
-// (still requires pressing "Sign in"). Seed credentials; rendered outside production only.
-const QUICK_SIGN_INS = [
-  { name: "Riverbank", email: "joyce.okore@riverbank.solutions", password: "Passw0rd!23", initial: "R", brand: "#c8151b" },
-];
-
-const SHOW_QUICK_SIGN_INS = process.env.NODE_ENV !== "production";
-
-const INPUT_CLASS =
-  "box-border w-full rounded-[11px] border border-[var(--l-field-bd)] bg-[var(--l-field-bg)] px-[14px] py-2.5 text-[13.5px] text-[var(--l-ink)] outline-none transition-colors placeholder:text-[var(--l-ph)] focus:border-[color-mix(in_oklab,var(--login-brand)_60%,transparent)] focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_55%,transparent)]";
+const SignInEmailSchema = z.object({
+  email: z
+    .string()
+    .trim()
+    .min(1, "Enter your work email.")
+    .refine(looksLikeCompleteDomain, "Enter your full work email, for example name@company.com."),
+});
+const SignInCodeSchema = z.object({
+  totpCode: z.string().regex(/^\d{6}$/, "Enter the 6-digit code from your authenticator app."),
+});
 
 function MicrosoftMark() {
   return (
@@ -49,17 +74,26 @@ function MicrosoftMark() {
   );
 }
 
-export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null }: LoginFormProps) {
+function Spinner() {
+  return <span aria-hidden="true" className="size-[15px] animate-spin rounded-full border-2 border-current/30 border-t-current" />;
+}
+
+export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null, demoAccounts = [] }: LoginFormProps) {
   const router = useRouter();
+  const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [totpCode, setTotpCode] = useState("");
-  const [showTotp, setShowTotp] = useState(false);
   const [error, setError] = useState<string | null>(ssoError);
   const [loading, setLoading] = useState(false);
   const [ssoLoading, setSsoLoading] = useState(false);
   const [org, setOrg] = useState<OrgLookup>({ status: "idle" });
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const focusRef = useRef<HTMLInputElement | null>(null);
+  // docs/08 § Errors: format problems show on the field. Wrong email/password/code stays ONE
+  // generic form-level message (never which part was wrong).
+  const emailErrors = useFieldErrors({ schema: SignInEmailSchema, values: { email }, idPrefix: "" });
+  const codeErrors = useFieldErrors({ schema: SignInCodeSchema, values: { totpCode }, idPrefix: "" });
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -88,15 +122,37 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null }: 
     };
   }, [email]);
 
-  async function handleSubmit(e: FormEvent) {
+  // Move focus to the step's field so keyboard users land where they type next.
+  useEffect(() => {
+    focusRef.current?.focus();
+  }, [step]);
+
+  function goToPassword(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!emailErrors.validate()) return;
+    if (org.status === "not-found") {
+      emailErrors.setServerErrors({ email: "No organisation uses that email domain. Check it, or request access." });
+      return;
+    }
+    setStep("password");
+  }
+
+  async function submitCredentials(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (step === "code" && !codeErrors.validate()) return;
     setLoading(true);
     const result = await signIn("credentials", { email, password, totpCode: totpCode || undefined, redirect: false });
     setLoading(false);
     if (!result || result.error) {
-      setShowTotp(true);
-      setError("Invalid email, password, or authentication code.");
+      // One generic message on purpose: never reveal whether the email, password or code
+      // was the wrong part.
+      setError(
+        step === "code"
+          ? "That didn't work. Check the code, or go back and check your password."
+          : "Invalid email or password. If your account uses an authenticator app, enter its code.",
+      );
       return;
     }
     router.push(callbackUrl);
@@ -112,136 +168,227 @@ export function LoginForm({ callbackUrl, ssoEnabled = false, ssoError = null }: 
     void signIn(SSO_PROVIDER_ID, { redirectTo: callbackUrl }).catch(() => setSsoLoading(false));
   }
 
+  function applyDemo(d: DemoAccount) {
+    setEmail(d.email);
+    setPassword(d.password);
+    setTotpCode("");
+    setError(null);
+    setStep("password");
+  }
+
   const resolved = org.status === "found";
   const loginBrand = resolved && org.tenantSlug === "riverbank" ? "var(--rbrand)" : "var(--pbrand)";
+  const orgName = resolved ? org.tenantName : null;
+
+  const art =
+    step === "code"
+      ? { art: "mfa" as const, heading: orgName ? `Keep ${orgName}’s data safe` : "Keep your data safe", sentence: "A code from your authenticator app confirms it’s really you." }
+      : step === "password"
+        ? { art: "hero" as const, heading: "Know what needs you today", sentence: "Your home page opens on what needs your attention first, for your role." }
+        : { art: "hero" as const, heading: "Run every project in one place", sentence: orgName ? `Portfolios, projects, risks and weekly reporting for ${orgName}, in one place.` : "Portfolios, projects, risks and weekly reporting, in one place." };
+
+  const errorLine = error && (
+    <p role="alert" className="text-[12.5px] text-[var(--l-err)]">
+      {error}
+    </p>
+  );
 
   return (
-    <AuthShell brand={loginBrand}>
-      <button
-        type="button"
-        onClick={() => router.push("/")}
-        className="mb-4 flex items-center gap-[11px] rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_55%,transparent)]"
-      >
-        {/* Full-colour lockup (red icon + navy wordmark) on the light canvas;
-            red icon + white wordmark on the dark one, so the mark stays legible. */}
-        <BrandLogo variant="color" className="h-7 w-auto dark:hidden" />
-        <BrandLogo variant="night" className="hidden h-7 w-auto dark:block" />
-      </button>
-
-      <h1 className="mb-1 text-[22px] font-semibold tracking-[-.4px] text-[var(--l-ink)]">Sign in</h1>
-      <p className="mb-5 text-[13px] text-[var(--l-ink-2)]">
-        {ssoEnabled
-          ? "Use your Riverbank Microsoft account to continue."
-          : "Your organization is resolved from your email — no picker."}
-      </p>
-
-      {/* SSO configured → Microsoft is the ONLY sign-in method (the reference design).
-          The password form below exists solely as the fallback while SSO is not set up. */}
+    <AuthShell brand={loginBrand} footer={orgName ?? undefined} {...art}>
+      {/* SSO configured → Microsoft is the ONLY sign-in method (unchanged behaviour). */}
       {ssoEnabled && (
         <>
-          <button
-            type="button"
-            onClick={handleMicrosoftSignIn}
-            disabled={ssoLoading}
-            aria-busy={ssoLoading}
-            className="flex w-full items-center justify-center gap-2.5 rounded-[11px] bg-[#1f1f1f] px-[13px] py-[11px] text-[13.5px] font-semibold text-white outline-none transition-transform hover:-translate-y-[2px] focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#1f1f1f] disabled:translate-y-0 disabled:opacity-75"
-            style={{ boxShadow: "0 4px 20px rgba(0,0,0,.35)" }}
-          >
+          <AuthHeading title="Sign In to QUBIT" lead="Use your work Microsoft account to continue." />
+          <button type="button" onClick={handleMicrosoftSignIn} disabled={ssoLoading} aria-busy={ssoLoading} className={AUTH_SECONDARY_CLASS}>
             {ssoLoading ? (
               <>
-                <span
-                  aria-hidden="true"
-                  className="size-[15px] animate-spin rounded-full border-2 border-white/30 border-t-white"
-                />
+                <Spinner />
                 Connecting to Microsoft…
               </>
             ) : (
               <>
                 <MicrosoftMark />
-                Continue with Microsoft
+                Sign In with Microsoft
               </>
             )}
           </button>
-          {error && <p role="alert" className="mt-3 text-[12px] text-[var(--l-err)]">{error}</p>}
+          {errorLine}
         </>
       )}
 
-      {!ssoEnabled && (
-      <form onSubmit={handleSubmit} className="flex flex-col gap-2.5" noValidate>
-        <input id="email" type="email" autoComplete="email" required placeholder="you@company.com" className={INPUT_CLASS} value={email} onChange={(e) => setEmail(e.target.value)} />
-
-        {resolved && (
-          <div
-            className="flex items-center gap-[9px] rounded-[11px] px-[13px] py-[9px] [animation:rise_.3s_ease_both]"
-            aria-live="polite"
-            style={{ background: "color-mix(in oklab, var(--login-brand) 18%, transparent)", border: "1px solid color-mix(in oklab, var(--login-brand) 40%, transparent)" }}
-          >
-            <span className="flex size-5 items-center justify-center rounded-full bg-[var(--login-brand)] text-[9.5px] font-extrabold text-[var(--onbrand)]">
-              {org.tenantName.charAt(0).toUpperCase()}
-            </span>
-            <span className="text-[12px] text-[var(--l-ink-2)]">Signing in to <span className="font-bold text-[var(--login-brand)]">{org.tenantName}</span></span>
-          </div>
-        )}
-        {org.status === "not-found" && (
-          <p className="rounded-[11px] border border-[var(--l-hair)] bg-[var(--l-chip-bg)] px-[13px] py-[9px] text-[12px] text-[var(--l-ink-3)]" aria-live="polite">
-            No organization found for that domain.
-          </p>
-        )}
-
-        <input id="password" type="password" autoComplete="current-password" required placeholder="Password" className={INPUT_CLASS} value={password} onChange={(e) => setPassword(e.target.value)} />
-
-        {showTotp ? (
-          <input id="totpCode" inputMode="numeric" autoComplete="one-time-code" placeholder="6-digit authenticator code" className={INPUT_CLASS} value={totpCode} onChange={(e) => setTotpCode(e.target.value)} />
-        ) : (
-          <button
-            type="button"
-            onClick={() => setShowTotp(true)}
-            className="self-start rounded-sm text-[11.5px] font-semibold text-[var(--l-ink-3)] outline-none transition-colors hover:text-[var(--login-brand)] focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_55%,transparent)]"
-          >
-            Enter authenticator code
+      {!ssoEnabled && step === "email" && (
+        <form onSubmit={goToPassword} className="flex flex-col gap-4" noValidate>
+          <AuthHeading title="Sign In to QUBIT" lead="Use your work email to continue." />
+          <AuthField id="email" label="Work email" hint="Your email domain identifies your organisation." error={emailErrors.errors.email}>
+            <input
+              ref={focusRef}
+              {...emailErrors.bind("email")}
+              type="email"
+              autoComplete="email"
+              required
+              placeholder="name@company.com"
+              className={AUTH_INPUT_CLASS}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </AuthField>
+          {errorLine}
+          <button type="submit" className={AUTH_PRIMARY_CLASS}>
+            Continue
           </button>
-        )}
-
-        {error && <p role="alert" className="text-[12px] text-[var(--l-err)]">{error}</p>}
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="mt-1 w-full rounded-[11px] px-[13px] py-[11px] text-[13.5px] font-bold text-[var(--onbrand)] outline-none transition-transform hover:-translate-y-[2px] focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--login-brand)] disabled:opacity-60"
-          style={{ background: "var(--login-brand)", boxShadow: "0 4px 20px color-mix(in oklab, var(--login-brand) var(--glowA), transparent)" }}
-        >
-          {loading ? "Signing in…" : "Sign in"}
-        </button>
-      </form>
+          <div className="flex items-center justify-between text-[12.5px] text-[var(--l-ink-3)]">
+            <span>New to QUBIT?</span>
+            <Link href="/request-access" className={AUTH_LINK_CLASS}>
+              Request Access
+            </Link>
+          </div>
+        </form>
       )}
 
-      {!ssoEnabled && SHOW_QUICK_SIGN_INS && (
-        <>
-          <div className="mt-5 mb-2.5 flex items-center gap-2.5">
-            <span className="flex-1 border-b border-[var(--l-hair)]" />
-            <span className="font-sans text-[9px] font-semibold uppercase tracking-[1.6px] text-[var(--l-ink-3)]">Demo quick sign-in</span>
-            <span className="flex-1 border-b border-[var(--l-hair)]" />
+      {!ssoEnabled && step === "password" && (
+        <form onSubmit={submitCredentials} className="flex flex-col gap-4" noValidate>
+          {orgName && <OrgChip name={orgName} />}
+          <AuthHeading title="Welcome Back" />
+          <div className="flex items-center justify-between gap-3 text-[12.5px] text-[var(--l-ink-3)]">
+            <span className="truncate">{email}</span>
+            <button type="button" className={AUTH_LINK_CLASS} onClick={() => { setStep("email"); setError(null); }}>
+              Change
+            </button>
           </div>
+          <AuthField id="password" label="Password">
+            <input
+              ref={focusRef}
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              placeholder="Enter your password"
+              className={AUTH_INPUT_CLASS}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </AuthField>
+          <ForgotPassword />
+          {errorLine}
+          <button type="submit" disabled={loading} aria-busy={loading} className={AUTH_PRIMARY_CLASS}>
+            {loading ? <><Spinner />Signing in…</> : "Sign In"}
+          </button>
+          <div className="flex items-center justify-between text-[12.5px] text-[var(--l-ink-3)]">
+            <span>Use an authenticator app?</span>
+            <button type="button" className={AUTH_LINK_CLASS} onClick={() => { setStep("code"); setError(null); }}>
+              Enter Your Code
+            </button>
+          </div>
+        </form>
+      )}
+
+      {!ssoEnabled && step === "code" && (
+        <form onSubmit={submitCredentials} className="flex flex-col gap-4" noValidate>
+          <AuthHeading title="Enter Your Code" lead="Open your authenticator app and enter the 6-digit code for QUBIT." />
+          <AuthField id="totpCode" label="Authenticator code" error={codeErrors.errors.totpCode}>
+            <OtpBoxes inputRef={focusRef} value={totpCode} onChange={setTotpCode} binding={codeErrors.bind("totpCode")} />
+          </AuthField>
+          {errorLine}
+          <button type="submit" disabled={loading} aria-busy={loading} className={AUTH_PRIMARY_CLASS}>
+            {loading ? <><Spinner />Verifying…</> : "Verify"}
+          </button>
+          <div className="flex items-center justify-between text-[12.5px] text-[var(--l-ink-3)]">
+            <button type="button" className={AUTH_LINK_CLASS} onClick={() => { setStep("password"); setError(null); }}>
+              Back
+            </button>
+            <span>Lost your device? Contact your administrator.</span>
+          </div>
+        </form>
+      )}
+
+      {!ssoEnabled && step === "email" && demoAccounts.length > 0 && (
+        <div className="flex flex-col gap-2.5 border-t border-[var(--l-hair)] pt-4">
+          <span className="text-[11px] font-semibold uppercase tracking-[.12em] text-[var(--l-ink-3)]">Demo quick sign-in</span>
           <div className="flex flex-col gap-2 sm:flex-row">
-            {QUICK_SIGN_INS.map((d) => (
+            {demoAccounts.map((d) => (
               <button
-                key={d.name}
+                key={d.email}
                 type="button"
-                onClick={() => { setEmail(d.email); setPassword(d.password); setError(null); }}
-                className="flex flex-1 items-center gap-2.5 rounded-[11px] border border-[var(--l-field-bd)] bg-[var(--l-chip-bg)] px-3 py-2.5 text-left outline-none transition-colors hover:border-[var(--login-brand)] focus-visible:border-[var(--login-brand)] focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_55%,transparent)]"
+                onClick={() => applyDemo(d)}
+                className="flex h-10 items-center gap-2.5 rounded-[10px] sm:flex-1 border border-[var(--l-field-bd)] px-3 text-left outline-none transition-colors hover:border-[var(--login-brand)] focus-visible:ring-[3px] focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_35%,transparent)]"
               >
-                <span className="flex size-7 flex-none items-center justify-center rounded-full text-[12px] font-extrabold text-white" style={{ background: d.brand }}>{d.initial}</span>
-                <span className="truncate text-[13px] font-bold text-[var(--l-ink)]">{d.name}</span>
+                <span className="flex size-6 flex-none items-center justify-center rounded-full text-[11px] font-extrabold text-white" style={{ background: d.brand }}>
+                  {d.initial}
+                </span>
+                <span className="truncate text-[13px] font-semibold text-[var(--l-ink)]">{d.name}</span>
               </button>
             ))}
           </div>
-        </>
+        </div>
       )}
-
-      <div className="mt-3.5 text-[11.5px] leading-[1.5] text-[var(--l-ink-3)]">
-        {!ssoEnabled && "You may be asked for a 6-digit authenticator code. "}
-        <span className="font-bold text-[var(--l-err)]">Trouble signing in?</span> Contact your administrator.
-      </div>
     </AuthShell>
+  );
+}
+
+/** "Forgot password?" — QUBIT has no self-service reset: an administrator sends a one-time
+ * reset link (Users › Edit). Says so instead of linking to a page that doesn't exist. */
+function ForgotPassword() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="-mt-2 flex flex-col items-end gap-1">
+      <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className={AUTH_LINK_CLASS}>
+        Forgot password?
+      </button>
+      {open && (
+        <p className="self-stretch rounded-[10px] bg-[var(--l-chip-bg)] px-3 py-2 text-[12.5px] text-[var(--l-ink-2)]" aria-live="polite">
+          Ask your administrator to send you a reset link. It arrives by email, works once and expires in 72 hours.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Design spec v2 code entry: six boxes, the current one ringed in brand. One real input sits
+ * over the boxes (transparent text), so paste, autofill and screen readers work as normal. */
+function OtpBoxes({ value, onChange, inputRef, binding }: { value: string; onChange: (v: string) => void; inputRef?: React.Ref<HTMLInputElement>; binding?: FieldBinding }) {
+  const [focused, setFocused] = useState(false);
+  // docs/08 § Errors: the whole group turns red when the code is invalid (one message under it).
+  const invalid = Boolean(binding?.["aria-invalid"]);
+  return (
+    <div className="relative">
+      <div aria-hidden className="flex gap-2">
+        {Array.from({ length: 6 }, (_, i) => {
+          const current = focused && (i === value.length || (i === 5 && value.length === 6));
+          return (
+            <span
+              key={i}
+              className="grid h-12 flex-1 place-items-center rounded-[10px] border bg-[var(--l-field-bg)] text-[20px] font-bold text-[var(--l-ink)]"
+              style={
+                invalid
+                  ? { borderColor: "var(--l-err)", boxShadow: current ? "0 0 0 3px color-mix(in oklab, var(--l-err) 18%, transparent)" : undefined }
+                  : current
+                    ? { borderColor: "var(--login-brand)", boxShadow: "0 0 0 3px color-mix(in oklab, var(--login-brand) 18%, transparent)" }
+                    : { borderColor: "var(--l-field-bd)" }
+              }
+            >
+              {value[i] ?? ""}
+            </span>
+          );
+        })}
+      </div>
+      <input
+        ref={inputRef}
+        id="totpCode"
+        aria-invalid={binding?.["aria-invalid"]}
+        aria-describedby={binding?.["aria-describedby"]}
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        maxLength={6}
+        aria-label="6-digit authenticator code"
+        className="absolute inset-0 h-full w-full cursor-text bg-transparent text-transparent caret-transparent outline-none selection:bg-transparent"
+        value={value}
+        onFocus={() => setFocused(true)}
+        onBlur={() => {
+          setFocused(false);
+          binding?.onBlur();
+        }}
+        onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, 6))}
+      />
+    </div>
   );
 }

@@ -5,6 +5,7 @@
 // a parked idea is never deleted, the reason it stopped is the record), merge (provenance
 // on the receiving project).
 import { z } from "zod";
+import { ideaExpectedValue, ideaProblem, ideaSponsor, ideaTitle } from "@/lib/idea-schema";
 import type { Prisma } from "@prisma/client";
 import { audit } from "@/lib/audit";
 import { withTenant, type TenantContext } from "@/lib/tenant";
@@ -27,15 +28,15 @@ function canTriage(ctx: TenantContext): boolean {
 
 function assertTriage(ctx: TenantContext): void {
   if (!canTriage(ctx)) {
-    throw new IdeaError("Triage is the Head of PMs' to run.", "FORBIDDEN");
+    throw new IdeaError("Triage is the Head's to run.", "FORBIDDEN");
   }
 }
 
 export const SubmitIdeaInput = z.object({
-  title: z.string().trim().min(4, "Give the idea a title.").max(140),
-  sponsor: z.string().trim().min(2, "Name the sponsor — an idea needs someone behind it.").max(120),
-  problem: z.string().trim().min(10, "Describe the problem it solves.").max(2000),
-  expectedValue: z.string().trim().max(500).nullable().optional(),
+  title: ideaTitle,
+  sponsor: ideaSponsor,
+  problem: ideaProblem,
+  expectedValue: ideaExpectedValue.nullable().optional(),
   suggestedPortfolioId: z.string().uuid().nullable().optional(),
 });
 export type SubmitIdeaInputT = z.infer<typeof SubmitIdeaInput>;
@@ -168,6 +169,32 @@ export async function getIdeaBoard(ctx: TenantContext): Promise<IdeaBoard> {
       decided: views.filter((v) => v.status === "Accepted" || v.status === "Parked" || v.status === "Merged"),
     };
   });
+}
+
+const OPEN_STATUSES: IdeaStatus[] = ["New", "Reviewing"];
+
+/** UX8 — whether the viewer may run triage (the engine's own gate, also asserted by every
+ * triage action). Callers pair it with `can(ctx, "idea:triage")`, the route's gate. */
+export function canTriageIdeas(ctx: TenantContext): boolean {
+  return canTriage(ctx);
+}
+
+/**
+ * UX8 (Approvals) — the open triage queue: New + Reviewing, oldest first, uncapped (unlike
+ * the board's 200, which could drop the longest-waiting ideas). Empty for a non-triager.
+ */
+export async function listOpenIdeas(ctx: TenantContext): Promise<IdeaView[]> {
+  if (!canTriage(ctx)) return [];
+  return withTenant(ctx, async (tx) => {
+    const rows = await tx.idea.findMany({ where: { status: { in: OPEN_STATUSES } }, include: INCLUDE, orderBy: { createdAt: "asc" } });
+    return rows.map((r) => toView(r, ctx.userId));
+  });
+}
+
+/** UX8 — how many ideas wait for triage (the Approvals badge). 0 for a non-triager. */
+export async function countOpenIdeas(ctx: TenantContext): Promise<number> {
+  if (!canTriage(ctx)) return 0;
+  return withTenant(ctx, (tx) => tx.idea.count({ where: { status: { in: OPEN_STATUSES } } }));
 }
 
 /** Head-only: move an idea between the two open lanes (New ⇄ Reviewing). */

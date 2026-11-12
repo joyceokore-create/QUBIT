@@ -35,12 +35,16 @@ export interface V3QueueItem {
   act: string;
   projectId: string;
   projectName: string;
+  /** When set, the action opens this page instead of the project drawer. */
+  href?: string;
 }
 
 export interface V3Risk { sev: "R" | "A"; t: string; meta: string; projectName: string; projectId: string }
 export interface V3Market { name: string; flag: string; pct: number; gates: string[]; live: boolean }
 
 export interface PmV3Props {
+  /** UX4: the new-layout Daily Brief, shown full width in place of the hero brief. */
+  brief?: React.ReactNode;
   viewer: { name: string; title: string; initials: string };
   briefLines: { emphasis: string; detail: string }[];
   generatedAt: string;
@@ -48,6 +52,8 @@ export interface PmV3Props {
   ragCounts: { R: number; A: number; G: number; N: number };
   stats: { overdueMilestones: number; gatesSoon: number; nextUp: string; disputes: number; openRisks: number; allocPct: number | null };
   queue: V3QueueItem[];
+  /** Copy for an empty queue (e.g. a Head previewing with no projects of their own). */
+  queueEmpty?: string;
   risks: V3Risk[];
   collisions: string[];
   market: { projectName: string; rows: V3Market[]; gateLabels: string[] } | null;
@@ -126,7 +132,7 @@ export function Gate({ g }: { g: string }) {
   return <span className={`gate ${v.cls}`} title={v.title}>{v.ch}</span>;
 }
 
-export function PmV3({ viewer, briefLines, generatedAt, projects, ragCounts, stats, queue, risks, collisions, market }: PmV3Props) {
+export function PmV3({ brief, viewer, briefLines, generatedAt, projects, ragCounts, stats, queue, queueEmpty, risks, collisions, market }: PmV3Props) {
   const [wqFilter, setWqFilter] = useState("");
   const [search, setSearch] = useState("");
 
@@ -137,7 +143,6 @@ export function PmV3({ viewer, briefLines, generatedAt, projects, ragCounts, sta
     { id: "pm-queue", icon: "list", label: "Work Queue" },
     { id: "pm-risks", icon: "warn", label: "Risks & Collisions" },
     ...(market ? [{ id: "pm-market", icon: "globe", label: "Market Rollout" }] : []),
-    { id: "custom-reports", icon: "report", label: "Custom Reports", href: "/reports?tab=custom" },
   ]);
 
   const q = search.trim().toLowerCase();
@@ -159,7 +164,9 @@ export function PmV3({ viewer, briefLines, generatedAt, projects, ragCounts, sta
         <div className="pm-shell">
 
           <div className="pm-content">
-            <div className="pm-toprow" id="pm-top">
+            {brief}
+            <div className={`pm-toprow${brief ? " solo" : ""}`} id="pm-top">
+              {!brief && (
               <section className="pm-hero">
                 <div className="pm-hero-top">
                   <span className="pm-hero-tag"><Ic name="sparkle" />Daily Brief</span>
@@ -170,6 +177,7 @@ export function PmV3({ viewer, briefLines, generatedAt, projects, ragCounts, sta
                 </div>
                 <p className="pm-hero-foot">Generated from status updates, gate records and RAID items — verify before acting.</p>
               </section>
+              )}
               <div className="pm-statgrid">
                 <div className="pm-stat"><div className="pm-stat-icon blue"><Ic name="folder" /></div><div className="v num">{projects.length}</div><div className="l">Projects owned</div><RagBarV3 c={ragCounts} /></div>
                 <div className={`pm-stat ${stats.overdueMilestones ? "hot" : ""}`}><div className="pm-stat-icon red"><Ic name="alarm" /></div><div className="v num">{stats.overdueMilestones}</div><div className="l">Overdue milestones</div></div>
@@ -208,9 +216,9 @@ export function PmV3({ viewer, briefLines, generatedAt, projects, ragCounts, sta
                     {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
-                <div className="sub" style={{ margin: "-6px 0 12px" }}>{visibleQueue.length} items · merged across projects</div>
+                <div className="sub" style={{ margin: "-6px 0 12px" }}>{visibleQueue.length} items · the projects you run</div>
                 <div className="queue queue-pm">
-                  {visibleQueue.length === 0 && <span className="hint">No items for this filter</span>}
+                  {visibleQueue.length === 0 && <span className="hint">{queueEmpty ?? (wqFilter ? "No items for this filter" : "Nothing needs you right now.")}</span>}
                   {visibleQueue.map((item, i) => (
                     <div className="qi" key={i}>
                       <div className="b">
@@ -221,7 +229,13 @@ export function PmV3({ viewer, briefLines, generatedAt, projects, ragCounts, sta
                         <b className="qi-title">{item.t}</b>
                         <span className="qi-desc">{item.d}</span>
                       </div>
-                      <div className="m"><button type="button" className="act-btn dark" data-open={item.projectId}>{item.act}</button></div>
+                      <div className="m">
+                        {item.href ? (
+                          <a className="act-btn dark" href={item.href}>{item.act}</a>
+                        ) : (
+                          <button type="button" className="act-btn dark" data-open={item.projectId}>{item.act}</button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

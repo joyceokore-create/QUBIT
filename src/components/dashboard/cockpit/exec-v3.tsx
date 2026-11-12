@@ -27,6 +27,8 @@ export interface ExecRow {
 }
 
 export interface ExecV3Props {
+  /** UX4: the new-layout Daily Brief, shown full width in place of the hero brief. */
+  brief?: React.ReactNode;
   briefLines: { emphasis: string; detail: string }[];
   generatedAt: string;
   stats: {
@@ -55,6 +57,7 @@ export interface ExecV3Props {
 const DIMS = ["Schedule", "Budget", "Scope", "Risk", "Resources", "Quality"];
 
 export function ExecV3(props: ExecV3Props) {
+  const brief = props.brief;
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
@@ -74,7 +77,6 @@ export function ExecV3(props: ExecV3Props) {
     { id: "exec-insights", icon: "list", label: "Insights" },
     { id: "decisions", icon: "warn", label: "Decisions" },
     { id: "exec-glc", icon: "shield", label: "GLC" },
-    { id: "custom-reports", icon: "report", label: "Custom Reports", href: "/reports?tab=custom" },
   ]);
 
   return (
@@ -89,7 +91,9 @@ export function ExecV3(props: ExecV3Props) {
 
         <div className="pm-shell">
           <div className="pm-content">
-            <div className="pm-toprow" id="exec-top">
+            {brief}
+            <div className={`pm-toprow${brief ? " solo" : ""}`} id="exec-top">
+              {!brief && (
               <section className="pm-hero">
                 <div className="pm-hero-top">
                   <span className="pm-hero-tag"><Ic name="sparkle" />Daily Brief</span>
@@ -98,6 +102,7 @@ export function ExecV3(props: ExecV3Props) {
                 <div className="pm-hero-body">{props.briefLines.map((l, i) => <p key={i}><b>{l.emphasis}</b> {l.detail}</p>)}</div>
                 <p className="pm-hero-foot">Generated from status updates, gate records and RAID items — verify before acting.</p>
               </section>
+              )}
               <div className="pm-statgrid">
                 <div className="pm-stat"><div className="pm-stat-icon blue"><Ic name="grid" /></div><div className="v num">{props.stats.all}</div><div className="l">Initiatives across the pipeline</div><div className="d">{props.stats.approved} approved & funded</div></div>
                 <div className="pm-stat"><div className="pm-stat-icon teal"><Ic name="check" /></div><div className="v num">{props.stats.live}</div><div className="l">Solutions live in production</div><div className="d">{props.stats.liveNames || "—"}</div></div>
@@ -191,7 +196,7 @@ export function ExecV3(props: ExecV3Props) {
 
             <div className="row g12">
               <section className="panel c7" id="decisions">
-                <div className="panel-h"><h2>Decisions waiting on the Group</h2><span className="sub">escalated by the Head of PMs · sorted by age</span></div>
+                <div className="panel-h"><h2>Decisions waiting on the Group</h2><span className="sub">escalated by the Head · sorted by age</span></div>
                 <div className="queue queue-pm">
                   {props.decisions.length === 0 && <span className="hint">No decisions pending</span>}
                   {props.decisions.map((d) => (

@@ -33,7 +33,7 @@ export type CanonicalRole = (typeof CANONICAL_ROLES)[number];
 /** Human-friendly labels for the canonical roles (for profile/UI display). */
 const ROLE_LABELS: Record<CanonicalRole, string> = {
   PlatformSuperAdmin: "Super Admin",
-  HeadOfProjects: "Head of Projects",
+  HeadOfProjects: "Head",
   HeadOfQA: "Head of QA",
   Executive: "Executive",
   ProjectManager: "Project Manager",
@@ -105,6 +105,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     "programme:create",
     "staffing:manage", // docs/26 §4.3 — fill/decline resource requests, see the bench
     "idea:triage", // M-P4a (docs/35 §1) — accept / park / merge the intake board
+    "integrations:manage", // Configs › Integrations — connect YouTrack, map projects, status/sync
     "project:create",
     "project:write", // may edit any project (governance)
     "project:update", // transitional coarse write key for existing routes (see file header)
@@ -128,6 +129,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     "teams:manage:all",
     "app_modules:read",
     "permissions:read",
+    "integrations:manage", // Configs › Integrations — connect YouTrack, map projects, status/sync
     "project:create",
     "project:stage", // docs/18 §7 — governance fields, not delivery scope
     "budget:read",
@@ -199,6 +201,12 @@ function matchesPermission(granted: string, requested: string): boolean {
   return g.length === r.length;
 }
 
+/** Does a granted set (a role's permissions, possibly with "*" wildcards) cover `requested`?
+ * Used by the Roles & Permissions matrix to read a role's effective set. */
+export function grantsPermission(granted: readonly string[], requested: string): boolean {
+  return granted.some((g) => matchesPermission(g, requested));
+}
+
 /**
  * Resolves whether the current session's roles grant `permission` AT THE ROLE LEVEL.
  * Roles come from the session (TenantContext), never from the client. Resource-scoped
@@ -221,4 +229,10 @@ export function can(ctx: TenantContext, permission: string, _scope?: Scope): boo
     if (!grants) return false;
     return grants.some((granted) => matchesPermission(granted, permission));
   });
+}
+
+/** The roll-up / reports "Head" gate used across the reporting chain: the Head,
+ * or the platform super-admin standing in. Role check only — permissions stay in can(). */
+export function isHeadOfProjects(ctx: { roles: string[] }): boolean {
+  return ctx.roles.some((r) => r === "HeadOfProjects" || r === "PlatformSuperAdmin");
 }

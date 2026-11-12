@@ -60,8 +60,10 @@ describe("M2 weekly loop", () => {
     await withTenant({ tenantId: demoBId, userId: "test" }, async (tx) => {
       await tx.checkIn.deleteMany({ where: { isoWeek: WEEK } });
       await tx.sharedReport.deleteMany({ where: { type: "weekly", periodLabel: WEEK } });
-      await tx.notification.deleteMany({ where: { kind: { in: ["checkin_ready", "weekly_report"] } } });
-      await tx.domainEvent.deleteMany({ where: { type: { in: ["checkin.drafted", "checkin.confirmed", "report.published"] } } });
+      await tx.notification.deleteMany({ where: { kind: { in: ["checkin_ready", "weekly_report", "checkin.submitted_to_head"] } } });
+      await tx.domainEvent.deleteMany({
+        where: { type: { in: ["checkin.drafted", "checkin.confirmed", "checkin.submitted_to_head", "report.published"] } },
+      });
       await tx.reportSubscription.deleteMany({ where: { userId: execId } });
       await tx.auditLog.deleteMany({ where: { entityType: "check_in" } });
       await tx.project.deleteMany({ where: { id: projectId } });
@@ -72,8 +74,10 @@ describe("M2 weekly loop", () => {
       // a test run (this wipe once ate a real weekly report during M-P3b verification).
       await tx.checkIn.deleteMany({ where: { isoWeek: WEEK, status: "Draft", confirmedById: null } });
       await tx.sharedReport.deleteMany({ where: { type: "weekly", periodLabel: WEEK } });
-      await tx.notification.deleteMany({ where: { kind: { in: ["checkin_ready", "weekly_report"] } } });
-      await tx.domainEvent.deleteMany({ where: { type: { in: ["checkin.drafted", "checkin.confirmed", "report.published"] } } });
+      await tx.notification.deleteMany({ where: { kind: { in: ["checkin_ready", "weekly_report", "checkin.submitted_to_head"] } } });
+      await tx.domainEvent.deleteMany({
+        where: { type: { in: ["checkin.drafted", "checkin.confirmed", "checkin.submitted_to_head", "report.published"] } },
+      });
     });
     await prisma.jobRun.deleteMany({ where: { idempotencyKey: { startsWith: KEY_PREFIX } } });
     await cleanupFixtureUsers(demoBId);

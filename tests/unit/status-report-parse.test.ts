@@ -1,0 +1,277 @@
+// Status-report upload — the parsers are pure over bytes/XML, so they are pinned without
+// Office: a ZIP written in-test round-trips; a Word table split across runs and paragraphs
+// comes out as rows; Excel shared strings resolve; PDF items group into a table; names
+// match the way PMs write them.
+import { deflateRawSync } from "node:zlib";
+import { describe, expect, it } from "vitest";
+import { readZip } from "@/lib/zip-read";
+import { matchProject } from "@/server/status-report/match";
+import { detectFormat, normaliseStatus, parseDocx, parseXlsx, tableFromPdfItems } from "@/server/status-report/parse";
+import { parsePptx } from "@/server/status-report/parse";
+
+/** Minimal ZIP writer (local headers + central directory) — enough for the reader to open. */
+function zip(files: Record<string, string>, stored = false): Buffer {
+  const parts: Buffer[] = [];
+  const central: Buffer[] = [];
+  let offset = 0;
+  for (const [name, text] of Object.entries(files)) {
+    const raw = Buffer.from(text, "utf8");
+    const data = stored ? raw : deflateRawSync(raw);
+    const n = Buffer.from(name);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(stored ? 0 : 8, 8);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(raw.length, 22);
+    local.writeUInt16LE(n.length, 26);
+    parts.push(local, n, data);
+    const cen = Buffer.alloc(46);
+    cen.writeUInt32LE(0x02014b50, 0);
+    cen.writeUInt16LE(stored ? 0 : 8, 10);
+    cen.writeUInt32LE(data.length, 20);
+    cen.writeUInt32LE(raw.length, 24);
+    cen.writeUInt16LE(n.length, 28);
+    cen.writeUInt32LE(offset, 42);
+    central.push(cen, n);
+    offset += local.length + n.length + data.length;
+  }
+  const cenBuf = Buffer.concat(central);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(Object.keys(files).length, 8);
+  eocd.writeUInt16LE(Object.keys(files).length, 10);
+  eocd.writeUInt32LE(cenBuf.length, 12);
+  eocd.writeUInt32LE(offset, 16);
+  return Buffer.concat([...parts, cenBuf, eocd]);
+}
+
+const cell = (...paras: string[]) => `<w:tc>${paras.map((p) => `<w:p>${p}</w:p>`).join("")}</w:tc>`;
+const runs = (...t: string[]) => t.map((x) => `<w:r><w:t xml:space="preserve">${x}</w:t></w:r>`).join("");
+const docxXml = (rows: string[]) =>
+  `<?xml version="1.0"?><w:document><w:body><w:p>${runs("Project Status Report")}</w:p><w:p>${runs("Prepared by: ", "Test PM, Project Manager, Riverbank", " Date: 29 September 2026 Classification: Internal")}</w:p><w:tbl>${rows.join("")}</w:tbl></w:body></w:document>`;
+const header = `<w:tr>${cell(runs("Project"))}${cell(runs("Status"))}${cell(runs("Stage"))}${cell(runs("Update and Outlook"))}</w:tr>`;
+
+describe("zip reader", () => {
+  it("round-trips stored and deflated entries", () => {
+    for (const stored of [true, false]) {
+      const z = readZip(zip({ "a/b.xml": "<x>hi &amp; bye</x>", "c.txt": "plain" }, stored));
+      expect([...z.keys()]).toEqual(["a/b.xml", "c.txt"]);
+      expect(z.get("a/b.xml")!.read().toString()).toBe("<x>hi &amp; bye</x>");
+    }
+  });
+  it("refuses non-archives", () => {
+    expect(() => readZip(Buffer.from("not a zip at all, honestly"))).toThrow(/central directory/);
+  });
+});
+
+describe("parseDocx", () => {
+  it("reads the template table: run-split text joined, paragraphs as line breaks, stage note kept, meta from the header", () => {
+    const xml = docxXml([
+      header,
+      `<w:tr>${cell(runs("Fik", "ra"))}${cell(runs("GREEN"))}${cell(runs("UAT / Pilot Readiness"), runs("(internal VAPT in progress)"))}${cell(runs("All stages up to UAT are complete."), runs("UAT Cycle 3 follows."))}</w:tr>`,
+      `<w:tr>${cell(runs("Lumi (AI Knowledge Layer)"))}${cell(runs("amber"))}${cell(runs("Evaluation"))}${cell(runs("Prototype complete; progress 20%."))}</w:tr>`,
+      `<w:tr>${cell(runs("Mystery"))}${cell(runs("Blue"))}${cell(runs(""))}${cell(runs("x".repeat(600)))}</w:tr>`,
+    ]);
+    const r = parseDocx(zip({ "word/document.xml": xml }));
+    expect(r.preparedBy).toBe("Test PM, Project Manager, Riverbank");
+    expect(r.reportDate).toBe("29 September 2026");
+    expect(r.rows).toHaveLength(3);
+    expect(r.rows[0]).toMatchObject({ project: "Fikra", status: "Green", stage: "UAT / Pilot Readiness (internal VAPT in progress)", update: "All stages up to UAT are complete.\nUAT Cycle 3 follows.", warnings: [] });
+    expect(r.rows[1]).toMatchObject({ project: "Lumi (AI Knowledge Layer)", status: "Amber" });
+    expect(r.rows[2]!.status).toBeNull();
+    expect(r.rows[2]!.update).toHaveLength(500);
+    expect(r.rows[2]!.warnings.join(" ")).toMatch(/isn't Green, Amber or Red/);
+    expect(r.rows[2]!.warnings.join(" ")).toMatch(/shortened to 500/);
+  });
+
+  it("says so when no status table exists", () => {
+    const r = parseDocx(zip({ "word/document.xml": docxXml([`<w:tr>${cell(runs("Name"))}${cell(runs("Owner"))}</w:tr>`]) }));
+    expect(r.rows).toEqual([]);
+    expect(r.warnings[0]).toMatch(/No table with Project/);
+  });
+});
+
+describe("tracker format (one column per gate)", () => {
+  it("reads gate cells, the current stage and comments; keeps free text whole; n/a as is", () => {
+    const rows = [
+      `<w:tr>${cell(runs("Project"))}${cell(runs("BRD"))}${cell(runs("Prototype"))}${cell(runs("MVP1"))}${cell(runs("Go Live"))}${cell(runs("Current Stage"))}${cell(runs("% Complete"))}${cell(runs("Comments"))}${cell(runs("Team"))}</w:tr>`,
+      `<w:tr>${cell(runs("RetailFlow"))}${cell(runs("✓ (Internal draft based on requirements sessions)"))}${cell(runs("In progress"))}${cell(runs("Not started"))}${cell(runs("n/a"))}${cell(runs("Fixing issues on receipts"))}${cell(runs("60"))}${cell(runs("BRD from internal team."))}${cell(runs("Titus, Joyce"))}</w:tr>`,
+      `<w:tr>${cell(runs("Anchor Pario"))}${cell(runs("Not returned from KCB"))}${cell(runs("✓"))}${cell(runs("In Progress"))}${cell(runs(""))}${cell(runs("Shelved"))}${cell(runs(""))}${cell(runs(""))}${cell(runs(""))}</w:tr>`,
+    ];
+    const r = parseDocx(zip({ "word/document.xml": docxXml(rows) }));
+    expect(r.rows).toHaveLength(2);
+    const [retail, anchor] = r.rows;
+    expect(retail).toMatchObject({ project: "RetailFlow", status: null, stage: "Fixing issues on receipts", update: "BRD from internal team." });
+    expect(retail!.gates).toEqual([
+      { name: "BRD", stateRaw: "✓", note: "Internal draft based on requirements sessions" },
+      { name: "Prototype", stateRaw: "In progress", note: "" },
+      { name: "MVP1", stateRaw: "Not started", note: "" },
+      { name: "Go Live", stateRaw: "n/a", note: "" },
+    ]);
+    expect(retail!.warnings).toContain("The file has no RAG column — the computed RAG is proposed.");
+    expect(anchor!.gates.map((g) => g.stateRaw)).toEqual(["Not returned from KCB", "✓", "In Progress"]);
+    expect(anchor!.warnings.some((w) => /Shelved/.test(w))).toBe(true);
+  });
+  it("reads QUBIT's own template: Code and Market columns, and a Channels sheet attached by code", () => {
+    const sheet = (rows: string[][]) =>
+      `<worksheet><sheetData>${rows.map((cells, r) => `<row r="${r + 1}">${cells.map((v, c) => `<c r="${String.fromCharCode(65 + c)}${r + 1}" t="inlineStr"><is><t>${v}</t></is></c>`).join("")}</row>`).join("")}</sheetData></worksheet>`;
+    const status = sheet([
+      ["Code", "Project", "Market", "RAG", "BRD", "MVP1", "Current stage", "Update and Outlook"],
+      ["SWIPE", "Swipe Agent Banking", "", "Amber", "Done", "In progress", "Build", "Product line."],
+      ["SWIPE", "Swipe Agent Banking", "RW", "Red", "Done", "Not started", "", "Rwanda line."],
+    ]);
+    const channels = sheet([
+      ["Code", "Project", "Market", "Channel", "State", "Note"],
+      ["SWIPE", "Swipe Agent Banking", "RW", "USSD", "UAT", "retest"],
+    ]);
+    const r = parseXlsx(zip({ "xl/worksheets/sheet1.xml": status, "xl/worksheets/sheet2.xml": channels }));
+    expect(r.rows).toHaveLength(2);
+    expect(r.rows[0]).toMatchObject({ code: "SWIPE", market: null, status: "Amber", stage: "Build", update: "Product line." });
+    expect(r.rows[0]!.gates).toEqual([{ name: "BRD", stateRaw: "Done", note: "" }, { name: "MVP1", stateRaw: "In progress", note: "" }]);
+    expect(r.rows[1]).toMatchObject({ code: "SWIPE", market: "RW", status: "Red" });
+    expect(r.rows[1]!.cells).toEqual([{ column: "USSD", row: "RW", stateRaw: "UAT", note: "retest" }]);
+  });
+});
+
+describe("parseXlsx", () => {
+  it("resolves shared strings and finds the header on any sheet", () => {
+    const sst = `<sst><si><t>Project</t></si><si><t>Status</t></si><si><t>Stage</t></si><si><t>Update</t></si><si><t>Sifa</t></si><si><t>GREEN</t></si><si><t>Pilot</t></si><si><r><t>Live, </t></r><r><t>phase 2 underway.</t></r></si></sst>`;
+    const sheet = `<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="s"><v>2</v></c><c r="D1" t="s"><v>3</v></c></row><row r="2"><c r="A2" t="s"><v>4</v></c><c r="B2" t="s"><v>5</v></c><c r="C2" t="s"><v>6</v></c><c r="D2" t="s"><v>7</v></c></row></sheetData></worksheet>`;
+    const r = parseXlsx(zip({ "xl/sharedStrings.xml": sst, "xl/worksheets/sheet1.xml": sheet }));
+    expect(r.rows).toHaveLength(1);
+    expect(r.rows[0]).toMatchObject({ project: "Sifa", status: "Green", stage: "Pilot", update: "Live, phase 2 underway." });
+  });
+});
+
+describe("PDF table grouping", () => {
+  it("groups items into lines by y and columns by the header's x, continuing wrapped rows", () => {
+    const items = [
+      { str: "Project", x: 40, y: 700 },
+      { str: "Status", x: 200, y: 700 },
+      { str: "Stage", x: 280, y: 700 },
+      { str: "Update and Outlook", x: 400, y: 700 },
+      { str: "Qora", x: 40, y: 680 },
+      { str: "GREEN", x: 200, y: 680 },
+      { str: "Documentation", x: 280, y: 680 },
+      { str: "ARB approved;", x: 400, y: 680 },
+      { str: "docs next.", x: 400, y: 668 },
+    ];
+    const t = tableFromPdfItems(items);
+    expect(t[0]).toEqual(["Project", "Status", "Stage", "Update and Outlook"]);
+    expect(t[1]).toEqual(["Qora", "GREEN", "Documentation", "ARB approved;\ndocs next."]);
+  });
+});
+
+describe("helpers", () => {
+  it("normalises statuses and detects formats by extension + magic bytes", () => {
+    expect(["GREEN", "g", "On track"].map(normaliseStatus)).toEqual(["Green", "Green", "Green"]);
+    expect(["Amber", "yellow", "At risk"].map(normaliseStatus)).toEqual(["Amber", "Amber", "Amber"]);
+    expect(["RED", "Off track"].map(normaliseStatus)).toEqual(["Red", "Red"]);
+    expect(normaliseStatus("Blue")).toBeNull();
+    expect(detectFormat("x.docx", zip({ a: "" }))).toBe("docx");
+    expect(detectFormat("x.XLSX", zip({ a: "" }))).toBe("xlsx");
+    expect(detectFormat("x.pdf", Buffer.from("%PDF-1.4 ..."))).toBe("pdf");
+    expect(() => detectFormat("x.txt", Buffer.from("hello"))).toThrow(/Word/);
+  });
+
+  it("matches names exactly, without parentheticals, by code, or suggests on strong overlap", () => {
+    const projects = [
+      { id: "1", code: "LUMI", name: "Lumi" },
+      { id: "2", code: "SWIPE-KE", name: "Swipe Agent Banking — Kenya" },
+      { id: "3", code: "QORA", name: "Qora" },
+    ];
+    expect(matchProject("Lumi (AI Knowledge Layer)", projects)).toEqual({ projectId: "1", confidence: "exact" });
+    expect(matchProject("qora", projects)).toEqual({ projectId: "3", confidence: "exact" });
+    expect(matchProject("swipe-ke", projects)).toEqual({ projectId: "2", confidence: "exact" });
+    expect(matchProject("Swipe Agent Banking Kenya rollout", projects)).toEqual({ projectId: "2", confidence: "exact" });
+    expect(matchProject("Totally Different", projects)).toEqual({ projectId: null, confidence: "none" });
+  });
+});
+
+
+// PowerPoint one-pagers: one project per slide — title, headline, overall RAG, the first
+// in-flight "Where we are" item as the stage, report date / PM when they are real.
+const slide = (lines: string[]) =>
+  `<p:sld><p:cSld><p:spTree>${lines.map((l) => `<p:sp><p:txBody><a:p><a:r><a:t>${l}</a:t></a:r></a:p></p:txBody></p:sp>`).join("")}</p:spTree></p:cSld></p:sld>`;
+/** A positioned shape (points → EMU), one paragraph per line. */
+const shape = (x: number, y: number, w: number, h: number, ...lines: string[]) =>
+  `<p:sp><p:spPr><a:xfrm><a:off x="${x * 12700}" y="${y * 12700}"/><a:ext cx="${w * 12700}" cy="${h * 12700}"/></a:xfrm></p:spPr><p:txBody>${lines.map((l) => `<a:p><a:r><a:t>${l}</a:t></a:r></a:p>`).join("")}</p:txBody></p:sp>`;
+const laidOut = (...shapes: string[]) => `<p:sld><p:cSld><p:spTree>${shapes.join("")}</p:spTree></p:cSld></p:sld>`;
+
+describe("parsePptx", () => {
+  it("reads a Keza-style one-pager and a Swipe-style deck slide", () => {
+    const keza = slide([
+      "PROJECT STATUS REPORT", "Keza", "Signed BRD approval is the gate to finalizing the build.", "AMBER", "Overall: on track, decision needed",
+      "Report date: 30 Sep 2026", "PM: [Name]   Sponsor: [Name]", "Where we are", "1 · COMPLETE", "User journeys", "Shared with stakeholders.",
+      "2 · IN REVIEW", "BRD v1 (Riverbank)", "With stakeholders; BA reviewing.", "Done", "✓  MVP1 released",
+    ]);
+    const swipe = slide(["Swipe Agent Banking Solution", "Project Status Report  |  Channels  |  As at 29 September 2026", "OVERALL STATUS: AMBER", "Scope", "5 of 6 markets in production, nine channel deployments in UAT."]);
+    const r = parsePptx(zip({ "ppt/slides/slide2.xml": swipe, "ppt/slides/slide1.xml": keza, "ppt/presentation.xml": "<p/>" }));
+    expect(r.rows).toHaveLength(2);
+    expect(r.rows[0]).toMatchObject({ line: 1, project: "Keza", status: "Amber", stage: "BRD v1 (Riverbank) · in review" });
+    expect(r.rows[0]!.update).toBe("Signed BRD approval is the gate to finalizing the build. Overall: on track, decision needed");
+    expect(r.rows[1]).toMatchObject({ line: 2, project: "Swipe Agent Banking Solution", status: "Amber", stage: "" });
+    expect(r.rows[1]!.update).toMatch(/^5 of 6 markets/);
+    expect(r.reportDate).toBe("30 Sep 2026");
+    expect(r.preparedBy).toBeNull(); // "[Name]" placeholders are not people
+  });
+  it("reads a channels-by-market grid, a banner list, dimension pills and headed sections by position", () => {
+    const xml = laidOut(
+      shape(36, 21, 547, 39, "Swipe Agent Banking Solution"),
+      shape(619, 21, 304, 30, "OVERALL STATUS: AMBER"),
+      shape(50, 126, 180, 15, "REQUIREMENTS"),
+      shape(50, 141, 180, 25, "Amber"),
+      shape(36, 187, 540, 20, "DEPLOYED CHANNELS BY MARKET"),
+      shape(144, 212, 72, 23, "P20 POS"),
+      shape(220, 212, 72, 23, "USSD"),
+      shape(36, 241, 100, 24, "Kenya"),
+      shape(144, 241, 72, 23, "LIVE"),
+      shape(220, 241, 72, 23, "LIVE"),
+      shape(36, 268, 100, 24, "Rwanda"),
+      shape(144, 268, 72, 23, "UAT"),
+      shape(220, 268, 72, 23, "N/A"),
+      shape(615, 194, 293, 20, "HAL: NEWPOS DEVICE REPAIR &amp; MAINTENANCE"),
+      shape(615, 221, 82, 18, "Kenya"),
+      shape(698, 221, 210, 18, "LIVE  |  ACTIVELY MANAGING POS"),
+      shape(615, 244, 82, 18, "Rwanda"),
+      shape(698, 244, 210, 18, "NOT YET LIVE"),
+      shape(36, 439, 286, 18, "RISKS &amp; ISSUES"),
+      shape(36, 459, 286, 72, "Rwanda: all 6 channels still in UAT", "KCB and Riverbank device handling still being harmonised"),
+      shape(336, 439, 286, 18, "NEXT STEPS"),
+      shape(336, 459, 286, 72, "Complete UAT: Rwanda"),
+      shape(615, 358, 293, 36, "Focus now: the project team is learning and streamlining device handling between the teams."),
+    );
+    const r = parsePptx(zip({ "ppt/slides/slide1.xml": xml, "ppt/presentation.xml": `<p:presentation><p:sldSz cx="${960 * 12700}" cy="${540 * 12700}"/></p:presentation>` }));
+    const row = r.rows[0]!;
+    expect(row).toMatchObject({ project: "Swipe Agent Banking Solution", status: "Amber" });
+    expect(row.update).toMatch(/^Focus now:/);
+    expect(row.cells).toEqual([
+      { column: "P20 POS", row: "Kenya", stateRaw: "LIVE", note: null },
+      { column: "USSD", row: "Kenya", stateRaw: "LIVE", note: null },
+      { column: "P20 POS", row: "Rwanda", stateRaw: "UAT", note: null },
+      { column: "USSD", row: "Rwanda", stateRaw: "N/A", note: null },
+      { column: "HAL: NEWPOS DEVICE REPAIR & MAINTENANCE", row: "Kenya", stateRaw: "LIVE", note: "ACTIVELY MANAGING POS" },
+      { column: "HAL: NEWPOS DEVICE REPAIR & MAINTENANCE", row: "Rwanda", stateRaw: "NOT YET LIVE", note: null },
+    ]);
+    expect(row.dimensions).toEqual([{ name: "Requirements", value: "Amber" }]);
+    expect(row.sections).toEqual([
+      { title: "Risks & issues", lines: ["Rwanda: all 6 channels still in UAT", "KCB and Riverbank device handling still being harmonised"] },
+      { title: "Next steps", lines: ["Complete UAT: Rwanda"] },
+    ]);
+  });
+  it("lists every 'Where we are' stage with its state and note", () => {
+    const r = parsePptx(zip({ "ppt/slides/slide1.xml": slide(["Keza", "AMBER", "Where we are", "1 · COMPLETE", "User journeys", "Shared with stakeholders.", "2 · IN REVIEW", "BRD v1 (Riverbank)", "With stakeholders; BA reviewing.", "3 · ON HOLD", "Finalize build"]) }));
+    expect(r.rows[0]!.gates).toEqual([
+      { name: "User journeys", stateRaw: "COMPLETE", note: "Shared with stakeholders." },
+      { name: "BRD v1 (Riverbank)", stateRaw: "IN REVIEW", note: "With stakeholders; BA reviewing." },
+      { name: "Finalize build", stateRaw: "ON HOLD", note: "" },
+    ]);
+    expect(r.rows[0]!.stage).toBe("BRD v1 (Riverbank) · in review");
+  });
+  it("warns per slide without a RAG and refuses a deck without slides", () => {
+    const r = parsePptx(zip({ "ppt/slides/slide1.xml": slide(["Lumi", "A short line that says enough to be a headline here."]) }));
+    expect(r.rows[0]).toMatchObject({ project: "Lumi", status: null });
+    expect(r.rows[0]!.warnings[0]).toMatch(/No overall RAG/);
+    expect(() => parsePptx(zip({ "docProps/app.xml": "<x/>" }))).toThrow(/no slides/);
+  });
+});

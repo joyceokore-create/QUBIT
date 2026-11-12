@@ -15,12 +15,20 @@ import { flagEnabled } from "@/lib/flags";
  *              unconfigured, so every other code path behaves identically either way.
  */
 
+export interface MailAttachment {
+  filename: string;
+  contentType: string;
+  content: Buffer;
+}
+
 export interface MailMessage {
   to: string;
   subject: string;
   html: string;
   /** Always supplied — a mail client that refuses HTML still gets a readable message. */
   text: string;
+  /** Milestone D — small files only (a one- or two-page PDF); Graph inlines them as base64. */
+  attachments?: MailAttachment[];
 }
 
 export interface MailResult {
@@ -52,10 +60,30 @@ const logMailer: Mailer = {
   async send(message) {
     // Deliberately not silent: in dev this is the record that the digest ran and what
     // it would have said.
-    console.info(`[mail:log] → ${message.to} · ${message.subject}`);
+    const files = message.attachments?.length ? ` · ${message.attachments.map((a) => `${a.filename} (${a.content.byteLength} B)`).join(", ")}` : "";
+    console.info(`[mail:log] → ${message.to} · ${message.subject}${files}`);
     return { ok: true, adapter: "log" };
   },
 };
+
+/** The Graph sendMail body for a message — pure, so tests can pin the attachment shape. */
+export function graphPayload(message: MailMessage): Record<string, unknown> {
+  const attachments = (message.attachments ?? []).map((a) => ({
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    name: a.filename,
+    contentType: a.contentType,
+    contentBytes: a.content.toString("base64"),
+  }));
+  return {
+    message: {
+      subject: message.subject,
+      body: { contentType: "HTML", content: message.html },
+      toRecipients: [{ emailAddress: { address: message.to } }],
+      ...(attachments.length ? { attachments } : {}),
+    },
+    saveToSentItems: false,
+  };
+}
 
 async function graphToken(): Promise<string> {
   const res = await fetch(`https://login.microsoftonline.com/${process.env.GRAPH_TENANT_ID}/oauth2/v2.0/token`, {
@@ -82,14 +110,7 @@ const graphMailer: Mailer = {
       const res = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(sender)}/sendMail`, {
         method: "POST",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-        body: JSON.stringify({
-          message: {
-            subject: message.subject,
-            body: { contentType: "HTML", content: message.html },
-            toRecipients: [{ emailAddress: { address: message.to } }],
-          },
-          saveToSentItems: false,
-        }),
+        body: JSON.stringify(graphPayload(message)),
       });
       if (!res.ok) return { ok: false, adapter: "graph", error: `sendMail ${res.status}` };
       return { ok: true, adapter: "graph" };

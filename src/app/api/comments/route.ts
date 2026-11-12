@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getTenantContext } from "@/lib/tenant";
+import { validationError } from "@/server/errors";
 import {
   COMMENT_ENTITY_TYPES,
   ConversationError,
@@ -50,12 +51,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: { code: "UNAUTHENTICATED" } }, { status: 401 });
   }
   const parsed = PostCommentInput.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: "VALIDATION", message: parsed.error.issues[0]?.message ?? "Invalid comment." } },
-      { status: 400 },
-    );
-  }
+  if (!parsed.success) return validationError(parsed.error);
   try {
     return NextResponse.json({ data: await postComment(ctx, parsed.data) }, { status: 201 });
   } catch (err) {

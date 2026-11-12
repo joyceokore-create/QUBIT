@@ -307,7 +307,7 @@ export async function submitMyReport(ctx: TenantContext, now = new Date()): Prom
           userId,
           kind: "member_report",
           message: `${me?.name ?? "A team member"} submitted their weekly report`,
-          link: `/reports?tab=team`,
+          link: "/reports",
         })),
     });
   });

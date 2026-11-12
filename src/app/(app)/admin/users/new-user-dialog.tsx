@@ -1,6 +1,10 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { Field } from "@/components/ui/drawer";
+import { Banner } from "@/components/ui/panel";
+import { InviteDetailsSchema } from "@/lib/invite-schema";
 import { ArrowLeft, ArrowRight, Check, Copy, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,9 +15,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ONBOARDING_ROLE_TIERS, PROJECT_ROLES, projectRoleCategory, type OnboardingRoleKey } from "@/lib/roles";
+} from "@/components/ui/drawer-dialog";
+import { ONBOARDING_ROLE_TIERS, type OnboardingRoleKey } from "@/lib/roles";
 import { derivedGroups, effectiveGroups, landingPersona, type UserGroup } from "@/lib/personas";
 import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { GROUP_LABELS } from "@/components/admin/labels";
@@ -36,16 +39,19 @@ interface ProjectOpt {
 const STEPS = ["Details", "Access", "Review"] as const;
 
 export function NewUserDialog({
-  departments = [],
-  teams = [],
-  projects = [],
   canGrantSuperAdmin = false,
+  sso = false,
 }: {
+  /** Accepted for call-site compatibility; org unit, team and project placement were
+   *  removed from this form. */
   departments?: DeptOpt[];
   teams?: TeamOpt[];
   projects?: ProjectOpt[];
   /** Only a Super Admin may invite another Super Admin (mirrors the server guard, M-O1). */
   canGrantSuperAdmin?: boolean;
+  /** SSO is configured — creating a user makes an active account they sign into with
+   *  Microsoft; no invite link is issued. Drives the copy on this dialog. */
+  sso?: boolean;
 }) {
   const { busy, error, setError, mutate } = useAdminMutation();
   const [open, setOpen] = useState(false);
@@ -54,17 +60,13 @@ export function NewUserDialog({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<OnboardingRoleKey>("Member");
-  const [departmentId, setDepartmentId] = useState("none");
-  const [teamId, setTeamId] = useState("none");
-  const [projectId, setProjectId] = useState("none");
-  const [projectRole, setProjectRole] = useState<string>("Developer");
-  // DM1.43: ONE declared group — exec, pm, or member(dev/qa/implementor). Null = decide
-  // from memberships (the derived half of docs/17 §1.1).
-  const [declaredGroup, setDeclaredGroup] = useState<UserGroup | null>(null);
+  // Declared dashboard views (docs/17 §1.3) — any number; the first is the one they land on.
+  // Empty = decide from memberships (the derived half of docs/17 §1.1).
+  const [declaredViews, setDeclaredViews] = useState<UserGroup[]>([]);
   const [copied, setCopied] = useState(false);
-  // M-O3: the invite result, not a password. `acceptUrl` is present only when email isn't
-  // configured — then the admin copies the link instead of the mailer sending it.
-  const [created, setCreated] = useState<{ email: string; emailed: boolean; acceptUrl?: string } | null>(null);
+  // The create result. `sso` = active SSO account, no link. Otherwise (non-SSO) `acceptUrl`
+  // is present only when email isn't configured — then the admin copies the link instead.
+  const [created, setCreated] = useState<{ email: string; emailed: boolean; acceptUrl?: string; sso?: boolean } | null>(null);
 
   // Hide the "Administrator" tier (= PlatformSuperAdmin) from admins who can't grant it.
   const roleTiers = ONBOARDING_ROLE_TIERS.filter((t) => canGrantSuperAdmin || t.key !== "PlatformSuperAdmin");
@@ -74,27 +76,38 @@ export function NewUserDialog({
   const SCOPE_LINE: Record<OnboardingRoleKey, string> = {
     PlatformSuperAdmin: "full administration — users, roles and settings",
     Executive: "reads everything; edits governance fields (stage/priority) and creates portfolios",
+    HeadOfProjects: "governs delivery across every project — staffing, gates and cross-project reporting",
     ProjectManager: "creates projects and manages the ones they lead; raises staffing requests",
     Member: "works assigned tasks on their board and sends weekly updates",
   };
-  // Live landing preview (docs/17 §1.3): the SAME resolver login uses — declared groups
-  // ∪ what this invite's role/placement will derive — so the chip can't lie.
+  // Live landing preview (docs/17 §1.3): the SAME resolver login uses — declared views
+  // ∪ what this invite's role will derive — so the chip can't lie. The primary (landing)
+  // view is the first one selected.
+  const primaryView = declaredViews[0] ?? null;
   const landing = landingPersona(
     effectiveGroups(
-      declaredGroup ? [declaredGroup] : [],
-      derivedGroups({
-        membershipCategories: projectId === "none" ? [] : [projectRoleCategory(projectRole)],
-        tenantRoles: [role],
-        leadsProjects: false,
-      }),
+      declaredViews,
+      derivedGroups({ membershipCategories: [], tenantRoles: [role], leadsProjects: false }),
     ),
-    declaredGroup,
+    primaryView,
     null,
   );
-  const deptName = departmentId === "none" ? "No org unit" : departments.find((d) => d.id === departmentId)?.name ?? "—";
-  const teamName = teamId === "none" ? "—" : teams.find((t) => t.id === teamId)?.name ?? "—";
-  const projName = projectId === "none" ? "—" : projects.find((p) => p.id === projectId)?.name ?? "—";
-  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  // docs/08 § Errors: Name and Email show their problems on the field (Next stays enabled).
+  const fe = useFieldErrors({ schema: InviteDetailsSchema, values: { name, email }, idPrefix: "nu" });
+
+  // Superadmin is a role, not a view (docs/17 §1) — it derives every view and lands on the
+  // executive cockpit. Surfacing it as a "dashboard view" is a shortcut: selecting it sets
+  // the PlatformSuperAdmin role and clears the declared views.
+  const superadmin = role === "PlatformSuperAdmin";
+  function handleSuperadmin(on: boolean) {
+    if (on) {
+      setRole("PlatformSuperAdmin");
+      setDeclaredViews([]);
+    } else {
+      setRole("Member");
+    }
+  }
+  const landingLabel = superadmin ? "Super admin" : GROUP_LABELS[landing];
 
   function reset() {
     setPhase("wizard");
@@ -102,22 +115,17 @@ export function NewUserDialog({
     setName("");
     setEmail("");
     setRole("Member");
-    setDepartmentId("none");
-    setTeamId("none");
-    setProjectId("none");
-    setProjectRole("Developer");
-    setDeclaredGroup(null);
+    setDeclaredViews([]);
     setError(null);
+    fe.reset();
     setCopied(false);
     setCreated(null);
   }
 
   function next() {
     setError(null);
-    if (step === 0 && (!name.trim() || !emailValid)) {
-      setError(!name.trim() ? "Enter a full name." : "Enter a valid work email.");
-      return;
-    }
+    // Can't leave a step with errors (decision #10): they show on the step's own fields.
+    if (step === 0 && !fe.validate(["name", "email"])) return;
     setStep((s) => Math.min(STEPS.length - 1, s + 1));
   }
 
@@ -130,18 +138,26 @@ export function NewUserDialog({
         name,
         email,
         roles: [role],
-        departmentId: departmentId === "none" ? null : departmentId,
-        teamId: teamId === "none" ? null : teamId,
-        projectId: projectId === "none" ? null : projectId,
-        projectRole: projectId === "none" ? null : projectRole,
-        userGroups: declaredGroup ? [declaredGroup] : [],
-        primaryGroup: declaredGroup,
+        departmentId: null,
+        teamId: null,
+        projectId: null,
+        projectRole: null,
+        userGroups: declaredViews,
+        primaryGroup: primaryView,
       },
       {
         fallback: "Could not create the user.",
+        // A rejection that belongs to Name or Email (e.g. already in use) jumps back to that step
+        // and shows on the field; anything else is the banner at the top.
+        onFieldErrors: (fields) => {
+          if (fields.name || fields.email) setStep(0);
+          else if (fields.roles) setStep(1);
+          fe.setServerErrors(fields, ["name", "email"]);
+          if (!fields.name && !fields.email && fields.roles) setError(fields.roles);
+        },
         onSuccess: (data) => {
-          const d = (data ?? {}) as { emailed?: boolean; acceptUrl?: string };
-          setCreated({ email, emailed: Boolean(d.emailed), acceptUrl: d.acceptUrl });
+          const d = (data ?? {}) as { emailed?: boolean; acceptUrl?: string; sso?: boolean };
+          setCreated({ email, emailed: Boolean(d.emailed), acceptUrl: d.acceptUrl, sso: Boolean(d.sso) });
           setPhase("done");
         },
       },
@@ -158,14 +174,18 @@ export function NewUserDialog({
   return (
     <Dialog open={open} onOpenChange={(nx) => { setOpen(nx); if (!nx) reset(); }}>
       <DialogTrigger render={<Button />}>
-        <Plus /> Invite user
+        <Plus /> Invite User
       </DialogTrigger>
       <DialogContent className="sm:max-w-[480px]">
         {phase === "wizard" ? (
           <>
             <DialogHeader>
-              <DialogTitle>Invite a user</DialogTitle>
-              <DialogDescription>Three quick steps — they set their own password from an emailed link.</DialogDescription>
+              <DialogTitle>Invite a User</DialogTitle>
+              <DialogDescription>
+                {sso
+                  ? "Three quick steps — once created, they sign in with Microsoft. No invite link."
+                  : "Three quick steps — they set their own password from an emailed link."}
+              </DialogDescription>
             </DialogHeader>
 
             {/* Step indicator */}
@@ -188,14 +208,14 @@ export function NewUserDialog({
             </div>
 
             <form onSubmit={handleSubmit} className="mt-1 flex flex-col gap-4" noValidate>
+              {error && <Banner tone="bad">{error}</Banner>}
               {step === 0 && (
                 <>
-                  <Field label="Full name" htmlFor="nu-name">
-                    <Input id="nu-name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" autoFocus />
+                  <Field label="Full Name" htmlFor={fe.idOf("name")} error={fe.errors.name}>
+                    <Input {...fe.bind("name")} required value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" autoComplete="off" autoFocus />
                   </Field>
-                  <Field label="Work email" htmlFor="nu-email">
-                    <Input id="nu-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@company.com" />
-                    <p className="text-xs text-ink-3">Their email domain routes them to this organization at sign-in.</p>
+                  <Field label="Work Email" htmlFor={fe.idOf("email")} error={fe.errors.email} hint="Their email domain routes them to this organization at sign-in.">
+                    <Input {...fe.bind("email")} type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@company.com" autoComplete="off" />
                   </Field>
                 </>
               )}
@@ -227,69 +247,24 @@ export function NewUserDialog({
                       })}
                     </div>
                   </div>
-                  {departments.length > 0 && (
-                    <Field label="Org unit (optional)" htmlFor="nu-dept">
-                      <Select
-                        value={departmentId}
-                        onValueChange={(v) => setDepartmentId(v ?? "none")}
-                        items={{ none: "No org unit", ...Object.fromEntries(departments.map((d) => [d.id, d.name])) }}
-                      >
-                        <SelectTrigger id="nu-dept"><SelectValue placeholder="No org unit" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">No org unit</SelectItem>
-                          {departments.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                  )}
-
+                  {/* Dashboard view(s) they land on — presentation only, never permission
+                      (docs/17 §1.3). Multi-select: pick one or more; the first is the
+                      default landing and they can switch between the rest. */}
                   <div className="rounded-[10px] border border-[var(--w08)] bg-[color-mix(in_oklab,var(--brand)_4%,transparent)] p-3">
-                    <p className="mb-2 text-[11.5px] font-semibold text-ink-2">Place them on day one (optional)</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Select
-                        value={teamId}
-                        onValueChange={(v) => setTeamId(v ?? "none")}
-                        items={{ none: "No team", ...Object.fromEntries(teams.map((t) => [t.id, t.name])) }}
-                      >
-                        <SelectTrigger><SelectValue placeholder="Team" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">No team</SelectItem>
-                          {teams.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <Select
-                        value={projectId}
-                        onValueChange={(v) => setProjectId(v ?? "none")}
-                        items={{ none: "No project", ...Object.fromEntries(projects.map((p) => [p.id, `${p.name} (${p.code})`])) }}
-                      >
-                        <SelectTrigger><SelectValue placeholder="Project" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">No project</SelectItem>
-                          {projects.map((p) => <SelectItem key={p.id} value={p.id}>{p.name} ({p.code})</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    {projectId !== "none" && (
-                      <div className="mt-2">
-                        <Select value={projectRole} onValueChange={(v) => v && setProjectRole(v)}>
-                          <SelectTrigger><SelectValue placeholder="Project role" /></SelectTrigger>
-                          <SelectContent>
-                            {PROJECT_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Dashboard group (docs/17 §1.3, single-choice per DM1.43) —
-                      presentation only, never permission. */}
-                  <div className="rounded-[10px] border border-[var(--w08)] p-3">
-                    <p className="mb-2 text-[11.5px] font-semibold text-ink-2">Dashboard group</p>
-                    <GroupPicker value={declaredGroup} onChange={setDeclaredGroup} />
+                    <p className="text-[11.5px] font-semibold text-ink-2">Dashboard view</p>
+                    <p className="mb-2 text-[11px] text-ink-3">Pick one or more views — they land on the first and can switch between the rest.</p>
+                    <GroupPicker
+                      multiple
+                      values={declaredViews}
+                      onValuesChange={setDeclaredViews}
+                      allowSuperadmin={canGrantSuperAdmin}
+                      superadmin={superadmin}
+                      onSuperadminChange={handleSuperadmin}
+                    />
                     <p className="mt-2 flex items-center gap-1.5 text-[11px] text-ink-3">
                       Will land on:
                       <span className="rounded-full bg-[color-mix(in_oklab,var(--brand)_10%,transparent)] px-2 py-0.5 font-semibold text-[var(--brand)]">
-                        {GROUP_LABELS[landing]} dashboard
+                        {superadmin ? "Super admin — every dashboard" : `${landingLabel} dashboard`}
                       </span>
                     </p>
                     <p className="mt-1 text-[11px] text-ink-3">Scope: {SCOPE_LINE[role]}.</p>
@@ -303,10 +278,7 @@ export function NewUserDialog({
                     <Row label="Name" value={name} />
                     <Row label="Email" value={email} />
                     <Row label="Role" value={roleTier.label} />
-                    <Row label="Org unit" value={deptName} />
-                    <Row label="Team" value={teamName} />
-                    <Row label="Project" value={projectId === "none" ? "—" : `${projName} · ${projectRole}`} />
-                    <Row label="Lands on" value={`${GROUP_LABELS[landing]} dashboard`} />
+                    <Row label="Lands on" value={superadmin ? "Super admin — every dashboard" : `${landingLabel} dashboard`} />
                     <Row label="Can" value={SCOPE_LINE[role]} />
                   </div>
                   <p className="text-xs text-ink-3">
@@ -316,16 +288,17 @@ export function NewUserDialog({
                 </>
               )}
 
-              {error && <p role="alert" className="text-sm text-status-red">{error}</p>}
-
               <div className="flex items-center justify-between">
                 <Button type="button" variant="ghost" disabled={step === 0} onClick={() => { setError(null); setStep((s) => Math.max(0, s - 1)); }}>
                   <ArrowLeft className="size-4" /> Back
                 </Button>
+                {/* Distinct keys: without them React reuses one <button> and flips its type to
+                    "submit" during the Next click, so the browser submits on that same click and
+                    the Review step is skipped. */}
                 {step < STEPS.length - 1 ? (
-                  <Button type="button" onClick={next}>Next <ArrowRight className="size-4" /></Button>
+                  <Button key="next" type="button" onClick={next}>Next <ArrowRight className="size-4" /></Button>
                 ) : (
-                  <Button type="submit" disabled={busy}>{busy ? "Inviting…" : "Send invite"}</Button>
+                  <Button key="submit" type="submit" disabled={busy}>{busy ? "Inviting…" : "Invite User"}</Button>
                 )}
               </div>
             </form>
@@ -333,9 +306,14 @@ export function NewUserDialog({
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle>User invited</DialogTitle>
+              <DialogTitle>User Created</DialogTitle>
               <DialogDescription>
-                {created?.emailed ? (
+                {created?.sso ? (
+                  <>
+                    <span className="font-medium text-ink-2">{created?.email}</span> can sign in now with Microsoft,
+                    as long as they&apos;re in your organization&apos;s directory. No invite link is needed.
+                  </>
+                ) : created?.emailed ? (
                   <>
                     An invite email is on its way to{" "}
                     <span className="font-medium text-ink-2">{created?.email}</span>. The link expires in 72 hours.
@@ -359,22 +337,13 @@ export function NewUserDialog({
               </div>
             )}
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={reset}>Invite another</Button>
+              <Button type="button" variant="outline" onClick={reset}>Create Another</Button>
               <Button type="button" onClick={() => setOpen(false)}>Done</Button>
             </div>
           </>
         )}
       </DialogContent>
     </Dialog>
-  );
-}
-
-function Field({ label, htmlFor, children }: { label: string; htmlFor: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={htmlFor} className="text-sm font-medium text-ink-2">{label}</label>
-      {children}
-    </div>
   );
 }
 

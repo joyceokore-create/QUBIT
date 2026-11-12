@@ -5,7 +5,7 @@ import "./pm-v3.css";
 import { Ic, RagChipV3, RagBarV3, Gate, RAG_LABEL } from "./pm-v3";
 import { usePublishSections } from "./section-nav";
 
-// Head of PMs view — markup ported 1:1 from the approved artifact's renderHead().
+// Head view — markup ported 1:1 from the approved artifact's renderHead().
 
 export interface HeadRow {
   id: string;
@@ -29,6 +29,8 @@ export interface HeadRow {
 }
 
 export interface HeadV3Props {
+  /** UX4: the new-layout Daily Brief, shown full width in place of the hero brief. */
+  brief?: React.ReactNode;
   briefLines: { emphasis: string; detail: string }[];
   generatedAt: string;
   gateLabels: string[];
@@ -96,7 +98,7 @@ export function TrendChart({ title, weeks, series, muted }: { title: string; wee
           })}
         </svg>
       ) : (
-        <span className="hint">Trend builds as nightly snapshots accrue.</span>
+        <span className="hint">Trend builds as weekly check-ins accrue.</span>
       )}
     </div>
   );
@@ -105,6 +107,7 @@ export function TrendChart({ title, weeks, series, muted }: { title: string; wee
 const AV_COLORS = ["teal", "red", "blue", "violet"];
 
 export function HeadV3(props: HeadV3Props) {
+  const brief = props.brief;
   const [headSort, setHeadSort] = useState<"rag" | "date" | "stale">("rag");
   const [headPm, setHeadPm] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -122,7 +125,6 @@ export function HeadV3(props: HeadV3Props) {
     { id: "disputes", icon: "warn", label: "Exceptions" },
     { id: "head-tracker", icon: "calcheck", label: "Tracker" },
     { id: "head-insights", icon: "compare", label: "Insights" },
-    { id: "custom-reports", icon: "report", label: "Custom Reports", href: "/reports?tab=custom" },
   ]);
 
   const ragOrder: Record<string, number> = { R: 0, A: 1, G: 2, N: 3 };
@@ -145,15 +147,18 @@ export function HeadV3(props: HeadV3Props) {
 
         <div className="pm-shell">
           <div className="pm-content">
-            <div className="pm-toprow" id="head-top">
+            {brief}
+            <div className={`pm-toprow${brief ? " solo" : ""}`} id="head-top">
+              {!brief && (
               <section className="pm-hero">
                 <div className="pm-hero-top">
                   <span className="pm-hero-tag"><Ic name="sparkle" />Daily Brief</span>
-                  <span className="pm-hero-meta">Generated {props.generatedAt} today · Head of PMs</span>
+                  <span className="pm-hero-meta">Generated {props.generatedAt} today · Head</span>
                 </div>
                 <div className="pm-hero-body">{props.briefLines.map((l, i) => <p key={i}><b>{l.emphasis}</b> {l.detail}</p>)}</div>
                 <p className="pm-hero-foot">Generated from status updates, gate records and RAID items — verify before acting.</p>
               </section>
+              )}
               <div className="pm-statgrid">
                 <div className="pm-stat"><div className="pm-stat-icon blue"><Ic name="folder" /></div><div className="v num">{props.stats.approved}</div><div className="l">Approved & in delivery</div><RagBarV3 c={props.stats.approvedCounts} /></div>
                 <div className={`pm-stat ${props.stats.disputes ? "hot" : ""}`}><div className="pm-stat-icon violet"><Ic name="compare" /></div><div className="v num">{props.stats.disputes}</div><div className="l">RAG disputes</div><div className="d">reported greener</div></div>
@@ -331,8 +336,8 @@ export function HeadV3(props: HeadV3Props) {
                 </div>
               </section>
               <section className="panel c6">
-                <div className="panel-h"><h2>Calculated RAG · approved portfolio · 8 weeks</h2></div>
-                <TrendChart title="Projects by calculated RAG" weeks={props.trend.weeks} series={props.trend.series} />
+                <div className="panel-h"><h2>Weekly status · 8 weeks</h2></div>
+                <TrendChart title="Projects by weekly status" weeks={props.trend.weeks} series={props.trend.series} />
               </section>
             </div>
           </div>

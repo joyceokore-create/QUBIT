@@ -62,9 +62,11 @@ incident survivable:
 
 Each of these is *stated on a live surface* or in a spec, so the promise is public:
 
-- [ ] **M9-B — server-rendered PDF exports.** The reports index literally says "PDF export
-      lands with M9-B; CSV is what ships today" (roll-ups tab). Also owed: XLSX/CSV on
-      every table, the Head's portfolio pack, resource-allocation export.
+- [x] **M9-B — server-rendered PDF exports.** Shipped with Milestone D (DM1.76): Chromium
+      in the image, `/api/reports/export` with the four templates (Build / In-market /
+      Build + In-market one-pagers, Portfolio digest) plus the custom data table in the
+      same print style; "Email to executives" attaches the digest. Still owed: XLSX on
+      every table, resource-allocation export.
 - [ ] **Budget, typed in Phase C.** The workspace shows `Budget: typed in Phase C`. Until
       then benefits realisation and business-case scoring stay parked.
 - [ ] **Business-case scoring / prioritisation** (docs/26 §2 Evaluating stage) — parked on
@@ -131,3 +133,17 @@ Verified on the box: **no `FEATURE_*` variables are set at all** in `.env.produc
 6. **Ops flags** (§8) — as Joyce's credentials arrive; independent of the above.
 
 M9-B exports (§5) can slot in wherever the PDF promise starts costing credibility.
+
+## 9. docs/38 — products, instances and markets (added 2026-10-07)
+
+- **I1 + named instances built on Development** (`4c32095`): markets layer (`markets.ts`, Markets tab,
+  header switch, Admin › Markets), named instances (`project-instances.ts`, Instances grid on
+  Delivery, instance × market gates), wizard Structure step, `scripts/merge-instance-projects.ts`.
+  Not yet deployed — needs backup + full rebuild (migration), then the merge script on the box.
+- **I3 (tagging)**: the `org_unit_id` / `module_id` columns exist on tasks, documents, risks, issues,
+  blockers and milestones but nothing writes or filters them yet; YouTrack field map for
+  market / instance; per-market set-up in the walkthrough.
+- **Reports**: instance × market grid in the one-pager PDF and the exec heatmap; the status-report
+  parser's "channels by market" table → instance states.
+- Columns `project.instance_label` and `project.module_tracking` are unused by the UI (always
+  Market / gates) — drop in a later migration if they stay unused.

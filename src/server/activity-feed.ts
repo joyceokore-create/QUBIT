@@ -33,7 +33,11 @@ export function formatActivity(type: string, payload: Record<string, unknown>): 
     case "checkin.drafted":
       return "drafted the Friday check-in";
     case "checkin.confirmed":
-      return `confirmed the Friday check-in (${String(payload.rag ?? "—")})`;
+      return `confirmed the weekly status update (${String(payload.rag ?? "—")})`;
+    case "checkin.submitted_to_head":
+      return "sent the status update to the Head";
+    case "task.nudged":
+      return "nudged the assignee of a blocked task";
     case "comment.posted":
       return payload.reply ? "replied to a comment" : n(payload.mentions) > 0 ? "commented, mentioning teammates" : "commented";
     case "decision.recorded":

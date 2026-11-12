@@ -84,6 +84,11 @@ This is the entry point. Read documents in this order.
     create/assign) and its four-wave plan. All four waves SHIPPED (DM1.73):
     A (trust fixes), B (declutter), C (status engine), D (workflow completeness).
 
+31. **38-instances-and-modules.md** — PROPOSED 2026-10-07 (DM1.77): one project per
+    product with configurable **instances** (markets / subsidiaries, switched from the
+    workspace header) and **modules** (POS, USSD, Marketplace) tracked per instance; four
+    per-project settings; three deployable steps I1–I3; archives the 14 ZED/Swipe shells.
+
 ## Document readiness checklist
 
 Everything below is included in this pack and ready for Claude Code.

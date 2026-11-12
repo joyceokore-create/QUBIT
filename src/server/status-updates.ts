@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { statusUpdateBody } from "@/lib/workspace-schema";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { emitDomainEvent } from "@/server/events";
@@ -37,7 +38,7 @@ export async function listStatusUpdates(ctx: TenantContext, projectId: string): 
 }
 
 export const PostStatusInput = z.object({
-  body: z.string().min(1),
+  body: statusUpdateBody,
   rag: z.enum(RAG).optional(),
 });
 export type PostStatusInput = z.infer<typeof PostStatusInput>;

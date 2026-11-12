@@ -2,19 +2,29 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { Forbidden } from "@/components/forbidden";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { listRisks } from "@/server/risks";
 import { ExportButton } from "@/components/export-button";
-import { listIssues } from "@/server/issues";
-import { getGapReport } from "@/server/raid";
+import { PageHeader } from "@/components/list/page-header";
+import { TabStrip } from "@/components/ui/tab-strip";
+import { NewRiskDialog } from "@/components/raid/new-risk-dialog";
+import { NewIssueButton } from "@/components/raid/new-issue-drawer";
+import { SEVERITY_ORDER } from "@/components/raid/severity";
+import { parseListParams } from "@/lib/list-state";
+import { listRisksPage, RISK_STATUSES } from "@/server/risks";
+import { ISSUE_STATUS_FILTERS, listIssuesPage } from "@/server/issues";
+import { raidFacets, raidTabCounts, type RaidTab } from "@/server/raid";
 import { listUsers } from "@/server/users";
 import { listProjects } from "@/server/projects";
-import { RiskTable } from "@/components/raid/risk-table";
-import { IssueTable } from "@/components/raid/issue-table";
-import { GapReportView } from "@/components/raid/gap-report-view";
-import { NewRiskDialog } from "@/components/raid/new-risk-dialog";
+import { RisksClient } from "./risks-client";
 
-export default async function RisksPage() {
+// UX5 (L1–L5) — Risks · Issues · Gap report. Every tab pages, searches and filters ON THE
+// SERVER: the URL (tab, q, page, size, project, severity, status, owner) is allow-listed by
+// parseListParams, re-validated with Zod inside listRisksPage / listIssuesPage, and run as
+// parameterised Prisma under the tenant's RLS context. Switching tab is a plain link that
+// drops the other tab's search, filters and page (each tab has its own statuses and owners).
+
+type SearchParams = Record<string, string | string[] | undefined>;
+
+export default async function RisksPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const session = await auth();
   if (!session?.user) return null;
 
@@ -35,55 +45,88 @@ export default async function RisksPage() {
   }
 
   const canReadIssues = can(ctx, "issue:read");
-  const [risks, issues, gapReport, users, projects] = await Promise.all([
-    listRisks(ctx),
-    canReadIssues ? listIssues(ctx) : Promise.resolve([]),
-    canReadIssues ? getGapReport(ctx) : Promise.resolve({ totalIssues: 0, gapCount: 0, traced: 0, items: [] }),
-    listUsers(ctx),
-    listProjects(ctx),
+  const canCreateRisk = can(ctx, "risk:create");
+  const sp = await searchParams;
+  const rawTab = Array.isArray(sp.tab) ? sp.tab[0] : sp.tab;
+  const tab: RaidTab = canReadIssues && (rawTab === "issues" || rawTab === "gap") ? rawTab : "risks";
+  const statuses = tab === "risks" ? RISK_STATUSES : ISSUE_STATUS_FILTERS;
+  const canUpdate = tab === "risks" ? can(ctx, "risk:update") : tab === "issues" && can(ctx, "issue:update");
+
+  const params = parseListParams(sp, {
+    defaultSize: 10,
+    filters: { project: "id", owner: "id", status: statuses, severity: SEVERITY_ORDER },
+  });
+  const query = {
+    q: params.q,
+    page: params.page,
+    size: params.size,
+    projectId: params.filters.project,
+    ownerId: params.filters.owner,
+    status: params.filters.status,
+    severity: params.filters.severity,
+  };
+
+  const [counts, facets, page, users, projects] = await Promise.all([
+    raidTabCounts(ctx, canReadIssues),
+    raidFacets(ctx, tab),
+    tab === "risks"
+      ? listRisksPage(ctx, query).then((p) => ({ tab, ...p }) as const)
+      : listIssuesPage(ctx, { ...query, gap: tab === "gap" }).then((p) => ({ tab, ...p })),
+    // Users feed the owner pickers in the create / edit dialogs.
+    canCreateRisk || canUpdate ? listUsers(ctx) : Promise.resolve([]),
+    canCreateRisk ? listProjects(ctx) : Promise.resolve([]),
   ]);
 
-  const canCreateRisk = can(ctx, "risk:create");
-  const canUpdateRisk = can(ctx, "risk:update");
-  const canUpdateIssue = can(ctx, "issue:update");
+  // UX fidelity Tier 2: "+ New Issue" on the Issues tabs (issue:create, or project contributors).
+  const canCreateIssue = canReadIssues && can(ctx, "issue:create");
+  const newIssue = canCreateIssue && tab !== "risks" ? <NewIssueButton projects={(await listProjects(ctx)).map((p) => ({ id: p.id, code: p.code, name: p.name }))} users={(users.length ? users : await listUsers(ctx)).map((u) => ({ id: u.id, name: u.name }))} /> : undefined;
+  // The top bar's "+ New › Risk" lands here with ?new=1 (UX fidelity F1).
+  const newRisk = canCreateRisk ? <NewRiskDialog users={users} projects={projects.map((p) => ({ id: p.id, code: p.code, name: p.name }))} defaultOpen={sp.new === "1"} /> : undefined;
+  // Design: one line for the page; the tab counts carry the numbers.
+  const description =
+    tab === "gap"
+      ? `${counts.gaps} of ${counts.issues} ${counts.issues === 1 ? "issue" : "issues"} had no owned, mitigated risk behind them · ${counts.issues - counts.gaps} traced.`
+      : "Risks, issues and the gap report across all projects.";
 
   return (
-    <div className="flex flex-1 flex-col gap-[22px] p-[26px]">
-      <Breadcrumb items={[{ label: "Dashboard", href: "/dashboard" }, { label: "Risks & Issues" }]} />
+    <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
+      <PageHeader
+        title="Risks & Issues"
+        description={description}
+        actions={
+          <>
+            <ExportButton href="/api/export?kind=risks" label="Export CSV" />
+            {tab === "risks" ? newRisk : newIssue}
+          </>
+        }
+      />
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-heading text-[21px] rv:text-heading-md font-bold tracking-[-0.5px] text-foreground">
-            Risks &amp; Issues
-          </h1>
-          <p className="mt-[3px] text-xs rv:text-body-sm text-ink-3">{risks.length} risks in this organization</p>
-        </div>
-        <ExportButton href="/api/export?kind=risks" />
-        {canCreateRisk && (
-          <NewRiskDialog users={users} projects={projects.map((p) => ({ id: p.id, code: p.code, name: p.name }))} />
-        )}
-      </div>
+      <TabStrip
+        label="Risks and issues views"
+        active={tab}
+        tabs={[
+          { key: "risks", label: "Risks", href: "/risks", count: counts.risks },
+          ...(canReadIssues
+            ? [
+                { key: "issues", label: "Issues", href: "/risks?tab=issues", count: counts.issues },
+                { key: "gap", label: "Gap Report", href: "/risks?tab=gap" },
+              ]
+            : []),
+        ]}
+      />
 
-      <Tabs defaultValue="risks">
-        <TabsList>
-          <TabsTrigger value="risks">Risks</TabsTrigger>
-          {canReadIssues && <TabsTrigger value="issues">Issues</TabsTrigger>}
-          {canReadIssues && <TabsTrigger value="gap-report">Gap Report</TabsTrigger>}
-        </TabsList>
-        <TabsContent value="risks" className="mt-[18px]">
-          <RiskTable risks={risks} users={users} canUpdate={canUpdateRisk} viewerId={ctx.userId} />
-        </TabsContent>
-        {canReadIssues && (
-          <TabsContent value="issues" className="mt-[18px]">
-            <IssueTable issues={issues} users={users} canUpdate={canUpdateIssue} />
-          </TabsContent>
-        )}
-        {canReadIssues && (
-          <TabsContent value="gap-report" className="mt-[18px]">
-            <GapReportView report={gapReport} />
-          </TabsContent>
-        )}
-      </Tabs>
-    </div>
+      <RisksClient
+        key={tab}
+        data={page}
+        info={page.info}
+        facets={facets}
+        statuses={statuses}
+        severities={SEVERITY_ORDER}
+        canUpdate={canUpdate}
+        viewerId={ctx.userId}
+        users={users}
+        createAction={newRisk}
+      />
+    </main>
   );
 }

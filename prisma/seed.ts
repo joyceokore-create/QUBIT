@@ -1219,6 +1219,8 @@ async function seedTenant(seed: TenantSeed) {
     for (const u of seed.users) {
       const created = await tx.user.create({
         data: {
+          // Seeded accounts never get the first-week walk (the e2e smoke signs in as them).
+          tourCompletedAt: new Date(),
           tenantId: tenant.id,
           email: u.email,
           name: u.name,
@@ -1461,6 +1463,8 @@ async function seedTenant(seed: TenantSeed) {
       const domain = seed.domains.find((d) => d.endsWith(".invalid")) ?? seed.domains[0];
       const qaUser = await tx.user.create({
         data: {
+          // Seeded accounts never get the first-week walk (the e2e smoke signs in as them).
+          tourCompletedAt: new Date(),
           tenantId: tenant.id,
           email: `qa.demo@${domain}`,
           name: "QA Demo",
@@ -1476,6 +1480,8 @@ async function seedTenant(seed: TenantSeed) {
       });
       const implUser = await tx.user.create({
         data: {
+          // Seeded accounts never get the first-week walk (the e2e smoke signs in as them).
+          tourCompletedAt: new Date(),
           tenantId: tenant.id,
           email: `impl.demo@${domain}`,
           name: "Implementor Demo",
@@ -1587,8 +1593,11 @@ async function seedTenant(seed: TenantSeed) {
     // Attach "Product build" to the demo project and walk its first gates so the derived
     // % and the pipeline gate ticks have real data to show.
     if (firstProject) {
+      // Scoped by tenant explicitly: the seed runs as a superuser (RLS bypassed), so a bare
+      // name lookup returned the FIRST tenant's template and cross-linked the second
+      // tenant's statuses to it — invisible until the CI gates ran under RLS.
       const template = await tx.checkpointTemplate.findFirst({
-        where: { name: "Product build" },
+        where: { tenantId: tenant.id, name: "Product build" },
         select: { id: true, checkpoints: { select: { id: true }, orderBy: { orderIndex: "asc" } } },
       });
       if (template) {
@@ -1614,9 +1623,9 @@ async function seedTenant(seed: TenantSeed) {
     // plus per-market CheckpointStatus rows whose states drive the cell's derived %.
     const rolloutPortfolioId = portfolioIdByKey.get("rollout");
     if (rolloutPortfolioId) {
-      const marketUnits = await tx.orgUnit.findMany({ where: { kind: "Market" }, orderBy: { createdAt: "asc" }, select: { id: true, code: true } });
+      const marketUnits = await tx.orgUnit.findMany({ where: { tenantId: tenant.id, kind: "Market" }, orderBy: { createdAt: "asc" }, select: { id: true, code: true } });
       const rolloutTemplate = await tx.checkpointTemplate.findFirst({
-        where: { name: "Market rollout" },
+        where: { tenantId: tenant.id, name: "Market rollout" },
         select: { id: true, checkpoints: { select: { id: true }, orderBy: { orderIndex: "asc" } } },
       });
       const rolloutProjects = await tx.project.findMany({

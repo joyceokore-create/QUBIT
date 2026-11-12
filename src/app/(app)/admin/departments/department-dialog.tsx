@@ -4,8 +4,11 @@ import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Field } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { DepartmentFormSchema } from "@/lib/department-schema";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DialogTrigger } from "@/components/ui/dialog";
+import { DialogTrigger } from "@/components/ui/drawer-dialog";
 import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
 import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { buildIndentedDepartmentOptions } from "@/lib/department-tree";
@@ -55,6 +58,9 @@ export function DepartmentDialog({
   const [orgUnitId, setOrgUnitId] = useState(department?.orgUnitId ?? "none");
   const [headUserId, setHeadUserId] = useState(department?.headUserId ?? "none");
 
+  // docs/08 § Errors: the name shows its problem on the field; Save stays enabled.
+  const fe = useFieldErrors({ schema: DepartmentFormSchema, values: { name }, idPrefix: `${mode}-department` });
+
   // Reset to the source of truth whenever the dialog opens: the row's values when editing,
   // empty when creating (so a second "New" doesn't inherit the last attempt).
   useEffect(() => {
@@ -64,16 +70,16 @@ export function DepartmentDialog({
     setOrgUnitId(department?.orgUnitId ?? "none");
     setHeadUserId(department?.headUserId ?? "none");
     setError(null);
+    fe.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when the dialog opens
   }, [open, department, setError]);
 
   // Editing excludes the department itself from the parent options (no self-parenting).
   const parentOptions = buildIndentedDepartmentOptions(departments, department?.id);
 
   async function submit() {
-    if (!name.trim()) {
-      setError("Enter a department name.");
-      return;
-    }
+    setError(null);
+    if (!fe.validate()) return;
     await mutate(
       mode === "edit" ? `/api/admin/departments/${department!.id}` : "/api/admin/departments",
       mode === "edit" ? "PATCH" : "POST",
@@ -85,18 +91,17 @@ export function DepartmentDialog({
       },
       {
         fallback: mode === "edit" ? "Could not update department." : "Could not create department.",
+        onFieldErrors: (fields) => fe.setServerErrors(fields, ["name", "parentId"]),
         onSuccess: () => setOpen(false),
       },
     );
   }
 
-  const fieldId = `${mode}-department-name`;
-
   return (
     <AdminFormDialog
       open={open}
       onOpenChange={setOpen}
-      title={mode === "edit" ? "Edit department" : "New department"}
+      title={mode === "edit" ? "Edit Department" : "New Department"}
       description={
         mode === "edit"
           ? "Changes take effect immediately and are audited."
@@ -109,21 +114,17 @@ export function DepartmentDialog({
       onSubmit={submit}
       trigger={
         mode === "create" ? (
-          <DialogTrigger render={<Button className="rounded-full" />}>
-            <Plus /> New department
+          <DialogTrigger render={<Button />}>
+            <Plus /> New Department
           </DialogTrigger>
         ) : undefined
       }
     >
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor={fieldId} className="text-sm font-medium text-ink-2">
-          Name
-        </label>
-        <Input id={fieldId} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-      </div>
+      <Field label="Name" htmlFor={fe.idOf("name")} error={fe.errors.name}>
+        <Input {...fe.bind("name")} required value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+      </Field>
 
-      <div className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium text-ink-2">Parent department</span>
+      <Field label="Parent Department" error={fe.errors.parentId}>
         <Select
           value={parentId}
           onValueChange={(v) => setParentId(v ?? "none")}
@@ -141,10 +142,10 @@ export function DepartmentDialog({
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </Field>
 
       <div className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium text-ink-2">Org unit</span>
+        <span className="text-sm font-medium text-ink-2">Org Unit</span>
         <Select
           value={orgUnitId}
           onValueChange={(v) => setOrgUnitId(v ?? "none")}
@@ -165,7 +166,7 @@ export function DepartmentDialog({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium text-ink-2">Head of department</span>
+        <span className="text-sm font-medium text-ink-2">Head of Department</span>
         <Select
           value={headUserId}
           onValueChange={(v) => setHeadUserId(v ?? "none")}

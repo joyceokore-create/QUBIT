@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
+import { departmentName } from "@/lib/department-schema";
 
 export class DepartmentAdminError extends Error {
   code: string;
@@ -12,7 +13,7 @@ export class DepartmentAdminError extends Error {
 }
 
 export const CreateDepartmentInput = z.object({
-  name: z.string().min(1),
+  name: departmentName,
   parentId: z.string().uuid().nullable().optional(),
   orgUnitId: z.string().uuid().nullable().optional(),
   headUserId: z.string().uuid().nullable().optional(),

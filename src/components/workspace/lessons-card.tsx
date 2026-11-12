@@ -3,6 +3,11 @@
 import { useEffect, useState } from "react";
 import { Loader2, Plus } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { FieldError } from "@/components/ui/drawer";
+import { COMPACT_PRIMARY, FIELD_INVALID } from "@/lib/surface";
+import { readApiError } from "@/lib/form-errors";
+import { LessonFormSchema } from "@/lib/workspace-schema";
 import { LESSON_CATEGORIES, LESSON_LABELS, type LessonCategory, type LessonRow } from "@/server/lessons";
 
 // Lessons learned (docs/16 §6). Captured while the project runs — the closure gate asks
@@ -26,6 +31,8 @@ export function LessonsCard({ projectId }: { projectId: string }) {
   const [category, setCategory] = useState<LessonCategory>("Recommendation");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // docs/08 § Errors: the title's problem shows on the field; Save stays enabled except while sending.
+  const fe = useFieldErrors({ schema: LessonFormSchema, values: { title }, idPrefix: "lesson" });
 
   useEffect(() => {
     let cancelled = false;
@@ -42,15 +49,18 @@ export function LessonsCard({ projectId }: { projectId: string }) {
   }, [projectId]);
 
   const add = async () => {
-    setBusy(true);
     setError(null);
+    if (!fe.validate()) return;
+    setBusy(true);
     const res = await fetch(`/api/projects/${projectId}/lessons`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ title: title.trim(), category }),
     });
     if (!res.ok) {
-      setError((await res.json().catch(() => null))?.error?.message ?? "Could not save.");
+      const { message, fields } = readApiError(await res.json().catch(() => null), "Could not save.");
+      if (fields.title) fe.setServerErrors({ title: fields.title });
+      else setError(message);
     } else {
       setRows(((await res.json()) as { data: Serialized[] }).data);
       setTitle("");
@@ -80,13 +90,16 @@ export function LessonsCard({ projectId }: { projectId: string }) {
       {open && (
         <div className="flex flex-col gap-2">
           <input
+            {...fe.bind("title")}
+            aria-label="Lesson"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             maxLength={200}
             autoFocus
             placeholder="What should the next project know?"
-            className="h-8 rounded-[8px] border border-[var(--w07)] bg-[var(--wash)] px-2.5 text-[12px] text-[var(--ink2)] outline-none focus:border-[var(--brand)]"
+            className={`h-8 rounded-[8px] border border-[var(--w07)] bg-[var(--wash)] px-2.5 text-[12px] text-[var(--ink2)] outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none ${FIELD_INVALID}`}
           />
+          {fe.errors.title && <FieldError id={`${fe.idOf("title")}-error`}>{fe.errors.title}</FieldError>}
           <div className="flex items-center gap-2">
             <Select value={category} onValueChange={(v) => setCategory(v as LessonCategory)}>
               <SelectTrigger className="h-7 w-[150px] text-[11px]" aria-label="Lesson category">
@@ -103,20 +116,24 @@ export function LessonsCard({ projectId }: { projectId: string }) {
             <button
               type="button"
               onClick={() => void add()}
-              disabled={busy || title.trim().length < 3}
-              className="ml-auto flex items-center gap-1.5 rounded-[8px] bg-[var(--brand)] px-3 py-1.5 text-[11.5px] font-bold text-[var(--onbrand)] disabled:opacity-60"
+              disabled={busy}
+              className={`ml-auto ${COMPACT_PRIMARY}`}
             >
               {busy && <Loader2 className="size-3 animate-spin" />} Save
             </button>
             <button
               type="button"
-              onClick={() => setOpen(false)}
+              onClick={() => {
+                setOpen(false);
+                fe.reset();
+                setError(null);
+              }}
               className="text-[11.5px] font-semibold text-[var(--ink4)] hover:text-[var(--qink)]"
             >
               Cancel
             </button>
           </div>
-          {error && <p className="text-[11px] text-[var(--bad)]">{error}</p>}
+          {error && <p role="alert" className="text-[11px] text-[var(--bad)]">{error}</p>}
         </div>
       )}
 

@@ -73,7 +73,7 @@ export interface ExecutiveDashboard {
   delta: DeltaFeed;
   /** code+status of every project — the health-parity contract with Q. */
   projects: { id: string; code: string; name: string; status: string }[];
-  /** Head of PMs only (null otherwise): this week's per-project check-in state. */
+  /** Head only (null otherwise): this week's per-project check-in state. */
   headQueue: HeadQueueRow[] | null;
   /** M-P3b — this week's roll-up state for the Head's approve strip (null for non-heads). */
   rollup: RollupView | null;
@@ -218,7 +218,7 @@ export async function getExecutiveDashboard(ctx: TenantContext): Promise<Executi
   };
 }
 
-/** docs/32 M-W1b — visible to the Head of PMs (and SuperAdmin, who sees everything);
+/** docs/32 M-W1b — visible to the Head (and SuperAdmin, who sees everything);
  * a plain Executive gets null and never renders the panel. */
 function buildHeadQueue(
   ctx: TenantContext,

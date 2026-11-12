@@ -1,0 +1,226 @@
+"use client";
+
+import { useState } from "react";
+import { InstanceNameFormSchema } from "@/lib/workspace-schema";
+import { readApiError } from "@/lib/form-errors";
+import { FieldError } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { useRouter } from "next/navigation";
+import { Loader2, Plus, ShieldAlert, X } from "lucide-react";
+import type { NamedInstanceJson } from "@/components/panels/project-panel-json";
+import { CARD_GLASS as CARD, CARD_BG, FIELD_INVALID, FOCUS, PRIMARY, QUIET, SECONDARY, THEAD, TROW } from "@/lib/surface";
+
+/**
+ * docs/38 — the Delivery tab's Instances grid: rows are the product's named instances
+ * (Schools, Marketplace …), columns the product level and each market. A cell is the
+ * instance's state there (Planned · Build · UAT · Live · N/A) over its gate-derived %;
+ * clicking a cell scopes the gates matrix above to that instance × market, so each
+ * instance runs the same track in every market. Add / rename / remove inline (the PM or
+ * project:stage); everyone else reads.
+ */
+
+const STATES = ["Planned", "Build", "UAT", "Live", "NotApplicable"] as const;
+const STATE_LABEL: Record<string, string> = { Planned: "Planned", Build: "Build", UAT: "UAT", Live: "Live", NotApplicable: "N/A" };
+const STATE_TOK: Record<string, string> = { Planned: "--ink4", Build: "--qinfo", UAT: "--warn", Live: "--ok", NotApplicable: "--ink5" };
+
+export function InstancesSection({
+  projectId,
+  initial,
+  markets,
+  canManage,
+  selected,
+  onSelect,
+}: {
+  projectId: string;
+  initial: NamedInstanceJson[];
+  markets: { orgUnitId: string; code: string; flag: string | null }[];
+  canManage: boolean;
+  selected: { instance: string | null; market: string | null };
+  onSelect: (instanceId: string | null, orgUnitId: string | null) => void;
+}) {
+  const router = useRouter();
+  const [rows, setRows] = useState<NamedInstanceJson[]>(initial);
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // docs/08 § Errors: the name's problem shows on the field; Add stays enabled except while sending.
+  const fe = useFieldErrors({ schema: InstanceNameFormSchema("instance"), values: { name }, idPrefix: "instance" });
+  // docs/38 — at All every market is a column (edit any); with a market selected, that
+  // market alone is edited.
+  const allColumns: { orgUnitId: string | null; label: string }[] = [{ orgUnitId: null, label: "Product" }, ...markets.map((m) => ({ orgUnitId: m.orgUnitId, label: `${m.flag ? `${m.flag} ` : ""}${m.code}` }))];
+  // Joyce (2026-10-07): with a market selected only that market shows and is edited; at
+  // "All" one "All markets" column edits every market at once and the markets read-only.
+  const columns = selected.market
+    ? allColumns.filter((c) => c.orgUnitId === selected.market).map((c) => ({ ...c, editable: true, all: false }))
+    : allColumns.length > 1
+      ? [{ orgUnitId: null as string | null, label: "All markets", editable: true, all: true }, ...allColumns.filter((c) => c.orgUnitId !== null).map((c) => ({ ...c, editable: false, all: false }))]
+      : allColumns.map((c) => ({ ...c, editable: true, all: false }));
+  /** The state a row shows in the "All markets" column: the shared one, or "" when markets differ. */
+  const allState = (cells: { orgUnitId: string | null; state: string }[]) => {
+    const states = [...new Set(cells.filter((c) => c.orgUnitId !== null).map((c) => c.state))];
+    return states.length === 1 ? states[0]! : states.length === 0 ? (cells.find((c) => c.orgUnitId === null)?.state ?? "Planned") : "";
+  };
+
+  const call = async (key: string, url: string, init: RequestInit, onFields?: (f: Record<string, string>) => boolean) => {
+    setBusy(key);
+    setError(null);
+    const res = await fetch(url, { headers: { "content-type": "application/json" }, ...init });
+    const d = await res.json().catch(() => null);
+    setBusy(null);
+    if (!res.ok) {
+      const { message, fields } = readApiError(d, "Could not save.");
+      if (!onFields?.(fields)) setError(message);
+      return false;
+    }
+    if (Array.isArray(d?.data)) setRows(d.data);
+    router.refresh();
+    return true;
+  };
+  const add = async () => {
+    if (busy !== null || !fe.validate()) return;
+    const ok = await call("add", `/api/projects/${projectId}/instances`, { method: "POST", body: JSON.stringify({ name: name.trim() }) }, (f) => {
+      const { _: root, ...onFields } = f;
+      if (Object.keys(onFields).length === 0) return false;
+      fe.setServerErrors(onFields);
+      if (root) setError(root);
+      return true;
+    });
+    if (ok) {
+      setName("");
+      fe.reset();
+      setAdding(false);
+    }
+  };
+  const setState = (instanceId: string, orgUnitId: string | null, state: string, allMarkets = false) =>
+    call(`${instanceId}:${orgUnitId ?? "-"}`, `/api/projects/${projectId}/instances/${instanceId}/state`, { method: "PUT", body: JSON.stringify({ orgUnitId, state, allMarkets }) });
+  const remove = (instanceId: string) => call(instanceId, `/api/projects/${projectId}/instances/${instanceId}`, { method: "DELETE" });
+
+  return (
+    <section className={`${CARD} p-4`} style={CARD_BG} aria-labelledby="instances-title">
+      <div className="mb-2.5 flex flex-wrap items-center gap-3">
+        <h3 id="instances-title" className="text-[13px] font-semibold text-foreground">
+          Instances
+        </h3>
+        <span className="text-[11.5px] text-[var(--ink4)]">
+          {rows.length === 0 ? "Named variants of the product (for Schools, for Marketplace …) — each runs as its own project, the same track in every market." : "Click a cell to open that instance's gates for that market; the track is one for all markets and may differ per instance."}
+        </span>
+        {canManage && (
+          <button type="button" onClick={() => setAdding((a) => !a)} className={`${SECONDARY} ml-auto gap-1.5 px-2.5 py-1 text-[12px]`}>
+            <Plus className="size-3.5" aria-hidden /> Add instance
+          </button>
+        )}
+      </div>
+      {adding && (
+        <form
+          className="mb-3 flex flex-wrap items-start gap-2"
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            void add();
+          }}
+        >
+          <div className="flex flex-col gap-1.5">
+            <input {...fe.bind("name")} value={name} onChange={(e) => setName(e.target.value)} maxLength={60} autoFocus placeholder="e.g. For Schools" aria-label="Instance name" className={`h-8 min-w-[220px] rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none ${FIELD_INVALID}`} />
+            {fe.errors.name && <FieldError id={`${fe.idOf("name")}-error`}>{fe.errors.name}</FieldError>}
+          </div>
+          <button type="submit" disabled={busy !== null} className={PRIMARY}>
+            {busy === "add" ? "Adding…" : "Add"}
+          </button>
+          <button type="button" onClick={() => { setAdding(false); fe.reset(); }} className={QUIET}>
+            Cancel
+          </button>
+        </form>
+      )}
+      {error && (
+        <p role="alert" className="mb-2 flex items-center gap-1.5 text-[12px] text-[var(--bad)]">
+          <ShieldAlert className="size-3" aria-hidden /> {error}
+        </p>
+      )}
+      {rows.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[420px] border-separate border-spacing-0 text-left text-[12.5px]">
+            <thead className={THEAD}>
+              <tr>
+                <th scope="col">Instance</th>
+                {columns.map((c) => (
+                  <th key={c.orgUnitId ?? "product"} scope="col" className="!text-center">
+                    {c.label}
+                  </th>
+                ))}
+                {canManage && (
+                  <th scope="col" className="w-8">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className={TROW}>
+                  <td>
+                    <span className="font-semibold text-[var(--qink)]">{r.name}</span>
+                    <span className="ml-1.5 font-mono text-[10px] text-[var(--ink4)]">{r.code}</span>
+                    <span className="block text-[10.5px] text-[var(--ink4)]" title="One track for all markets — pick a template in the gates card while this instance is selected">
+                      track · {r.checkpointTemplateName ?? "project's"}
+                    </span>
+                  </td>
+                  {columns.map((c) => {
+                    const base = r.cells.find((x) => x.orgUnitId === c.orgUnitId) ?? { orgUnitId: c.orgUnitId, state: "Planned", note: null, progress: 0 };
+            const cell = c.all ? { ...base, state: allState(r.cells) } : base;
+                    const on = selected.instance === r.id && selected.market === c.orgUnitId;
+                    const tok = STATE_TOK[cell.state] ?? "--ink4";
+            const mixed = c.all && cell.state === "";
+                    const k = `${r.id}:${c.orgUnitId ?? "-"}`;
+                    return (
+                      <td key={k} className="text-center">
+                        <div className="inline-flex flex-col items-center gap-1">
+                          {canManage && c.editable ? (
+                            <select
+                              value={cell.state}
+                              onChange={(e) => e.target.value && void setState(r.id, c.all ? null : c.orgUnitId, e.target.value, c.all)}
+                              aria-label={`${r.name} · ${c.label} state`}
+                              className={`h-6 rounded-full border px-2 text-[11px] font-semibold ${FOCUS}`}
+                              style={{ color: `var(${tok})`, borderColor: `color-mix(in oklab, var(${tok}) 40%, transparent)`, background: `color-mix(in oklab, var(${tok}) 10%, transparent)` }}
+                            >
+                              {mixed && <option value="">Mixed</option>}
+                              {STATES.map((s) => (
+                                <option key={s} value={s}>
+                                  {STATE_LABEL[s]}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="rounded-full border px-2 py-0.5 text-[11px] font-semibold" style={{ color: `var(${tok})`, borderColor: `color-mix(in oklab, var(${tok}) 40%, transparent)` }}>
+                              {mixed ? "Mixed" : (STATE_LABEL[cell.state] ?? cell.state)}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => onSelect(on ? null : r.id, on ? null : c.orgUnitId)}
+                            aria-pressed={on}
+                            className={`rounded-[4px] font-mono text-[10.5px] tabular-nums transition-colors ${on ? "text-[var(--brand)]" : "text-[var(--ink4)] hover:text-[var(--qink)]"} ${FOCUS}`}
+                            title={on ? "Back to the product's gates" : `Open ${r.name}'s gates ${c.orgUnitId ? `in ${c.label}` : "at product level"}`}
+                          >
+                            {busy === k ? <Loader2 className="inline size-3 animate-spin" aria-hidden /> : `${cell.progress}%`}
+                          </button>
+                        </div>
+                      </td>
+                    );
+                  })}
+                  {canManage && (
+                    <td className="text-right">
+                      <button type="button" onClick={() => void remove(r.id)} aria-label={`Remove ${r.name}`} className={`${QUIET} px-1 text-[var(--ink4)]`} title="Remove (only while it carries no work)">
+                        <X className="size-3" aria-hidden />
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}

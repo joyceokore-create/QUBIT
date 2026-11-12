@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { userRoles } from "@/lib/user-edit-schema";
+import { inviteEmail, inviteName } from "@/lib/invite-schema";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
@@ -8,31 +11,39 @@ import { assignableRoleNames } from "@/server/role-permissions";
 import { derivedGroups, USER_GROUPS } from "@/lib/personas";
 import { PROJECT_ROLES, projectRoleCategory } from "@/lib/roles";
 import { mfaRequired } from "@/lib/mfa-policy";
+import { ssoEnabled } from "@/lib/sso";
+import { pageInfo, type PageInfo } from "@/lib/list-state";
+import { containsText } from "@/lib/list-query";
 
 export const CreateUserInput = z.object({
-  name: z.string().min(1),
-  email: z.string().email(),
-  // M-O3 (docs/22): no admin-supplied password. The invitee sets their own via an emailed
-  // one-time link, so a temp password is never generated, displayed, or transported.
-  // Role names are validated in the engine against canonical + ACTIVE custom roles —
-  // a static enum can't know the tenant's custom roles.
+  // Same rules and copy as the Invite form (src/lib/invite-schema.ts).
+  name: inviteName,
+  email: inviteEmail,
+  // No admin-supplied password, ever. Under SSO the person signs in with Microsoft; without
+  // SSO they set their own password via an emailed one-time link (M-O3, docs/22). A temp
+  // password is never generated, displayed, or transported. Role names are validated in the
+  // engine against canonical + ACTIVE custom roles — a static enum can't know the tenant's
+  // custom roles.
   roles: z.array(z.string().min(1)).min(1),
   departmentId: z.string().min(1).nullable().optional(),
   // Optional placement at invite time — so PMs/developers land on a team + project.
   teamId: z.string().min(1).nullable().optional(),
   projectId: z.string().min(1).nullable().optional(),
   projectRole: z.enum(PROJECT_ROLES).nullable().optional(),
-  // Declared dashboard group (docs/17 §1.3) — presentation, never permission. DM1.43:
-  // SINGLE choice — exec, pm, or member(dev/qa/implementor) — so "where they land" is
-  // unambiguous. Derived groups still union in at login; this caps what is DECLARED.
-  userGroups: z.array(z.enum(USER_GROUPS)).max(1).optional(),
+  // Declared dashboard views (docs/17 §1.3) — presentation, never permission. A user may be
+  // given more than one view and switch between them; `primaryGroup` is the one they land on.
+  // Derived groups still union in at login; this only caps what is DECLARED.
+  userGroups: z.array(z.enum(USER_GROUPS)).max(USER_GROUPS.length).optional(),
   primaryGroup: z.enum(USER_GROUPS).nullable().optional(),
+  // UX fidelity Tier 1: an optional note from the admin, shown in the invite email only
+  // (never stored or audited).
+  inviteNote: z.string().trim().max(500).optional(),
 });
 export type CreateUserInput = z.infer<typeof CreateUserInput>;
 
 export const UpdateRolesInput = z.object({
   // Validated in updateUserRoles against canonical + ACTIVE custom roles (see CreateUserInput).
-  roles: z.array(z.string().min(1)).min(1),
+  roles: userRoles,
 });
 export type UpdateRolesInput = z.infer<typeof UpdateRolesInput>;
 
@@ -89,6 +100,43 @@ export interface AdminUserSummary {
   derivedGroups: string[];
 }
 
+// One include + mapping for every directory read, so the paged list and the full list can
+// never disagree about what a row shows.
+const SUMMARY_INCLUDE = {
+  roles: true,
+  department: { select: { name: true } },
+  manager: { select: { name: true } },
+  projectAllocations: { select: { role: true } },
+  projectsLed: { select: { id: true }, take: 1 },
+  _count: { select: { teamMemberships: true, projectAllocations: true } },
+} satisfies Prisma.UserInclude;
+
+function toSummary(u: Prisma.UserGetPayload<{ include: typeof SUMMARY_INCLUDE }>): AdminUserSummary {
+  return {
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    status: u.status,
+    roles: u.roles.map((r) => r.role),
+    departmentId: u.departmentId,
+    departmentName: u.department?.name ?? null,
+    managerId: u.managerId,
+    managerName: u.manager?.name ?? null,
+    createdAt: u.createdAt,
+    lastLoginAt: u.lastLoginAt,
+    mfaEnabled: u.mfaSecret !== null,
+    teamCount: u._count.teamMemberships,
+    projectCount: u._count.projectAllocations,
+    userGroups: u.userGroups,
+    primaryGroup: u.primaryGroup,
+    derivedGroups: derivedGroups({
+      membershipCategories: u.projectAllocations.map((m) => projectRoleCategory(m.role)),
+      tenantRoles: u.roles.map((r) => r.role),
+      leadsProjects: u.projectsLed.length > 0,
+    }),
+  };
+}
+
 export async function listUsers(
   ctx: TenantContext,
   opts: { includeDeleted?: boolean } = {},
@@ -96,40 +144,167 @@ export async function listUsers(
   return withTenant(ctx, async (tx) => {
     const users = await tx.user.findMany({
       where: opts.includeDeleted ? undefined : { status: { not: "DELETED" } },
-      include: {
-        roles: true,
-        department: { select: { name: true } },
-        manager: { select: { name: true } },
-        projectAllocations: { select: { role: true } },
-        projectsLed: { select: { id: true }, take: 1 },
-        _count: { select: { teamMemberships: true, projectAllocations: true } },
-      },
+      include: SUMMARY_INCLUDE,
       orderBy: { name: "asc" },
     });
+    return users.map(toSummary);
+  });
+}
+
+// ── UX5 (L4): server-paged directory ───────────────────────────────────────────
+
+/** Statuses the Users list can filter on (DELETED rows never list). */
+export const USER_LIST_STATUSES = ["ACTIVE", "INVITED", "SUSPENDED"] as const;
+/** The Users page's tabs (UX11; design spec v2): All · Active · Invited · No MFA · Suspended.
+ * Each narrows the base set; search and the other filters still AND on top. */
+export const USER_LIST_TABS = ["all", "active", "invited", "nomfa", "suspended"] as const;
+export type UserListTab = (typeof USER_LIST_TABS)[number];
+
+/**
+ * The ONE "No MFA" rule (UX11): ACTIVE users without app-level TOTP. The overview tile's
+ * count, the No MFA tab and the `users` report all read it from here, so they can't drift.
+ * (The tile's URL shortcut — status=ACTIVE & mfa=off — selects exactly this set.) Under SSO,
+ * MFA lives at the identity provider and the page hides every surface that uses it.
+ */
+export const NO_MFA_WHERE = { status: "ACTIVE", mfaSecret: null } satisfies Prisma.UserWhereInput;
+/** Onboarding gaps the overview tiles filter on. */
+export const USER_ONBOARDING_FILTERS = ["not-signed-in", "unplaced"] as const;
+
+/**
+ * The validated query for one page of the directory. The page parses the URL with
+ * `parseListParams` (allow-lists); this schema re-checks the shape at the engine boundary so
+ * no caller can ask for more than 100 rows or smuggle an unexpected value into `where`.
+ */
+export const UserListQuery = z.object({
+  q: z.string().trim().max(100).default(""),
+  page: z.number().int().min(1).max(1_000_000).default(1),
+  size: z.number().int().min(1).max(100),
+  role: z.string().min(1).max(100).optional(),
+  /** A department id, or "none" for users with no department. */
+  department: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
+  mfa: z.enum(["on", "off"]).optional(),
+  status: z.enum(USER_LIST_STATUSES).optional(),
+  onboarding: z.enum(USER_ONBOARDING_FILTERS).optional(),
+  /** The base set: every live user (default), or only the No MFA rule's users. */
+  tab: z.enum(USER_LIST_TABS).default("all"),
+});
+export type UserListQuery = z.input<typeof UserListQuery>;
+
+function userListWhere(q: z.output<typeof UserListQuery>): Prisma.UserWhereInput {
+  const and: Prisma.UserWhereInput[] = [{ status: q.status ?? { not: "DELETED" } }];
+  // The tab narrows the base set; search and the other filters still AND on top of it.
+  if (q.tab === "nomfa") and.push(NO_MFA_WHERE);
+  if (q.tab === "active") and.push({ status: "ACTIVE" });
+  if (q.tab === "invited") and.push({ status: "INVITED" });
+  if (q.tab === "suspended") and.push({ status: "SUSPENDED" });
+  if (q.q) and.push({ OR: [{ name: containsText(q.q) }, { email: containsText(q.q) }] });
+  if (q.role) and.push({ roles: { some: { role: q.role } } });
+  if (q.department) and.push({ departmentId: q.department === "none" ? null : q.department });
+  if (q.mfa) and.push({ mfaSecret: q.mfa === "on" ? { not: null } : null });
+  if (q.onboarding === "not-signed-in") and.push({ lastLoginAt: null });
+  if (q.onboarding === "unplaced") and.push({ teamMemberships: { none: {} }, projectAllocations: { none: {} } });
+  return { AND: and };
+}
+
+/**
+ * One page of the directory: search (name or email), filters and paging all in SQL, under
+ * the tenant's RLS context. The count and the page read run in the same transaction; an
+ * out-of-range page clamps to the last page.
+ */
+export async function listUsersPaged(
+  ctx: TenantContext,
+  input: UserListQuery,
+): Promise<{ rows: AdminUserSummary[]; info: PageInfo }> {
+  const q = UserListQuery.parse(input);
+  const where = userListWhere(q);
+  return withTenant(ctx, async (tx) => {
+    const total = await tx.user.count({ where });
+    const info = pageInfo(total, q.page, q.size);
+    const users = total
+      ? await tx.user.findMany({ where, include: SUMMARY_INCLUDE, orderBy: [{ name: "asc" }, { id: "asc" }], skip: info.skip, take: info.size })
+      : [];
+    return { rows: users.map(toSummary), info };
+  });
+}
+
+/** Whole-directory counts for the Users overview tiles and the admin insights. */
+export interface UserDirectoryStats {
+  /** Every non-deleted user. */
+  all: number;
+  /** ACTIVE and never signed in. */
+  notSignedIn: number;
+  /** ACTIVE (the Active tab). */
+  active: number;
+  /** INVITED — created, invite not yet accepted (the Invited tab). */
+  invited: number;
+  /** ACTIVE without app-level TOTP. */
+  noMfa: number;
+  /** ACTIVE and on no team or project. */
+  unplaced: number;
+  suspended: number;
+  /** ACTIVE, signed in, placed — and (without SSO) MFA enrolled. */
+  onboarded: number;
+  /** Non-deleted Super Admins without MFA. */
+  noMfaAdmins: number;
+  /** Non-deleted users with no department. */
+  noDepartment: number;
+  /** ACTIVE Super Admins. */
+  activeAdmins: number;
+}
+
+export async function userDirectoryStats(ctx: TenantContext, opts: { sso: boolean }): Promise<UserDirectoryStats> {
+  const live: Prisma.UserWhereInput = { status: { not: "DELETED" } };
+  const active: Prisma.UserWhereInput = { status: "ACTIVE" };
+  const admin: Prisma.UserWhereInput = { roles: { some: { role: SUPER_ADMIN_ROLE } } };
+  const placed: Prisma.UserWhereInput = { OR: [{ teamMemberships: { some: {} } }, { projectAllocations: { some: {} } }] };
+  return withTenant(ctx, async (tx) => {
+    const count = (where: Prisma.UserWhereInput) => tx.user.count({ where });
+    const [all, notSignedIn, noMfa, unplaced, suspended, onboarded, noMfaAdmins, noDepartment, activeAdmins, activeN, invited] = await Promise.all([
+      count(live),
+      count({ ...active, lastLoginAt: null }),
+      count(NO_MFA_WHERE),
+      count({ ...active, teamMemberships: { none: {} }, projectAllocations: { none: {} } }),
+      count({ status: "SUSPENDED" }),
+      count({ AND: [active, { lastLoginAt: { not: null } }, placed, ...(opts.sso ? [] : [{ mfaSecret: { not: null } }])] }),
+      count({ AND: [live, admin, { mfaSecret: null }] }),
+      count({ ...live, departmentId: null }),
+      count({ AND: [active, admin] }),
+      count(active),
+      count({ status: "INVITED" }),
+    ]);
+    return { all, notSignedIn, active: activeN, invited, noMfa, unplaced, suspended, onboarded, noMfaAdmins, noDepartment, activeAdmins };
+  });
+}
+
+/** A directory row plus the names of the teams the user sits on — the `users` report. */
+export interface UserReportRow extends AdminUserSummary {
+  teamNames: string[];
+}
+
+/**
+ * Every non-deleted user for the `users` Custom report dataset (UX11): the same include and
+ * mapping as the Users page (roles, department, counts) plus team names, under the tenant's
+ * RLS context. The caller gates on `admin:access` (DATASET_PERMISSION).
+ */
+export async function listUsersForReport(ctx: TenantContext): Promise<UserReportRow[]> {
+  return withTenant(ctx, async (tx) => {
+    const users = await tx.user.findMany({
+      where: { status: { not: "DELETED" } },
+      include: { ...SUMMARY_INCLUDE, teamMemberships: { select: { team: { select: { name: true } } } } },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+    });
     return users.map((u) => ({
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      status: u.status,
-      roles: u.roles.map((r) => r.role),
-      departmentId: u.departmentId,
-      departmentName: u.department?.name ?? null,
-      managerId: u.managerId,
-      managerName: u.manager?.name ?? null,
-      createdAt: u.createdAt,
-      lastLoginAt: u.lastLoginAt,
-      mfaEnabled: u.mfaSecret !== null,
-      teamCount: u._count.teamMemberships,
-      projectCount: u._count.projectAllocations,
-      userGroups: u.userGroups,
-      primaryGroup: u.primaryGroup,
-      derivedGroups: derivedGroups({
-        membershipCategories: u.projectAllocations.map((m) => projectRoleCategory(m.role)),
-        tenantRoles: u.roles.map((r) => r.role),
-        leadsProjects: u.projectsLed.length > 0,
-      }),
+      ...toSummary(u),
+      teamNames: u.teamMemberships.map((m) => m.team.name).sort((a, b) => a.localeCompare(b)),
     }));
   });
+}
+
+/** Lightweight id + name for every non-deleted user — the manager picker in Edit department. */
+export async function listUserOptions(ctx: TenantContext): Promise<{ id: string; name: string }[]> {
+  return withTenant(ctx, (tx) =>
+    tx.user.findMany({ where: { status: { not: "DELETED" } }, select: { id: true, name: true }, orderBy: [{ name: "asc" }, { id: "asc" }] }),
+  );
 }
 
 /** Edit DECLARED dashboard groups (docs/17 §1.3) — presentation only; RBAC untouched. */
@@ -185,13 +360,23 @@ export interface CreateUserResult {
   /** The one-time accept link — present only when email is NOT configured (docs/22 §4.1). */
   acceptUrl?: string;
   emailed: boolean;
+  /** True when the account was created SSO-ready (ACTIVE, no invite link) — the SSO path. */
+  sso?: boolean;
 }
 
 /**
- * Invite a user (M-O3, docs/22). Creates them as INVITED with **no usable password**, then
- * mints a one-time token and emails the set-password link. When the mailer isn't
- * configured the link comes back for the admin to copy, so the flow works before Graph is
- * wired on the box — but a temp password is never created either way.
+ * Create a user.
+ *
+ * SSO deployments (all AZURE_AD_* set): Entra is the only sign-in door — `authorize()`
+ * refuses password login while SSO is active — so an invite-to-set-a-password is
+ * meaningless. The account is created ACTIVE with a null hash and `mustChangePassword`
+ * cleared; the person can sign in with Microsoft immediately, provided they exist in the
+ * org directory (the SSO gate maps their email to this ACTIVE user). No link is minted.
+ *
+ * Non-SSO deployments: the original M-O3 flow (docs/22) — created INVITED with **no usable
+ * password**, then a one-time token is minted and the set-password link emailed (or
+ * returned for the admin to copy when the mailer isn't configured). A temp password is
+ * never created either way.
  */
 export async function createUser(ctx: TenantContext, input: CreateUserInput): Promise<CreateUserResult> {
   // Privilege-escalation guard: only a Super Admin may mint another Super Admin. Without
@@ -199,6 +384,9 @@ export async function createUser(ctx: TenantContext, input: CreateUserInput): Pr
   assertMayGrantSuperAdmin(ctx, input.roles);
 
   const email = input.email.toLowerCase();
+  // SSO is the switch between "usable immediately via Microsoft" and "invite-to-set-a-
+  // password". Read once so the account row and the post-commit step agree.
+  const sso = ssoEnabled();
 
   const user = await withTenant(ctx, async (tx) => {
     const existing = await tx.user.findUnique({
@@ -233,14 +421,18 @@ export async function createUser(ctx: TenantContext, input: CreateUserInput): Pr
         tenantId: ctx.tenantId,
         email,
         name: input.name,
-        // INVITED + null hash: the account cannot be signed into until the invitee
-        // consumes their token and sets a password (consumeInviteToken flips it ACTIVE).
-        status: "INVITED",
+        // SSO on: ACTIVE + null hash — usable the moment it exists. Microsoft is the door,
+        //   so there's no password to set and no onboarding gate to clear
+        //   (mustChangePassword stays false; onboardedAt is stamped so records read clean).
+        // SSO off: INVITED + null hash — cannot be signed into until the invitee consumes
+        //   their token and sets a password (consumeInviteToken flips it ACTIVE).
+        status: sso ? "ACTIVE" : "INVITED",
         passwordHash: null,
         departmentId: input.departmentId ?? null,
         userGroups: declaredGroups,
         primaryGroup: input.primaryGroup ?? null,
-        mustChangePassword: true,
+        mustChangePassword: !sso,
+        ...(sso ? { onboardedAt: new Date() } : {}),
       },
     });
 
@@ -278,12 +470,19 @@ export async function createUser(ctx: TenantContext, input: CreateUserInput): Pr
     return user;
   });
 
-  // Minted AFTER the user transaction commits: the token references user.id, and a failed
-  // send must not roll back a successfully created account (the admin can resend).
-  const { acceptUrl, emailed } = await mintInvite(ctx, user.id, "invite");
+  // SSO: nothing to send — the account is already usable via Microsoft.
+  if (sso) {
+    return { user: { id: user.id, name: user.name, email: user.email }, emailed: false, sso: true };
+  }
+
+  // Non-SSO: mint the one-time link AFTER the user transaction commits — the token
+  // references user.id, and a failed send must not roll back a successfully created
+  // account (the admin can resend).
+  const { acceptUrl, emailed } = await mintInvite(ctx, user.id, "invite", input.inviteNote);
   return {
     user: { id: user.id, name: user.name, email: user.email },
     emailed,
+    sso: false,
     ...(emailed ? {} : { acceptUrl }),
   };
 }

@@ -8,7 +8,7 @@ const cardStyle = { background: "var(--cardbg)" } as const;
 
 // The member "my work" cockpit — the projects they lead or are a member of, with the items
 // that need them. Deliberately slim (docs/17 §4: a member's world is their work, not the estate).
-export function UserCockpit({ data, viewerId }: { data: CockpitData; viewerId: string }) {
+export function UserCockpit({ data, viewerId, brief }: { data: CockpitData; viewerId: string; brief?: React.ReactNode }) {
   // A member's projects: those they lead (pmId) — membership rows aren't in the cockpit
   // payload, so lead is the available signal; empty falls back to a gentle empty state.
   const mine = data.projects.filter((p) => p.pmId === viewerId && !["Completed", "Cancelled"].includes(p.status));
@@ -21,7 +21,7 @@ export function UserCockpit({ data, viewerId }: { data: CockpitData; viewerId: s
         subtitle={`${mine.length} project${mine.length === 1 ? "" : "s"} you're on. ${attention.length} need attention.`}
       />
 
-      {mine.length > 0 && <AskQBrief level="user" data={data} viewerId={viewerId} />}
+      {brief ?? (mine.length > 0 && <AskQBrief level="user" data={data} viewerId={viewerId} />)}
 
       {mine.length === 0 ? (
         <div className={`${CARD} text-center text-[var(--ink3)]`} style={cardStyle}>

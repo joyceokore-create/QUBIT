@@ -1,9 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { StatusUpdateFormSchema } from "@/lib/workspace-schema";
+import { readApiError } from "@/lib/form-errors";
+import { FieldError } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
 import { Send } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RAG_TOKEN } from "@/lib/surface";
+import { COMPACT_PRIMARY, FIELD_INVALID, RAG_TOKEN } from "@/lib/surface";
 
 interface Update {
   id: string;
@@ -18,6 +22,9 @@ export function StatusUpdatesSection({ projectId, canEdit }: { projectId: string
   const [body, setBody] = useState("");
   const [rag, setRag] = useState("Green");
   const [posting, setPosting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // docs/08 § Errors: the update's problem shows on the field; Post stays enabled except while sending.
+  const fe = useFieldErrors({ schema: StatusUpdateFormSchema, values: { body }, idPrefix: "status-update" });
 
   const load = useCallback(async () => {
     const d = await fetch(`/api/projects/${projectId}/status-updates`).then((r) => r.json());
@@ -28,19 +35,25 @@ export function StatusUpdatesSection({ projectId, canEdit }: { projectId: string
   }, [load]);
 
   const post = async () => {
-    if (!body.trim()) return;
+    setError(null);
+    if (!fe.validate()) return;
     setPosting(true);
-    const ok = await fetch(`/api/projects/${projectId}/status-updates`, {
+    const res = await fetch(`/api/projects/${projectId}/status-updates`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ body: body.trim(), rag }),
-    }).then((r) => r.ok);
+    }).catch(() => null);
     setPosting(false);
-    if (ok) {
+    if (res?.ok) {
       setBody("");
       setRag("Green");
+      fe.reset();
       void load();
+      return;
     }
+    const { message, fields } = readApiError(await res?.json().catch(() => null), "Could not post the update. Try again.");
+    if (fields.body) fe.setServerErrors({ body: fields.body });
+    else setError(message);
   };
 
   return (
@@ -50,12 +63,15 @@ export function StatusUpdatesSection({ projectId, canEdit }: { projectId: string
       {canEdit && (
         <div className="flex flex-col gap-2 rounded-[12px] border border-[var(--w07)] bg-[var(--qcard)] p-3">
           <textarea
+            {...fe.bind("body")}
+            aria-label="Status update"
             value={body}
             onChange={(e) => setBody(e.target.value)}
             rows={2}
             placeholder="Post an update — the project's managers and testers get notified…"
-            className="resize-none rounded-[8px] border border-ink-4 bg-background p-2.5 text-xs text-foreground outline-none focus:border-brand"
+            className={`resize-none rounded-[8px] border border-ink-4 bg-background p-2.5 text-xs text-foreground outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none ${FIELD_INVALID}`}
           />
+          {fe.errors.body && <FieldError id={`${fe.idOf("body")}-error`}>{fe.errors.body}</FieldError>}
           <div className="flex items-center gap-2">
             <Select value={rag} onValueChange={(v) => v && setRag(v)} items={{ Green: "Green", Amber: "Amber", Red: "Red" }}>
               <SelectTrigger className="h-8 w-[120px] text-[11px]"><SelectValue /></SelectTrigger>
@@ -68,13 +84,14 @@ export function StatusUpdatesSection({ projectId, canEdit }: { projectId: string
                 ))}
               </SelectContent>
             </Select>
+            {error && <p role="alert" className="ml-auto text-[11.5px] text-[var(--bad)]">{error}</p>}
             <button
               type="button"
               onClick={post}
-              disabled={posting || !body.trim()}
-              className="ml-auto flex items-center gap-1.5 rounded-[8px] bg-[var(--brand)] px-3.5 py-1.5 text-xs font-bold text-[var(--onbrand)] disabled:opacity-50"
+              disabled={posting}
+              className={`${error ? "" : "ml-auto "}${COMPACT_PRIMARY}`}
             >
-              <Send className="size-3.5" /> {posting ? "Posting…" : "Post update"}
+              <Send className="size-3.5" /> {posting ? "Posting…" : "Post Update"}
             </button>
           </div>
         </div>

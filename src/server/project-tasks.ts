@@ -4,9 +4,13 @@ import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { projectRoleCategory, type ProjectRoleCategory } from "@/lib/roles";
 import { emitDomainEvent } from "@/server/events";
+import { PM_SELECT, pmIdsOf } from "@/lib/ownership";
 import { SOURCE_SYSTEM } from "@/server/connectors/youtrack-sync";
 import { mockEnabled, mockPlanFromText } from "@/server/q/mock";
 import { llmChat, llmEnabled, llmModel } from "@/server/q/llm";
+import { emailEnabled, getMailer } from "@/server/mail/mailer";
+import { nudgeEmail } from "@/server/mail/template";
+import { resolveChannels, type Channel } from "@/server/mail/preferences";
 
 /**
  * MVP1 PRD Modules 5–7 + Phase 6.1 (docs/15) — executable project tasks.
@@ -30,7 +34,7 @@ export type TaskType = (typeof TASK_TYPES)[number];
 export class TaskError extends Error {
   constructor(
     message: string,
-    public code: "NOT_FOUND" | "BAD_INPUT" | "AI_UNAVAILABLE" | "FORBIDDEN",
+    public code: "NOT_FOUND" | "BAD_INPUT" | "AI_UNAVAILABLE" | "FORBIDDEN" | "ALREADY_NUDGED",
   ) {
     super(message);
     this.name = "TaskError";
@@ -73,11 +77,15 @@ export interface ProjectTaskRow {
   externalAssigneeName: string | null;
   /** Last mutation (any) — feeds the board's aging tint and the 6.4 nudger. */
   lastActivityAt: Date;
+  /** Milestone A — when the open blocker was raised (the age pill); null when not blocked. */
+  blockedSince: Date | null;
+  /** Milestone A — the PM's last nudge of the assignee; null = never. */
+  lastNudgedAt: Date | null;
 }
 
 const OPEN_BLOCKER_SELECT = {
   where: { status: "Open" },
-  select: { id: true, description: true },
+  select: { id: true, description: true, createdAt: true },
   take: 1,
 } as const;
 
@@ -143,6 +151,8 @@ export async function listProjectTasks(ctx: TenantContext, projectId: string): P
       externalUrl: t.externalUrl,
       externalAssigneeName: t.externalAssigneeName,
       lastActivityAt: t.lastActivityAt,
+      blockedSince: t.blockers[0]?.createdAt ?? null,
+      lastNudgedAt: t.lastNudgedAt,
     }));
   });
 }
@@ -657,22 +667,58 @@ export async function setTaskStatus(ctx: TenantContext, taskId: string, status: 
 
 /** Flag a task blocked: creates an Open Blocker linked to the task (a reason is required —
  * that's what makes the flag useful to the nudger and reports). Audited. */
+export const BLOCKED_SINCE_MAX_DAYS = 90;
+
 export async function flagTaskBlocked(
   ctx: TenantContext,
   taskId: string,
-  /** ownerId: undefined = the caller owns it; null = ownerless — the machine paths
-   *  (M7-B commit `#blocked` with no matched committer) pass null, because ctx.userId is
-   *  a sentinel there and Blocker.ownerId is a real FK. */
-  input: { description: string; severity?: "Low" | "Medium" | "Critical"; ownerId?: string | null },
+  /** ownerId: undefined = a person raised it (UX6 rules below); null = ownerless — the
+   *  machine paths (M7-B commit `#blocked` with no matched committer) pass null, because
+   *  ctx.userId is a sentinel there and Blocker.ownerId is a real FK. */
+  input: {
+    description: string;
+    severity?: "Low" | "Medium" | "Critical";
+    ownerId?: string | null;
+    /** UX6 "Who can unblock it?": someone on the project. Becomes the blocker's owner. */
+    unblockerId?: string | null;
+    /** UX6 "Blocked since": not in the future, at most 90 days back. Default: now. */
+    since?: Date;
+  },
+  now = new Date(),
 ) {
   if (!input.description.trim()) throw new TaskError("A blocked reason is required.", "BAD_INPUT");
+  const human = input.ownerId === undefined;
+  if (input.since) {
+    if (input.since.getTime() > now.getTime()) throw new TaskError("Blocked since can't be in the future.", "BAD_INPUT");
+    if (now.getTime() - input.since.getTime() > BLOCKED_SINCE_MAX_DAYS * 86_400_000) {
+      throw new TaskError(`Blocked since can be at most ${BLOCKED_SINCE_MAX_DAYS} days ago.`, "BAD_INPUT");
+    }
+  }
   return withTenant(ctx, async (tx) => {
     const task = await tx.projectTask.findUnique({
       where: { id: taskId },
-      select: { projectId: true, blockers: { where: { status: "Open" }, select: { id: true } } },
+      select: {
+        projectId: true,
+        title: true,
+        taskKey: true,
+        externalKey: true,
+        blockers: { where: { status: "Open" }, select: { id: true } },
+        project: { select: { name: true, ...PM_SELECT } },
+      },
     });
     if (!task) throw new TaskError("Task not found.", "NOT_FOUND");
     if (task.blockers.length > 0) throw new TaskError("Task is already flagged blocked.", "BAD_INPUT");
+
+    const pmIds = pmIdsOf(task.project);
+    // "Who can unblock it?" must be someone on this project (a member, the lead or a PM), so
+    // a blocker can't be pointed at an arbitrary person. RLS already limits it to the tenant.
+    if (human && input.unblockerId) {
+      const onProject =
+        pmIds.includes(input.unblockerId) ||
+        (await tx.projectMember.count({ where: { projectId: task.projectId, userId: input.unblockerId } })) > 0;
+      if (!onProject) throw new TaskError("Choose someone on this project to unblock it.", "BAD_INPUT");
+    }
+
     const blocker = await tx.blocker.create({
       data: {
         tenantId: ctx.tenantId,
@@ -681,7 +727,10 @@ export async function flagTaskBlocked(
         description: input.description.trim(),
         severity: input.severity ?? "Medium",
         status: "Open",
-        ownerId: input.ownerId === undefined ? ctx.userId : input.ownerId,
+        // The owner is who can unblock it: the chosen person, else (as before UX6) the raiser.
+        ownerId: human ? (input.unblockerId ?? ctx.userId) : input.ownerId,
+        raisedById: human ? ctx.userId : null,
+        ...(input.since ? { dateRaised: input.since } : {}),
       },
     });
     await tx.projectTask.update({ where: { id: taskId }, data: { lastActivityAt: new Date() } });
@@ -689,16 +738,173 @@ export async function flagTaskBlocked(
       action: "create",
       entityType: "blocker",
       entityId: blocker.id,
-      after: { taskId, description: blocker.description, severity: blocker.severity },
+      after: {
+        taskId,
+        description: blocker.description,
+        severity: blocker.severity,
+        ownerId: blocker.ownerId,
+        raisedById: blocker.raisedById,
+        dateRaised: blocker.dateRaised.toISOString(),
+      },
     });
+
+    // UX6: the PM sees a raised blocker at once — the project's PMs and the chosen unblocker
+    // are notified (never the raiser). Machine-raised blockers notify nobody, as before.
+    let notify: { userId: string; kind: string; message: string; link: string }[] = [];
+    if (human) {
+      const raiser = await tx.user.findUnique({ where: { id: ctx.userId }, select: { name: true } });
+      const label = task.externalKey ?? task.taskKey ?? task.title.slice(0, 60);
+      const link = `/projects/${task.projectId}?tab=Board&task=${taskId}`;
+      const recipients = [...new Set([...pmIds, ...(input.unblockerId ? [input.unblockerId] : [])])].filter((id) => id !== ctx.userId);
+      notify = recipients.map((userId) => ({
+        userId,
+        kind: "blocker.opened",
+        message:
+          userId === input.unblockerId
+            ? `${raiser?.name ?? "A teammate"} needs you to unblock ${label} on ${task.project.name}.`
+            : `${raiser?.name ?? "A teammate"} is blocked on ${label} (${task.project.name}).`,
+        link,
+      }));
+    }
     await emitDomainEvent(tx, ctx, {
       type: "blocker.opened",
       entityType: "blocker",
       entityId: blocker.id,
       payload: { projectId: task.projectId, taskId, severity: blocker.severity },
+      notify,
     });
     return blocker;
   });
+}
+
+export interface NudgeResult {
+  taskId: string;
+  assigneeId: string;
+  lastNudgedAt: Date;
+  channel: Channel;
+  /** True only when mail actually left: email enabled, channel not InApp, send ok. */
+  emailed: boolean;
+}
+
+const NUDGE_COOLDOWN_MS = 24 * 3_600_000;
+
+function appUrl(): string {
+  return (process.env.AUTH_URL ?? process.env.APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+}
+
+/**
+ * Milestone A (docs handoff §1.5) — the PM nudges a blocked task's assignee: an email
+ * with the YouTrack link and the block age (devs/QA may not live in QUBIT), plus the
+ * in-app bell. Rules: the task must carry an open blocker; the assignee must be an ACTIVE
+ * QUBIT user (a tracker-only name has no address we hold); one nudge per 24h. The
+ * mutation (lastNudgedAt + audit + event/notification) commits first; the email goes
+ * out AFTER, and a failed send never rolls the nudge back — the nightly digest retries
+ * any notification still lacking emailedAt. Respects the user's "nudge" channel.
+ */
+export async function nudgeTask(ctx: TenantContext, taskId: string, now = new Date()): Promise<NudgeResult> {
+  const prepared = await withTenant(ctx, async (tx) => {
+    const task = await tx.projectTask.findUnique({
+      where: { id: taskId },
+      select: {
+        id: true,
+        title: true,
+        taskKey: true,
+        externalKey: true,
+        externalUrl: true,
+        projectId: true,
+        externalAssigneeName: true,
+        lastNudgedAt: true,
+        assignee: { select: { id: true, name: true, email: true, status: true } },
+        blockers: { where: { status: "Open" }, select: { id: true, description: true, createdAt: true }, orderBy: { createdAt: "asc" }, take: 1 },
+        project: { select: { code: true, name: true } },
+      },
+    });
+    if (!task) throw new TaskError("Task not found.", "NOT_FOUND");
+    const blocker = task.blockers[0];
+    if (!blocker) throw new TaskError("Only a blocked task can be nudged.", "BAD_INPUT");
+    const assignee = task.assignee;
+    if (!assignee || assignee.status !== "ACTIVE" || !assignee.email) {
+      throw new TaskError(
+        task.externalAssigneeName
+          ? `${task.externalAssigneeName} is not a QUBIT user — nudge them in YouTrack.`
+          : "No active QUBIT assignee to nudge.",
+        "BAD_INPUT",
+      );
+    }
+    if (task.lastNudgedAt && now.getTime() - task.lastNudgedAt.getTime() < NUDGE_COOLDOWN_MS) {
+      throw new TaskError("Already nudged in the last 24 hours.", "ALREADY_NUDGED");
+    }
+    // Not lastActivityAt: a nudge is not progress, and bumping it would hide the task from
+    // the staleness nudger.
+    await tx.projectTask.update({ where: { id: taskId }, data: { lastNudgedAt: now } });
+    await audit(tx, ctx, {
+      action: "update",
+      entityType: "project_task",
+      entityId: taskId,
+      before: { lastNudgedAt: task.lastNudgedAt },
+      after: { lastNudgedAt: now, nudgedUserId: assignee.id, blockerId: blocker.id },
+    });
+    const channel = (await resolveChannels(tx, [{ userId: assignee.id, kind: "nudge" }])).get(`${assignee.id}:nudge`) ?? "Email";
+    const [actor, tenant] = await Promise.all([
+      tx.user.findUnique({ where: { id: ctx.userId }, select: { name: true } }),
+      tx.tenant.findUnique({ where: { id: ctx.tenantId }, select: { name: true, brandColor: true } }),
+    ]);
+    const blockedDays = Math.max(0, Math.floor((now.getTime() - blocker.createdAt.getTime()) / 86_400_000));
+    const key = task.externalKey ?? task.taskKey ?? "task";
+    const link = `/projects/${task.projectId}?tab=Board&task=${taskId}`;
+    const actorName = actor?.name ?? "Your project manager";
+    await emitDomainEvent(tx, ctx, {
+      type: "task.nudged",
+      entityType: "project_task",
+      entityId: taskId,
+      payload: { projectId: task.projectId, taskId, assigneeId: assignee.id, blockerId: blocker.id, blockedDays, channel },
+      notify: [
+        {
+          userId: assignee.id,
+          kind: "nudge",
+          message: `${actorName} nudged you: ${key} "${task.title}" has been blocked ${blockedDays}d — ${blocker.description}`,
+          link,
+        },
+      ],
+    });
+    // notifyUsers is a createMany (no ids back) — find the row we just made to stamp it.
+    const notification = await tx.notification.findFirst({
+      where: { userId: assignee.id, kind: "nudge", link, emailedAt: null },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    return { task, assignee, blocker, channel, blockedDays, key, link, actorName, tenant, notificationId: notification?.id ?? null };
+  });
+
+  // Outside the transaction (the invites.ts pattern): the mutation is already durable.
+  let emailed = false;
+  if (prepared.channel !== "InApp" && emailEnabled()) {
+    const message = nudgeEmail({
+      tenantName: prepared.tenant?.name ?? "QUBIT",
+      brandColor: prepared.tenant?.brandColor ?? "#231F20",
+      appUrl: appUrl(),
+      recipientFirstName: prepared.assignee.name.split(/\s+/)[0] ?? "",
+      nudgerName: prepared.actorName,
+      projectCode: prepared.task.project.code,
+      projectName: prepared.task.project.name,
+      taskKey: prepared.task.taskKey,
+      taskTitle: prepared.task.title,
+      externalKey: prepared.task.externalKey,
+      externalUrl: prepared.task.externalUrl,
+      blockedDays: prepared.blockedDays,
+      blockerDescription: prepared.blocker.description,
+      taskLink: prepared.link,
+    });
+    const result = await getMailer().send({ to: prepared.assignee.email, ...message });
+    emailed = result.ok;
+    if (emailed && prepared.notificationId) {
+      const notificationId = prepared.notificationId;
+      await withTenant(ctx, (tx) =>
+        tx.notification.updateMany({ where: { id: notificationId }, data: { emailedAt: new Date() } }),
+      );
+    }
+  }
+  return { taskId, assigneeId: prepared.assignee.id, lastNudgedAt: now, channel: prepared.channel, emailed };
 }
 
 /** Unflag: resolve the task's Open linked Blocker(s). Audited. */

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission } from "@/lib/api-guard";
+import { validationError } from "@/server/errors";
 import {
   addProjectMembers,
   BulkAddMembersInput,
@@ -36,9 +37,7 @@ export async function POST(req: Request, { params }: Ctx) {
   const guard = await requirePermission("project:update");
   if ("response" in guard) return guard.response;
   const parsed = BulkAddMembersInput.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json({ error: { code: "VALIDATION", message: "Invalid input." } }, { status: 400 });
-  }
+  if (!parsed.success) return validationError(parsed.error);
   const { id } = await params;
   const result = await addProjectMembers(guard.ctx, id, parsed.data);
   return NextResponse.json({ ok: true, count: result.count });

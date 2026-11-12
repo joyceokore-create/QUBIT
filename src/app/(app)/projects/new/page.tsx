@@ -2,13 +2,12 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { withTenant } from "@/lib/tenant";
 import { getIdeaForPrefill } from "@/server/ideas";
-import { listMarkets } from "@/server/portfolios";
 import { listWorkload } from "@/server/resources";
 import { Forbidden } from "@/components/forbidden";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { ProjectWizard } from "./project-wizard";
 
-// M-P1c (docs/26 §5.3) — the centrepiece wizard. DM1.73: three steps (Basics · Team ·
+// M-P1c (docs/26 §5.3) — the centrepiece wizard. DM1.73: four steps (Basics · Structure · Team ·
 // Review) — docs and integrations moved to the workspace, where they always ended up.
 export default async function NewProjectPage({
   searchParams,
@@ -54,7 +53,8 @@ export default async function NewProjectPage({
         orderBy: { name: "asc" },
       }),
     })),
-    listMarkets(ctx),
+    // docs/38 — every org unit with its kind; the Structure step filters by the chosen label.
+    withTenant(ctx, (tx) => tx.orgUnit.findMany({ select: { id: true, code: true, name: true, flag: true, kind: true }, orderBy: { code: "asc" } })),
     listWorkload(ctx),
   ]);
 
@@ -69,7 +69,7 @@ export default async function NewProjectPage({
             the idea.
           </>
         ) : (
-          "The centrepiece wizard — three steps, one question at a time."
+          "The centrepiece wizard — four steps, one question at a time."
         )}
       </p>
       <ProjectWizard

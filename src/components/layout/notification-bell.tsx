@@ -19,7 +19,7 @@ interface Notif {
   createdAt: string;
 }
 
-export function NotificationBell() {
+export function NotificationBell({ variant = "dark" }: { variant?: "dark" | "light" } = {}) {
   const [items, setItems] = useState<Notif[]>([]);
   const [unread, setUnread] = useState(0);
 
@@ -61,7 +61,11 @@ export function NotificationBell() {
     <DropdownMenu onOpenChange={(o) => o && void load()}>
       <DropdownMenuTrigger
         aria-label="Notifications"
-        className="relative flex size-[34px] flex-none items-center justify-center rounded-full border border-[var(--tbchipbd)] bg-[var(--tbchipbg)] text-[var(--tbink)] transition-colors hover:text-[var(--tbinkS)]"
+        className={
+          variant === "light"
+            ? "relative flex size-[var(--ds-control-h)] flex-none items-center justify-center rounded-[var(--ds-radius-control)] border border-[var(--ds-line)] bg-[var(--ds-card)] text-[var(--ds-ink2)] transition-colors hover:bg-[var(--ds-surface2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-brand)]"
+            : "relative flex size-[34px] flex-none items-center justify-center rounded-full border border-[var(--tbchipbd)] bg-[var(--tbchipbg)] text-[var(--tbink)] transition-colors hover:text-[var(--tbinkS)]"
+        }
       >
         <Bell className="size-4" />
         {unread > 0 && (

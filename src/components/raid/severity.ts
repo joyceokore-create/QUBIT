@@ -8,6 +8,14 @@ export const SEVERITY_CLASSES: Record<SeverityLevel, string> = {
   Critical: "bg-status-red-bg text-status-red",
 };
 
+/** UX fidelity: severity → the shared Chip tone (design chips, sentence case). */
+export const SEVERITY_TONE: Record<SeverityLevel, "ok" | "info" | "warn" | "bad"> = {
+  Low: "ok",
+  Medium: "info",
+  High: "warn",
+  Critical: "bad",
+};
+
 // probability(1-5) x impact(1-5) -> score(1-25) -> bucket. Distinct from the project RAG
 // status colors (same 4 tokens) since heat/severity only render inside the RAID screen.
 export function heatBucket(probability: number, impact: number): SeverityLevel {

@@ -1,4 +1,7 @@
+import { lifecycleStage } from "@/lib/lifecycle";
+import { statusNote as statusNoteRule, moduleLabel as moduleLabelRule } from "@/lib/workspace-schema";
 import { z } from "zod";
+import { projectName } from "@/lib/project-schema";
 import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
@@ -48,20 +51,26 @@ export type CreateProjectInput = z.infer<typeof CreateProjectInput>;
 // name/description and a real project lead (Project.leadUserId), so PMs can maintain
 // projects fully from the UI. Per-person resourcing lives in ProjectMember (resources.ts).
 export const UpdateProjectInput = z.object({
-  name: z.string().min(1).optional(),
+  name: projectName.optional(),
   description: z.string().nullable().optional(),
   status: z.enum(PROJECT_STATUSES).optional(),
   priority: z.enum(PROJECT_PRIORITIES).optional(),
   // docs/18 §7 governance fields — PM/lead via canWriteProject, heads/execs via
   // the project:stage permission (route-enforced).
   pipelineStage: z.enum(PIPELINE_STAGES).optional(),
-  statusNote: z.string().trim().max(200).nullable().optional(),
+  statusNote: statusNoteRule.nullable().optional(),
   // docs/18 §0.5: moving between portfolios is a normal audited edit; never null —
   // every project belongs to a portfolio.
   portfolioId: z.string().uuid().optional(),
   dueDate: z.string().datetime().nullable().optional(),
   budget: z.string().nullable().optional(),
   leadUserId: z.string().uuid().nullable().optional(),
+  // docs/38 — the product's shape (governance rights, like stage / status note).
+  instanceLabel: z.enum(["Market", "Subsidiary", "Instance"]).optional(),
+  moduleTracking: z.enum(["state", "gates"]).optional(),
+  instanceTagging: z.boolean().optional(),
+  pmScope: z.enum(["product", "instance"]).optional(),
+  moduleLabel: moduleLabelRule.optional(),
   ...ProjectDefinitionFields,
 });
 export type UpdateProjectInput = z.infer<typeof UpdateProjectInput>;
@@ -299,6 +308,12 @@ export interface ProjectPanelData {
   programmeName: string | null;
   avgProgress: number;
   subsidiaries: ProjectSubsidiaryDetail[];
+  /** docs/38 — the product's shape. */
+  instanceLabel: string;
+  moduleTracking: string;
+  instanceTagging: boolean;
+  pmScope: string;
+  moduleLabel: string;
 }
 
 export async function getProjectPanelData(
@@ -343,6 +358,11 @@ export async function getProjectPanelData(
       businessOwner: project.businessOwner,
       startDate: project.startDate,
       leadName: project.lead?.name ?? null,
+      instanceLabel: project.instanceLabel,
+      moduleTracking: project.moduleTracking,
+      instanceTagging: project.instanceTagging,
+      pmScope: project.pmScope,
+      moduleLabel: project.moduleLabel,
       portfolioId: project.portfolioId,
       portfolioName: project.portfolio?.name ?? null,
       programmeName: project.programme?.name ?? null,
@@ -561,9 +581,26 @@ export async function updateProject(
       });
     }
 
+    // UX10 (D8b): a change of lifecycle stage restarts the stage clock.
+    // The portfolio's category counts too (a Shelved portfolio makes its projects Inactive).
+    const nextPortfolioId = input.portfolioId ?? before.portfolioId;
+    const cats = await tx.portfolio.findMany({
+      where: { id: { in: [before.portfolioId, nextPortfolioId].filter((x): x is string => !!x) } },
+      select: { id: true, category: true },
+    });
+    const catOf = (id: string | null) => (id ? (cats.find((c) => c.id === id)?.category ?? null) : null);
+    const nextStage = lifecycleStage({
+      status: input.status ?? before.status,
+      pipelineStage: input.pipelineStage ?? before.pipelineStage,
+      priority: input.priority ?? before.priority,
+      portfolioCategory: catOf(nextPortfolioId),
+    });
+    const stageChanged = nextStage !== lifecycleStage({ ...before, portfolioCategory: catOf(before.portfolioId) });
+
     const after = await tx.project.update({
       where: { id: projectId },
       data: {
+        ...(stageChanged ? { stageEnteredAt: new Date() } : {}),
         name: input.name,
         description: input.description === undefined ? undefined : input.description,
         status: input.status,
@@ -574,6 +611,11 @@ export async function updateProject(
         dueDate: input.dueDate === undefined ? undefined : input.dueDate ? new Date(input.dueDate) : null,
         budget: input.budget === undefined ? undefined : input.budget,
         leadUserId: input.leadUserId === undefined ? undefined : input.leadUserId,
+        instanceLabel: input.instanceLabel,
+        moduleTracking: input.moduleTracking,
+        instanceTagging: input.instanceTagging,
+        pmScope: input.pmScope,
+        moduleLabel: input.moduleLabel,
         client: input.client === undefined ? undefined : input.client,
         objective: input.objective === undefined ? undefined : input.objective,
         mission: input.mission === undefined ? undefined : input.mission,
@@ -597,6 +639,11 @@ export async function updateProject(
         dueDate: before.dueDate,
         budget: before.budget,
         leadUserId: before.leadUserId,
+        instanceLabel: before.instanceLabel,
+        moduleTracking: before.moduleTracking,
+        instanceTagging: before.instanceTagging,
+        pmScope: before.pmScope,
+        moduleLabel: before.moduleLabel,
       },
       after: {
         name: after.name,
@@ -608,6 +655,11 @@ export async function updateProject(
         dueDate: after.dueDate,
         budget: after.budget,
         leadUserId: after.leadUserId,
+        instanceLabel: after.instanceLabel,
+        moduleTracking: after.moduleTracking,
+        instanceTagging: after.instanceTagging,
+        pmScope: after.pmScope,
+        moduleLabel: after.moduleLabel,
       },
     });
 

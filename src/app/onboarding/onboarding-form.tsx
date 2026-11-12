@@ -1,5 +1,7 @@
 "use client";
 
+import { PasswordChecklist } from "@/components/auth/password-checklist";
+
 import { useState, type FormEvent } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -7,6 +9,12 @@ import { SessionProvider, useSession } from "next-auth/react";
 import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Field } from "@/components/ui/drawer";
+import { Banner } from "@/components/ui/panel";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { readApiError } from "@/lib/form-errors";
+import { SetPasswordFormSchema } from "@/lib/password-schema";
+import { MfaCodeFormSchema } from "@/lib/mfa-schema";
 
 /**
  * Guided first-login (docs/23 §6.2): password → MFA → confirm role → land.
@@ -39,8 +47,8 @@ export function OnboardingForm(props: { viewer: OnboardingViewer; needsPassword:
 
 function StepDots({ current }: { current: Step }) {
   const steps: { key: Step; label: string }[] = [
-    { key: "password", label: "Password" },
-    { key: "mfa", label: "Two-factor" },
+    { key: "password", label: "New Password" },
+    { key: "mfa", label: "Authenticator" },
     { key: "confirm", label: "Confirm" },
   ];
   const index = steps.findIndex((s) => s.key === current);
@@ -79,13 +87,14 @@ function OnboardingFormInner({ viewer, needsPassword }: { viewer: OnboardingView
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
   const [enrolled, setEnrolled] = useState(viewer.mfaEnrolled);
 
+  // docs/08 § Errors: problems show on their field; buttons stay enabled while not sending.
+  const pw = useFieldErrors({ schema: SetPasswordFormSchema, values: { password, confirm }, idPrefix: "ob" });
+  const mfa = useFieldErrors({ schema: MfaCodeFormSchema, values: { token: code }, idPrefix: "ob" });
+
   async function submitPassword(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (password !== confirm) {
-      setError("Passwords don’t match.");
-      return;
-    }
+    if (!pw.validate(["password", "confirm"])) return;
     setBusy(true);
     const res = await fetch("/api/onboarding/complete", {
       method: "POST",
@@ -94,7 +103,14 @@ function OnboardingFormInner({ viewer, needsPassword }: { viewer: OnboardingView
     });
     setBusy(false);
     if (!res.ok) {
-      setError((await res.json().catch(() => null))?.error?.message ?? "Could not set your password.");
+      const { message, fields } = readApiError(await res.json().catch(() => null), "Could not set your password.");
+      const { _: root, ...onFields } = fields;
+      if (Object.keys(onFields).length > 0) {
+        pw.setServerErrors(onFields, ["password", "confirm"]);
+        if (root) setError(root);
+      } else {
+        setError(message);
+      }
       return;
     }
     setStep("mfa");
@@ -116,6 +132,7 @@ function OnboardingFormInner({ viewer, needsPassword }: { viewer: OnboardingView
   async function confirmCode(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!mfa.validate(["token"])) return;
     setBusy(true);
     const res = await fetch("/api/auth/mfa/verify", {
       method: "POST",
@@ -124,7 +141,14 @@ function OnboardingFormInner({ viewer, needsPassword }: { viewer: OnboardingView
     });
     setBusy(false);
     if (!res.ok) {
-      setError((await res.json().catch(() => null))?.error?.message ?? "Incorrect authentication code.");
+      const { message, fields } = readApiError(await res.json().catch(() => null), "Incorrect authentication code.");
+      const { _: root, ...onFields } = fields;
+      if (Object.keys(onFields).length > 0) {
+        mfa.setServerErrors(onFields, ["token"]);
+        if (root) setError(root);
+      } else {
+        setError(message);
+      }
       return;
     }
     setRecoveryCodes((await res.json()).recoveryCodes ?? []);
@@ -152,17 +176,17 @@ function OnboardingFormInner({ viewer, needsPassword }: { viewer: OnboardingView
 
       {step === "password" && (
         <form onSubmit={submitPassword} className="mt-5 flex flex-col gap-3" noValidate>
+          {error && <Banner tone="bad">{error}</Banner>}
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="ob-pw" className="text-[12.5px] font-medium text-[var(--ink2)]">New password</label>
-            <Input id="ob-pw" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
-            <p className="text-[11px] text-[var(--ink4)]">At least 8 characters; don’t reuse a recent password.</p>
+            <Field label="New Password" htmlFor={pw.idOf("password")} error={pw.errors.password}>
+              <Input {...pw.bind("password")} type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
+            </Field>
+            <PasswordChecklist password={password} />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="ob-confirm" className="text-[12.5px] font-medium text-[var(--ink2)]">Confirm password</label>
-            <Input id="ob-confirm" type="password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-          </div>
-          {error && <p role="alert" className="text-[12.5px] text-status-red">{error}</p>}
-          <Button type="submit" disabled={busy} className="mt-1">{busy ? "Saving…" : "Continue"}</Button>
+          <Field label="Confirm Password" htmlFor={pw.idOf("confirm")} error={pw.errors.confirm}>
+            <Input {...pw.bind("confirm")} type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          </Field>
+          <Button type="submit" disabled={busy} className="mt-1">{busy ? "Saving…" : "Next: Connect Authenticator"}</Button>
         </form>
       )}
 
@@ -196,23 +220,26 @@ function OnboardingFormInner({ viewer, needsPassword }: { viewer: OnboardingView
               <Button type="button" onClick={() => setStep("confirm")}>Continue</Button>
             </>
           ) : qrDataUrl ? (
-            <form onSubmit={confirmCode} className="flex flex-col gap-3">
+            <form onSubmit={confirmCode} className="flex flex-col gap-3" noValidate>
+              {error && <Banner tone="bad">{error}</Banner>}
               <p className="text-[12.5px] leading-relaxed text-[var(--ink3)]">
                 Scan this with your authenticator app, then enter the 6-digit code it shows.
               </p>
               <Image src={qrDataUrl} alt="Two-factor QR code" width={180} height={180} className="self-center rounded-[10px] bg-white p-2" unoptimized />
-              <Input
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                placeholder="123456"
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                className="text-center font-mono tracking-[4px]"
-                autoFocus
-              />
-              {error && <p role="alert" className="text-[12.5px] text-status-red">{error}</p>}
-              <Button type="submit" disabled={busy || code.length !== 6}>{busy ? "Checking…" : "Confirm code"}</Button>
+              <Field label="Authenticator Code" htmlFor={mfa.idOf("token")} error={mfa.errors.token}>
+                <Input
+                  {...mfa.bind("token")}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  placeholder="123456"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                  className="text-center font-mono tracking-[4px]"
+                  autoFocus
+                />
+              </Field>
+              <Button type="submit" disabled={busy}>{busy ? "Checking…" : "Confirm Code"}</Button>
             </form>
           ) : (
             <>
@@ -222,7 +249,7 @@ function OnboardingFormInner({ viewer, needsPassword }: { viewer: OnboardingView
                   ? "Your role can see and change things across the whole organisation, so a second factor is required."
                   : "A second factor keeps your account safe even if your password leaks. You can add it later from Settings."}
               </p>
-              {error && <p role="alert" className="text-[12.5px] text-status-red">{error}</p>}
+              {error && <Banner tone="bad">{error}</Banner>}
               <Button type="button" onClick={() => void startEnrolment()} disabled={busy}>
                 {busy ? "Starting…" : "Set up two-factor"}
               </Button>
@@ -260,7 +287,7 @@ function OnboardingFormInner({ viewer, needsPassword }: { viewer: OnboardingView
               )}
             </p>
           </div>
-          {error && <p role="alert" className="text-[12.5px] text-status-red">{error}</p>}
+          {error && <Banner tone="bad">{error}</Banner>}
           <Button type="button" onClick={() => void finish()} disabled={busy}>
             {busy ? "Finishing…" : "Go to my dashboard"}
           </Button>

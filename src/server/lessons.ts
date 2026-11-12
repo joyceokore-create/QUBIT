@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { lessonTitle } from "@/lib/workspace-schema";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 
@@ -48,7 +49,7 @@ export async function listLessons(ctx: TenantContext, projectId: string): Promis
 }
 
 export const AddLessonInput = z.object({
-  title: z.string().trim().min(3, "Say what the lesson is.").max(200),
+  title: lessonTitle,
   detail: z.string().trim().max(1000).nullable().optional(),
   category: z.enum(LESSON_CATEGORIES),
 });

@@ -1,23 +1,11 @@
-import type { CockpitData, CockpitProject, GateKey } from "@/server/dashboard-cockpit";
-import { GATE_KEYS, GATE_LABELS } from "@/server/dashboard-cockpit";
+import type { CockpitData, CockpitProject } from "@/server/dashboard-cockpit";
+import { GATE_KEYS, GATE_LABELS, stageOf } from "@/server/dashboard-cockpit";
 import { briefLines } from "./ask-q-brief";
 import { HeadV3, type HeadV3Props, type HeadRow } from "./head-v3";
 
-// Server wrapper for the Head of PMs view — maps real tenant data into the approved
+// Server wrapper for the Head view — maps real tenant data into the approved
 // artifact's shape (head-v3.tsx renders its exact markup).
 
-const STAGE_OF: Record<GateKey, { phase: string; stage: string }> = {
-  brd: { phase: "Planning", stage: "BRD" },
-  proto: { phase: "Planning", stage: "Prototype" },
-  mvp1: { phase: "Execution", stage: "Build / MVP1" },
-  sit: { phase: "Execution", stage: "SIT" },
-  uat: { phase: "Execution", stage: "UAT" },
-  golive: { phase: "Transition", stage: "Go-Live" },
-};
-function stageOf(p: CockpitProject): { phase: string; stage: string } {
-  for (const k of GATE_KEYS) if (p.gates[k] !== "done") return STAGE_OF[k];
-  return { phase: "Closure", stage: "Production" };
-}
 const fmt = (d: Date | string | null) =>
   d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" }) : "—";
 const initialsOf = (name: string | null) =>
@@ -30,7 +18,7 @@ const CATEGORY_BUCKETS: { key: string; label: string; color: string }[] = [
   { key: "Unfiled", label: "Unfiled", color: "teal" },
 ];
 
-export function HeadCockpit({ data }: { data: CockpitData }) {
+export function HeadCockpit({ data, brief }: { data: CockpitData; brief?: React.ReactNode }) {
   const now = data.generatedAt;
   const active = data.projects.filter((p) => !["Completed", "Cancelled"].includes(p.status));
   const approved = active.filter((p) => p.category === "Approved");
@@ -102,6 +90,7 @@ export function HeadCockpit({ data }: { data: CockpitData }) {
 
   return (
     <HeadV3
+      brief={brief}
       briefLines={briefLines("head", data, "")}
       generatedAt={now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
       gateLabels={GATE_KEYS.map((k) => GATE_LABELS[k])}

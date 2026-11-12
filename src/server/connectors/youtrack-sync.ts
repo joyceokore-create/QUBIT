@@ -149,7 +149,9 @@ export function changedFields(before: OwnedValues, after: OwnedValues): string[]
   });
 }
 
-/** Read the integration config and decrypt the token. Throws SyncError, never leaks it. */
+/** Read the integration config and decrypt the token. Throws SyncError, never leaks it.
+ *  Prefers the TENANT credential (Configs › Integrations — one instance, one token) and
+ *  falls back to the legacy per-project token so existing connections keep syncing. */
 async function loadConnection(ctx: SyncContext, projectId: string) {
   return withTenant(ctx, async (tx) => {
     const project = await tx.project.findUnique({ where: { id: projectId }, select: { id: true, code: true } });
@@ -160,14 +162,43 @@ async function loadConnection(ctx: SyncContext, projectId: string) {
     });
     if (!row?.connected) throw new SyncError("YouTrack is not connected on this project.", "NOT_CONNECTED");
     if (!row.resource) throw new SyncError("Set the YouTrack project short name first.", "BAD_CONFIG");
-    if (!row.secret) throw new SyncError("Add a YouTrack token first.", "BAD_CONFIG");
-    const config = parseConfig(row.config);
-    if (!config) throw new SyncError("Set the YouTrack instance URL first.", "BAD_CONFIG");
+
+    const perProject = parseConfig(row.config);
+    const tenant = await tx.tenantIntegration.findUnique({
+      where: { tenantId_provider: { tenantId: ctx.tenantId, provider: SOURCE_SYSTEM } },
+      select: { baseUrl: true, secret: true, config: true },
+    });
+
     let token: string;
-    try {
-      token = decryptSecret(row.secret);
-    } catch {
-      throw new SyncError("Stored YouTrack token could not be read — re-enter it.", "BAD_CONFIG");
+    let config: YoutrackConfig;
+    if (tenant) {
+      // Tenant credential wins; its state map layers over the per-project field map.
+      try {
+        token = decryptSecret(tenant.secret);
+      } catch {
+        throw new SyncError("Stored YouTrack token could not be read — replace it in Configs › Integrations.", "BAD_CONFIG");
+      }
+      const tcfg = tenant.config && typeof tenant.config === "object" ? (tenant.config as Record<string, unknown>) : {};
+      const rawState = tcfg.stateMap && typeof tcfg.stateMap === "object" ? (tcfg.stateMap as Record<string, unknown>) : {};
+      const tenantState = Object.fromEntries(
+        Object.entries(rawState)
+          .filter((e): e is [string, string] => typeof e[1] === "string")
+          .map(([k, v]) => [k.toLowerCase(), v]),
+      );
+      config = {
+        baseUrl: tenant.baseUrl,
+        fieldMap: { ...perProject?.fieldMap, state: { ...perProject?.fieldMap?.state, ...tenantState } },
+      };
+    } else {
+      // Legacy: per-project token + instance URL.
+      if (!row.secret) throw new SyncError("Add a YouTrack token first.", "BAD_CONFIG");
+      if (!perProject) throw new SyncError("Set the YouTrack instance URL first.", "BAD_CONFIG");
+      try {
+        token = decryptSecret(row.secret);
+      } catch {
+        throw new SyncError("Stored YouTrack token could not be read — re-enter it.", "BAD_CONFIG");
+      }
+      config = perProject;
     }
     return { project, resource: row.resource, token, config, lastSyncAt: row.lastSyncAt };
   });

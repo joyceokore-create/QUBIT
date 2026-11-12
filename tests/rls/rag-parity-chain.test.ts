@@ -3,6 +3,8 @@
 // pins the surfaces a PM's override actually travels through:
 //
 //   pipeline rows (the estate: dashboard + /projects + portfolio pages)
+//   === the Delivery Cockpit's "reported" RAG (UX1 — the September cockpit had grown its
+//       own classification from the typed status; this pins it back to the chain)
 //   === the Head's roll-up rows
 //   === the roll-up CSV export
 //
@@ -13,7 +15,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { withTenant, type TenantContext } from "@/lib/tenant";
-import { confirmCheckIn, submitCheckInToHead } from "@/server/checkins";
+import { confirmCheckIn } from "@/server/checkins";
+import { getCockpitData } from "@/server/dashboard-cockpit";
 import { getPortfolioSections } from "@/server/pipeline";
 import { approveRollup, buildRollup, getRollupWeek } from "@/server/portfolio-reports";
 import { rollupCsv } from "@/lib/report-csv";
@@ -89,16 +92,21 @@ describe("RAG parity across the reporting chain", () => {
     const sections = await getPortfolioSections(headCtx, NOW);
     expect(ragFromSections(sections, "PAR1")).toBe("Red");
 
+    // 1b. The Delivery Cockpit (every home dashboard's data) reads the same confirmed week.
+    const cockpit = await getCockpitData(headCtx, NOW);
+    const cp = cockpit.projects.find((p) => p.code === "PAR1")!;
+    expect(cp.reported).toBe("R");
+    expect(cp.reportedConfirmed).toBe(true);
+
     // 2. The Head's roll-up.
     const draft = await buildRollup(headCtx, NOW);
     const row = draft.rows.find((r) => r.code === "PAR1")!;
     expect(row.rag).toBe("Red");
 
-    // 3. The CSV the Head hands to an executive. Sending first is not ceremony: since
-    // DM1.73 (T7) approveRollup REFUSES a roll-up holding never-sent check-ins, which is
-    // exactly the guarantee that used to be missing — walking the real chain here proves
-    // it still holds.
-    await submitCheckInToHead(headCtx, projectId, NOW);
+    // 3. The CSV the Head hands to an executive. DM1.73 (T7) approveRollup REFUSES a
+    // roll-up holding never-sent check-ins; since Milestone A confirmCheckIn sends in the
+    // same transaction, so walking the real chain satisfies that guard by itself
+    // (portfolio-rollup.test still covers the guard with a legacy unsent row).
     await buildRollup(headCtx, NOW);
     await approveRollup(headCtx, "Week carried one red project.", NOW);
     const signed = await getRollupWeek(headCtx, WEEK);
@@ -117,5 +125,7 @@ describe("RAG parity across the reporting chain", () => {
     const estate = ragFromSections(sections, "PAR1");
     const rollup = (await getRollupWeek(headCtx, WEEK))!.rows.find((r) => r.code === "PAR1")!.rag;
     expect(estate).toBe(rollup);
+    const cockpit = (await getCockpitData(headCtx, NOW)).projects.find((p) => p.code === "PAR1")!.reported;
+    expect(cockpit).toBe({ Green: "G", Amber: "A", Red: "R" }[estate as "Green" | "Amber" | "Red"]);
   });
 });

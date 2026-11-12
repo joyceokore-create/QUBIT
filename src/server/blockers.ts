@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { blockerDescription } from "@/lib/workspace-schema";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { emitDomainEvent } from "@/server/events";
@@ -38,7 +39,7 @@ export interface BlockerRow {
 }
 
 export const CreateBlockerInput = z.object({
-  description: z.string().min(1),
+  description: blockerDescription,
   severity: z.enum(BLOCKER_SEVERITIES).optional(),
   ownerId: z.string().uuid().nullable().optional(),
 });

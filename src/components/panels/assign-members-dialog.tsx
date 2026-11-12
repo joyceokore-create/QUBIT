@@ -6,8 +6,11 @@ import { Plus } from "lucide-react";
 import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
 import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { Button } from "@/components/ui/button";
-import { DialogTrigger } from "@/components/ui/dialog";
+import { DialogTrigger } from "@/components/ui/drawer-dialog";
 import { Input } from "@/components/ui/input";
+import { FieldError } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { AssignMembersFormSchema } from "@/lib/assign-members-schema";
 import { assignmentWarnings } from "@/lib/capacity";
 import { PROJECT_ROLES } from "@/lib/roles";
 
@@ -49,30 +52,61 @@ export function AssignMembersDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [bench, setBench] = useState<BenchRow[]>([]);
+  // Oct 2026 — the list's states are told apart: loading, failed (with the server's reason
+  // and a retry), nobody active yet, everyone already assigned. "Everyone is already on
+  // this project" used to be the message for a failed request too.
+  const [benchState, setBenchState] = useState<"loading" | "ready" | "error">("loading");
+  const [benchError, setBenchError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [role, setRole] = useState<string>("Developer");
+  // Projects are run by their project managers — the PM hat is the default.
+  const [role, setRole] = useState<string>("Project Manager");
   const [alloc, setAlloc] = useState(50);
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   // DM1.73 (Wave D) — sparse per-person overrides on top of the shared defaults.
   const [overrides, setOverrides] = useState<Record<string, RowOverride>>({});
   const { busy, error, setError, mutate } = useAdminMutation();
+  // docs/08 § Errors: "pick at least one person" sits under the list (the group), and the default
+  // window's end date shows its own problem; Assign stays enabled.
+  const fe = useFieldErrors({ schema: AssignMembersFormSchema, values: { members: [...picked], start, end }, idPrefix: "assign" });
 
   useEffect(() => {
     if (!open) return;
     const qs = new URLSearchParams();
     if (start) qs.set("start", new Date(start).toISOString());
     if (end) qs.set("end", new Date(end).toISOString());
+    let live = true;
+    setBenchState("loading");
+    setBenchError(null);
     fetch(`/api/staffing/bench?${qs}`)
-      .then((r) => r.json())
-      .then((d) => setBench((d.data ?? []) as BenchRow[]))
-      .catch(() => setBench([]));
-  }, [open, start, end]);
+      .then(async (r) => {
+        const d = await r.json().catch(() => null);
+        if (!live) return;
+        if (!r.ok) throw new Error(d?.error?.message ?? `Could not load people (HTTP ${r.status}).`);
+        setBench((d?.data ?? []) as BenchRow[]);
+        setBenchState("ready");
+      })
+      .catch((e: unknown) => {
+        if (!live) return;
+        setBench([]);
+        setBenchError(e instanceof Error ? e.message : "Could not load people.");
+        setBenchState("error");
+      });
+    return () => {
+      live = false;
+    };
+  }, [open, start, end, reloadKey]);
 
   const candidates = useMemo(
     () => bench.filter((b) => !existingUserIds.includes(b.userId)),
     [bench, existingUserIds],
   );
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q ? candidates.filter((c) => c.name.toLowerCase().includes(q)) : candidates;
+  }, [candidates, query]);
 
   /** Effective values for one person: their overrides, falling back to the defaults. */
   const rowValues = (userId: string) => {
@@ -103,10 +137,8 @@ export function AssignMembersDialog({
   const selected = useMemo(() => candidates.filter((c) => picked.has(c.userId)), [candidates, picked]);
 
   async function submit() {
-    if (picked.size === 0) {
-      setError("Pick at least one person.");
-      return;
-    }
+    setError(null);
+    if (!fe.validate(["members", "start", "end"])) return;
     await mutate(
       `/api/projects/${projectId}/members`,
       "POST",
@@ -126,8 +158,17 @@ export function AssignMembersDialog({
         acceptedWarnings: warnings,
       },
       {
-        fallback: "Could not assign.",
+        fallback: "Could not assign the people.",
+        onFieldErrors: (fields) => {
+          // Anything the server names that isn't on this form's fields (e.g. one row's allocation)
+          // goes in the banner at the top.
+          const { members, end: endErr, start: startErr, ...rest } = fields;
+          fe.setServerErrors({ ...(members ? { members } : {}), ...(endErr ? { end: endErr } : {}), ...(startErr ? { start: startErr } : {}) }, ["members", "start", "end"]);
+          const other = Object.values(rest)[0];
+          if (other) setError(other);
+        },
         onSuccess: () => {
+          fe.reset();
           setOpen(false);
           setPicked(new Set());
           setOverrides({});
@@ -142,27 +183,57 @@ export function AssignMembersDialog({
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
-        if (!o) setError(null);
+        if (!o) {
+          setError(null);
+          fe.reset();
+        }
       }}
-      title="Add to team"
+      title="Add to Team"
       description="An assignment is person + role hat + allocation + dates — never a bare membership row."
       error={error}
       busy={busy}
-      submitLabel={picked.size > 1 ? `Assign ${picked.size} people` : "Assign"}
+      submitLabel={picked.size > 1 ? `Assign ${picked.size} People` : "Assign"}
       onSubmit={submit}
       className="sm:max-w-[640px]"
       trigger={
-        <DialogTrigger render={<Button size="sm" />}>
-          <Plus /> Add member
+        <DialogTrigger render={<Button size="sm" data-tour="add-member" />}>
+          <Plus /> Add Member
         </DialogTrigger>
       }
     >
       <div className="flex max-h-[62vh] flex-col gap-3 overflow-y-auto pr-0.5">
-        <div className="max-h-[180px] flex-none overflow-auto rounded-[10px] border border-[var(--w08)]">
-          {candidates.length === 0 ? (
+        {bench.length > 6 && (
+          <Input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a person…" aria-label="Find a person" className="h-8" />
+        )}
+        <div
+          {...fe.bindGroup("members")}
+          aria-label="People"
+          // data-invalid (from bindGroup), not aria-invalid: the old aria-invalid: class never matched.
+          className="max-h-[180px] flex-none overflow-auto rounded-[10px] border border-[var(--w08)] outline-none data-[invalid]:border-[var(--ds-bad)]"
+        >
+          {benchState === "loading" ? (
+            <p className="p-3 text-[12px] text-[var(--ink4)]">Loading people…</p>
+          ) : benchState === "error" ? (
+            <p role="alert" className="flex flex-wrap items-center gap-2 p-3 text-[12px] text-[var(--bad)]">
+              {benchError}
+              <button type="button" onClick={() => setReloadKey((k) => k + 1)} className="rounded-[6px] border border-[var(--w07)] px-2 py-0.5 text-[11px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)]">
+                Retry
+              </button>
+            </p>
+          ) : bench.length === 0 ? (
+            <p className="p-3 text-[12px] text-[var(--ink4)]">
+              No active people to add yet —{" "}
+              <Link href="/admin/users" className="font-semibold text-[var(--ink3)] underline-offset-2 hover:underline">
+                invite them under Admin → Users
+              </Link>
+              .
+            </p>
+          ) : candidates.length === 0 ? (
             <p className="p-3 text-[12px] text-[var(--ink4)]">Everyone is already on this project.</p>
+          ) : shown.length === 0 ? (
+            <p className="p-3 text-[12px] text-[var(--ink4)]">Nobody matches “{query}”.</p>
           ) : (
-            candidates.map((c) => {
+            shown.map((c) => {
               const on = picked.has(c.userId);
               return (
                 <button
@@ -199,6 +270,7 @@ export function AssignMembersDialog({
             })
           )}
         </div>
+        {fe.errors.members && <FieldError id={`${fe.idOf("members")}-error`}>{fe.errors.members}</FieldError>}
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
@@ -220,13 +292,15 @@ export function AssignMembersDialog({
               className="mt-1.5"
             />
           </div>
-          <div>
-            <span className={LABEL}>Default start</span>
-            <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="mt-1.5" />
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor={fe.idOf("start")} className={LABEL}>Default start</label>
+            <Input {...fe.bind("start")} type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+            {fe.errors.start && <FieldError id={`${fe.idOf("start")}-error`}>{fe.errors.start}</FieldError>}
           </div>
-          <div>
-            <span className={LABEL}>Default end</span>
-            <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="mt-1.5" />
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor={fe.idOf("end")} className={LABEL}>Default end</label>
+            <Input {...fe.bind("end")} type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+            {fe.errors.end && <FieldError id={`${fe.idOf("end")}-error`}>{fe.errors.end}</FieldError>}
           </div>
         </div>
 

@@ -137,7 +137,7 @@ export function QDrawer({ canReports = false }: { canReports?: boolean }) {
         style={{ boxShadow: "0 24px 80px rgba(0,0,0,.35)" }}
       >
         {/* Header */}
-        <div className="relative flex items-center gap-2.5 border-b border-[var(--hair)] p-[16px_20px]">
+        <div className="relative flex items-center gap-2.5 p-[16px_20px]">
           <div aria-hidden className="pointer-events-none absolute inset-0" style={{ background: "radial-gradient(500px 160px at 8% -60%, color-mix(in oklab, var(--brand) 16%, transparent), transparent 65%)" }} />
           <span className="relative flex size-7 items-center justify-center">
             <QubitLogo square={8} gap={2} radius={2} color="var(--brand)" />
@@ -282,7 +282,7 @@ export function QDrawer({ canReports = false }: { canReports?: boolean }) {
               e.preventDefault();
               void sendChat(chatInput);
             }}
-            className="flex items-center gap-2 border-t border-[var(--hair)] p-3"
+            className="flex items-center gap-2 p-3"
           >
             {(view === "chat" || view === "report") && (
               <button

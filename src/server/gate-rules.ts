@@ -31,7 +31,7 @@ export interface GateEvaluation {
 }
 
 /** Facts every rule reads. Gathered once so a gate check is a single round trip. */
-interface GateFacts {
+export interface GateFacts {
   hasLead: boolean;
   memberCount: number;
   publishedTasks: number;
@@ -128,7 +128,7 @@ const RULES: { match: (name: string) => boolean; build: (f: GateFacts) => GateRu
   },
 ];
 
-async function gatherFacts(tx: Prisma.TransactionClient, projectId: string): Promise<GateFacts> {
+export async function gatherFacts(tx: Prisma.TransactionClient, projectId: string): Promise<GateFacts> {
   const [project, memberCount, publishedTasks, milestones, openCriticalBugs, documents, lessons, requirements] = await Promise.all([
     tx.project.findUnique({ where: { id: projectId }, select: { leadUserId: true } }),
     tx.projectMember.count({ where: { projectId } }),

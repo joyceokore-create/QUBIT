@@ -1,5 +1,7 @@
 "use client";
 
+import { dispatchTourEvent } from "@/components/tour/tour-events";
+
 import { useCallback, useEffect, useState } from "react";
 import { Check, Download, FileText, MessageSquare, Plus, Sparkles, Trash2 } from "lucide-react";
 import { ConversationDrawer } from "@/components/conversation/conversation-drawer";
@@ -9,6 +11,19 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Markdown } from "@/components/q/markdown";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { Field } from "@/components/ui/drawer";
+import { COMPACT, FIELD_INVALID, PRIMARY } from "@/lib/surface";
+import { readApiError } from "@/lib/form-errors";
+import { DocumentFormSchema } from "@/lib/workspace-schema";
+
+// Uploaded files kept as base64 (PDF since M8; the weekly status report arrives as Word/Excel too).
+const FILE_MIME: Record<string, string> = {
+  pdf: "application/pdf",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+};
 
 interface Approval {
   approverId: string;
@@ -136,7 +151,7 @@ export function DocumentsSection({
             <Button type="button" variant="outline" onClick={draftBrd} disabled={drafting}>
               <Sparkles className="size-4" /> {drafting ? "Drafting…" : "Draft BRD with Q"}
             </Button>
-            <Button type="button" onClick={() => setAddOpen(true)}>
+            <Button data-tour="add-document" type="button" onClick={() => setAddOpen(true)}>
               <Plus className="size-4" /> Add document
             </Button>
           </div>
@@ -179,21 +194,21 @@ export function DocumentsSection({
             {/* I am a named approver on a document in review — my decision, my act. */}
             {d.status === "InReview" && d.approvals.some((a) => a.approverId === viewerId && a.decision === "Pending") && (
               <>
-                <button type="button" onClick={() => decide(d.id, "Approved")} className="flex flex-none items-center gap-1 rounded-full border border-[var(--w10)] px-2.5 py-1 text-[10.5px] font-semibold text-ink-3 hover:border-[var(--ok)] hover:text-[var(--ok)]">
+                <button type="button" onClick={() => decide(d.id, "Approved")} className={`${COMPACT} flex-none`}>
                   <Check className="size-3.5" /> Approve
                 </button>
-                <button type="button" onClick={() => decide(d.id, "Rejected")} className="flex-none rounded-full border border-[var(--w10)] px-2.5 py-1 text-[10.5px] font-semibold text-ink-3 hover:border-[var(--bad)] hover:text-[var(--bad)]">
+                <button type="button" onClick={() => decide(d.id, "Rejected")} className={`${COMPACT} flex-none`}>
                   Send back
                 </button>
               </>
             )}
             {canEdit && (d.status === "Draft" || d.status === "Rejected") && members.length > 0 && (
-              <button type="button" onClick={() => setSubmitFor(submitFor === d.id ? null : d.id)} className="flex-none rounded-full border border-[var(--w10)] px-2.5 py-1 text-[10.5px] font-semibold text-ink-3 hover:border-[var(--brand)] hover:text-brand">
+              <button type="button" onClick={() => setSubmitFor(submitFor === d.id ? null : d.id)} className={`${COMPACT} flex-none`}>
                 Submit for review
               </button>
             )}
             {canEdit && d.status === "Approved" && !d.superseded && (
-              <button type="button" onClick={() => void raiseVersion(d.id)} title="Raise the next version" className="flex-none rounded-full border border-[var(--w10)] px-2.5 py-1 text-[10.5px] font-semibold text-ink-3 hover:border-[var(--brand)] hover:text-brand">
+              <button type="button" onClick={() => void raiseVersion(d.id)} title="Raise the next version" className={`${COMPACT} flex-none`}>
                 New version
               </button>
             )}
@@ -224,7 +239,7 @@ export function DocumentsSection({
                     void submit(d.id, [m.id]);
                     setSubmitFor(null);
                   }}
-                  className="rounded-full border border-[var(--w10)] px-2.5 py-1 text-[10.5px] font-semibold text-ink-3 hover:border-[var(--brand)] hover:text-brand"
+                  className={COMPACT}
                 >
                   {m.name}
                 </button>
@@ -248,7 +263,7 @@ export function DocumentsSection({
         )}
       </div>
 
-      {addOpen && <AddDialog projectId={projectId} onClose={() => setAddOpen(false)} onAdded={() => { setAddOpen(false); void load(); }} />}
+      {addOpen && <AddDialog projectId={projectId} onClose={() => setAddOpen(false)} onAdded={() => { setAddOpen(false); dispatchTourEvent("document-added"); void load(); }} />}
       {view && <ViewDialog doc={view} onClose={() => setView(null)} />}
     </div>
   );
@@ -262,6 +277,8 @@ function AddDialog({ projectId, onClose, onAdded }: { projectId: string; onClose
   const [fileName, setFileName] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // docs/08 § Errors: problems show on their field; Save stays enabled except while sending.
+  const fe = useFieldErrors({ schema: DocumentFormSchema, values: { title, content, fileData }, idPrefix: "add-doc" });
 
   async function onFile(file: File | undefined) {
     if (!file) return;
@@ -275,10 +292,7 @@ function AddDialog({ projectId, onClose, onAdded }: { projectId: string; onClose
 
   async function save() {
     setError(null);
-    if (!title.trim() || (!content.trim() && !fileData)) {
-      setError("Give it a title and either text or a PDF.");
-      return;
-    }
+    if (!fe.validate()) return;
     setSaving(true);
     const res = await fetch(`/api/projects/${projectId}/documents`, {
       method: "POST",
@@ -292,8 +306,16 @@ function AddDialog({ projectId, onClose, onAdded }: { projectId: string; onClose
       }),
     });
     setSaving(false);
-    if (res.ok) onAdded();
-    else setError((await res.json().catch(() => null))?.error?.message ?? "Could not save.");
+    if (res.ok) {
+      onAdded();
+      return;
+    }
+    const { message, fields } = readApiError(await res.json().catch(() => null), "Could not save.");
+    const { _: root, ...onFields } = fields;
+    if (Object.keys(onFields).length > 0) {
+      fe.setServerErrors(onFields, ["title", "content"]);
+      if (root) setError(root);
+    } else setError(message);
   }
 
   return (
@@ -304,28 +326,35 @@ function AddDialog({ projectId, onClose, onAdded }: { projectId: string; onClose
           <DialogDescription>Paste the text (recommended — Q can read it) or attach a PDF.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
-          <div className="flex gap-2">
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title, e.g. Field Sales BRD" className="flex-1" />
+          <div className="flex items-start gap-2">
+            <div className="flex-1">
+              <Field label={<span className="sr-only">Title</span>} htmlFor={fe.idOf("title")} error={fe.errors.title}>
+                <Input {...fe.bind("title")} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title, e.g. Field Sales BRD" />
+              </Field>
+            </div>
             <Select value={kind} onValueChange={(v) => v && setKind(v)}>
               <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
               <SelectContent>{KINDS.map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            rows={8}
-            placeholder="Paste document text / markdown here…"
-            className="rounded-[10px] border border-ink-4 bg-background p-3 text-xs text-foreground outline-none focus:border-brand"
-          />
+          <Field label={<span className="sr-only">Document text</span>} htmlFor={fe.idOf("content")} error={fe.errors.content}>
+            <textarea
+              {...fe.bind("content")}
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              rows={8}
+              placeholder="Paste document text / markdown here…"
+              className={`rounded-[10px] border border-ink-4 bg-background p-3 text-xs text-foreground outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none ${FIELD_INVALID}`}
+            />
+          </Field>
           <label className="flex cursor-pointer items-center gap-2 text-xs text-ink-3">
             <input type="file" accept="application/pdf" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
             <span className="rounded-[8px] border border-dashed border-ink-4 px-3 py-1.5 hover:border-brand hover:text-brand">
               {fileName ? `📄 ${fileName}` : "Attach a PDF instead (optional)"}
             </span>
           </label>
-          {error && <p className="text-xs text-status-red">{error}</p>}
-          <div className="flex justify-end">
+          <div className="flex items-center justify-end gap-3">
+            {error && <p role="alert" className="text-xs text-status-red">{error}</p>}
             <Button type="button" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save document"}</Button>
           </div>
         </div>
@@ -342,13 +371,13 @@ function ViewDialog({ doc, onClose }: { doc: DocDetail; onClose: () => void }) {
           <DialogTitle>{doc.title}</DialogTitle>
           <DialogDescription>{doc.kind} · {doc.status === "PendingReview" ? "Pending review" : doc.status}</DialogDescription>
         </DialogHeader>
-        {doc.format === "pdf" && doc.fileData ? (
+        {FILE_MIME[doc.format] && doc.fileData ? (
           <a
-            href={`data:application/pdf;base64,${doc.fileData}`}
-            download={`${doc.title}.pdf`}
-            className="flex w-fit items-center gap-2 rounded-[10px] bg-[var(--brand)] px-4 py-2.5 text-[13px] font-bold text-[var(--onbrand)]"
+            href={`data:${FILE_MIME[doc.format]};base64,${doc.fileData}`}
+            download={`${doc.title}.${doc.format}`}
+            className={`${PRIMARY} w-fit`}
           >
-            <Download className="size-4" /> Download PDF
+            <Download className="size-4" /> Download {doc.format.toUpperCase()}
           </a>
         ) : doc.content ? (
           <div className="max-h-[60vh] overflow-y-auto rounded-[10px] border border-[var(--w07)] bg-[var(--qcard)] p-4">

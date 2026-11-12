@@ -8,6 +8,7 @@ import {
   Contact,
   BarChart3,
   Shield,
+  SlidersHorizontal,
   type LucideIcon,
 } from "lucide-react";
 
@@ -47,6 +48,9 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "People", href: "/people", memberHidden: true, module: "TEAMS", icon: Contact },
   { label: "Reports", href: "/reports", module: "REPORTS", icon: BarChart3 },
   { label: "Admin", href: "/admin", perm: "admin:access", module: "ADMIN_IAM", icon: Shield },
+  // Configs — deployment-level configuration (integrations, …), sits below Admin and is
+  // gated the same way (admin:access to see the pill; each page re-checks its own permission).
+  { label: "Configs", href: "/configs", perm: "admin:access", icon: SlidersHorizontal },
 ];
 
 export interface NavViewer {

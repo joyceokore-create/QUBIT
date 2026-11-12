@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { validationError } from "@/server/errors";
 import { requirePermission } from "@/lib/api-guard";
 import { updateIssue, UpdateIssueInput, IssueError } from "@/server/issues";
 
@@ -7,13 +8,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if ("response" in guard) return guard.response;
   const { id } = await params;
 
-  const parsed = UpdateIssueInput.safeParse(await req.json());
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: "VALIDATION", message: "Invalid input." } },
-      { status: 400 },
-    );
-  }
+  const parsed = UpdateIssueInput.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return validationError(parsed.error);
 
   try {
     await updateIssue(guard.ctx, id, parsed.data);

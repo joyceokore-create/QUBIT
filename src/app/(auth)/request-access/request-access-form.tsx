@@ -2,14 +2,10 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { BrandLogo } from "@/components/brand/brand-logo";
-import { AuthShell } from "../auth-shell";
-import { accessRequestSchema } from "@/lib/access-request-schema";
-
-const INPUT_CLASS =
-  "box-border w-full rounded-[11px] border border-[var(--l-field-bd)] bg-[var(--l-field-bg)] px-[14px] py-2.5 text-[13.5px] text-[var(--l-ink)] outline-none transition-colors placeholder:text-[var(--l-ph)] focus:border-[color-mix(in_oklab,var(--login-brand)_60%,transparent)] focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_55%,transparent)]";
-const LABEL_CLASS = "mb-1 block text-[12px] font-semibold text-[var(--l-ink-2)]";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { readApiError } from "@/lib/form-errors";
+import { AUTH_INPUT_CLASS, AUTH_LINK_CLASS, AUTH_PRIMARY_CLASS, AuthField, AuthHeading, AuthShell } from "@/components/auth/auth-shell";
+import { accessRequestSchema, REQUESTABLE_ROLES } from "@/lib/access-request-schema";
 
 function looksLikeCompleteDomain(email: string): boolean {
   const domain = email.split("@")[1];
@@ -17,17 +13,21 @@ function looksLikeCompleteDomain(email: string): boolean {
 }
 
 export function RequestAccessForm() {
-  const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [company, setCompany] = useState("");
   const [jobTitle, setJobTitle] = useState("");
+  const [requestedRole, setRequestedRole] = useState("");
+  const [reason, setReason] = useState("");
   const [companyUrl, setCompanyUrl] = useState(""); // honeypot
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [knownOrg, setKnownOrg] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // docs/08 § Errors: problems show on their field; the button stays enabled.
+  const fe = useFieldErrors({ schema: accessRequestSchema, values: { fullName, email, company, jobTitle, requestedRole, reason }, idPrefix: "" });
+  const FIELD_ORDER = ["fullName", "email", "company", "jobTitle", "requestedRole", "reason"];
 
   // Reuse the login org-resolver: if the work-email domain is already a QUBIT tenant, nudge
   // the visitor to sign in rather than request access.
@@ -60,11 +60,9 @@ export function RequestAccessForm() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    const parsed = accessRequestSchema.safeParse({ fullName, email, company, jobTitle, companyUrl });
-    if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? "Please check the form and try again.");
-      return;
-    }
+    if (!fe.validate(FIELD_ORDER)) return;
+    const parsed = accessRequestSchema.safeParse({ fullName, email, company, jobTitle, requestedRole, reason, companyUrl });
+    if (!parsed.success) return;
     setLoading(true);
     try {
       const res = await fetch("/api/access-request", {
@@ -74,7 +72,14 @@ export function RequestAccessForm() {
       });
       setLoading(false);
       if (!res.ok) {
-        setError("Something went wrong. Please try again.");
+        const { message, fields } = readApiError(await res.json().catch(() => null), "Something went wrong. Please try again.");
+        const { _: root, ...onFields } = fields;
+        if (Object.keys(onFields).length > 0) {
+          fe.setServerErrors(onFields, FIELD_ORDER);
+          if (root) setError(root);
+        } else {
+          setError(message);
+        }
         return;
       }
       setDone(true);
@@ -84,59 +89,72 @@ export function RequestAccessForm() {
     }
   }
 
+  const shell = {
+    brand: "var(--pbrand)",
+    art: "hero" as const,
+    heading: "Run every project in one place",
+    sentence: "Portfolios, projects, risks and weekly reporting, in one place.",
+  };
+
   if (done) {
     return (
-      <AuthShell brand="var(--pbrand)">
-        <BrandLogo variant="color" className="mb-4 h-7 w-auto dark:hidden" />
-        <BrandLogo variant="night" className="mb-4 hidden h-7 w-auto dark:block" />
-        <h1 className="mb-1 text-[22px] font-semibold tracking-[-.4px] text-[var(--l-ink)]">Request received</h1>
-        <p className="mb-5 text-[13px] leading-[1.6] text-[var(--l-ink-2)]">
-          Thanks — we&apos;ll be in touch at <span className="font-bold text-[var(--l-ink)]">{email}</span>.
-        </p>
-        <Link href="/login" className="text-[12px] font-semibold text-[var(--login-brand)] hover:underline">
-          ‹ Back to sign in
+      <AuthShell {...shell}>
+        <AuthHeading
+          title="Request received"
+          lead={<>Thanks. We&apos;ll be in touch at <span className="font-semibold text-[var(--l-ink)]">{email}</span>.</>}
+        />
+        <Link href="/login" className={AUTH_LINK_CLASS}>
+          Back to sign in
         </Link>
       </AuthShell>
     );
   }
 
   return (
-    <AuthShell brand="var(--pbrand)">
-      <button
-        type="button"
-        onClick={() => router.push("/")}
-        className="mb-4 flex items-center gap-[11px] rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--login-brand)_55%,transparent)]"
-      >
-        <BrandLogo variant="color" className="h-7 w-auto dark:hidden" />
-        <BrandLogo variant="night" className="hidden h-7 w-auto dark:block" />
-      </button>
+    <AuthShell {...shell}>
+      <AuthHeading title="Request Access" lead="Tell us about your organisation and we&apos;ll reach out." />
 
-      <h1 className="mb-1 text-[22px] font-semibold tracking-[-.4px] text-[var(--l-ink)]">Request access</h1>
-      <p className="mb-5 text-[13px] text-[var(--l-ink-2)]">Tell us about your organization and we&apos;ll reach out.</p>
-
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3" noValidate>
-        <div>
-          <label htmlFor="fullName" className={LABEL_CLASS}>Full name</label>
-          <input id="fullName" type="text" autoComplete="name" className={INPUT_CLASS} value={fullName} onChange={(e) => setFullName(e.target.value)} />
-        </div>
-        <div>
-          <label htmlFor="email" className={LABEL_CLASS}>Work email</label>
-          <input id="email" type="email" autoComplete="email" className={INPUT_CLASS} value={email} onChange={(e) => setEmail(e.target.value)} />
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+        <AuthField id={fe.idOf("fullName")} label="Full Name" error={fe.errors.fullName}>
+          <input {...fe.bind("fullName")} type="text" autoComplete="name" placeholder="Your first and last name" className={AUTH_INPUT_CLASS} value={fullName} onChange={(e) => setFullName(e.target.value)} />
+        </AuthField>
+        <AuthField id={fe.idOf("email")} label="Work Email" error={fe.errors.email}>
+          <input {...fe.bind("email")} type="email" autoComplete="email" placeholder="name@company.com" className={AUTH_INPUT_CLASS} value={email} onChange={(e) => setEmail(e.target.value)} />
           {knownOrg && (
-            <p className="mt-1.5 text-[11.5px] text-[var(--l-ink-3)]" aria-live="polite">
-              {knownOrg} already uses QUBIT —{" "}
-              <Link href="/login" className="font-semibold text-[var(--login-brand)] hover:underline">sign in</Link> instead.
+            <p className="text-[12px] text-[var(--l-ink-3)]" aria-live="polite">
+              {knownOrg} already uses QUBIT.{" "}
+              <Link href="/login" className={AUTH_LINK_CLASS}>Sign in</Link> instead.
             </p>
           )}
-        </div>
-        <div>
-          <label htmlFor="company" className={LABEL_CLASS}>Company name</label>
-          <input id="company" type="text" autoComplete="organization" className={INPUT_CLASS} value={company} onChange={(e) => setCompany(e.target.value)} />
-        </div>
-        <div>
-          <label htmlFor="jobTitle" className={LABEL_CLASS}>Job title <span className="font-normal text-[var(--l-ink-3)]">(optional)</span></label>
-          <input id="jobTitle" type="text" autoComplete="organization-title" className={INPUT_CLASS} value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
-        </div>
+        </AuthField>
+        <AuthField id={fe.idOf("company")} label="Company Name" error={fe.errors.company}>
+          <input {...fe.bind("company")} type="text" autoComplete="organization" placeholder="For example: Northwind Ltd" className={AUTH_INPUT_CLASS} value={company} onChange={(e) => setCompany(e.target.value)} />
+        </AuthField>
+        <AuthField id={fe.idOf("jobTitle")} label="Job Title (Optional)" error={fe.errors.jobTitle}>
+          <input {...fe.bind("jobTitle")} type="text" autoComplete="organization-title" placeholder="For example: Head of PMO" className={AUTH_INPUT_CLASS} value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
+        </AuthField>
+
+        <AuthField id={fe.idOf("requestedRole")} label="Role You Need (Optional)" error={fe.errors.requestedRole}>
+          <select {...fe.bind("requestedRole")} className={AUTH_INPUT_CLASS} value={requestedRole} onChange={(e) => setRequestedRole(e.target.value)}>
+            <option value="">Not sure</option>
+            {REQUESTABLE_ROLES.map((r) => (
+              <option key={r.key} value={r.key}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+        </AuthField>
+        <AuthField id={fe.idOf("reason")} label="Why You Need Access (Optional)" error={fe.errors.reason} hint="Up to 300 characters. Please don’t include personal details.">
+          <textarea
+            {...fe.bind("reason")}
+            rows={3}
+            maxLength={300}
+            placeholder="For example: joining the Payments squad on Payments Hub"
+            className={`${AUTH_INPUT_CLASS} h-auto py-2`}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+        </AuthField>
 
         {/* Honeypot — visually hidden, never shown to real users. */}
         <div aria-hidden className="absolute left-[-9999px] top-[-9999px] h-0 w-0 overflow-hidden">
@@ -144,22 +162,17 @@ export function RequestAccessForm() {
           <input id="companyUrl" type="text" tabIndex={-1} autoComplete="off" value={companyUrl} onChange={(e) => setCompanyUrl(e.target.value)} />
         </div>
 
-        {error && <p role="alert" className="text-[12px] text-[var(--l-err)]">{error}</p>}
+        {error && <p role="alert" className="text-[12.5px] text-[var(--l-err)]">{error}</p>}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="mt-1 w-full rounded-[11px] px-[13px] py-[11px] text-[13.5px] font-bold text-[var(--onbrand)] outline-none transition-transform hover:-translate-y-[2px] focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--login-brand)] disabled:opacity-60"
-          style={{ background: "var(--login-brand)", boxShadow: "0 4px 20px color-mix(in oklab, var(--login-brand) var(--glowA), transparent)" }}
-        >
-          {loading ? "Sending…" : "Request access"}
+        <button type="submit" disabled={loading} aria-busy={loading} className={AUTH_PRIMARY_CLASS}>
+          {loading ? "Sending…" : "Request Access"}
         </button>
       </form>
 
-      <p className="mt-5 text-[12px] text-[var(--l-ink-3)]">
-        Already have an account?{" "}
-        <Link href="/login" className="font-semibold text-[var(--login-brand)] hover:underline">Sign in</Link>
-      </p>
+      <div className="flex items-center justify-between text-[12.5px] text-[var(--l-ink-3)]">
+        <span>Already have an account?</span>
+        <Link href="/login" className={AUTH_LINK_CLASS}>Sign in</Link>
+      </div>
     </AuthShell>
   );
 }

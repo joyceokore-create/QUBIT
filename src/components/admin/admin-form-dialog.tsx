@@ -2,6 +2,7 @@
 
 import type { FormEvent, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { Banner } from "@/components/ui/panel";
 import {
   Dialog,
   DialogContent,
@@ -9,11 +10,11 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/ui/drawer-dialog";
 
 /**
  * The shared admin form dialog (docs/21 M-O2b). It owns the chrome every admin dialog
- * repeats — title/description, the `role="alert"` error slot fed by
+ * repeats — title/description, the top error banner fed by
  * `useAdminMutation().error`, and the Cancel + submit footer with its busy label — and
  * nothing else. Fields stay with the caller as `children`, because they are the part that
  * genuinely differs; this wrapper exists so the shell can't drift screen to screen.
@@ -65,13 +66,10 @@ export function AdminFormDialog({
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+          {/* docs/08 § Errors: form-level problems (network, 403, conflict) sit at the TOP;
+              field problems sit on their field (callers pass `error` to their <Field>s). */}
+          {error && <Banner tone="bad">{error}</Banner>}
           {children}
-
-          {error && (
-            <p role="alert" className="text-sm text-status-red">
-              {error}
-            </p>
-          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

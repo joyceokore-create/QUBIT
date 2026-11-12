@@ -1,24 +1,40 @@
 "use client";
 
+import { dispatchTourEvent } from "@/components/tour/tour-events";
+
 import { useEffect, useState } from "react";
-import { Loader2, ShieldAlert, TriangleAlert } from "lucide-react";
+import { FileText, Loader2, ShieldAlert, TriangleAlert } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { FieldError } from "@/components/ui/drawer";
+import { FIELD_INVALID } from "@/lib/surface";
+import { readApiError } from "@/lib/form-errors";
+import { GateOverrideFormSchema } from "@/lib/workspace-schema";
 import type { CheckpointState, ProjectCheckpoints, TemplateOption } from "@/server/checkpoints";
 
 // The project's gate matrix (docs/18 §2 + §7 edit surface). Humans set gate STATE; the
 // percentage underneath is derived and never typed — that's the whole point of moving
 // the slide's hand-maintained numbers into the system.
 
-import { CHECKPOINT_STATE_TOK as STATE_TOK, CHECKPOINT_STATE_LABEL as STATE_LABEL } from "@/lib/checkpoint-view";
+import { CHECKPOINT_STATE_LABEL as STATE_LABEL } from "@/lib/checkpoint-view";
+import { GateSquare } from "@/components/workspace/gates-by-market";
+import { Chip } from "@/components/ui/status-pill";
+import { approvalChip, type ApproverScope } from "@/lib/gate-approval";
 
 const STATES: CheckpointState[] = ["NotStarted", "InProgress", "Done", "Blocked"];
 
 interface Payload extends ProjectCheckpoints {
   templates: TemplateOption[];
   canGovern: boolean;
+  /** UX9 (D10): Head of QA — only testing gates (SIT/UAT) are editable. */
+  testingOnly?: boolean;
+  /** WS1: which gates the viewer signs off (all / testing / none). */
+  approver?: ApproverScope;
 }
 
-export function CheckpointMatrix({ projectId }: { projectId: string }) {
+/** docs/38 — `orgUnitId` scopes the matrix to one market's gates, `moduleId` to one named
+ * instance's own gates (both: that instance in that market); null = the product's own. */
+export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null }: { projectId: string; orgUnitId?: string | null; moduleId?: string | null }) {
   const [data, setData] = useState<Payload | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -26,18 +42,23 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
   // missing and ask for a reason rather than silently refusing or silently allowing.
   const [gateBlock, setGateBlock] = useState<{ checkpointId: string; unmet: { key: string; label: string; detail: string | null }[] } | null>(null);
   const [overrideReason, setOverrideReason] = useState("");
+  // docs/08 § Errors: the reason's problem shows on the field; the button stays enabled.
+  const fe = useFieldErrors({ schema: GateOverrideFormSchema, values: { overrideReason }, idPrefix: "gate-override" });
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const res = await fetch(`/api/projects/${projectId}/checkpoints`);
+      const q = new URLSearchParams();
+      if (orgUnitId) q.set("orgUnitId", orgUnitId);
+      if (moduleId) q.set("moduleId", moduleId);
+      const res = await fetch(`/api/projects/${projectId}/checkpoints${q.toString() ? `?${q}` : ""}`);
       if (!res.ok || cancelled) return;
       setData(await res.json());
     })();
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, orgUnitId, moduleId]);
 
   if (!data) {
     return (
@@ -50,40 +71,68 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
   const patch = async (body: Record<string, unknown>, key: string) => {
     setBusy(key);
     setError(null);
-    const res = await fetch(`/api/projects/${projectId}/checkpoints`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    // docs/38 — scoped to an instance / module, the template choice is THAT row's own track
+    // (one track for all markets, may differ per instance); otherwise the project's.
+    const res =
+      "templateId" in body && moduleId
+        ? await fetch(`/api/projects/${projectId}/instances/${moduleId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ checkpointTemplateId: body.templateId }) })
+        : await fetch(`/api/projects/${projectId}/checkpoints`, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            // docs/38 — at All (no market) a state change applies to every market's row too.
+            body: JSON.stringify("templateId" in body ? body : { ...body, ...(body.state === "Done" ? { cascade: true } : {}), orgUnitId, moduleId, allMarkets: !orgUnitId }),
+          });
     if (res.status === 409) {
       // Gate unmet — show the checklist and offer the override rather than failing flat.
       const err = (await res.json().catch(() => null))?.error;
       setGateBlock({ checkpointId: String(body.checkpointId), unmet: err?.unmet ?? [] });
       setError(null);
     } else if (!res.ok) {
-      setError((await res.json().catch(() => null))?.error?.message ?? "Could not save.");
+      const { message, fields } = readApiError(await res.json().catch(() => null), "Could not save.");
+      if (fields.overrideReason) {
+        fe.setServerErrors({ overrideReason: fields.overrideReason });
+        setError(null);
+      } else {
+        setError(message);
+      }
+    } else if ("templateId" in body && moduleId) {
+      // The row's track changed — reload the scoped matrix.
+      const again = await fetch(`/api/projects/${projectId}/checkpoints?moduleId=${moduleId}${orgUnitId ? `&orgUnitId=${orgUnitId}` : ""}`);
+      if (again.ok) setData(await again.json());
+      setGateBlock(null);
     } else {
+      // Joyce (2026-10-12): a later gate done means the earlier ones are done — the server
+      // closes any still open (`cascade: true`): a gate whose checklist refuses stays as it
+      // was, and (WS1) a sign-off gate in the way is submitted and the cascade stops there.
       const next = await res.json();
       setData((prev) => (prev ? { ...prev, ...next } : prev));
       setGateBlock(null);
       setOverrideReason("");
+      fe.reset();
+      if (key === "template" && body.templateId) dispatchTourEvent("template-attached");
     }
     setBusy(null);
   };
 
   return (
     <div className="flex flex-col gap-2.5">
+      {data.testingOnly && (
+        <p className="rounded-[8px] bg-[var(--surface-2)] px-3 py-2 text-[12.5px] text-[var(--ink2)]">
+          As Head of QA you can set testing gates (SIT and UAT). The project&apos;s PM sets the others.
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-[9px] font-bold uppercase tracking-[1.2px] text-[var(--ink4)]">Checkpoints</span>
+        <span className="text-[12px] font-semibold text-[var(--ds-ink3)]">Progress</span>
         {data.templateId && (
-          <span className="font-mono text-[9.5px] font-bold tabular-nums text-[var(--qink)]">{data.progress}%</span>
+          <span className="text-[12px] font-semibold tabular-nums text-[var(--ds-ink)]">{data.progress}%</span>
         )}
-        {data.canGovern ? (
+        {data.canGovern && !data.testingOnly && !orgUnitId ? (
+          <span data-tour="gate-template" className="ml-auto inline-flex">
           <Select
             value={data.templateId ?? "none"}
             onValueChange={(v) => void patch({ templateId: v === "none" ? null : v }, "template")}
           >
-            <SelectTrigger className="ml-auto h-7 w-[168px] text-[11px]" aria-label="Checkpoint template">
+            <SelectTrigger className="h-7 w-[168px] text-[11px]" aria-label="Checkpoint template">
               <SelectValue placeholder="No template">{data.templateName ?? "No template"}</SelectValue>
             </SelectTrigger>
             <SelectContent>
@@ -95,15 +144,16 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
               ))}
             </SelectContent>
           </Select>
+          </span>
         ) : (
           data.templateName && (
-            <span className="ml-auto font-mono text-[9px] uppercase tracking-[.8px] text-[var(--ink5)]">{data.templateName}</span>
+            <span className="ml-auto text-[12px] text-[var(--ds-ink3)]">{data.templateName}</span>
           )
         )}
       </div>
 
       {!data.templateId ? (
-        <p className="text-[11.5px] text-[var(--ink5)]">
+        <p className="text-[12px] text-[var(--ds-ink3)]">
           No checkpoint template yet — progress falls back to the per-subsidiary rollup until one is chosen.
         </p>
       ) : (
@@ -115,13 +165,24 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
           <ol className="flex flex-col">
             {data.rows.map((row) => (
               <li key={row.checkpointId} className="flex items-center gap-2 border-b border-[var(--hair2)] py-1.5 last:border-0">
-                <span
-                  className="size-2 flex-none rounded-full"
-                  style={{ background: `var(${STATE_TOK[row.state]})` }}
-                  aria-hidden
-                />
-                <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink2)]">{row.name}</span>
+                <GateSquare state={row.state} size={12} signOff={row.approval === "submitted" || row.approval === "returned" ? row.approval : null} />
+                <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--ds-ink)]">{row.name}</span>
+                {/* WS1 — the sign-off state of a sign-off gate (Go-Live, SIT exit, UAT exit). */}
+                {row.signOff && row.approval !== "none" && (
+                  <span title={row.approval === "returned" && row.decided?.note ? `Returned: ${row.decided.note}` : undefined}>
+                    <Chip tone={approvalChip(row.approval).tone}>{approvalChip(row.approval).label}</Chip>
+                  </span>
+                )}
                 {busy === row.checkpointId && <Loader2 className="size-3 animate-spin text-[var(--ink4)]" />}
+                {row.source && (
+                  <span
+                    title={`Moved by ${row.source.label} · ${new Date(row.source.at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}${row.source.byName ? ` · ${row.source.byName}` : ""}`}
+                    className="flex flex-none items-center gap-1 rounded-[5px] px-1.5 py-0.5 font-mono text-[8.5px] font-bold uppercase tracking-[.6px] text-[var(--ink3)]"
+                    style={{ background: "color-mix(in oklab, var(--qinfo) 10%, transparent)" }}
+                  >
+                    <FileText className="size-2.5" aria-hidden /> from report
+                  </span>
+                )}
                 {row.overrideReason && (
                   <span
                     title={`Gate closed early: ${row.overrideReason}`}
@@ -131,7 +192,7 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
                     <ShieldAlert className="size-2.5" /> overridden
                   </span>
                 )}
-                {data.canGovern ? (
+                {data.canGovern && (!data.testingOnly || row.testing) ? (
                   <Select
                     value={row.state}
                     onValueChange={(v) => void patch({ checkpointId: row.checkpointId, state: v }, row.checkpointId)}
@@ -142,13 +203,14 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
                     <SelectContent>
                       {STATES.map((s) => (
                         <SelectItem key={s} value={s}>
-                          {STATE_LABEL[s]}
+                          {/* WS1: for someone who doesn't sign this gate off, Done submits it. */}
+                          {s === "Done" && row.signOff && row.state !== "Done" && !(data.approver === "all" || (data.approver === "testing" && row.testing)) ? "Submit for sign-off" : STATE_LABEL[s]}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 ) : (
-                  <span className="font-mono text-[9px] font-bold uppercase tracking-[.6px]" style={{ color: `var(${STATE_TOK[row.state]})` }}>
+                  <span className="text-[12px] font-semibold text-[var(--ds-ink2)]">
                     {STATE_LABEL[row.state]}
                   </span>
                 )}
@@ -174,22 +236,26 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
                 ))}
               </ul>
               <input
+                {...fe.bind("overrideReason")}
                 value={overrideReason}
                 onChange={(e) => setOverrideReason(e.target.value)}
                 maxLength={300}
                 placeholder="Why is it being closed anyway? This is recorded."
-                className="h-8 rounded-[8px] border border-[var(--w07)] bg-[var(--wash)] px-2.5 text-[12px] text-[var(--ink2)] outline-none focus:border-[var(--brand)]"
+                aria-label="Reason for closing the gate early"
+                className={`h-8 rounded-[8px] border border-[var(--w07)] bg-[var(--wash)] px-2.5 text-[12px] text-[var(--ink2)] outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none ${FIELD_INVALID}`}
               />
+              {fe.errors.overrideReason && <FieldError id={`${fe.idOf("overrideReason")}-error`}>{fe.errors.overrideReason}</FieldError>}
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  disabled={overrideReason.trim().length < 5 || busy !== null}
-                  onClick={() =>
+                  disabled={busy !== null}
+                  onClick={() => {
+                    if (!fe.validate()) return;
                     void patch(
                       { checkpointId: gateBlock.checkpointId, state: "Done", overrideReason: overrideReason.trim() },
                       gateBlock.checkpointId,
-                    )
-                  }
+                    );
+                  }}
                   className="rounded-[8px] bg-[var(--warn)] px-3 py-1.5 text-[11.5px] font-bold text-[var(--onbrand)] disabled:opacity-60"
                 >
                   Close gate with reason
@@ -199,6 +265,7 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
                   onClick={() => {
                     setGateBlock(null);
                     setOverrideReason("");
+                    fe.reset();
                   }}
                   className="text-[11.5px] font-semibold text-[var(--ink4)] hover:text-[var(--qink)]"
                 >
@@ -208,9 +275,8 @@ export function CheckpointMatrix({ projectId }: { projectId: string }) {
             </div>
           )}
           {/* Blocked needs a linked blocker (§2) — say so rather than silently rejecting. */}
-          <p className="font-mono text-[8.5px] uppercase tracking-[.8px] text-[var(--ink5)]">
-            % is derived from these states · Blocked needs an open blocker · gates check their
-            requirements before closing
+          <p className="text-[12px] text-[var(--ds-ink3)]">
+            Progress is derived from these states. Blocked needs an open blocker; gates check their requirements before closing.
           </p>
         </>
       )}

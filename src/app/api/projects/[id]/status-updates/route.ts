@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { validationError } from "@/server/errors";
 import { getTenantContext } from "@/lib/tenant";
 import { canViewProject } from "@/lib/project-access";
 import { requirePermission } from "@/lib/api-guard";
@@ -23,7 +24,7 @@ export async function POST(req: Request, { params }: Ctx) {
   if ("response" in guard) return guard.response;
   const parsed = PostStatusInput.safeParse(await req.json());
   if (!parsed.success) {
-    return NextResponse.json({ error: { code: "VALIDATION", message: "A status update needs a body." } }, { status: 400 });
+    return validationError(parsed.error);
   }
   const { id } = await params;
   return NextResponse.json(await postStatusUpdate(guard.ctx, id, parsed.data), { status: 201 });
