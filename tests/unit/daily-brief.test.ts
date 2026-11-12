@@ -279,10 +279,18 @@ describe("Executive", () => {
 });
 
 describe("Executive decisions", () => {
-  it("matches the 'Decisions needing Group action' figure and says it's suggested", () => {
-    const brief = buildBrief(input({ role: "Executive", projects: [project({ id: "p1", calculated: "R", freshnessDays: 10, category: "Exploring" })] }));
-    expect(brief.items[0]).toMatchObject({ group: "now", emphasis: "1 project may need a Group decision." });
-    expect(brief.items[0].detail).toBe("Project p1. Suggested from project signals.");
+  it("lists real waiting decisions (WS2), not signal-based suggestions", () => {
+    // A red, stale project no longer produces a suggested-decision line on its own.
+    const signals = buildBrief(input({ role: "Executive", projects: [project({ id: "p1", calculated: "R", freshnessDays: 10, category: "Exploring" })] }));
+    expect(signals.items.find((i) => i.id === "exec-decisions")).toBeUndefined();
+
+    const one = buildBrief(input({ role: "Executive", extras: { decisionsWaiting: { count: 1, titles: ["Choose the card scheme"], firstId: "d1", overdue: 0 } } }));
+    expect(one.items[0]).toMatchObject({ id: "exec-decisions", group: "now", emphasis: "1 decision is waiting on the Group.", detail: "Choose the card scheme." });
+    expect(one.items[0].action).toEqual({ label: "Open Decision", href: "/decisions?open=d1" });
+
+    const many = buildBrief(input({ role: "Executive", extras: { decisionsWaiting: { count: 5, titles: ["A", "B", "C"], firstId: "d1", overdue: 2 } } }));
+    expect(many.items[0]).toMatchObject({ emphasis: "5 decisions are waiting on the Group, 2 overdue.", detail: "A, B, C and 2 more." });
+    expect(many.items[0].action).toEqual({ label: "Open Decisions", href: "/decisions" });
   });
 });
 

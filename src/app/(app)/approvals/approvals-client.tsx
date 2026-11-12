@@ -6,6 +6,9 @@ import { useRouter } from "next/navigation";
 import { Info } from "lucide-react";
 import { toast } from "sonner";
 import { Drawer, DrawerHeader } from "@/components/ui/drawer";
+import { Chip as StatusChip } from "@/components/ui/status-pill";
+import { GateReviewDrawer } from "@/components/gates/gate-review";
+import { approvalChip } from "@/lib/gate-approval";
 import { PageHeader } from "@/components/list/page-header";
 import { FilterChips, FilterSelect, ListToolbar, SearchField, type ActiveFilter, type FilterOption } from "@/components/list/list-toolbar";
 import { ListEmpty, TableCard, TableFooter } from "@/components/list/table-footer";
@@ -24,6 +27,7 @@ import {
   itemsForTab,
   parseTab,
   projectOptions,
+  type ApprovalGate,
   type ApprovalIdea,
   type ApprovalItem,
   type ApprovalsFeed,
@@ -40,6 +44,10 @@ import { cn } from "@/lib/utils";
  * always-visible pagination (view state in the URL). Each row's action opens a right-hand
  * drawer — Triage for an idea, Review for a staffing request — which posts to the existing
  * routes. After a decision: toast, close, refresh (and the sidebar badge recounts).
+ *
+ * WS1 (Tier 4): a Gates tab — gates submitted for sign-off. An approver's Review opens the
+ * wide review drawer (13 "Approve a Stage Gate" / 14 "Sign Off a Testing Gate"); a PM sees
+ * their own submitted and returned gates, read-only, with the approver's reason.
  */
 
 const FILTER_KEYS = ["project", "age"] as const;
@@ -65,6 +73,12 @@ function Chip({ label }: { label: string }) {
 
 type Drawer = { kind: ApprovalItem["kind"]; id: string } | null;
 
+/** ["gates", "ideas", "staffing requests"] → "Gates, ideas and staffing requests". */
+function sentenceList(words: string[]): string {
+  const s = words.length <= 1 ? (words[0] ?? "") : `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
+  return s ? s[0]!.toUpperCase() + s.slice(1) : s;
+}
+
 /** POST JSON to an existing decision route; the route's own message on failure. */
 async function post(url: string, body: unknown, fallback: string): Promise<string | null> {
   const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
@@ -87,6 +101,7 @@ export function ApprovalsClient({
   nowIso: string;
 }) {
   const now = useMemo(() => new Date(nowIso), [nowIso]);
+  const router = useRouter();
   const list = useListUrl("approvals", 10);
   const [drawer, setDrawer] = useState<Drawer>(null);
 
@@ -97,7 +112,7 @@ export function ApprovalsClient({
 
   // Tabs offer only the kinds this person may decide; counts follow search + filters.
   const filtered = useMemo(() => filterApprovals(feed.items, { q: list.q, project: f.project, age: f.age }, now, timeZone), [feed.items, list.q, f.project, f.age, now, timeZone]);
-  const tabs = approvalTabs(filtered).filter((t) => t.key === "all" || (t.key === "ideas" ? feed.can.ideas : feed.can.staffing));
+  const tabs = approvalTabs(filtered).filter((t) => t.key === "all" || (t.key === "gates" ? feed.can.gates !== null : t.key === "ideas" ? feed.can.ideas : feed.can.staffing));
   const rawTab = parseTab(list.get("tab"));
   const tab: ApprovalTab = tabs.some((t) => t.key === rawTab) ? rawTab : "all";
   const shown = itemsForTab(filtered, tab);
@@ -111,11 +126,16 @@ export function ApprovalsClient({
   const clearAll = () => list.clear([...FILTER_KEYS]);
 
   const open = drawer ? feed.items.find((i) => i.kind === drawer.kind && i.id === drawer.id) : undefined;
-  const searchLabel = feed.can.ideas && feed.can.staffing ? "Search approvals by project or person" : feed.can.ideas ? "Search ideas by title or person" : "Search requests by project or person";
+  const kinds = [feed.can.gates && "gates", feed.can.ideas && "ideas", feed.can.staffing && "staffing requests"].filter((k): k is string => Boolean(k));
+  const searchLabel = kinds.length > 1 ? "Search approvals by project or person" : feed.can.ideas ? "Search ideas by title or person" : feed.can.gates ? "Search gates by project or person" : "Search requests by project or person";
+  const description =
+    feed.can.gates === "mine" && kinds.length === 1
+      ? "Your gates submitted for sign-off, and any returned to you."
+      : `${sentenceList(kinds) || "Items"} waiting for your decision.`;
 
   return (
     <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
-      <PageHeader eyebrow={tenantName} title="Approvals" description="Ideas and staffing requests waiting for your decision." />
+      <PageHeader eyebrow={tenantName} title="Approvals" description={description} />
 
       {feed.rollup && <RollupBanner rollup={feed.rollup} />}
 
@@ -135,7 +155,7 @@ export function ApprovalsClient({
       <div className="flex flex-col gap-2">
         <ListToolbar>
           <SearchField value={list.q} onChange={(q) => list.set({ q })} placeholder={searchLabel} label="Search approvals" className="sm:w-[320px]" />
-          {feed.can.staffing && <FilterSelect label="Project" allLabel="All projects" value={f.project} options={opts.project} onChange={(v) => list.set({ project: v })} />}
+          {(feed.can.staffing || feed.can.gates) && <FilterSelect label="Project" allLabel="All projects" value={f.project} options={opts.project} onChange={(v) => list.set({ project: v })} />}
           <FilterSelect label="Age" allLabel="Any age" value={f.age} options={opts.age} onChange={(v) => list.set({ age: v })} />
           <FilterChips filters={active} onRemove={(k) => list.set({ [k]: null })} onClearAll={clearAll} />
         </ListToolbar>
@@ -146,7 +166,7 @@ export function ApprovalsClient({
           isFiltered ? (
             <ListEmpty
               filtered
-              noun={tab === "ideas" ? "ideas" : tab === "staffing" ? "staffing requests" : "approvals"}
+              noun={tab === "ideas" ? "ideas" : tab === "staffing" ? "staffing requests" : tab === "gates" ? "gates" : "approvals"}
               onClear={clearAll}
               hint={f.project && tab !== "staffing" && feed.can.ideas ? "Ideas have no project until they are accepted, so the Project filter hides them." : undefined}
             />
@@ -162,10 +182,16 @@ export function ApprovalsClient({
         )}
       </TableCard>
 
-      <Drawer open={!!open} onClose={() => setDrawer(null)}>
+      <Drawer open={!!open && open.kind !== "gate"} onClose={() => setDrawer(null)}>
         {open?.kind === "idea" && <TriageDrawer key={open.id} idea={open} projects={projects} tz={timeZone} now={now} onDone={() => setDrawer(null)} />}
         {open?.kind === "staffing" && <ReviewDrawer key={open.id} req={open} tz={timeZone} now={now} onDone={() => setDrawer(null)} />}
       </Drawer>
+      <GateReviewDrawer
+        target={open?.kind === "gate" ? { projectId: open.projectId, statusId: open.statusId } : null}
+        onClose={() => setDrawer(null)}
+        onDone={() => router.refresh()}
+        timeZone={timeZone}
+      />
     </main>
   );
 }
@@ -196,10 +222,15 @@ function RollupBanner({ rollup }: { rollup: RollupSummary }) {
 }
 
 function EmptyQueue({ tab, can }: { tab: ApprovalTab; can: ApprovalsFeed["can"] }) {
-  const title = tab === "ideas" ? "No ideas waiting for triage" : tab === "staffing" ? "No staffing requests waiting" : "Nothing is waiting for your decision";
+  const title =
+    tab === "ideas" ? "No ideas waiting for triage" : tab === "staffing" ? "No staffing requests waiting" : tab === "gates" ? (can.gates === "mine" ? "No gates submitted or returned" : "No gates waiting for sign-off") : "Nothing is waiting for your decision";
   const ideas = "New ideas appear here when someone submits one, and stay until you accept, park or merge them.";
   const staffing = "Staffing requests appear here when a project manager asks for someone, and stay until you fill or decline them.";
-  const hint = tab === "ideas" ? ideas : tab === "staffing" ? staffing : [can.ideas && ideas, can.staffing && staffing].filter(Boolean).join(" ");
+  const gates =
+    can.gates === "mine"
+      ? "Gates you submit for sign-off appear here until a Head signs them off; a returned gate stays until you submit it again."
+      : "Gates appear here when a PM or a status upload submits one for sign-off, and stay until you approve or return them.";
+  const hint = tab === "ideas" ? ideas : tab === "staffing" ? staffing : tab === "gates" ? gates : [can.gates && gates, can.ideas && ideas, can.staffing && staffing].filter(Boolean).join(" ");
   return (
     <div className="flex flex-col items-center gap-1.5 px-6 py-12 text-center">
       <p className="text-[14px] font-semibold text-[var(--qink)]">{title}</p>
@@ -208,7 +239,39 @@ function EmptyQueue({ tab, can }: { tab: ApprovalTab; can: ApprovalsFeed["can"] 
   );
 }
 
+function GateRow({ item, days, onOpen }: { item: ApprovalGate; days: number; onOpen: () => void }) {
+  const title = approvalTitle(item);
+  const sub = ["Gate", item.pmName ? `PM ${item.pmName}` : null, item.source ? "from an upload" : null, item.approval === "returned" && item.decisionNote ? `returned: ${item.decisionNote}` : null].filter(Boolean).join(" · ");
+  const chip = approvalChip(item.approval, days);
+  const age = ageLabel(days);
+  const action = item.canDecide ? "Review" : "View";
+  return (
+    <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border)] px-4 py-2.5 last:border-0 sm:grid-cols-[minmax(0,1fr)_96px_80px_auto]">
+      <div className="min-w-0">
+        <span className="block truncate text-[13.5px] font-semibold text-[var(--qink)]" title={title}>
+          {title}
+        </span>
+        <span className="block truncate text-[12px] text-[var(--ink3)]" title={sub}>
+          {sub}
+        </span>
+        <span className="mt-1 flex items-center gap-2 sm:hidden">
+          <StatusChip tone={chip.tone}>{chip.label}</StatusChip>
+          <span className="text-[12px] text-[var(--ink2)]">{age}</span>
+        </span>
+      </div>
+      <span className="max-sm:hidden">
+        <StatusChip tone={chip.tone}>{chip.label}</StatusChip>
+      </span>
+      <span className="text-[12.5px] tabular-nums text-[var(--ink2)] max-sm:hidden">{age}</span>
+      <button type="button" onClick={onOpen} className={COMPACT_SECONDARY} aria-label={`${action}: ${title}`}>
+        {action}
+      </button>
+    </li>
+  );
+}
+
 function ApprovalRow({ item, days, onOpen }: { item: ApprovalItem; days: number; onOpen: () => void }) {
+  if (item.kind === "gate") return <GateRow item={item} days={days} onOpen={onOpen} />;
   const title = approvalTitle(item);
   const sub =
     item.kind === "idea"

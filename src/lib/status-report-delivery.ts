@@ -27,6 +27,9 @@ export interface CatalogGate {
   checkpointId: string;
   name: string;
   orderIndex: number;
+  /** WS1 — closing it needs a sign-off: "done" on the report submits it, and the cascade
+   * (a later gate done closes the earlier ones) stops at it. */
+  signOff?: boolean;
 }
 export interface DeliveryCatalog {
   projectId: string;
@@ -39,7 +42,7 @@ export interface DeliveryCatalog {
   modules: CatalogModule[];
   gates: CatalogGate[];
   /** Product track (orgUnitId null) and every market's own copy of it. */
-  gateStates: { orgUnitId: string | null; checkpointId: string; state: CheckpointState }[];
+  gateStates: { orgUnitId: string | null; checkpointId: string; state: CheckpointState; approval?: string }[];
   moduleStates: { moduleId: string; orgUnitId: string | null; state: InstanceState; note: string | null }[];
   /** The tenant's learned stage vocabulary ("build ongoing" → Prototype), checked first. */
   stageTerms?: StageTerm[];
@@ -76,6 +79,8 @@ export interface GateChange {
   /** A move backwards (Done → In progress): the file may be older than QUBIT — shown, not
    * ticked by default. */
   backwards: boolean;
+  /** WS1 — a sign-off gate set to Done: applying it SUBMITS it for sign-off. */
+  signOff?: boolean;
 }
 export interface ModuleChange {
   moduleId: string;
@@ -284,6 +289,27 @@ export function resolveDelivery(
     catalog.gateStates.find((g) => g.orgUnitId === scopeUnit && g.checkpointId === checkpointId)?.state ?? "NotStarted";
   const byGate = new Map<string, GateChange>();
   let gatesUnchanged = 0;
+  // Joyce (2026-10-12) + WS1: a gate done closes the earlier ones still open, walking back
+  // from it — Done and Blocked gates are left alone, a gate already in the plan keeps its
+  // reading (and so does one the file states, when `keep` is given), and an open sign-off
+  // gate is submitted (proposed Done, `signOff`) and the walk stops there.
+  const cascadeBack = (from: CatalogGate, source: string, keep?: Set<string>) => {
+    const earlier = catalog.gates.filter((e) => e.orderIndex < from.orderIndex).sort((a, b) => b.orderIndex - a.orderIndex);
+    for (const e of earlier) {
+      const ef = currentGate(e.checkpointId);
+      if (ef === "Done" || ef === "Blocked") continue;
+      if (keep?.has(e.checkpointId) || byGate.has(e.checkpointId)) {
+        if (e.signOff) return;
+        continue;
+      }
+      const waiting = catalog.gateStates.find((gs) => gs.orgUnitId === scopeUnit && gs.checkpointId === e.checkpointId)?.approval === "submitted";
+      if (e.signOff) {
+        if (!waiting) byGate.set(e.checkpointId, { checkpointId: e.checkpointId, name: e.name, from: ef, to: "Done", source, blockedWanted: false, backwards: false });
+        return;
+      }
+      byGate.set(e.checkpointId, { checkpointId: e.checkpointId, name: e.name, from: ef, to: "Done", source, blockedWanted: false, backwards: false });
+    }
+  };
   for (const g of row.gates) {
     const gate = matchName(g.name, catalog.gates);
     const want = gateStateFrom(g.stateRaw);
@@ -312,11 +338,12 @@ export function resolveDelivery(
   const trackDone = row.percent === 100 || (!under100 && Boolean(row.stage) && TRACK_DONE.test(row.stage!));
   if (row.gates.length === 0 && trackDone) {
     stageReading = { gateName: catalog.gates[catalog.gates.length - 1]?.name ?? null, state: "Done", matched: null, learned: false, clauses: [] };
-    for (const g of catalog.gates) {
-      const from = currentGate(g.checkpointId);
-      if (from === "Done" || from === "Blocked") continue;
-      byGate.set(g.checkpointId, { checkpointId: g.checkpointId, name: g.name, from, to: "Done", source: row.percent === 100 ? "100 % complete" : `stage: ${row.stage}`, blockedWanted: false, backwards: false });
-    }
+    // WS1: walk back from the last gate; a sign-off gate in the way is submitted and the
+    // walk stops there (its approval closes the rest).
+    const last = catalog.gates[catalog.gates.length - 1];
+    const lastFrom = last ? currentGate(last.checkpointId) : "Done";
+    if (last && lastFrom !== "Done" && lastFrom !== "Blocked") byGate.set(last.checkpointId, { checkpointId: last.checkpointId, name: last.name, from: lastFrom, to: "Done", source: row.percent === 100 ? "100 % complete" : `stage: ${row.stage}`, blockedWanted: false, backwards: false });
+    if (last && !(last.signOff && lastFrom !== "Done")) cascadeBack(last, row.percent === 100 ? "100 % complete" : `stage: ${row.stage}`);
   }
   // No gate columns, but a Stage ("UAT / Pilot Readiness (VAPT in progress)"): the named
   // gate and everything before it.
@@ -331,12 +358,8 @@ export function resolveDelivery(
       const to: CheckpointState = done ? "Done" : "InProgress";
       stageReading.state = to;
       if (!(from === "Done" && to === "InProgress") && from !== "Blocked") byGate.set(gate.checkpointId, { checkpointId: gate.checkpointId, name: gate.name, from, to, source: `stage: ${row.stage}`, blockedWanted: false, backwards: false });
-      for (const earlier of catalog.gates) {
-        if (earlier.orderIndex >= gate.orderIndex || byGate.has(earlier.checkpointId)) continue;
-        const ef = currentGate(earlier.checkpointId);
-        if (ef === "Done" || ef === "Blocked") continue;
-        byGate.set(earlier.checkpointId, { checkpointId: earlier.checkpointId, name: earlier.name, from: ef, to: "Done", source: `before ${gate.name}`, blockedWanted: false, backwards: false });
-      }
+      // A sign-off gate stated done is submitted, not closed — its approval cascades later.
+      if (!(done && gate.signOff && from !== "Done")) cascadeBack(gate, `before ${gate.name}`);
     }
   }
   // Joyce (2026-10-12): a later gate done means the earlier ones are done too, unless the
@@ -344,16 +367,15 @@ export function resolveDelivery(
   const stated = new Set(row.gates.map((g) => matchName(g.name, catalog.gates)?.checkpointId).filter((x): x is string => Boolean(x)));
   for (const c of [...byGate.values()]) {
     if (c.to !== "Done") continue;
-    const order = catalog.gates.find((g) => g.checkpointId === c.checkpointId)?.orderIndex ?? 0;
-    for (const earlier of catalog.gates) {
-      if (earlier.orderIndex >= order || stated.has(earlier.checkpointId) || byGate.has(earlier.checkpointId)) continue;
-      const ef = currentGate(earlier.checkpointId);
-      if (ef === "Done" || ef === "Blocked") continue;
-      byGate.set(earlier.checkpointId, { checkpointId: earlier.checkpointId, name: earlier.name, from: ef, to: "Done", source: `before ${c.name}`, blockedWanted: false, backwards: false });
-    }
+    const g = catalog.gates.find((x) => x.checkpointId === c.checkpointId);
+    // WS1: a sign-off gate being submitted closes nothing behind it.
+    if (!g || (g.signOff && c.from !== "Done")) continue;
+    cascadeBack(g, `before ${c.name}`, stated);
   }
   const gates: GateChange[] = [];
   for (const c of byGate.values()) {
+    const g = catalog.gates.find((x) => x.checkpointId === c.checkpointId);
+    if (c.to === "Done" && c.from !== "Done" && g?.signOff) c.signOff = true;
     if (c.to === c.from) gatesUnchanged++;
     else gates.push(c);
   }

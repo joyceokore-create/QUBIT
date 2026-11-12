@@ -82,6 +82,8 @@ model Tenant {
   nudgeSnoozes            NudgeSnooze[]
   workComments            WorkComment[]
   decisions               Decision[]
+  decisionRequests        DecisionRequest[]
+  glcActions              GlcAction[]
   absences                Absence[]
   notificationPreferences NotificationPreference[]
   projectTaskDependencies ProjectTaskDependency[]
@@ -261,6 +263,9 @@ model User {
   nudgeSnoozes             NudgeSnooze[]            @relation("UserNudgeSnoozes")
   workComments             WorkComment[]            @relation("WorkCommentAuthor")
   decisionsMade            Decision[]               @relation("DecisionDecider")
+  decisionRequestsRaised   DecisionRequest[]        @relation("DecisionRequestRaiser")
+  decisionRequestsDecided  DecisionRequest[]        @relation("DecisionRequestDecider")
+  glcActionsOwned          GlcAction[]              @relation("GlcActionOwner")
   resourceRequestsRaised   ResourceRequest[]        @relation("ResourceRequestRaiser")
   resourceRequestsResolved ResourceRequest[]        @relation("ResourceRequestResolver")
   projectDependenciesMade  ProjectDependency[]      @relation("ProjectDependencyAuthor")
@@ -1075,6 +1080,8 @@ model Project {
   nudges               Nudge[]
   workComments         WorkComment[]
   decisions            Decision[]
+  decisionRequests     DecisionRequest[]
+  glcActions           GlcAction[]
   memberReportAcks     MemberReportAck[]
   checkpointTemplate   CheckpointTemplate?    @relation(fields: [checkpointTemplateId], references: [id])
   checkpointTemplateId String?                @map("checkpoint_template_id")
@@ -1183,6 +1190,10 @@ model Checkpoint {
   /// NULL = not set: the name decides (src/lib/testing-gates.ts). An admin can set it
   /// explicitly either way.
   testing    Boolean?
+  /// WS1 (Tier 4) — a sign-off gate: closing it needs an approver (Head; Head of QA for a
+  /// testing gate; Super Admin). NULL = the name decides (Go-Live, SIT exit, UAT exit —
+  /// src/lib/gate-approval.ts). An admin can set it explicitly either way.
+  requiresApproval Boolean? @map("requires_approval")
   statuses   CheckpointStatus[]
 
   @@unique([templateId, name])
@@ -1342,12 +1353,23 @@ model CheckpointStatus {
   source         String?        @map("source")
   sourceAt       DateTime?      @map("source_at")
   sourceById     String?        @map("source_by_id")
+  // WS1 (Tier 4) — sign-off, separate from `state` so delivery progress keeps working:
+  // none | submitted | approved | approved_with_exception | returned. Approving sets
+  // state = Done; submitting and returning leave `state` alone.
+  approval       String         @default("none")
+  submittedById  String?        @map("submitted_by_id")
+  submittedAt    DateTime?      @map("submitted_at")
+  decidedById    String?        @map("decided_by_id")
+  decidedAt      DateTime?      @map("decided_at")
+  // Required for an approval with exception and for a return; shown to the PM.
+  decisionNote   String?        @map("decision_note")
   updatedAt      DateTime       @updatedAt @map("updated_at")
 
   // Postgres treats NULLs as distinct, so the null combinations (project-level row, and
   // track-level rows without a module) are pinned by partial unique indexes in the migration.
   @@unique([projectId, checkpointId, orgUnitId, moduleId])
   @@index([tenantId, projectId])
+  @@index([tenantId, approval])
   @@map("checkpoint_status")
 }
 
@@ -2051,6 +2073,7 @@ model Decision {
   sourceCommentId String?  @map("source_comment_id")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
+  request         DecisionRequest? // WS2: the request this Register entry came from, if any
 
   @@index([tenantId, projectId, decidedAt])
   @@map("decision")
@@ -2079,4 +2102,67 @@ model StageTerm {
   @@unique([tenantId, term])
   @@index([tenantId])
   @@map("stage_term")
+}
+
+/**
+ * WS2 (UX fidelity Tier 4, mwashukes-desk/plans/ws1-ws2-proposals.md) — a decision waiting on
+ * the Group. Raised by a Head (any project) or a PM (their own projects); decided by an
+ * Executive. waiting → decided (outcome approved | declined) or deferred (new due date, still
+ * waiting on the Group). A decided request with a project writes a `Decision` (the project's
+ * Register entry) and keeps its id here; the request keeps the history.
+ */
+model DecisionRequest {
+  id          String      @id @default(cuid())
+  tenantId    String      @map("tenant_id")
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  projectId   String?     @map("project_id")
+  project     Project?    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String
+  /// What is being asked (sentence case, plain words).
+  context     String?
+  /// [{ label: "If approved", text: "…" }, { label: "If declined", text: "…" }]
+  options     Json        @default("[]")
+  raisedById  String      @map("raised_by_id")
+  raisedBy    User        @relation("DecisionRequestRaiser", fields: [raisedById], references: [id])
+  dueDate     DateTime?   @map("due_date")
+  status      String      @default("waiting") // waiting | decided | deferred
+  outcome     String? // approved | declined
+  /// The note for the record: required for declined and deferred.
+  outcomeNote String?     @map("outcome_note")
+  decidedById String?     @map("decided_by_id")
+  decidedBy   User?       @relation("DecisionRequestDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedAt   DateTime?   @map("decided_at")
+  decisionId  String?     @unique @map("decision_id") // the Register entry once decided
+  decision    Decision?   @relation(fields: [decisionId], references: [id], onDelete: SetNull)
+  glcActions  GlcAction[]
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  @@index([tenantId, status, dueDate])
+  @@index([tenantId, projectId])
+  @@map("decision_request")
+}
+
+/**
+ * WS2 — a Group-level committee (GLC) action item: work someone owes after a decision or a
+ * committee meeting, with an owner, a due date and open | done.
+ */
+model GlcAction {
+  id                String           @id @default(cuid())
+  tenantId          String           @map("tenant_id")
+  tenant            Tenant           @relation(fields: [tenantId], references: [id])
+  projectId         String?          @map("project_id")
+  project           Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  decisionRequestId String?          @map("decision_request_id")
+  decisionRequest   DecisionRequest? @relation(fields: [decisionRequestId], references: [id], onDelete: SetNull)
+  title             String
+  ownerId           String?          @map("owner_id")
+  owner             User?            @relation("GlcActionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  dueDate           DateTime?        @map("due_date")
+  status            String           @default("open") // open | done
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  @@index([tenantId, status, dueDate])
+  @@map("glc_action")
 }

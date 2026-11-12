@@ -1,7 +1,10 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { GateReviewDrawer, type GateTarget } from "@/components/gates/gate-review";
+import type { GateQueueItem } from "@/lib/gate-approval";
 import { KpiCard, KpiRow } from "@/components/ui/kpi-card";
 import { Meter } from "@/components/ui/kpi-charts";
 import { Chip } from "@/components/ui/status-pill";
@@ -17,21 +20,23 @@ import { cn } from "@/lib/utils";
 /**
  * UX9 + UX fidelity Tier 1 — Head of QA › Quality Home, built to design spec v2 (docs/08).
  * Brief → four KPI cards → the "Quality Queue" panel (Testing Gates · Critical Issues · Test
- * Tasks) → Requirement Coverage and Testers This Week. Signing off a testing gate in a drawer
- * waits for the gate workflow (WS1, Tier 4); until then a testing gate opens the project's
- * Delivery tab, where Head of QA can set testing gates (and only those, D10).
+ * Tasks) → Requirement Coverage and Testers This Week. WS1 (Tier 4): the Testing Gates tab
+ * lists testing gates submitted for sign-off; Review opens drawer 14 "Sign Off a Testing
+ * Gate" in place (Return to PM / Sign Off with Exception).
  */
 
 const EMPTY: Record<QhTab, string> = {
-  gates: "No testing gates in play",
+  gates: "No testing gates waiting for sign-off",
   critical: "No critical issues open",
   tasks: "No test tasks are unassigned or overdue",
 };
 
-export function QualityHome({ data, testers, brief, nowIso }: { data: QhData; testers: TesterLoad[]; brief: ReactNode; nowIso: string }) {
+export function QualityHome({ data, gates = [], testers, brief, nowIso }: { data: QhData; gates?: GateQueueItem[]; testers: TesterLoad[]; brief: ReactNode; nowIso: string }) {
   const now = useMemo(() => new Date(nowIso), [nowIso]);
-  const items = useMemo(() => buildQueue(data, now), [data, now]);
-  const k = qhKpis(data);
+  const router = useRouter();
+  const [review, setReview] = useState<GateTarget | null>(null);
+  const items = useMemo(() => buildQueue(data, now, gates), [data, now, gates]);
+  const k = qhKpis(data, gates);
   const coverage = coverageList(data);
   const list = useListUrl("quality-home", 10);
   const counts = Object.fromEntries(QH_TABS.map((t) => [t, items.filter((i) => i.tab === t).length])) as Record<QhTab, number>;
@@ -55,9 +60,9 @@ export function QualityHome({ data, testers, brief, nowIso }: { data: QhData; te
           chart={data.projects.length ? <Meter value={k.inTesting} max={data.projects.length} /> : undefined}
         />
         <KpiCard
-          label="Testing Gates in Play"
+          label="Testing Gates Waiting"
           value={k.testingGates}
-          context={k.gatesBlocked ? `${k.gatesBlocked} blocked or held by critical issues` : "None blocked"}
+          context={k.gatesBlocked ? `${k.gatesBlocked} held by critical issues` : k.testingGates ? "UAT and SIT sign-offs" : "None waiting"}
           contextTone={k.gatesBlocked ? "bad" : "neutral"}
           chart={k.testingGates ? <Meter value={k.gatesBlocked} max={k.testingGates} tone="warn" /> : undefined}
         />
@@ -72,7 +77,7 @@ export function QualityHome({ data, testers, brief, nowIso }: { data: QhData; te
 
       <Columns
         main={
-          <Panel title="Quality Queue" labelledBy="qa-queue" action={<TextLink href="/projects?view=gates">Gate View</TextLink>}>
+          <Panel title="Quality Queue" labelledBy="qa-queue" action={<TextLink href="/approvals?tab=gates">Open Approvals</TextLink>}>
             <nav aria-label="Quality queue views">
               <ul className={TABS_ROW}>
                 {QH_TABS.map((t) => (
@@ -100,9 +105,15 @@ export function QualityHome({ data, testers, brief, nowIso }: { data: QhData; te
                     chip={<Chip tone={it.chip.tone}>{it.chip.label}</Chip>}
                     meta={it.when}
                     action={
-                      <Link href={it.href} className={COMPACT}>
-                        {tab === "gates" ? "Review" : "Open"}
-                      </Link>
+                      it.gate ? (
+                        <button type="button" onClick={() => setReview(it.gate!)} className={COMPACT}>
+                          Review
+                        </button>
+                      ) : (
+                        <Link href={it.href} className={COMPACT}>
+                          Open
+                        </Link>
+                      )
                     }
                   />
                 ))}
@@ -110,7 +121,7 @@ export function QualityHome({ data, testers, brief, nowIso }: { data: QhData; te
             )}
             <Foot>
               {tab === "gates"
-                ? "Testing gates only. You set them in each project's Delivery tab; sign-off in a drawer arrives with the gate workflow."
+                ? "Testing gates submitted for your sign-off. Signing off with critical issues open records an exception."
                 : "Head of QA can still raise and edit risks and issues from Risks & Issues."}
             </Foot>
           </Panel>
@@ -157,6 +168,7 @@ export function QualityHome({ data, testers, brief, nowIso }: { data: QhData; te
           </>
         }
       />
+      <GateReviewDrawer target={review} onClose={() => setReview(null)} onDone={() => router.refresh()} timeZone={data.timeZone} />
     </main>
   );
 }

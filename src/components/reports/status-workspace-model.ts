@@ -134,7 +134,7 @@ export function readStage(p: WorkspaceProject, base: Card, c: Card, stageGateNam
   }
   if (!c.stage.trim()) return { card: next, reading: null };
   // Read against the card's CURRENT product-scope states, so "before X → done" respects hand edits.
-  const catalog: DeliveryCatalog = { ...p.catalog, gateStates: [...p.catalog.gateStates.filter((g) => g.orgUnitId !== null), ...p.catalog.gates.map((g) => ({ orgUnitId: null, checkpointId: g.checkpointId, state: next.gates["-"]![g.checkpointId]! }))] };
+  const catalog: DeliveryCatalog = { ...p.catalog, gateStates: [...p.catalog.gateStates.filter((g) => g.orgUnitId !== null), ...p.catalog.gates.map((g) => ({ orgUnitId: null, checkpointId: g.checkpointId, state: next.gates["-"]![g.checkpointId]!, approval: p.catalog.gateStates.find((s) => s.orgUnitId === null && s.checkpointId === g.checkpointId)?.approval }))] };
   const plan = resolveDelivery({ project: p.catalog.name, stage: c.stage, gates: [], cells: [] }, catalog, { market: null, ...(stageGateName === undefined ? {} : { stageGateName }) });
   for (const g of plan.gates) {
     next.gates["-"] = { ...next.gates["-"], [g.checkpointId]: g.to };

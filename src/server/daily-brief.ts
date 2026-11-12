@@ -9,6 +9,9 @@ import { getTenantTimeZone } from "@/server/preferences";
 import type { CockpitProject } from "@/server/dashboard-cockpit";
 import { buildBrief, type Brief, type BriefExtras, type BriefTask } from "@/lib/daily-brief";
 import { SUPER_ADMIN, type ViewRole } from "@/lib/view-roles";
+import { approverScope } from "@/lib/gate-approval";
+import { listGateQueue } from "@/server/gate-approval";
+import { waitingDecisionsSummary } from "@/server/decision-requests";
 
 /**
  * UX4 — the Daily Brief's reads (UX plan D4/D4a). The cockpit payload the page already loaded
@@ -33,6 +36,11 @@ export function briefReadsFor(role: ViewRole, ctx: TenantContext) {
     checkIns: role === "ProjectManager",
     critical: role === "HeadOfQA",
     myTasks: role === "Member",
+    // WS1 — gate sign-off lines: approvers (on their own home), and the PM's returned gates.
+    gatesWaiting: (role === "HeadOfProjects" || role === "HeadOfQA") && approverScope(ctx.roles) !== "none",
+    gatesReturned: role === "ProjectManager",
+    // WS2 — the Executive's real waiting decisions (replaces the signal-based suggestion).
+    decisionsWaiting: role === "Executive",
   };
 }
 
@@ -169,6 +177,44 @@ export async function getBriefExtras(ctx: Ctx, role: ViewRole, projects: Cockpit
               blockerText: t.blockers[0]?.description ?? null,
             }),
           )),
+      ),
+    );
+  }
+
+  if (reads.decisionsWaiting) {
+    jobs.push(
+      withTenant(ctx, (tx) => waitingDecisionsSummary(tx, 3)).then(
+        (w) =>
+          void (extras.decisionsWaiting = {
+            count: w.total,
+            titles: w.top.map((d) => d.title),
+            firstId: w.top[0]?.id ?? null,
+            overdue: w.dueDates.filter((d) => new Date(d) < now).length,
+          }),
+      ),
+    );
+  }
+
+  if (reads.gatesWaiting) {
+    jobs.push(
+      listGateQueue(ctx, "approver").then((gates) => {
+        const waiting = gates.filter((g) => g.approval === "submitted" && (role !== "HeadOfQA" || g.testing));
+        extras.gatesWaiting = {
+          count: waiting.length,
+          oldestAt: waiting[0]?.submittedAt ? new Date(waiting[0].submittedAt) : null,
+          names: waiting.map((g) => `${g.projectName} · ${g.gateName}`),
+        };
+      }),
+    );
+  }
+
+  if (reads.gatesReturned) {
+    jobs.push(
+      listGateQueue(ctx, "mine").then(
+        (gates) =>
+          void (extras.gatesReturned = gates
+            .filter((g) => g.approval === "returned")
+            .map((g) => ({ statusId: g.statusId, projectId: g.projectId, projectName: g.projectName, gateName: g.gateName, note: g.decisionNote }))),
       ),
     );
   }

@@ -90,7 +90,7 @@ export default async function ProjectWorkspacePage({
       // Tier 3 — the Delivery tab's "Gates by Market" grid: the template's gates and every
       // track's states (product + each market; module rows excluded), read once here.
       tx.project.findUnique({ where: { id }, select: { checkpointTemplate: { select: { checkpoints: { select: { id: true, name: true }, orderBy: { orderIndex: "asc" } } } } } }),
-      tx.checkpointStatus.findMany({ where: { projectId: id, moduleId: null }, select: { orgUnitId: true, checkpointId: true, state: true, source: true, updatedAt: true } }),
+      tx.checkpointStatus.findMany({ where: { projectId: id, moduleId: null }, select: { orgUnitId: true, checkpointId: true, state: true, source: true, updatedAt: true, approval: true } }),
     ]),
   );
   if (!p) notFound();

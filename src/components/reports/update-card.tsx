@@ -11,6 +11,7 @@ import { FOCUS, PRIMARY, SECONDARY } from "@/lib/surface";
 import { cn } from "@/lib/utils";
 import { GATE_STATE_LABEL, MODULE_STATE_LABEL, type CatalogMarket } from "@/lib/status-report-delivery";
 import type { CheckpointState } from "@/server/checkpoints";
+import { cascadePlan } from "@/lib/gate-approval";
 import type { InstanceState } from "@/server/project-instances";
 import { GATE_STATES, MODULE_STATES, NARRATIVE_MAX, RAG_TONE, RAG_WORD, RAGS, mkey, progressOf, readStage, type Card, type Diff, type WorkspaceProject, needsRatingReason, RATING_REASON_MIN } from "@/components/reports/status-workspace-model";
 
@@ -189,7 +190,15 @@ export function UpdateCard({
                               const state = String(v) as CheckpointState;
                               const scoped = { ...x.gates[x.scope], [g.checkpointId]: state };
                               // A later gate done closes the earlier ones (a PM can reopen one explicitly after).
-                              if (state === "Done") for (const earlier of p.catalog.gates) if (earlier.orderIndex < g.orderIndex && scoped[earlier.checkpointId] !== "Done" && scoped[earlier.checkpointId] !== "Blocked") scoped[earlier.checkpointId] = "Done";
+                              // WS1: a sign-off gate set done is submitted on save, and the cascade stops
+                              // at the first open sign-off gate behind it (which is proposed done = submitted).
+                              if (state === "Done" && !g.signOff) {
+                                const plan = cascadePlan(
+                                  p.catalog.gates.map((e) => ({ checkpointId: e.checkpointId, orderIndex: e.orderIndex, state: scoped[e.checkpointId] ?? "NotStarted", signOff: Boolean(e.signOff), approval: p.catalog.gateStates.find((s) => s.orgUnitId === (x.scope === "-" ? null : x.scope) && s.checkpointId === e.checkpointId)?.approval })),
+                                  g.checkpointId,
+                                );
+                                for (const id of [...plan.close, ...(plan.submit ? [plan.submit] : [])]) scoped[id] = "Done";
+                              }
                               return { ...x, gates: { ...x.gates, [x.scope]: scoped } };
                             })
                           }

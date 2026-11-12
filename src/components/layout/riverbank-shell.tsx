@@ -30,10 +30,12 @@ import {
   Building2,
   Compass,
   History,
+  Scale,
   type LucideIcon,
 } from "lucide-react";
 import { activeMenuKey, type MenuGroup, type MenuIcon } from "@/lib/role-menus";
 import { APPROVALS_CHANGED } from "@/lib/approvals";
+import { DECISIONS_CHANGED } from "@/lib/decisions";
 import type { UiMode } from "@/lib/ui-mode";
 import type { ViewRole } from "@/lib/view-roles";
 import { ViewingAs } from "./viewing-as";
@@ -95,6 +97,7 @@ const MENU_ICONS: Record<MenuIcon, LucideIcon> = {
   building: Building2,
   compass: Compass,
   history: History,
+  scale: Scale,
 };
 
 const SIDEBAR_KEY = "rv-sidebar-open";
@@ -228,6 +231,25 @@ export function RiverbankShell({
       window.removeEventListener(APPROVALS_CHANGED, load);
     };
   }, [hasApprovalsItem, pathname]);
+  // WS2 — the Executive's Decisions item carries the decisions waiting on the Group, the same
+  // way; refetched on navigation and when /decisions records a change (DECISIONS_CHANGED).
+  const hasDecisionsItem = Boolean(newNav?.groups.some((g) => g.items.some((i) => i.key === "decisions")));
+  const [decisionsCount, setDecisionsCount] = useState(0);
+  useEffect(() => {
+    if (!hasDecisionsItem) return;
+    let live = true;
+    const load = () =>
+      fetch("/api/decisions/count")
+        .then((r) => (r.ok ? r.json() : { waiting: 0 }))
+        .then((d) => live && setDecisionsCount(d.waiting ?? 0))
+        .catch(() => {});
+    void load();
+    window.addEventListener(DECISIONS_CHANGED, load);
+    return () => {
+      live = false;
+      window.removeEventListener(DECISIONS_CHANGED, load);
+    };
+  }, [hasDecisionsItem, pathname]);
   const activeHref = activeNavHref(pathname, items);
   // Labels show when expanded on desktop, or always inside the mobile drawer.
   const labelled = open || mobileOpen;
@@ -304,7 +326,9 @@ export function RiverbankShell({
                         ? accessCount
                         : item.key === "approvals" && approvalsCount > 0
                           ? approvalsCount
-                          : null;
+                          : item.key === "decisions" && decisionsCount > 0
+                            ? decisionsCount
+                            : null;
                     return (
                       <li key={item.key}>
                         <Link

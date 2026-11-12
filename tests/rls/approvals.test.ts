@@ -101,7 +101,7 @@ describe("UX8 approvals feed", () => {
 
   it("a Head sees the tenant's New/Reviewing ideas and Open requests — never decided ones", async () => {
     const feed = await getApprovals(rbHead);
-    expect(feed.can).toEqual({ ideas: true, staffing: true });
+    expect(feed.can).toEqual({ ideas: true, staffing: true, gates: "approver" }); // WS1: the Head signs off gates
     expect(ids(feed)).toEqual(expect.arrayContaining([...rb.openIdeaIds, rb.openRequestId]));
     expect(ids(feed)).not.toContain(rb.closedIdeaId);
     expect(ids(feed)).not.toContain(rb.closedRequestId);
@@ -114,21 +114,30 @@ describe("UX8 approvals feed", () => {
   });
 
   it("a viewer without idea:triage or staffing:manage gets nothing (and can't open the page)", async () => {
-    for (const ctx of [rbMember, rbPm]) {
+    for (const ctx of [rbMember]) {
       expect(canOpenApprovals(ctx)).toBe(false);
       const feed = await getApprovals(ctx);
       expect(feed.items).toEqual([]);
       expect(feed.rollup).toBeNull();
-      expect(await countApprovals(ctx)).toEqual({ ideas: 0, staffing: 0, total: 0 });
+      expect(await countApprovals(ctx)).toEqual({ ideas: 0, staffing: 0, gates: 0, total: 0 });
     }
+  });
+
+  it("WS1: a PM opens Approvals for their own gate submissions only — no ideas, staffing or roll-up", async () => {
+    expect(canOpenApprovals(rbPm)).toBe(true);
+    const feed = await getApprovals(rbPm);
+    expect(feed.can).toEqual({ ideas: false, staffing: false, gates: "mine" });
+    expect(feed.items.every((i) => i.kind === "gate")).toBe(true);
+    expect(feed.rollup).toBeNull();
+    expect((await countApprovals(rbPm)).ideas + (await countApprovals(rbPm)).staffing).toBe(0);
   });
 
   it("lists only what the viewer can act on: staffing:manage alone → requests only, no roll-up", async () => {
     const staffer: TenantContext = { ...rbPm, permissions: ["dashboard:read", "reports:read", "staffing:manage"] };
     expect(canOpenApprovals(staffer)).toBe(true);
     const feed = await getApprovals(staffer);
-    expect(feed.can).toEqual({ ideas: false, staffing: true });
-    expect(feed.items.every((i) => i.kind === "staffing")).toBe(true);
+    expect(feed.can).toEqual({ ideas: false, staffing: true, gates: "mine" }); // a PM's own gates (WS1)
+    expect(feed.items.every((i) => i.kind === "staffing" || i.kind === "gate")).toBe(true);
     expect(ids(feed)).toContain(rb.openRequestId);
     // reports:read without the Head role can't approve the roll-up, so no banner.
     expect(feed.rollup).toBeNull();

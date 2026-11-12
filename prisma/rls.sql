@@ -107,7 +107,10 @@ BEGIN
     -- M-P4a (docs/35) — idea intake & triage, the front of the funnel.
     'idea',
     -- Custom roles (tuma-style permission bundles) — admin-created, deactivate-only.
-    'custom_role'
+    'custom_role',
+    -- WS2 (UX fidelity Tier 4) — decisions waiting on the Group, and GLC actions.
+    'decision_request',
+    'glc_action'
     -- NOTE: `app_module` and `permission` are deliberately NOT listed. They are the GLOBAL
     -- platform catalogue (tuma's app_modules/permissions) — identical for every tenant, not
     -- tenant data, and carry no tenant_id — exactly like the `tenant` table, which is also

@@ -21,7 +21,6 @@ import {
   PRIORITY_TAB_LABEL,
   PRIORITY_TABS,
   priorityWord,
-  SUGGESTED_LABEL,
   tabCounts,
   topRisks,
   type OneThing,
@@ -31,7 +30,8 @@ import {
   type Tone,
 } from "@/lib/portfolio-home";
 import { GATE_KEYS, stageOf } from "@/lib/cockpit-gates";
-import { FOCUS, PRIMARY, TAB, TAB_ACTIVE_ON_CARD, TAB_COUNT, TABS_ROW, THEAD, TROW } from "@/lib/surface";
+import { dueChip } from "@/lib/decisions";
+import { FOCUS, PRIMARY, SECONDARY, TAB, TAB_ACTIVE_ON_CARD, TAB_COUNT, TABS_ROW, THEAD, TROW } from "@/lib/surface";
 import { cn } from "@/lib/utils";
 
 /**
@@ -39,8 +39,9 @@ import { cn } from "@/lib/utils";
  * Brief → four KPI cards → the "Approved Portfolio" panel (tabs by priority; Project ·
  * Portfolio · Stage · Health · The One Thing to Know) → Blockers Needing a Decision (the real
  * list from Reports › This Week) and Top Risks. Read-only: a row opens the project drawer with a
- * link to the full workspace. The decisions figure stays "Suggested from project signals" until
- * the Decisions workflow exists (WS2, Tier 4).
+ * link to the full workspace. WS2 (Tier 4): the decisions figure and the "Decisions Waiting on
+ * the Group" panel are the real requests Heads and PMs raise (Decisions page); a project with
+ * one waiting gets "Go to the Decision" in its summary drawer.
  */
 
 const HOME_ROWS = 10;
@@ -85,6 +86,8 @@ export function PortfolioHome({
   const [openId, setOpenId] = useState<string | null>(null);
   const open = openId ? (projects.find((p) => p.id === openId) ?? null) : null;
   const dateLine = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone }).format(now).replace(",", "");
+  const waiting = extras.decisions;
+  const overdue = waiting.dueDates.filter((d) => isOverdue(d, now, timeZone)).length;
 
   return (
     <main className="mx-auto flex w-full max-w-[1280px] flex-col gap-4 p-[22px_22px_72px]">
@@ -103,9 +106,10 @@ export function PortfolioHome({
         <KpiCard label="Live in Production" value={k.live} context={k.live ? k.liveNames.slice(0, 2).join(" · ") + (k.live > 2 ? ` and ${k.live - 2} more` : "") : "None live yet"} />
         <KpiCard
           label="Decisions Waiting on the Group"
-          value={k.decisions}
-          context={SUGGESTED_LABEL}
-          chart={k.approved ? <Meter value={k.decisions} max={k.approved} tone="bad" /> : undefined}
+          value={waiting.total}
+          context={waiting.total === 0 ? "Nothing waiting" : overdue ? `${overdue} overdue` : "None overdue"}
+          contextTone={overdue ? "bad" : "neutral"}
+          chart={k.approved ? <Meter value={waiting.total} max={Math.max(k.approved, waiting.total)} tone="bad" /> : undefined}
         />
         <KpiCard
           label="Blocked by a Dependency"
@@ -169,6 +173,31 @@ export function PortfolioHome({
         }
         rail={
           <>
+            <Panel title="Decisions Waiting on the Group" action={<TextLink href="/decisions">{waiting.total > waiting.top.length ? `All ${waiting.total} Decisions` : "Decisions"}</TextLink>}>
+              {waiting.top.length === 0 ? (
+                <p className="text-[12.5px] text-[var(--ds-ink3)]">Nothing is waiting on the Group.</p>
+              ) : (
+                <PanelList>
+                  {waiting.top.map((d) => {
+                    const chip = dueChip(d.dueDate, now, timeZone);
+                    const late = chip.label === "Overdue";
+                    return (
+                      <PanelRow
+                        key={d.id}
+                        title={
+                          <Link href={`/decisions?open=${d.id}`} className={cn("rounded-[3px] hover:underline", FOCUS)}>
+                            {d.title}
+                          </Link>
+                        }
+                        sub={`${d.projectName ?? "Group level"} · ${d.dueDate ? `${late ? "was due" : "due"} ${formatDayMonth(d.dueDate, timeZone)}` : d.raisedBy}`}
+                        chip={<Chip tone={chip.tone}>{chip.label}</Chip>}
+                      />
+                    );
+                  })}
+                </PanelList>
+              )}
+            </Panel>
+
             {extras.decisionBlockers && (
               <Panel title="Blockers Needing a Decision" action={<TextLink href="/reports">Reports</TextLink>}>
                 {extras.decisionBlockers.length === 0 ? (
@@ -281,15 +310,21 @@ function ProjectSummary({ p, extras, now, tz }: { p: CockpitProject; extras: Por
   const milestones = extras.nextMilestones[p.id] ?? [];
   const last = extras.lastLine[p.id];
   const gatesDone = GATE_KEYS.filter((g) => p.gates[g] === "done").length;
+  const decisionId = extras.decisions.byProject[p.id] ?? null;
   const sub = [p.portfolioName ?? "Unassigned", stage, p.pmName ? `PM ${p.pmName}` : "No PM", `${priorityWord(p.priority)} priority`].join(" · ");
   return (
     <DrawerFrame
       header={<DrawerHeader step="Project" title={p.name} subtitle={sub} />}
       footer={
         <DrawerFooter>
-          <Link href={`/projects/${p.id}`} className={PRIMARY}>
+          <Link href={`/projects/${p.id}`} className={decisionId ? SECONDARY : PRIMARY}>
             Open Full Workspace
           </Link>
+          {decisionId && (
+            <Link href={`/decisions?open=${decisionId}`} className={PRIMARY}>
+              Go to the Decision
+            </Link>
+          )}
         </DrawerFooter>
       }
     >

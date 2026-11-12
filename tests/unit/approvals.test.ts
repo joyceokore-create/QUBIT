@@ -87,8 +87,10 @@ describe("ordering and tabs", () => {
   });
   it("tab counts match the rows each tab shows", () => {
     const tabs = approvalTabs(items);
+    // WS1: a Gates tab joins (the page hides it from viewers with no gate lens).
     expect(tabs).toEqual([
       { key: "all", label: "All", count: 3 },
+      { key: "gates", label: "Gates", count: 0 },
       { key: "ideas", label: "Ideas", count: 2 },
       { key: "staffing", label: "Staffing", count: 1 },
     ]);
@@ -96,7 +98,8 @@ describe("ordering and tabs", () => {
   });
   it("an unknown tab reads as All", () => {
     expect(parseTab("staffing")).toBe("staffing");
-    expect(parseTab("gates")).toBe("all");
+    expect(parseTab("gates")).toBe("gates"); // WS1
+    expect(parseTab("decisions")).toBe("all");
     expect(parseTab("")).toBe("all");
   });
 });

@@ -61,6 +61,8 @@ export interface BriefTask {
 /** Role-specific reads beyond the cockpit payload. Absent = not fetched (no permission). */
 export interface BriefExtras {
   accessRequests?: { count: number; oldestAt: Date | null };
+  /** Executive: decision requests waiting on the Group (WS2), soonest due first. */
+  decisionsWaiting?: { count: number; titles: string[]; firstId: string | null; overdue: number };
   usersWithoutMfa?: number;
   expiredInvites?: number;
   /** Ideas waiting for triage (New or Reviewing) — the same set Approvals lists. */
@@ -71,6 +73,10 @@ export interface BriefExtras {
   checkInsSent?: string[];
   /** Open critical issues + open critical bugs per project (Head of QA). */
   criticalByProject?: Record<string, number>;
+  /** WS1 — gates waiting on this approver's sign-off (Head; Head of QA: testing gates). */
+  gatesWaiting?: { count: number; oldestAt: Date | null; names: string[] };
+  /** WS1 — the PM's gates an approver returned, with the reason. */
+  gatesReturned?: { statusId: string; projectId: string; projectName: string; gateName: string; note: string | null }[];
   myTasks?: BriefTask[];
 }
 
@@ -357,7 +363,7 @@ function qaItems({ projects, extras }: BriefInput): BriefItem[] {
   return items;
 }
 
-function execItems({ projects }: BriefInput): BriefItem[] {
+function execItems({ projects, extras }: BriefInput): BriefItem[] {
   const live = active(projects);
   const items: BriefItem[] = [];
 
@@ -373,17 +379,16 @@ function execItems({ projects }: BriefInput): BriefItem[] {
     });
   }
 
-  // The same rule as the Executive's "Decisions needing Group action" figure (exec.tsx). These
-  // are worked out from project signals, not raised by people (D5), and the line says so.
-  const decisions = live.filter((p) => p.redRisks > 0 || (p.dispute && p.targetPassed) || (p.calculated === "R" && p.freshnessDays > 7));
-  if (decisions.length) {
+  // WS2: decisions raised by people and waiting on the Group (no longer suggested from signals).
+  const waiting = extras.decisionsWaiting;
+  if (waiting && waiting.count > 0) {
     items.push({
       id: "exec-decisions",
       group: "now",
-      weight: 10 + decisions.length,
-      emphasis: `${count(decisions.length, "project may need", "projects may need")} a Group decision.`,
-      detail: `${nameList(decisions.map((p) => p.name))}. Suggested from project signals.`,
-      action: decisions.length === 1 ? { label: "Open Project", href: projectHref(decisions[0].id) } : { label: "See Projects", href: "/projects" },
+      weight: 10 + waiting.count + waiting.overdue * 5,
+      emphasis: `${count(waiting.count, "decision is", "decisions are")} waiting on the Group${waiting.overdue ? `, ${waiting.overdue} overdue` : ""}.`,
+      detail: waiting.count > waiting.titles.length ? `${waiting.titles.join(", ")} and ${waiting.count - waiting.titles.length} more.` : `${nameList(waiting.titles)}.`,
+      action: waiting.count === 1 && waiting.firstId ? { label: "Open Decision", href: `/decisions?open=${waiting.firstId}` } : { label: "Open Decisions", href: "/decisions" },
     });
   }
 
@@ -568,8 +573,41 @@ export function rankBrief(items: BriefItem[]): BriefItem[] {
   );
 }
 
+/**
+ * WS1 — gate sign-off lines, for whichever role's reads fetched them (briefReadsFor gates the
+ * reads by role and approver scope, so an absent extra means "not yours"):
+ *  - approvers: "2 gates are waiting on your sign-off." (Waiting on you);
+ *  - the PM: "UAT on Branch Queue System was returned: <reason>" (Needs action now).
+ */
+export function gateItems({ extras, now, timeZone: tz }: BriefInput): BriefItem[] {
+  const items: BriefItem[] = [];
+  const w = extras.gatesWaiting;
+  if (w && w.count > 0) {
+    const oldest = w.oldestAt ? daysBetween(w.oldestAt, now, tz) : 0;
+    items.push({
+      id: "gates-waiting",
+      group: "wait",
+      weight: 30 + w.count + oldest,
+      emphasis: `${count(w.count, "gate is", "gates are")} waiting on your sign-off.`,
+      detail: `${nameList(w.names)}.${oldest > 0 ? ` The oldest has waited ${count(oldest, "day", "days")}.` : ""}`,
+      action: { label: "Review Gates", href: "/approvals?tab=gates" },
+    });
+  }
+  for (const r of extras.gatesReturned ?? []) {
+    items.push({
+      id: `gate-returned-${r.statusId}`,
+      group: "now",
+      weight: 90,
+      emphasis: `${r.gateName} on ${r.projectName} was returned${r.note ? `: ${r.note.replace(/\.$/, "")}` : ""}.`,
+      detail: "Fix what the approver asked for, then submit it again from the Delivery tab.",
+      action: { label: "Open Gate", href: projectHref(r.projectId, "Delivery") },
+    });
+  }
+  return items;
+}
+
 /** The whole Brief for one role: every qualifying item, ranked. */
 export function buildBrief(input: BriefInput): Brief {
   const rule = RULES[input.role] ?? memberItems;
-  return { items: rankBrief(rule(input)), generatedAt: input.now };
+  return { items: rankBrief([...rule(input), ...gateItems(input)]), generatedAt: input.now };
 }

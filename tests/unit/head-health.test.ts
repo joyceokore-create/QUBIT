@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { buildDecisions, escalations, gatesInPlay, headKpis, pmLoad, staleProjects } from "@/lib/head-health";
+import type { GateQueueItem } from "@/lib/gate-approval";
+
+/** A synthetic gate in the sign-off queue (WS1). */
+function gateItem(o: Partial<GateQueueItem> = {}): GateQueueItem {
+  return {
+    statusId: "s", projectId: "p", projectCode: "P1", projectName: "Project p", checkpointId: "c", gateName: "Go-Live", testing: false,
+    orgUnitId: null, marketName: null, moduleName: null, approval: "submitted", state: "InProgress", submittedAt: "2026-11-11T09:00:00Z",
+    submittedById: "u_pm", submittedByName: "user_004", pmName: null, source: null, decidedAt: null, decidedByName: null, decisionNote: null, canDecide: true,
+    ...o,
+  };
+}
 import type { CockpitProject } from "@/server/dashboard-cockpit";
 
 // UX8 — Head › Delivery health rules (same meaning as the old Head cockpit's figures).
@@ -73,13 +84,28 @@ describe("exception rules", () => {
 describe("Needs your decision", () => {
   const items = buildDecisions(ps);
 
-  it("labels every gate row as suggested from project signals, blocked first", () => {
-    const gates = items.filter((i) => i.tab === "gates");
-    expect(gates.map((i) => [i.projectId, i.chip.label])).toEqual([
-      ["a", "Blocked"],
-      ["b", "In progress"],
+  it("WS1: lists no gate rows from project signals any more — only real submissions", () => {
+    expect(items.filter((i) => i.tab === "gates")).toEqual([]);
+  });
+
+  it("WS1: lists submitted gates oldest first, with the design's chips, opening the review", () => {
+    const now = new Date("2026-11-12T09:00:00Z");
+    const rows = buildDecisions(
+      ps,
+      [
+        gateItem({ statusId: "s1", projectId: "a", projectName: "Project a", gateName: "Go-Live", submittedAt: "2026-11-08T09:00:00Z", pmName: "user_004" }),
+        gateItem({ statusId: "s2", projectId: "b", projectName: "Project b", gateName: "UAT", marketName: "Market B", submittedAt: "2026-11-12T08:00:00Z", source: "Status report · Week 46" }),
+        gateItem({ statusId: "s3", approval: "returned" }),
+      ],
+      now,
+      "UTC",
+    ).filter((i) => i.tab === "gates");
+    expect(rows.map((i) => [i.title, i.chip.label, i.when])).toEqual([
+      ["Project a · Go-Live", "Overdue", "4 days"],
+      ["Project b · UAT (Market B)", "New", "today"],
     ]);
-    expect(gates.every((i) => i.sub.includes("Suggested from project signals"))).toBe(true);
+    expect(rows[0]).toMatchObject({ sub: "Gate · PM user_004", action: { kind: "gate", label: "Review", projectId: "a", statusId: "s1" } });
+    expect(rows[1]?.sub).toBe("Gate · No PM · from an upload");
   });
 
   it("words disputes with status words and offers Chase on stale updates", () => {
@@ -92,7 +118,9 @@ describe("Needs your decision", () => {
 
 describe("figures and PM load", () => {
   it("counts the approved portfolio by reported status", () => {
-    expect(headKpis(ps)).toEqual({ approved: 6, byHealth: { ok: 4, warn: 1, bad: 1, none: 0 }, gates: 2, stale: 1, disputes: 1 });
+    // WS1: the gates figure counts real submissions waiting on the Head, not signals.
+    expect(headKpis(ps)).toEqual({ approved: 6, byHealth: { ok: 4, warn: 1, bad: 1, none: 0 }, gates: 0, stale: 1, disputes: 1 });
+    expect(headKpis(ps, [gateItem({ statusId: "x" }), gateItem({ statusId: "y", approval: "returned" })]).gates).toBe(1);
   });
 
   it("lists PMs worst first and drops PMs with no live projects", () => {

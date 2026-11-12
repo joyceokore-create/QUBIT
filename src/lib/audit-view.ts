@@ -18,6 +18,17 @@ const ACTION_LABEL: Record<string, string> = {
   mfa_enroll: "MFA set up",
   mfa_reminder: "MFA reminder sent",
   tenant_switch: "Organisation switched",
+  // WS2 (Tier 4) — decisions waiting on the Group, and GLC actions.
+  "decision.raise": "Decision raised",
+  "decision.decide": "Decision recorded",
+  "decision.defer": "Decision deferred",
+  "glc_action.create": "GLC action added",
+  "glc_action.complete": "GLC action done",
+  // WS1 (Tier 4) — gate sign-off.
+  "gate.submit": "Gate submitted for sign-off",
+  "gate.approve": "Gate signed off",
+  "gate.approve_exception": "Gate signed off with exception",
+  "gate.return": "Gate returned",
 };
 const VERB: Record<string, string> = { create: "created", update: "changed", delete: "removed" };
 
@@ -63,6 +74,7 @@ export const AUDIT_FIELD_ALLOW: Record<string, string> = {
   reminded: "People reminded",
   reasonCode: "Reason",
   accessRequestRetentionDays: "Keep decided requests (days)",
+  approval: "Sign-off", // WS1: none / submitted / approved / approved_with_exception / returned
 };
 
 const ROLE_FIELDS = new Set(["role", "viewRole"]);

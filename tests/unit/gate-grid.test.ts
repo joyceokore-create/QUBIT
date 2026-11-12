@@ -62,7 +62,7 @@ describe("buildGateGrid", () => {
   });
   it("shows the product track when the project ships to no market", () => {
     const grid = buildGateGrid({ gates, markets: [], statuses: [{ orgUnitId: null, checkpointId: "g1", state: "Bogus", source: null, updatedAt: NOW }], productLabel: "Product", now: NOW, timeZone: TZ });
-    expect(grid.rows).toEqual([{ orgUnitId: null, label: "Product", flag: null, states: ["NotStarted", "NotStarted", "NotStarted"], currentGate: "BRD", done: 0, updated: "Edited · today" }]);
+    expect(grid.rows).toEqual([{ orgUnitId: null, label: "Product", flag: null, states: ["NotStarted", "NotStarted", "NotStarted"], signOff: [null, null, null], currentGate: "BRD", done: 0, updated: "Edited · today" }]);
     expect(grid.product).toBe(grid.rows[0]);
   });
 });

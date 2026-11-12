@@ -24,15 +24,28 @@ const FILL: Record<CheckpointState, string> = {
 };
 const LEGEND: CheckpointState[] = ["Done", "InProgress", "Blocked", "NotStarted"];
 
-export function GateSquare({ state, size = 16 }: { state: CheckpointState; size?: number }) {
+/** WS1 — a gate waiting for sign-off reads as the design's "Waiting for approval" (amber
+ * square with an ink ring, so it differs from plain in-progress by more than colour); a
+ * returned one carries a red ring. */
+export type SignOffMark = "submitted" | "returned" | null;
+const RING: Record<"submitted" | "returned", string> = { submitted: "0 0 0 2px var(--ds-card), 0 0 0 3.5px var(--ds-ink2)", returned: "0 0 0 2px var(--ds-card), 0 0 0 3.5px var(--ds-bad)" };
+
+export function GateSquare({ state, size = 16, signOff = null }: { state: CheckpointState; size?: number; signOff?: SignOffMark }) {
   return (
     <span
       aria-hidden
       className="inline-block flex-none align-middle"
-      style={{ width: size, height: size, borderRadius: size > 12 ? 5 : 3, background: FILL[state], boxShadow: state === "NotStarted" ? "inset 0 0 0 1px var(--ds-line)" : undefined }}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size > 12 ? 5 : 3,
+        background: signOff === "submitted" ? "var(--ds-warn)" : FILL[state],
+        boxShadow: signOff ? RING[signOff] : state === "NotStarted" ? "inset 0 0 0 1px var(--ds-line)" : undefined,
+      }}
     />
   );
 }
+const SIGN_OFF_WORD: Record<"submitted" | "returned", string> = { submitted: "waiting for sign-off", returned: "returned by the approver" };
 
 export function GatesByMarket({
   grid,
@@ -81,7 +94,8 @@ export function GatesByMarket({
                     </td>
                     {grid.gates.map((g, i) => {
                       const st = r.states[i] ?? "NotStarted";
-                      const word = CHECKPOINT_STATE_LABEL[st] ?? st;
+                      const mark = r.signOff?.[i] ?? null;
+                      const word = `${CHECKPOINT_STATE_LABEL[st] ?? st}${mark ? `, ${SIGN_OFF_WORD[mark]}` : ""}`;
                       return (
                         <td key={g.checkpointId} className="text-center">
                           <button
@@ -92,7 +106,7 @@ export function GatesByMarket({
                             onClick={() => onOpen({ orgUnitId: r.orgUnitId, label: r.label, checkpointId: g.checkpointId, gateName: g.name, updated: r.updated })}
                             className={`inline-grid size-7 place-items-center rounded-[6px] transition-colors hover:bg-[var(--ds-surface2)] ${FOCUS}`}
                           >
-                            <GateSquare state={st} />
+                            <GateSquare state={st} signOff={mark} />
                           </button>
                         </td>
                       );
@@ -111,6 +125,12 @@ export function GatesByMarket({
                   {CHECKPOINT_STATE_LABEL[st]}
                 </span>
               ))}
+              {rows.some((r) => r.signOff?.some(Boolean)) && (
+                <span className="inline-flex items-center gap-1.5">
+                  <GateSquare state="InProgress" size={11} signOff="submitted" />
+                  Waiting for sign-off
+                </span>
+              )}
             </span>
           </Foot>
         </>

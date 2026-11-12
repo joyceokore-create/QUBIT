@@ -17,6 +17,7 @@ import { saveMarketCheckIn } from "@/server/rollout";
 import { extractStatusReport, NARRATIVE_MAX, STAGE_MAX, type ParsedRow, type ReportFormat } from "@/server/status-report/parse";
 import { matchProjectAndMarket, type MatchableProject, type RowMatch } from "@/server/status-report/match";
 import { resolveDelivery, type DeliveryCatalog, type DeliveryPlan } from "@/lib/status-report-delivery";
+import { requiresSignOff } from "@/lib/gate-approval";
 
 /**
  * Weekly update workspace (Reports › Update all my projects). GET the WORKSPACE — every
@@ -99,14 +100,14 @@ export async function getDeliveryCatalog(ctx: TenantContext, projectId: string):
       where: { id: projectId },
       select: {
         id: true, code: true, name: true, moduleLabel: true,
-        checkpointTemplate: { select: { name: true, checkpoints: { select: { id: true, name: true, orderIndex: true }, orderBy: { orderIndex: "asc" } } } },
+        checkpointTemplate: { select: { name: true, checkpoints: { select: { id: true, name: true, orderIndex: true, requiresApproval: true }, orderBy: { orderIndex: "asc" } } } },
         orgStatuses: { where: { retiredAt: null }, select: { orgUnitId: true, orgUnit: { select: { code: true, name: true, flag: true } } }, orderBy: { orgUnit: { code: "asc" } } },
         modules: { select: { id: true, name: true, code: true, kind: true }, orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }] },
       },
     });
     if (!project) return null;
     const [gateStates, moduleStates] = await Promise.all([
-      tx.checkpointStatus.findMany({ where: { projectId, moduleId: null }, select: { orgUnitId: true, checkpointId: true, state: true } }),
+      tx.checkpointStatus.findMany({ where: { projectId, moduleId: null }, select: { orgUnitId: true, checkpointId: true, state: true, approval: true } }),
       tx.moduleInstanceStatus.findMany({ where: { projectId }, select: { moduleId: true, orgUnitId: true, state: true, note: true } }),
     ]);
     return {
@@ -117,8 +118,9 @@ export async function getDeliveryCatalog(ctx: TenantContext, projectId: string):
       templateName: project.checkpointTemplate?.name ?? null,
       markets: project.orgStatuses.map((o) => ({ orgUnitId: o.orgUnitId, code: o.orgUnit.code, name: o.orgUnit.name, flag: o.orgUnit.flag })),
       modules: project.modules.map((m) => ({ id: m.id, name: m.name, code: m.code, kind: m.kind as "instance" | "module" })),
-      gates: project.checkpointTemplate?.checkpoints.map((c) => ({ checkpointId: c.id, name: c.name, orderIndex: c.orderIndex })) ?? [],
-      gateStates: gateStates.map((g) => ({ orgUnitId: g.orgUnitId, checkpointId: g.checkpointId, state: g.state as CheckpointState })),
+      // WS1: a sign-off gate the report calls done is SUBMITTED, and the cascade stops there.
+      gates: project.checkpointTemplate?.checkpoints.map((c) => ({ checkpointId: c.id, name: c.name, orderIndex: c.orderIndex, signOff: requiresSignOff(c) })) ?? [],
+      gateStates: gateStates.map((g) => ({ orgUnitId: g.orgUnitId, checkpointId: g.checkpointId, state: g.state as CheckpointState, approval: g.approval })),
       moduleStates: moduleStates.map((m) => ({ moduleId: m.moduleId, orgUnitId: m.orgUnitId, state: m.state as InstanceState, note: m.note })),
       stageTerms: await tx.stageTerm.findMany({ select: { term: true, gateName: true }, orderBy: { term: "asc" } }),
     };
@@ -325,8 +327,10 @@ async function applyGates(ctx: TenantContext, projectId: string, gates: { checkp
         if (!(e instanceof CheckpointError) || e.code !== "GATE_UNMET") throw e;
         cps = await setCheckpointState(ctx, projectId, { checkpointId: g.checkpointId, state: g.state, overrideReason: reason }, scope, origin);
       }
-      const name = cps.rows.find((r) => r.checkpointId === g.checkpointId)?.name ?? "gate";
-      done.push(`${name} ${GATE_WORD[g.state]}`);
+      const row = cps.rows.find((r) => r.checkpointId === g.checkpointId);
+      const name = row?.name ?? "gate";
+      // WS1: a sign-off gate the report calls done was submitted for sign-off, not closed.
+      done.push(g.state === "Done" && row?.signOff && row.state !== "Done" ? `${name} submitted for sign-off` : `${name} ${GATE_WORD[g.state]}`);
     } catch (e) {
       problems.push(`Gate not moved: ${e instanceof Error ? e.message : "could not save"}`);
     }

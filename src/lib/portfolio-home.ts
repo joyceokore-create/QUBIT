@@ -1,5 +1,6 @@
 import type { CockpitProject } from "@/server/dashboard-cockpit";
 import type { DecisionBlocker } from "@/server/reports-week";
+import type { WaitingSummary } from "@/server/decision-requests";
 import { stageOf } from "@/lib/cockpit-gates";
 import { formatDayMonth, isOverdue } from "@/lib/dates";
 import { healthWord } from "@/lib/status-words";
@@ -243,6 +244,9 @@ export function topRisks(ps: CockpitProject[], limit = 2): TopRisk[] {
 export interface PortfolioHomeExtras {
   /** The real "Blockers needing a decision" (Reports › This week); null = viewer can't read reports. */
   decisionBlockers: DecisionBlocker[] | null;
+  /** WS2 — the real decisions waiting on the Group: count, the first three, and per project
+   * the soonest-due one (the summary drawer's "Go to the Decision"). */
+  decisions: WaitingSummary;
   /** Per project: the next pending milestones (ISO dates), soonest first. */
   nextMilestones: Record<string, { id: string; name: string; dueDate: string | null }[]>;
   /** Per project: the latest PM-confirmed check-in line. */

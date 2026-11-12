@@ -1,19 +1,21 @@
 import type { CockpitProject } from "@/server/dashboard-cockpit";
-import { GATE_LABELS } from "@/lib/cockpit-gates";
 import { healthWord } from "@/lib/status-words";
+import { dayKey } from "@/lib/dates";
+import { approvalChip, type GateQueueItem } from "@/lib/gate-approval";
 
 /**
  * UX8 — Head › Delivery health, the pure part (UX plan D3/D4/D5, UX8). Exceptions only, across
- * every project: gates (Suggested from project signals until gate approvals exist, UX13),
- * status disputes, stale updates and escalations — each with the SAME rule as the figures the
- * Head saw before (head.tsx), so nothing changes meaning. Client-safe.
+ * every project: gates waiting for the Head's sign-off (WS1, Tier 4 — real submissions; they
+ * replaced the "suggested from project signals" go-live rows), status disputes, stale updates
+ * and escalations — each with the SAME rule as the figures the Head saw before (head.tsx), so
+ * nothing changes meaning. Client-safe.
  */
 
 export const DECISION_TABS = ["gates", "disputes", "stale", "escalations"] as const;
 export type DecisionTab = (typeof DECISION_TABS)[number];
 export const DECISION_TAB_LABEL: Record<DecisionTab, string> = { gates: "Gates", disputes: "Disputes", stale: "Stale", escalations: "Escalations" };
 
-export type Tone = "bad" | "warn" | "info" | "muted";
+export type Tone = "bad" | "warn" | "info" | "ok" | "muted";
 
 export interface DecisionItem {
   id: string;
@@ -23,7 +25,7 @@ export interface DecisionItem {
   sub: string;
   chip: { tone: Tone; label: string };
   when: string;
-  action: { kind: "link"; label: string; href: string } | { kind: "nudge"; label: string; projectId: string };
+  action: { kind: "link"; label: string; href: string } | { kind: "nudge"; label: string; projectId: string } | { kind: "gate"; label: string; projectId: string; statusId: string };
   rank: number;
 }
 
@@ -37,7 +39,8 @@ const href = (id: string, tab?: string) => `/projects/${id}${tab ? `?tab=${encod
 const active = (ps: CockpitProject[]) => ps.filter((p) => !["Completed", "Cancelled"].includes(p.status));
 const pm = (p: CockpitProject) => (p.pmName ? `PM ${p.pmName}` : "No PM");
 
-/** Gates in play — the old cockpit's "Gate approvals waiting" rule: the Go-Live gate is live. */
+/** Go-Live gates in play (the old cockpit's signal rule). Since WS1 the Gates tab and KPI list
+ * real submissions instead; kept for callers that still want the signal. */
 export function gatesInPlay(ps: CockpitProject[]): CockpitProject[] {
   return active(ps).filter((p) => ["prog", "late", "block"].includes(p.gates.golive));
 }
@@ -51,21 +54,32 @@ export function escalations(ps: CockpitProject[]): CockpitProject[] {
   return active(ps).filter((p) => p.redRisks > 0 || (p.targetPassed && p.calculated !== "G"));
 }
 
-export function buildDecisions(ps: CockpitProject[]): DecisionItem[] {
+/** Whole tenant-local days a gate has waited (0 = today). */
+export function waitingDays(at: string | null, now: Date, tz: string): number {
+  if (!at) return 0;
+  return Math.max(0, Math.round((Date.parse(`${dayKey(now, tz)}T00:00:00Z`) - Date.parse(`${dayKey(at, tz)}T00:00:00Z`)) / 86_400_000));
+}
+
+const ageWord = (d: number) => (d === 0 ? "today" : d === 1 ? "1 day" : `${d} days`);
+
+export function buildDecisions(ps: CockpitProject[], gates: readonly GateQueueItem[] = [], now = new Date(), tz = "UTC"): DecisionItem[] {
   const items: DecisionItem[] = [];
 
-  for (const p of gatesInPlay(ps)) {
-    const state = p.gates.golive;
+  // WS1 — gates submitted for sign-off that this Head may decide (four-eyes already applied
+  // by the engine's approver lens). Oldest first.
+  for (const g of gates) {
+    if (g.approval !== "submitted") continue;
+    const days = waitingDays(g.submittedAt, now, tz);
     items.push({
-      id: `gate-${p.id}`,
+      id: `gate-${g.statusId}`,
       tab: "gates",
-      projectId: p.id,
-      title: `${p.name} · ${GATE_LABELS.golive} readiness`,
-      sub: `${pm(p)} · Suggested from project signals`,
-      chip: state === "block" ? { tone: "bad", label: "Blocked" } : state === "late" ? { tone: "warn", label: "Behind" } : { tone: "info", label: "In progress" },
-      when: "",
-      action: { kind: "link", label: "Open", href: href(p.id, "Delivery") },
-      rank: state === "block" ? 0 : state === "late" ? 1 : 2,
+      projectId: g.projectId,
+      title: `${g.projectName} · ${g.gateName}${g.marketName ? ` (${g.marketName})` : ""}`,
+      sub: ["Gate", g.pmName ? `PM ${g.pmName}` : "No PM", g.source ? "from an upload" : null].filter(Boolean).join(" · "),
+      chip: approvalChip("submitted", days),
+      when: ageWord(days),
+      action: { kind: "gate", label: "Review", projectId: g.projectId, statusId: g.statusId },
+      rank: -days,
     });
   }
 
@@ -123,7 +137,7 @@ export interface HeadKpis {
   disputes: number;
 }
 
-export function headKpis(ps: CockpitProject[]): HeadKpis {
+export function headKpis(ps: CockpitProject[], gates: readonly GateQueueItem[] = []): HeadKpis {
   const live = active(ps);
   const approved = live.filter((p) => p.lifecycle === "Approved");
   const by = { ok: 0, warn: 0, bad: 0, none: 0 };
@@ -136,7 +150,7 @@ export function headKpis(ps: CockpitProject[]): HeadKpis {
   return {
     approved: approved.length,
     byHealth: by,
-    gates: gatesInPlay(ps).length,
+    gates: gates.filter((g) => g.approval === "submitted").length,
     stale: staleProjects(ps).length,
     disputes: live.filter((p) => p.dispute).length,
   };

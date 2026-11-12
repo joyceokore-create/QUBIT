@@ -2,6 +2,7 @@ import type { TenantContext } from "@/lib/tenant";
 import { getCockpitData } from "@/server/dashboard-cockpit";
 import { getBriefExtras } from "@/server/daily-brief";
 import { getTenantTimeZone } from "@/server/preferences";
+import { listGateQueue } from "@/server/gate-approval";
 import { buildBrief } from "@/lib/daily-brief";
 import { formatTime } from "@/lib/dates";
 import { DailyBrief } from "@/components/dashboard/daily-brief";
@@ -15,11 +16,13 @@ import { HeadHealthHome } from "./head-health-home";
 export async function HeadHealthPage({ ctx }: { ctx: TenantContext }) {
   const now = new Date();
   const cockpit = await getCockpitData(ctx, now);
-  const [timeZone, extras] = await Promise.all([getTenantTimeZone(ctx), getBriefExtras(ctx, "HeadOfProjects", cockpit.projects, now)]);
+  // WS1 — the gates waiting on this Head (approver lens: scope + four-eyes applied).
+  const [timeZone, extras, gates] = await Promise.all([getTenantTimeZone(ctx), getBriefExtras(ctx, "HeadOfProjects", cockpit.projects, now), listGateQueue(ctx, "approver")]);
   const brief = buildBrief({ role: "HeadOfProjects", viewerId: ctx.userId, now, timeZone, projects: cockpit.projects, extras });
   return (
     <HeadHealthHome
       projects={cockpit.projects}
+      gates={gates}
       pms={cockpit.pms.map((p) => ({ id: p.id, name: p.name }))}
       also={{ ideas: extras.ideasNew?.count ?? null, staffing: extras.staffingOpen?.count ?? null, clashes: extras.overbooked?.length ?? 0 }}
       timeZone={timeZone}

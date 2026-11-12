@@ -1,16 +1,19 @@
 import { dayKey } from "@/lib/dates";
 import { matchesSearch } from "@/lib/list-state";
+import type { GateQueueItem } from "@/lib/gate-approval";
 
 /**
  * UX8 — Approvals v1 (UX plan D5), the pure part. One queue of what the viewer may decide
  * today: ideas waiting for triage and open staffing requests. The weekly roll-up is approved
- * in Reports, so it is a summary banner here, never a row. Gate approvals and Decisions wait
- * for a workflow spec (UX13). Client-safe; ages are tenant-local calendar days (U5).
+ * in Reports, so it is a summary banner here, never a row. WS1 (Tier 4): gates submitted for
+ * sign-off join as a Gates tab — for approvers the gates waiting on them, for a PM their own
+ * submitted and returned gates. Decisions live on their own page (WS2). Client-safe; ages are
+ * tenant-local calendar days (U5).
  */
 
-export const APPROVAL_TABS = ["all", "ideas", "staffing"] as const;
+export const APPROVAL_TABS = ["all", "gates", "ideas", "staffing"] as const;
 export type ApprovalTab = (typeof APPROVAL_TABS)[number];
-export const APPROVAL_TAB_LABEL: Record<ApprovalTab, string> = { all: "All", ideas: "Ideas", staffing: "Staffing" };
+export const APPROVAL_TAB_LABEL: Record<ApprovalTab, string> = { all: "All", gates: "Gates", ideas: "Ideas", staffing: "Staffing" };
 
 /** The open idea statuses — the only ones triage can still act on. */
 export const OPEN_IDEA_STATUSES = ["New", "Reviewing"] as const;
@@ -46,7 +49,15 @@ export interface ApprovalStaffing {
   note: string | null;
 }
 
-export type ApprovalItem = ApprovalIdea | ApprovalStaffing;
+/** WS1 — a gate in the sign-off workflow. `id` is the checkpoint-status row id. */
+export interface ApprovalGate extends GateQueueItem {
+  kind: "gate";
+  id: string;
+  /** ISO timestamp the gate was submitted (or decided, for a returned gate). */
+  createdAt: string;
+}
+
+export type ApprovalItem = ApprovalIdea | ApprovalStaffing | ApprovalGate;
 
 export interface RollupSummary {
   isoWeek: string;
@@ -58,7 +69,8 @@ export interface RollupSummary {
 }
 
 export interface ApprovalsFeed {
-  can: { ideas: boolean; staffing: boolean };
+  /** gates: "approver" = gates waiting on this person; "mine" = the PM's own; null = none. */
+  can: { ideas: boolean; staffing: boolean; gates: "approver" | "mine" | null };
   items: ApprovalItem[];
   /** Null unless the viewer may approve the roll-up. */
   rollup: RollupSummary | null;
@@ -108,9 +120,17 @@ export function sortApprovals<T extends ApprovalItem>(items: readonly T[]): T[] 
 }
 
 export function itemsForTab<T extends ApprovalItem>(items: readonly T[], tab: ApprovalTab): T[] {
+  if (tab === "gates") return items.filter((i) => i.kind === "gate");
   if (tab === "ideas") return items.filter((i) => i.kind === "idea");
   if (tab === "staffing") return items.filter((i) => i.kind === "staffing");
   return [...items];
+}
+
+/** WS1 — a gate row from the engine's queue item (age runs from the submission; a returned
+ * gate's from the return). */
+export function gateApprovalItem(g: GateQueueItem): ApprovalGate {
+  const at = g.approval === "returned" ? (g.decidedAt ?? g.submittedAt) : g.submittedAt;
+  return { ...g, kind: "gate", id: g.statusId, createdAt: at ?? new Date(0).toISOString() };
 }
 
 export function approvalTabs(items: readonly ApprovalItem[]): { key: ApprovalTab; label: string; count: number }[] {
@@ -121,13 +141,16 @@ export function parseTab(raw: string): ApprovalTab {
   return (APPROVAL_TABS as readonly string[]).includes(raw) ? (raw as ApprovalTab) : "all";
 }
 
-/** The row's headline: the idea's title, or "1 QA Engineer for Card Issuing Platform". */
+/** The row's headline: the idea's title, "1 QA Engineer for Card Issuing Platform", or
+ * "Branch Queue System · Go-Live" (with the market when the gate is one market's). */
 export function approvalTitle(item: ApprovalItem): string {
+  if (item.kind === "gate") return `${item.projectName} · ${item.gateName}${item.marketName ? ` (${item.marketName})` : ""}`;
   return item.kind === "idea" ? item.title : `1 ${item.role} for ${item.projectName}`;
 }
 
 /** Search covers the project and the people ("Search approvals by project or person"). */
 export function matchesApprovalSearch(q: string, item: ApprovalItem): boolean {
+  if (item.kind === "gate") return matchesSearch(q, item.projectName, item.projectCode, item.gateName, item.marketName, item.pmName, item.submittedByName);
   return item.kind === "idea"
     ? matchesSearch(q, item.title, item.sponsor, item.personName)
     : matchesSearch(q, item.projectName, item.projectCode, item.personName, item.role);
@@ -136,7 +159,7 @@ export function matchesApprovalSearch(q: string, item: ApprovalItem): boolean {
 /** The Project filter's choices: the projects named by the rows (ideas have none yet). */
 export function projectOptions(items: readonly ApprovalItem[]): { value: string; label: string }[] {
   const seen = new Map<string, string>();
-  for (const i of items) if (i.kind === "staffing") seen.set(i.projectId, i.projectName);
+  for (const i of items) if (i.kind === "staffing" || i.kind === "gate") seen.set(i.projectId, i.projectName);
   return [...seen].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
 }
 
@@ -150,7 +173,7 @@ export function filterApprovals<T extends ApprovalItem>(
   return items.filter(
     (i) =>
       matchesApprovalSearch(f.q, i) &&
-      (!f.project || (i.kind === "staffing" && i.projectId === f.project)) &&
+      (!f.project || ((i.kind === "staffing" || i.kind === "gate") && i.projectId === f.project)) &&
       matchesAge(f.age, ageDays(i.createdAt, now, tz)),
   );
 }

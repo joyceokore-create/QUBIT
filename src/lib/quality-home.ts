@@ -1,9 +1,12 @@
 import { dayKey, formatDayMonth } from "@/lib/dates";
+import type { GateQueueItem } from "@/lib/gate-approval";
 
 /**
  * UX9 — Head of QA › Quality home, the pure part (UX plan D3, UX9): the quality queue
  * (testing gates · critical issues · unassigned test tasks · overdue test tasks), its tabs and
  * the four KPI figures. Built from `QualityOverview` (src/server/quality.ts). Client-safe.
+ * WS1 (Tier 4): the Testing Gates tab and the "Testing Gates Waiting" KPI list REAL testing
+ * gates submitted for sign-off (the engine's approver lens), not gates inferred from state.
  */
 
 export interface QhProject {
@@ -56,6 +59,8 @@ export interface QhItem {
   chip: { tone: Tone; label: string };
   when: string;
   href: string;
+  /** WS1 — a gate row opens the sign-off drawer in place instead of navigating. */
+  gate?: { projectId: string; statusId: string };
 }
 
 const DAY = 86_400_000;
@@ -63,30 +68,35 @@ const daysSince = (d: Date, now: Date, tz: string) => Math.max(0, Math.round((Da
 const taskHref = (projectId: string, id: string) => `/projects/${projectId}?tab=Board&task=${id}`;
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-export function buildQueue(d: QhData, now: Date): QhItem[] {
+/** Testing gates waiting for sign-off (submitted; testing gates only — the HQA scope). */
+export function waitingTestingGates(gates: readonly GateQueueItem[]): GateQueueItem[] {
+  return gates.filter((g) => g.testing && g.approval === "submitted");
+}
+
+export function buildQueue(d: QhData, now: Date, gates: readonly GateQueueItem[] = []): QhItem[] {
   const tz = d.timeZone;
   const items: QhItem[] = [];
 
-  for (const p of d.projects) {
-    for (const g of p.testingGates) {
-      const blockedBy = p.criticalOpen;
-      items.push({
-        id: `gate-${p.id}-${g.key}`,
-        tab: "gates",
-        title: `${p.name} · ${g.label}`,
-        sub: [blockedBy ? plural(blockedBy, "critical issue open", "critical issues open") : "No critical issues open", p.coveragePct !== null ? `${p.coveragePct}% of requirements have tests` : "No requirements tracked"].join(" · "),
-        chip:
-          g.state === "block"
-            ? { tone: "bad", label: "Blocked" }
-            : blockedBy
-              ? { tone: "warn", label: `Blocked by ${blockedBy}` }
-              : g.state === "late"
-                ? { tone: "warn", label: "Behind" }
-                : { tone: "ok", label: "No blockers" },
-        when: p.pmName ? `PM ${p.pmName}` : "",
-        href: `/projects/${p.id}?tab=Delivery`,
-      });
-    }
+  for (const g of waitingTestingGates(gates)) {
+    const p = d.projects.find((x) => x.id === g.projectId);
+    const blockedBy = p?.criticalOpen ?? 0;
+    const age = g.submittedAt ? daysSince(new Date(g.submittedAt), now, tz) : 0;
+    items.push({
+      id: `gate-${g.statusId}`,
+      tab: "gates",
+      title: `${g.projectName} · ${g.gateName}${g.marketName ? ` (${g.marketName})` : ""}`,
+      sub: [
+        "Pass rate not tracked",
+        blockedBy ? plural(blockedBy, "critical issue open", "critical issues open") : "no critical issues",
+        p && p.coveragePct !== null ? `${p.coveragePct}% of requirements have tests` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      chip: blockedBy ? { tone: "warn", label: `Blocked by ${blockedBy}` } : { tone: "ok", label: "Ready" },
+      when: age === 0 ? "today" : `${age}d`,
+      href: `/projects/${g.projectId}?tab=Delivery`,
+      gate: { projectId: g.projectId, statusId: g.statusId },
+    });
   }
 
   for (const c of d.critical) {
@@ -131,6 +141,7 @@ export function buildQueue(d: QhData, now: Date): QhItem[] {
 
 export interface QhKpis {
   inTesting: number;
+  /** WS1 — testing gates waiting for sign-off, and how many of those critical issues hold. */
   testingGates: number;
   gatesBlocked: number;
   criticalOpen: number;
@@ -139,12 +150,13 @@ export interface QhKpis {
   overdueProjects: number;
 }
 
-export function qhKpis(d: QhData): QhKpis {
-  const gates = d.projects.flatMap((p) => p.testingGates.map((g) => ({ g, p })));
+export function qhKpis(d: QhData, waitingGates: readonly GateQueueItem[] = []): QhKpis {
+  const gates = waitingTestingGates(waitingGates);
+  const critical = new Map(d.projects.map((p) => [p.id, p.criticalOpen]));
   return {
     inTesting: d.projects.filter((p) => p.inTesting).length,
     testingGates: gates.length,
-    gatesBlocked: gates.filter(({ g, p }) => g.state === "block" || p.criticalOpen > 0).length,
+    gatesBlocked: gates.filter((g) => (critical.get(g.projectId) ?? 0) > 0).length,
     // Uncapped per-project counts (the critical list itself is capped for display).
     criticalOpen: d.projects.reduce((n, p) => n + p.criticalOpen, 0),
     criticalProjects: d.projects.filter((p) => p.criticalOpen > 0).length,

@@ -4,12 +4,12 @@ import type { ViewRole } from "@/lib/view-roles";
  * The sidebar menu per role (UX plan D6, from the approved artifact). Roles pick the
  * layout; permissions hide items (D2): an item is shown only when the viewer holds its
  * permission, so no link ever leads to a Forbidden page, and a group left empty is
- * dropped. Pages that don't exist yet (Decisions) join in their own phases.
+ * dropped. Each page joins its role's menu in its own phase (Decisions: WS2, Executive).
  * Pure and client-safe; `icon` names map to lucide icons in the shell.
  */
 export type MenuIcon =
   | "home" | "board" | "inbox" | "layers" | "folder" | "bulb" | "alert" | "users" | "chart"
-  | "shield" | "filter" | "user" | "key" | "building" | "compass" | "history";
+  | "shield" | "filter" | "user" | "key" | "building" | "compass" | "history" | "scale";
 
 /**
  * What the page itself checks: ONE permission (`perm`), or — for a page that opens to
@@ -34,6 +34,12 @@ const I = {
   home: { key: "home", label: "Home", href: "/dashboard", icon: "home", perm: "dashboard:read", module: "DASHBOARD" },
   // UX8 (D5): ideas and staffing requests waiting for a decision; the page opens to either.
   approvals: { key: "approvals", label: "Approvals", href: "/approvals", icon: "inbox", anyPerm: ["idea:triage", "staffing:manage"] },
+  // WS1 (Tier 4): the same page for a PM (their own gate submissions) and Head of QA (testing
+  // gates to sign off). The page opens to them by role (src/server/approvals.ts gatesLens).
+  gateApprovals: { key: "approvals", label: "Approvals", href: "/approvals", icon: "inbox", perm: "project:read" },
+  // WS2 (Tier 4): decisions waiting on the Group and GLC actions. Global read, so it opens to
+  // anyone; only the Executive menu lists it (Executives decide; Heads and PMs raise in place).
+  decisions: { key: "decisions", label: "Decisions", href: "/decisions", icon: "scale", perm: "project:read", module: "PROJECTS" },
   board: { key: "board", label: "My Board", href: "/board", icon: "board", perm: "dashboard:read", module: "PROJECTS" },
   portfolios: { key: "portfolios", label: "Portfolios", href: "/portfolios", icon: "layers", perm: "portfolio:read", module: "PORTFOLIOS" },
   projects: { key: "projects", label: "Projects", href: "/projects", icon: "folder", perm: "project:read", module: "PROJECTS" },
@@ -72,19 +78,19 @@ export const ROLE_MENUS: Record<ViewRole, MenuGroup[]> = {
     { label: "Admin", items: [I.admin, I.configs] },
   ],
   HeadOfQA: [
-    { label: "Work", items: [I.home, I.board] },
+    { label: "Work", items: [I.home, I.gateApprovals, I.board] },
     { label: "Delivery", items: [I.projects, I.portfolios, I.risks] },
     { label: "Team", items: [I.people] },
     { label: "Reports", items: [I.reports] },
     { label: "Admin", items: [I.admin, I.configs] },
   ],
   Executive: [
-    { label: "Overview", items: [I.home] },
+    { label: "Overview", items: [I.home, I.decisions] },
     { label: "Portfolio", items: [I.portfolios, I.projects, I.ideas, I.risks] },
     { label: "Reports", items: [I.reports] },
   ],
   ProjectManager: [
-    { label: "Work", items: [I.home, I.board] },
+    { label: "Work", items: [I.home, I.gateApprovals, I.board] },
     { label: "Delivery", items: [I.projects, I.risks, I.ideas, I.portfolios] },
     { label: "Team", items: [I.people] },
     { label: "Reports", items: [I.reports] },

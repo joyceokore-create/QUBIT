@@ -2,24 +2,29 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { KpiCard, KpiRow } from "@/components/ui/kpi-card";
 import { Meter, RagBar } from "@/components/ui/kpi-charts";
 import { Chip } from "@/components/ui/status-pill";
 import { TextLink } from "@/components/ui/text-link";
-import { Columns, Foot, ListRow, Panel, PanelList, PanelRow, SuggestedPill } from "@/components/ui/panel";
+import { Columns, Foot, ListRow, Panel, PanelList, PanelRow } from "@/components/ui/panel";
+import { GateReviewDrawer, type GateTarget } from "@/components/gates/gate-review";
+import type { GateQueueItem } from "@/lib/gate-approval";
 import { PageHeader } from "@/components/list/page-header";
 import { useListUrl } from "@/components/list/use-list-url";
 import type { CockpitProject } from "@/server/dashboard-cockpit";
-import { buildDecisions, DECISION_TAB_LABEL, DECISION_TABS, headKpis, pmLoad, type DecisionItem, type DecisionTab } from "@/lib/head-health";
+import { buildDecisions, DECISION_TAB_LABEL, DECISION_TABS, headKpis, pmLoad, waitingDays, type DecisionItem, type DecisionTab } from "@/lib/head-health";
 import { COMPACT, FOCUS, TAB, TAB_ACTIVE_ON_CARD, TAB_COUNT, TABS_ROW } from "@/lib/surface";
 import { cn } from "@/lib/utils";
+import { SuggestRaisingPanel } from "@/components/decisions/suggest-raising-panel";
 
 /**
  * UX8 + UX fidelity Tier 1 — Head › Delivery Health, built to design spec v2 (docs/08). Brief →
  * four KPI cards → the "Needs Your Decision" panel (Gates · Disputes · Stale · Escalations) →
- * PM Load and Also Waiting. Gate rows are "Suggested from project signals": gates have no
- * approval workflow yet (WS1, Tier 4). The stage-gate tracker lives in Projects › Gate View.
+ * PM Load and Also Waiting. WS1 (Tier 4): the Gates tab and the "Gates Waiting on You" KPI
+ * list real gates submitted for sign-off; Review opens the review drawer (13 / 14) here. The
+ * stage-gate tracker lives in Projects › Gate View.
  */
 
 export interface AlsoWaiting {
@@ -30,6 +35,7 @@ export interface AlsoWaiting {
 
 export function HeadHealthHome({
   projects,
+  gates = [],
   pms,
   also,
   brief,
@@ -37,6 +43,8 @@ export function HeadHealthHome({
   timeZone,
 }: {
   projects: CockpitProject[];
+  /** WS1 — gates waiting on this Head's sign-off (approver lens). */
+  gates?: GateQueueItem[];
   pms: { id: string; name: string }[];
   also: AlsoWaiting;
   brief: ReactNode;
@@ -44,8 +52,12 @@ export function HeadHealthHome({
   timeZone: string;
 }) {
   const now = useMemo(() => new Date(nowIso), [nowIso]);
-  const items = useMemo(() => buildDecisions(projects), [projects]);
-  const k = headKpis(projects);
+  const router = useRouter();
+  const [review, setReview] = useState<GateTarget | null>(null);
+  const items = useMemo(() => buildDecisions(projects, gates, now, timeZone), [projects, gates, now, timeZone]);
+  const k = headKpis(projects, gates);
+  const oldest = gates.find((g) => g.approval === "submitted");
+  const oldestDays = oldest ? waitingDays(oldest.submittedAt, now, timeZone) : 0;
   const load = pmLoad(projects, pms);
   const list = useListUrl("head-health", 10);
   const counts = Object.fromEntries(DECISION_TABS.map((t) => [t, items.filter((i) => i.tab === t).length])) as Record<DecisionTab, number>;
@@ -74,7 +86,12 @@ export function HeadHealthHome({
           context={healthLine || "Nothing approved yet"}
           chart={k.approved ? <RagBar ok={k.byHealth.ok} warn={k.byHealth.warn} bad={k.byHealth.bad} /> : undefined}
         />
-        <KpiCard label="Gates Waiting on You" value={k.gates} context="Go-live gates in play · suggested from project signals" />
+        <KpiCard
+          label="Gates Waiting on You"
+          value={k.gates}
+          context={k.gates ? `Oldest: ${oldestDays === 0 ? "today" : oldestDays === 1 ? "1 day" : `${oldestDays} days`}` : "None waiting"}
+          contextTone={oldestDays >= 3 ? "bad" : "neutral"}
+        />
         <KpiCard
           label="Stale Updates"
           value={k.stale}
@@ -100,7 +117,6 @@ export function HeadHealthHome({
                 ))}
               </ul>
             </nav>
-            {tab === "gates" && shown.length > 0 && <SuggestedPill />}
             {shown.length === 0 ? (
               <div className="flex flex-col items-center gap-1.5 px-6 py-10 text-center">
                 <p className="text-[14px] font-semibold text-[var(--ds-ink)]">{EMPTY[tab]}</p>
@@ -109,11 +125,11 @@ export function HeadHealthHome({
             ) : (
               <ul className="m-0 flex list-none flex-col p-0">
                 {shown.map((it) => (
-                  <DecisionRow key={it.id} it={it} />
+                  <DecisionRow key={it.id} it={it} onReview={setReview} />
                 ))}
               </ul>
             )}
-            <Foot>{tab === "gates" ? "Gates are suggested from project signals until gate approvals exist. Disputes, Stale and Escalations are real." : "Each action opens where the work is done."}</Foot>
+            <Foot>{tab === "gates" ? "Gates submitted for sign-off by PMs and status uploads. Review opens the gate here." : "Each action opens where the work is done."}</Foot>
           </Panel>
         }
         rail={
@@ -148,15 +164,18 @@ export function HeadHealthHome({
                 />
               </PanelList>
             </Panel>
+            {/* WS2: project signals are hints to raise a decision, not decisions. */}
+            <SuggestRaisingPanel projects={projects} />
           </>
         }
       />
+      <GateReviewDrawer target={review} onClose={() => setReview(null)} onDone={() => router.refresh()} timeZone={timeZone} />
     </main>
   );
 }
 
 const EMPTY: Record<DecisionTab, string> = {
-  gates: "No go-live gates in play",
+  gates: "No gates waiting for your sign-off",
   disputes: "No status disputes",
   stale: "Every project checked in within 14 days",
   escalations: "Nothing to escalate",
@@ -176,7 +195,7 @@ function AlsoRow({ href, label, sub, chip }: { href: string; label: string; sub:
   );
 }
 
-function DecisionRow({ it }: { it: DecisionItem }) {
+function DecisionRow({ it, onReview }: { it: DecisionItem; onReview: (t: GateTarget) => void }) {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -196,7 +215,11 @@ function DecisionRow({ it }: { it: DecisionItem }) {
 
   const a = it.action;
   const action =
-    a.kind === "link" ? (
+    a.kind === "gate" ? (
+      <button type="button" onClick={() => onReview({ projectId: a.projectId, statusId: a.statusId })} className={COMPACT}>
+        {a.label}
+      </button>
+    ) : a.kind === "link" ? (
       <Link href={a.href} className={COMPACT}>
         {a.label}
       </Link>

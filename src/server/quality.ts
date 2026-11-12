@@ -156,3 +156,32 @@ export async function getQualityOverview(ctx: TenantContext, cockpit: CockpitPro
 
   return { timeZone, projects, critical, unassigned, overdue, weekly: weekIds.map((w) => ({ isoWeek: w, opened: counts.get(w) ?? 0 })) };
 }
+
+/**
+ * WS1 — one project's open critical items, the same rule as the overview above (an open
+ * Critical bug in published work, or an open Critical issue). The testing-gate sign-off
+ * drawer lists them, and the engine counts them to allow "sign off with exception".
+ * Runs inside the caller's tenant transaction.
+ */
+export async function openCriticalForProject(tx: Prisma.TransactionClient, projectId: string, take = 20): Promise<{ total: number; items: CriticalItem[] }> {
+  const [bugs, issues, bugCount, issueCount, project] = await Promise.all([
+    tx.projectTask.findMany({
+      where: { projectId, type: "Bug", severity: "Critical", ...OPEN_TASK },
+      select: { id: true, title: true, createdAt: true, assignee: { select: { name: true } } },
+      orderBy: { createdAt: "asc" },
+      take,
+    }),
+    tx.issue.findMany({ where: { projectId, severity: "Critical", status: "Open" }, select: { id: true, title: true, createdAt: true, ownerId: true }, orderBy: { createdAt: "asc" }, take }),
+    tx.projectTask.count({ where: { projectId, type: "Bug", severity: "Critical", ...OPEN_TASK } }),
+    tx.issue.count({ where: { projectId, severity: "Critical", status: "Open" } }),
+    tx.project.findUnique({ where: { id: projectId }, select: { name: true } }),
+  ]);
+  const ownerIds = [...new Set(issues.map((i) => i.ownerId).filter((x): x is string => !!x))];
+  const owners = new Map(ownerIds.length ? (await tx.user.findMany({ where: { id: { in: ownerIds } }, select: { id: true, name: true } })).map((u) => [u.id, u.name]) : []);
+  const projectName = project?.name ?? "";
+  const items: CriticalItem[] = [
+    ...bugs.map((b) => ({ id: b.id, kind: "bug" as const, title: b.title, projectId, projectName, owner: b.assignee?.name ?? null, openedAt: b.createdAt })),
+    ...issues.map((i) => ({ id: i.id, kind: "issue" as const, title: i.title, projectId, projectName, owner: (i.ownerId && owners.get(i.ownerId)) || null, openedAt: i.createdAt })),
+  ].sort((a, b) => a.openedAt.getTime() - b.openedAt.getTime());
+  return { total: bugCount + issueCount, items: items.slice(0, take) };
+}

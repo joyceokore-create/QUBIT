@@ -53,7 +53,16 @@ describe("menuFor", () => {
   it("menus follow REAL permissions, not the role being viewed", () => {
     // A Super Admin previewing the Executive menu still gets only Executive's items.
     const groups = menuFor("Executive", viewer(["PlatformSuperAdmin"]));
-    expect(groups.flatMap((g) => g.items.map((i) => i.key))).toEqual(["home", "portfolios", "projects", "ideas", "risks", "reports"]);
+    expect(groups.flatMap((g) => g.items.map((i) => i.key))).toEqual(["home", "decisions", "portfolios", "projects", "ideas", "risks", "reports"]);
+  });
+
+  it("WS2: Decisions is the Executive's, right after Home; no other role lists it", () => {
+    expect(labels(menuFor("Executive", viewer(["Executive"])))[0]).toBe("Overview: Home, Decisions");
+    const item = ROLE_MENUS.Executive.flatMap((g) => g.items).find((i) => i.key === "decisions");
+    expect(item?.href).toBe("/decisions");
+    for (const role of ["PlatformSuperAdmin", "HeadOfProjects", "HeadOfQA", "ProjectManager", "Member"] as const) {
+      expect(ROLE_MENUS[role].flatMap((g) => g.items).some((i) => i.key === "decisions"), role).toBe(false);
+    }
   });
 
   it("respects module allowedRoles from the registry", () => {
@@ -73,10 +82,21 @@ describe("UX8 Approvals and anyPerm", () => {
     expect(canOpenItem({ perm: "x:y" }, { can: (p) => p === "x:y" })).toBe(true);
   });
 
-  it("the Head gets Approvals right after Home; Super Admin (design) and other roles don't", () => {
+  it("the Head gets Approvals right after Home; Super Admin (design), Executive and Member don't", () => {
     expect(labels(menuFor("PlatformSuperAdmin", viewer(["PlatformSuperAdmin"])))[0]).toBe("Work: Home, Access Requests");
-    for (const role of ["HeadOfQA", "Executive", "ProjectManager", "Member"] as const) {
+    for (const role of ["Executive", "Member"] as const) {
       expect(ROLE_MENUS[role].flatMap((g) => g.items).some((i) => i.key === "approvals"), role).toBe(false);
+    }
+  });
+
+  it("WS1: a PM (own gate submissions) and Head of QA (testing gates) get Approvals after Home", () => {
+    expect(labels(menuFor("ProjectManager", viewer(["ProjectManager"])))[0]).toBe("Work: Home, Approvals, My Board");
+    expect(labels(menuFor("HeadOfQA", viewer(["HeadOfQA"])))[0]).toBe("Work: Home, Approvals, My Board");
+    for (const role of ["ProjectManager", "HeadOfQA"] as const) {
+      const item = ROLE_MENUS[role].flatMap((g) => g.items).find((i) => i.key === "approvals");
+      expect(item?.href, role).toBe("/approvals");
+      // Opens on a permission every PM / Head of QA holds; the page itself decides by role.
+      expect(item?.perm, role).toBe("project:read");
     }
   });
 

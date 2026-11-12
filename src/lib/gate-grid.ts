@@ -22,6 +22,8 @@ export interface GridStatus {
   /** Set when a status-report upload moved it; cleared by the next human change. */
   source: string | null;
   updatedAt: Date;
+  /** WS1 — sign-off state (none / submitted / approved / approved_with_exception / returned). */
+  approval?: string;
 }
 
 export interface GridMarket {
@@ -36,6 +38,8 @@ export interface GateGridRow {
   label: string;
   flag: string | null;
   states: CheckpointState[];
+  /** WS1 — per gate (same order as `states`): "submitted" (waiting for sign-off), "returned", or null. */
+  signOff: ("submitted" | "returned" | null)[];
   /** The gate the row is at (see `currentGateName`), or null without gates. */
   currentGate: string | null;
   done: number;
@@ -95,12 +99,18 @@ export function buildGateGrid(input: { gates: GridGate[]; statuses: GridStatus[]
     const mine = statuses.filter((s) => s.orgUnitId === u.orgUnitId && gateIds.has(s.checkpointId));
     const byGate = new Map(mine.map((s) => [s.checkpointId, s.state]));
     const states = gates.map((g) => asState(byGate.get(g.checkpointId)));
+    const approvalOf = new Map(mine.map((s) => [s.checkpointId, s.approval]));
+    const signOff = gates.map((g) => {
+      const a = approvalOf.get(g.checkpointId);
+      return a === "submitted" || a === "returned" ? a : null;
+    });
     const latest = mine.reduce<GridStatus | null>((a, s) => (!a || s.updatedAt > a.updatedAt ? s : a), null);
     return {
       orgUnitId: u.orgUnitId,
       label: u.label,
       flag: u.flag,
       states,
+      signOff,
       currentGate: currentGateName(names, states),
       done: states.filter((s) => s === "Done").length,
       updated: latest ? updatedLabel(latest.updatedAt, Boolean(latest.source), now, timeZone) : null,

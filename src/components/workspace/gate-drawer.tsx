@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Checklist, Choice, Drawer, DrawerError, DrawerFooter, DrawerFrame, DrawerHeader, DrawerSection, DrawerText, Field, FIELD_TEXTAREA, Kv } from "@/components/ui/drawer";
 import { Banner } from "@/components/ui/panel";
+import { Chip } from "@/components/ui/status-pill";
+import { GateReviewBody, type GateTarget } from "@/components/gates/gate-review";
 import { CHECKPOINT_STATE_LABEL } from "@/lib/checkpoint-view";
-import { earlierOpenGates } from "@/lib/gate-grid";
+import { approvalChip, type ApproverScope } from "@/lib/gate-approval";
+import { formatDayMonth } from "@/lib/dates";
 import { PRIMARY, SECONDARY } from "@/lib/surface";
 import type { CheckpointRow, CheckpointState } from "@/server/checkpoints";
 import { GateSquare } from "@/components/workspace/gates-by-market";
@@ -16,7 +20,13 @@ import { GateSquare } from "@/components/workspace/gates-by-market";
  * writes through its PATCH, which enforces project:stage / project ownership, the Head of QA
  * testing-gate rule and the gate checklist, and audits every change. Same rules as the
  * Product Track editor: a gate whose checklist is unmet asks for a reason; a later gate set
- * Done closes the earlier ones still open.
+ * Done closes the earlier ones still open (run on the server: `cascade: true`).
+ *
+ * WS1 (Tier 4) — a sign-off gate (Go-Live, SIT exit, UAT exit): the PM sees "Submit for
+ * Sign-Off" instead of Done and the sign-off state (Submitted / Returned with its reason /
+ * Approved); an approver for the gate gets "Review Sign-Off", which opens the review (drawer
+ * 13 / 14) inside this drawer with Back. An approver may also set Done directly — recorded as
+ * their approval.
  */
 
 export interface OpenGate {
@@ -28,10 +38,14 @@ export interface OpenGate {
   updated: string | null;
 }
 
+type Row = Omit<CheckpointRow, "source"> & { source: { label: string; at: string; byName: string | null } | null };
 interface Payload {
-  rows: (Omit<CheckpointRow, "source"> & { source: { label: string; at: string; byName: string | null } | null })[];
+  rows: Row[];
   canGovern: boolean;
   testingOnly?: boolean;
+  approver?: ApproverScope;
+  viewerId?: string;
+  runsProject?: boolean;
 }
 
 // Blocked needs a linked blocker, which is raised from the Register; it is shown, not chosen.
@@ -39,20 +53,36 @@ const CHOICES: CheckpointState[] = ["NotStarted", "InProgress", "Done"];
 const REASON_MIN = 5;
 
 export function GateDrawer({ projectId, gate, onClose, onSaved }: { projectId: string; gate: OpenGate | null; onClose: () => void; onSaved: () => void }) {
+  const [review, setReview] = useState<GateTarget | null>(null);
+  const close = () => {
+    setReview(null);
+    onClose();
+  };
   return (
-    <Drawer open={!!gate} onClose={onClose}>
-      {gate && <GateBody key={`${gate.orgUnitId ?? "product"}:${gate.checkpointId}`} projectId={projectId} gate={gate} onClose={onClose} onSaved={onSaved} />}
+    <Drawer open={!!gate} onClose={close} wide={!!review}>
+      {gate &&
+        (review ? (
+          <GateReviewBody
+            key={review.statusId}
+            target={review}
+            onBack={() => setReview(null)}
+            onClose={close}
+            onDone={onSaved}
+          />
+        ) : (
+          <GateBody key={`${gate.orgUnitId ?? "product"}:${gate.checkpointId}`} projectId={projectId} gate={gate} onClose={close} onSaved={onSaved} onReview={(statusId) => setReview({ projectId, statusId })} />
+        ))}
     </Drawer>
   );
 }
 
-function GateBody({ projectId, gate, onClose, onSaved }: { projectId: string; gate: OpenGate; onClose: () => void; onSaved: () => void }) {
+function GateBody({ projectId, gate, onClose, onSaved, onReview }: { projectId: string; gate: OpenGate; onClose: () => void; onSaved: () => void; onReview: (statusId: string) => void }) {
   const [data, setData] = useState<Payload | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [state, setState] = useState<CheckpointState | null>(null);
   const [unmet, setUnmet] = useState<{ key: string; label: string; detail: string | null }[] | null>(null);
   const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"save" | "submit" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const scopeQuery = gate.orgUnitId ? `?orgUnitId=${encodeURIComponent(gate.orgUnitId)}` : "";
@@ -79,34 +109,56 @@ function GateBody({ projectId, gate, onClose, onSaved }: { projectId: string; ga
   const needsReason = unmet !== null;
   const reasonOk = !needsReason || reason.trim().length >= REASON_MIN;
 
+  // WS1 — the viewer's part in this gate's sign-off.
+  const signOff = Boolean(row?.signOff);
+  const iApprove = Boolean(row && (data?.approver === "all" || (data?.approver === "testing" && row.testing)));
+  const iSubmitted = Boolean(row?.submitted?.byId && row.submitted.byId === data?.viewerId);
+  const waiting = row?.approval === "submitted";
+  // An approver sets Done directly (implicit approval) — unless they submitted it (four-eyes).
+  const doneByHand = !signOff || (iApprove && !(waiting && iSubmitted));
+  const canSubmit = Boolean(signOff && row && row.state !== "Done" && !waiting && !doneByHand && data?.runsProject);
+  const canReview = Boolean(signOff && waiting && iApprove && !iSubmitted && row?.statusId);
+
   const patch = (body: Record<string, unknown>) =>
     fetch(`/api/projects/${projectId}/checkpoints`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, ...scopeBody }) });
 
   const save = async () => {
     if (!row || !state || !changed || !reasonOk) return;
-    setBusy(true);
+    setBusy("save");
     setError(null);
-    const res = await patch({ checkpointId: row.checkpointId, state, ...(needsReason ? { overrideReason: reason.trim() } : {}) });
+    // A later gate done closes the earlier ones still open — on the server, which stops at a
+    // sign-off gate (submitted instead) and leaves a gate whose checklist refuses as it was.
+    const res = await patch({ checkpointId: row.checkpointId, state, ...(state === "Done" ? { cascade: true } : {}), ...(needsReason ? { overrideReason: reason.trim() } : {}) });
     if (res.status === 409) {
       const err = (await res.json().catch(() => null))?.error;
       setUnmet(err?.unmet ?? []);
-      setBusy(false);
+      setBusy(null);
       return;
     }
     if (!res.ok) {
       setError((await res.json().catch(() => null))?.error?.message ?? "Could not save the gate. Try again.");
-      setBusy(false);
+      setBusy(null);
       return;
     }
-    // A later gate done closes the earlier ones still open (a gate whose checklist refuses
-    // stays as it was, for the PM to decide) — the Product Track editor's rule.
-    if (state === "Done") {
-      const next = (await res.json().catch(() => null)) as Payload | null;
-      for (const id of earlierOpenGates(next?.rows ?? [], row.checkpointId)) {
-        await patch({ checkpointId: id, state: "Done" });
-      }
+    if (state === "Done" && signOff) toast.success(`${row.name} signed off.`);
+    setBusy(null);
+    onSaved();
+    onClose();
+  };
+
+  // Submitting = asking for Done on a sign-off gate: the engine records a submission for this
+  // track (and, at "All", every live market's copy), with one notice to the approvers.
+  const submit = async () => {
+    if (!row) return;
+    setBusy("submit");
+    setError(null);
+    const res = await patch({ checkpointId: row.checkpointId, state: "Done" });
+    setBusy(null);
+    if (!res.ok) {
+      setError((await res.json().catch(() => null))?.error?.message ?? "Could not submit the gate. Try again.");
+      return;
     }
-    setBusy(false);
+    toast.success(`${row.name} submitted for sign-off.`);
     onSaved();
     onClose();
   };
@@ -114,19 +166,51 @@ function GateBody({ projectId, gate, onClose, onSaved }: { projectId: string; ga
   const stateWord = (s: CheckpointState) => CHECKPOINT_STATE_LABEL[s] ?? s;
   // Provenance is cleared by the next human change, so a gate without it was set by hand.
   const source = row?.source ? `Upload · ${row.source.label}${row.source.byName ? ` · ${row.source.byName}` : ""}` : row && row.state !== "NotStarted" ? "Set by hand" : "Not set yet";
+  const choices = [...CHOICES.filter((s) => s !== "Done" || doneByHand || row?.state === "Done"), ...(row?.state === "Blocked" ? (["Blocked"] as CheckpointState[]) : [])];
+
+  const signOffValue = (() => {
+    if (!row || !signOff) return null;
+    const chip = approvalChip(row.approval);
+    const who =
+      row.approval === "submitted"
+        ? [row.submitted?.byName && `by ${row.submitted.byName}`, row.submitted?.at && formatDayMonth(row.submitted.at, "UTC"), row.source && "from upload"].filter(Boolean).join(" · ")
+        : row.decided
+          ? [row.decided.byName && `by ${row.decided.byName}`, row.decided.at && formatDayMonth(row.decided.at, "UTC")].filter(Boolean).join(" · ")
+          : row.state === "Done"
+            ? ""
+            : "Needs a Head's sign-off to close";
+    return (
+      <span className="inline-flex flex-wrap items-center gap-1.5">
+        {row.approval === "none" && row.state === "Done" ? <Chip tone="ok">Done</Chip> : <Chip tone={chip.tone}>{chip.label}</Chip>}
+        {who && <span className="text-[12px] font-normal text-[var(--ds-ink3)]">{who}</span>}
+      </span>
+    );
+  })();
 
   return (
     <DrawerFrame
       header={<DrawerHeader step={`Gate · ${gate.gateName}`} title={gate.label} subtitle={gate.orgUnitId ? "This market's own gate" : "The product's own gate"} />}
       footer={
-        canEdit ? (
+        canEdit || canReview ? (
           <DrawerFooter note={changed && row ? `${stateWord(row.state)} → ${stateWord(state!)}` : undefined}>
             <button type="button" onClick={onClose} className={SECONDARY}>
               Cancel
             </button>
-            <button type="button" onClick={() => void save()} disabled={busy || !changed || !reasonOk} className={PRIMARY}>
-              {busy ? "Saving…" : needsReason ? "Close Gate with Reason" : "Save Gate"}
-            </button>
+            {canEdit && (changed || !(canSubmit || canReview)) && (
+              <button type="button" onClick={() => void save()} disabled={!!busy || !changed || !reasonOk} className={canSubmit || canReview ? SECONDARY : PRIMARY}>
+                {busy === "save" ? "Saving…" : needsReason ? "Close Gate with Reason" : "Save Gate"}
+              </button>
+            )}
+            {canSubmit && canEdit && (
+              <button type="button" onClick={() => void submit()} disabled={!!busy} className={PRIMARY}>
+                {busy === "submit" ? "Submitting…" : row?.approval === "returned" ? "Submit Again" : "Submit for Sign-Off"}
+              </button>
+            )}
+            {canReview && row?.statusId && (
+              <button type="button" onClick={() => onReview(row.statusId!)} disabled={!!busy} className={PRIMARY}>
+                Review Sign-Off
+              </button>
+            )}
           </DrawerFooter>
         ) : (
           <DrawerFooter>
@@ -152,19 +236,26 @@ function GateBody({ projectId, gate, onClose, onSaved }: { projectId: string; ga
               [
                 "Now",
                 <span key="now" className="inline-flex items-center gap-2">
-                  <GateSquare state={row.state} size={12} />
+                  <GateSquare state={row.state} signOff={row.approval === "submitted" || row.approval === "returned" ? row.approval : null} />
                   {stateWord(row.state)}
                 </span>,
               ],
               ["Source", source],
+              ...(signOffValue ? ([["Sign-Off", signOffValue]] as [string, ReactNode][]) : []),
             ]}
           />
+          {row.approval === "returned" && row.decided?.note && (
+            <Banner tone="warn">
+              Returned{row.decided.byName ? ` by ${row.decided.byName}` : ""}: {row.decided.note}
+            </Banner>
+          )}
+          {row.approval === "submitted" && row.source && <DrawerText hint>Submitted from upload: {row.source.label}.</DrawerText>}
           <DrawerSection title="State">
             {canEdit ? (
               <Choice
                 label={`${gate.gateName} state in ${gate.label}`}
                 value={state}
-                options={[...CHOICES, ...(row.state === "Blocked" ? (["Blocked"] as CheckpointState[]) : [])].map((s) => ({ value: s, label: stateWord(s) }))}
+                options={choices.map((s) => ({ value: s, label: stateWord(s) }))}
                 onChange={(s) => {
                   setState(s);
                   setUnmet(null);
@@ -176,7 +267,15 @@ function GateBody({ projectId, gate, onClose, onSaved }: { projectId: string; ga
                 {data.testingOnly && !row.testing ? "As Head of QA you can set testing gates (SIT and UAT). The project's PM sets this one." : "Only the project's PM or a Head can change gates."}
               </DrawerText>
             )}
-            {canEdit && state === "Done" && <DrawerText hint>Setting a gate to done also closes the earlier gates still open in this market.</DrawerText>}
+            {canEdit && signOff && !doneByHand && row.state !== "Done" && (
+              <DrawerText hint>
+                {waiting
+                  ? `This gate is waiting for sign-off by a Head${row.testing ? " or the Head of QA" : ""}. It closes when they approve it.`
+                  : `${gate.gateName} needs a sign-off to close: submit it, and a Head${row.testing ? " or the Head of QA" : ""} approves or returns it.`}
+              </DrawerText>
+            )}
+            {canEdit && state === "Done" && changed && signOff && doneByHand && <DrawerText hint>Setting it to done signs it off, recorded as your approval. It also closes the earlier gates still open in this market.</DrawerText>}
+            {canEdit && state === "Done" && changed && !signOff && <DrawerText hint>Setting a gate to done also closes the earlier gates still open in this market, up to the first gate that needs a sign-off.</DrawerText>}
           </DrawerSection>
           {row.gate.length > 0 && (
             <DrawerSection title="What This Gate Asks For">

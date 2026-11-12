@@ -13,6 +13,8 @@ import type { CheckpointState, ProjectCheckpoints, TemplateOption } from "@/serv
 
 import { CHECKPOINT_STATE_LABEL as STATE_LABEL } from "@/lib/checkpoint-view";
 import { GateSquare } from "@/components/workspace/gates-by-market";
+import { Chip } from "@/components/ui/status-pill";
+import { approvalChip, type ApproverScope } from "@/lib/gate-approval";
 
 const STATES: CheckpointState[] = ["NotStarted", "InProgress", "Done", "Blocked"];
 
@@ -21,6 +23,8 @@ interface Payload extends ProjectCheckpoints {
   canGovern: boolean;
   /** UX9 (D10): Head of QA — only testing gates (SIT/UAT) are editable. */
   testingOnly?: boolean;
+  /** WS1: which gates the viewer signs off (all / testing / none). */
+  approver?: ApproverScope;
 }
 
 /** docs/38 — `orgUnitId` scopes the matrix to one market's gates, `moduleId` to one named
@@ -69,7 +73,7 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
             method: "PATCH",
             headers: { "content-type": "application/json" },
             // docs/38 — at All (no market) a state change applies to every market's row too.
-            body: JSON.stringify("templateId" in body ? body : { ...body, orgUnitId, moduleId, allMarkets: !orgUnitId }),
+            body: JSON.stringify("templateId" in body ? body : { ...body, ...(body.state === "Done" ? { cascade: true } : {}), orgUnitId, moduleId, allMarkets: !orgUnitId }),
           });
     if (res.status === 409) {
       // Gate unmet — show the checklist and offer the override rather than failing flat.
@@ -84,18 +88,10 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
       if (again.ok) setData(await again.json());
       setGateBlock(null);
     } else {
-      let next = await res.json();
-      // Joyce (2026-10-12): a later gate done means the earlier ones are done — close any
-      // still open (a gate whose checklist refuses stays as it was, for the PM to decide).
-      if (body.state === "Done" && !("templateId" in body)) {
-        const rows: { checkpointId: string; orderIndex: number; state: string }[] = next.rows ?? [];
-        const me = rows.find((r) => r.checkpointId === body.checkpointId);
-        for (const r of rows) {
-          if (!me || r.orderIndex >= me.orderIndex || r.state === "Done" || r.state === "Blocked") continue;
-          const again = await fetch(`/api/projects/${projectId}/checkpoints`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ checkpointId: r.checkpointId, state: "Done", orgUnitId, moduleId, allMarkets: !orgUnitId }) });
-          if (again.ok) next = await again.json();
-        }
-      }
+      // Joyce (2026-10-12): a later gate done means the earlier ones are done — the server
+      // closes any still open (`cascade: true`): a gate whose checklist refuses stays as it
+      // was, and (WS1) a sign-off gate in the way is submitted and the cascade stops there.
+      const next = await res.json();
       setData((prev) => (prev ? { ...prev, ...next } : prev));
       setGateBlock(null);
       setOverrideReason("");
@@ -155,8 +151,14 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
           <ol className="flex flex-col">
             {data.rows.map((row) => (
               <li key={row.checkpointId} className="flex items-center gap-2 border-b border-[var(--hair2)] py-1.5 last:border-0">
-                <GateSquare state={row.state} size={12} />
+                <GateSquare state={row.state} size={12} signOff={row.approval === "submitted" || row.approval === "returned" ? row.approval : null} />
                 <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--ds-ink)]">{row.name}</span>
+                {/* WS1 — the sign-off state of a sign-off gate (Go-Live, SIT exit, UAT exit). */}
+                {row.signOff && row.approval !== "none" && (
+                  <span title={row.approval === "returned" && row.decided?.note ? `Returned: ${row.decided.note}` : undefined}>
+                    <Chip tone={approvalChip(row.approval).tone}>{approvalChip(row.approval).label}</Chip>
+                  </span>
+                )}
                 {busy === row.checkpointId && <Loader2 className="size-3 animate-spin text-[var(--ink4)]" />}
                 {row.source && (
                   <span
@@ -187,7 +189,8 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
                     <SelectContent>
                       {STATES.map((s) => (
                         <SelectItem key={s} value={s}>
-                          {STATE_LABEL[s]}
+                          {/* WS1: for someone who doesn't sign this gate off, Done submits it. */}
+                          {s === "Done" && row.signOff && row.state !== "Done" && !(data.approver === "all" || (data.approver === "testing" && row.testing)) ? "Submit for sign-off" : STATE_LABEL[s]}
                         </SelectItem>
                       ))}
                     </SelectContent>

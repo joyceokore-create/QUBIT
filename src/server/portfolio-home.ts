@@ -2,6 +2,7 @@ import "server-only";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { can } from "@/lib/rbac";
 import { findDecisionBlockers, type DecisionBlocker } from "@/server/reports-week";
+import { waitingDecisionsSummary } from "@/server/decision-requests";
 import type { PortfolioHomeExtras } from "@/lib/portfolio-home";
 
 /**
@@ -11,6 +12,8 @@ import type { PortfolioHomeExtras } from "@/lib/portfolio-home";
  *  - the real "Blockers needing a decision" — the SAME engine as Reports › This week for
  *    Executives (findDecisionBlockers), so the two lists can't disagree. Hidden (null) for a
  *    viewer without reports:read, as Reports itself is;
+ *  - WS2: the decisions waiting on the Group (real, raised by Heads and PMs) — the KPI count,
+ *    the side panel's first three, and per project the one "Go to the Decision" opens;
  *  - for the summary drawer, per listed project: the next three pending milestones and the
  *    latest PM-confirmed check-in line (the line the weekly roll-up carries).
  * Read-only: no writes, so nothing to audit.
@@ -22,7 +25,7 @@ const NEXT_MILESTONES = 3;
 export async function getPortfolioHomeExtras(ctx: TenantContext, projectIds: string[], now: Date): Promise<PortfolioHomeExtras> {
   const ids = [...new Set(projectIds)];
   return withTenant(ctx, async (tx) => {
-    const [blockers, milestones, checkIns] = await Promise.all([
+    const [blockers, milestones, checkIns, decisions] = await Promise.all([
       can(ctx, "reports:read") ? findDecisionBlockers(tx, now) : Promise.resolve<DecisionBlocker[] | null>(null),
       ids.length
         ? tx.projectMilestone.findMany({
@@ -40,6 +43,7 @@ export async function getPortfolioHomeExtras(ctx: TenantContext, projectIds: str
             select: { projectId: true, isoWeek: true, narrative: true, confirmedAt: true },
           })
         : Promise.resolve([]),
+      waitingDecisionsSummary(tx, 3),
     ]);
 
     const nextMilestones: PortfolioHomeExtras["nextMilestones"] = {};
@@ -51,6 +55,6 @@ export async function getPortfolioHomeExtras(ctx: TenantContext, projectIds: str
     for (const c of checkIns) {
       if (c.narrative?.trim()) lastLine[c.projectId] = { line: c.narrative.trim(), isoWeek: c.isoWeek, confirmedAt: c.confirmedAt?.toISOString() ?? null };
     }
-    return { decisionBlockers: blockers, nextMilestones, lastLine };
+    return { decisionBlockers: blockers, nextMilestones, lastLine, decisions };
   });
 }

@@ -7,6 +7,8 @@ import { VIEW_ROLE_HOME } from "@/lib/view-roles";
 import { AR_TAB_LABEL } from "@/lib/admin-home";
 import { todoTabs } from "@/lib/pm-today";
 import { CUSTOM_ONLY_TABS } from "@/lib/reports-view";
+import { DECISION_TAB_LABEL } from "@/lib/decisions";
+import { APPROVAL_TAB_LABEL } from "@/lib/approvals";
 import { isTitleCase, toTitleCase } from "@/lib/title-case";
 
 describe("the casing rule", () => {
@@ -27,6 +29,8 @@ describe("shared labels are Title Case", () => {
     ...Object.values(AR_TAB_LABEL).map((l) => ["access request tab", l] as [string, string]),
     ...todoTabs([]).map((t) => ["PM tab", t.label] as [string, string]),
     ...CUSTOM_ONLY_TABS.map((t) => ["report tab", t.label] as [string, string]),
+    ...Object.values(DECISION_TAB_LABEL).map((l) => ["decisions tab", l] as [string, string]),
+    ...Object.values(APPROVAL_TAB_LABEL).map((l) => ["approvals tab", l] as [string, string]),
   ];
   it.each(all)("%s “%s”", (_kind, label) => {
     expect(isTitleCase(label), `${label} → ${toTitleCase(label)}`).toBe(true);

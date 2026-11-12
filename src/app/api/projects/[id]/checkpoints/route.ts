@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/api-guard";
 import { can } from "@/lib/rbac";
 import { canWriteProject } from "@/lib/access";
 import { gateWriteScope } from "@/lib/testing-gates";
+import { approverScope } from "@/lib/gate-approval";
 import { getTenantContext } from "@/lib/tenant";
 import {
   CheckpointError,
@@ -17,6 +18,10 @@ import {
 
 // GET   /api/projects/:id/checkpoints — the project's gate matrix + template options
 // PATCH /api/projects/:id/checkpoints — set one gate's state, or swap the template
+//
+// WS1: Done on a sign-off gate (Go-Live, SIT exit, UAT exit) SUBMITS it unless the caller is
+// an approver for it (an implicit, audited approval) — decided in the engine, so the cascade
+// (`cascade: true`, run server-side) and the status-report upload follow the same rule.
 //
 // Checkpoint state is a governance fact (docs/18 §7), so it rides the SAME gate as
 // stage/priority/status note: the project's PM/lead, or a holder of project:stage.
@@ -51,6 +56,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     // D10: Executives set no gates (UX10); Head of QA sets testing gates only (UX9).
     canGovern: (can(guard.ctx, "project:stage") || runs) && gateWriteScope(guard.ctx.roles, runs) !== "none",
     testingOnly: gateWriteScope(guard.ctx.roles, runs) === "testing",
+    // WS1: whether the viewer signs off gates (all / testing / none) and who they are, so the
+    // gate drawer can offer Approve / Return (four-eyes: never on their own submission).
+    approver: approverScope(guard.ctx.roles),
+    viewerId: guard.ctx.userId,
+    runsProject: runs,
   });
 }
 
