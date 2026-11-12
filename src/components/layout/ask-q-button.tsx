@@ -11,8 +11,9 @@ import { cn } from "@/lib/utils";
 export function AskQButton({ variant = "brand" }: { variant?: "brand" | "secondary" }) {
   const { openQ } = useQ();
   if (variant === "secondary") {
-    // Designer, 12 Nov 2026: Ask Q is AI, so it gets its own look — a violet → magenta gradient
-    // with white text (white on every stop ≥ 5.4:1), a soft matching glow; hover brightens
+    // Designer, 12 Nov 2026: Ask Q is AI, so it gets its own look — a Riverbank red gradient
+    // (deep red → brand red → warm red-orange; the label sits over the deep/brand red, 8.3–4.4:1)
+    // with a soft red glow; hover brightens
     // and lifts it. Same 36px height and radius as the other top-bar buttons.
     return (
       <button
@@ -20,8 +21,8 @@ export function AskQButton({ variant = "brand" }: { variant?: "brand" | "seconda
         onClick={openQ}
         className={cn(
           "inline-flex h-[var(--ds-control-h)] items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--ds-radius-control)] px-3.5 text-[12.5px] font-semibold text-white",
-          "bg-[linear-gradient(100deg,#5b3df5_0%,#7c3aed_40%,#b4378b_100%)] shadow-[0_2px_10px_-2px_rgba(124,58,237,0.45)]",
-          "transition-[filter,box-shadow,transform] duration-200 hover:-translate-y-px hover:brightness-110 hover:shadow-[0_4px_14px_-2px_rgba(180,55,139,0.5)] motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+          "bg-[linear-gradient(100deg,#9e1017_0%,#ed1c24_55%,#f0533a_100%)] shadow-[0_2px_10px_-2px_rgba(237,28,36,0.45)]",
+          "transition-[filter,box-shadow,transform] duration-200 hover:-translate-y-px hover:brightness-110 hover:shadow-[0_4px_14px_-2px_rgba(240,83,58,0.5)] motion-reduce:transition-none motion-reduce:hover:translate-y-0",
           FOCUS,
         )}
       >
