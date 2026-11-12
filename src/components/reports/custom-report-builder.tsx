@@ -74,9 +74,17 @@ function CheckRow({ on, label, onClick, role }: { on: boolean; label: string; on
         role={role}
         aria-checked={on}
         onClick={onClick}
-        className={cn("flex w-full items-center gap-2 rounded-[6px] py-[3px] text-left text-[13px]", on ? "text-[var(--ds-ink)]" : "text-[var(--ds-ink3)] hover:text-[var(--ds-ink)]", FOCUS)}
+        className={cn("flex w-full items-center gap-2.5 rounded-[6px] py-[3px] text-left text-[13px]", on ? "font-medium text-[var(--ds-ink)]" : "text-[var(--ds-ink3)] hover:text-[var(--ds-ink)]", FOCUS)}
       >
-        {on ? <Check className="size-3.5 flex-none text-[var(--ds-ok-text)]" aria-hidden /> : <Circle className="size-3.5 flex-none text-[var(--ds-ink3)]" aria-hidden />}
+        {/* Designer, 12 Nov 2026: a checked item is a solid green circle with a white tick, so
+            what's active reads at a glance; unchecked stays an empty grey ring. */}
+        {on ? (
+          <span className="grid size-[18px] flex-none place-items-center rounded-full bg-[var(--ds-ok)]" aria-hidden>
+            <Check className="size-3 text-white" strokeWidth={3} />
+          </span>
+        ) : (
+          <Circle className="size-[18px] flex-none text-[var(--ds-ink4)]" strokeWidth={1.5} aria-hidden />
+        )}
         <span className="min-w-0">{label}</span>
       </button>
     </li>
