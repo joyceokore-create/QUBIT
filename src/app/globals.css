@@ -795,6 +795,9 @@
   /* Surfaces — Material-style: a cool-gray page so solid white cards separate
      with real elevation (no glass/blur). */
   --qbg: #f7f7f7; /* designer, 12 Nov 2026: neutral and lighter than the design's cool #f3f5f8 */
+  /* Designer, 12 Nov 2026: softer navy/green glow so the page reads lighter (half strength). */
+  --amb2: rgba(11, 34, 57, 0.045);
+  --amb3: rgba(17, 64, 46, 0.035);
   --qcard: #ffffff;
   --card2: #f8fafc;
   --drawer: #ffffff;
@@ -847,6 +850,9 @@
 .dark [data-tenant="riverbank"] {
   --rbrand: #ed1c24;            /* guide keeps brand red on primary buttons */
   --onbrand: #ffffff;
+  /* Dark mode keeps the full-strength glow (the light block halves navy/green). */
+  --amb2: rgba(64, 99, 168, 0.11);
+  --amb3: rgba(242, 177, 60, 0.07);
 
   /* Slate near-black dark ramp (slate-950 based; deeper = darker) */
   --qbg: #020617;
