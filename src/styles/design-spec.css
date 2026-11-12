@@ -70,6 +70,9 @@
   /* Elevation */
   --ds-shadow: 0 1px 2px rgba(35, 31, 32, 0.06), 0 8px 24px -12px rgba(35, 31, 32, 0.18);
   --ds-shadow-drawer: -16px 0 40px rgba(15, 23, 42, 0.22);
+  /* White controls that sit on the page (search, filter chips, secondary buttons): a soft lift so
+     they read against the #fafafa page without a heavier border (designer, 12 Nov 2026). */
+  --ds-shadow-control: 0 1px 2px rgba(35, 31, 32, 0.06), 0 2px 8px -3px rgba(35, 31, 32, 0.14);
   --ds-shadow-menu: 0 10px 30px rgba(0, 0, 0, 0.35);
   --ds-scrim: rgba(15, 23, 42, 0.38);
 
@@ -153,6 +156,7 @@
   --ds-feat-track: rgba(255, 255, 255, 0.12);
 
   --ds-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  --ds-shadow-control: 0 1px 2px rgba(0, 0, 0, 0.45);
   --ds-side: linear-gradient(180deg, #0b0f1a, color-mix(in oklab, var(--brand) 25%, #0b0f1a));
 }
 

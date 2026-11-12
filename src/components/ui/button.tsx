@@ -12,7 +12,7 @@ const buttonVariants = cva(
       variant: {
         default: "bg-[var(--ds-brand)] text-[var(--ds-on-brand)] hover:bg-[color-mix(in_oklab,var(--ds-brand)_86%,black)]",
         outline:
-          "border-[var(--ds-line)] bg-[var(--ds-card)] text-[var(--ds-ink)] hover:bg-[var(--ds-surface2)] aria-expanded:bg-[var(--ds-surface2)]",
+          "border-[var(--ds-line)] bg-[var(--ds-card)] text-[var(--ds-ink)] shadow-[var(--ds-shadow-control)] hover:bg-[var(--ds-surface2)] aria-expanded:bg-[var(--ds-surface2)]",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
         ghost:

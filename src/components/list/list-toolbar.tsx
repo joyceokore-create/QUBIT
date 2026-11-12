@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
  * an active one reads "Severity: Critical" in brand-wash with an × that clears it.
  */
 
-const CHIP_BASE = "inline-flex h-[var(--ds-control-h)] items-center gap-[5px] rounded-[var(--ds-radius-control)] border text-[12.5px] font-semibold";
+const CHIP_BASE = "inline-flex h-[var(--ds-control-h)] items-center gap-[5px] rounded-[var(--ds-radius-control)] border text-[12.5px] font-semibold shadow-[var(--ds-shadow-control)]";
 const CHIP_OFF = "border-[var(--ds-line)] bg-[var(--ds-card)] text-[var(--ds-ink2)] hover:bg-[var(--ds-surface2)]";
 const CHIP_ON = "border-transparent bg-[var(--ds-brand-wash)] text-[var(--ds-brand-ink)]";
 
@@ -72,7 +72,7 @@ export function SearchField({
         aria-label={label}
         maxLength={100}
         className={cn(
-          "h-[var(--ds-control-h)] w-full rounded-[var(--ds-radius-control)] border border-[var(--ds-line)] bg-[var(--ds-card)] pl-[30px] pr-3 text-[12.5px] text-[var(--ds-ink)] placeholder:text-[var(--ds-placeholder)]",
+          "h-[var(--ds-control-h)] w-full rounded-[var(--ds-radius-control)] border border-[var(--ds-line)] bg-[var(--ds-card)] pl-[30px] pr-3 text-[12.5px] shadow-[var(--ds-shadow-control)] text-[var(--ds-ink)] placeholder:text-[var(--ds-placeholder)]",
           FIELD_FOCUS,
         )}
       />
