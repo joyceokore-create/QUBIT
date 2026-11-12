@@ -85,7 +85,7 @@ export function LessonsCard({ projectId }: { projectId: string }) {
             maxLength={200}
             autoFocus
             placeholder="What should the next project know?"
-            className="h-8 rounded-[8px] border border-[var(--w07)] bg-[var(--wash)] px-2.5 text-[12px] text-[var(--ink2)] outline-none focus:border-[var(--brand)]"
+            className="h-8 rounded-[8px] border border-[var(--w07)] bg-[var(--wash)] px-2.5 text-[12px] text-[var(--ink2)] outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none"
           />
           <div className="flex items-center gap-2">
             <Select value={category} onValueChange={(v) => setCategory(v as LessonCategory)}>

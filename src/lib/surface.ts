@@ -43,6 +43,12 @@ export function ragTokenOf(rag: Rag): string {
 export const FOCUS =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-brand)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--ds-card)]";
 
+/** Focus for TEXT FIELDS (inputs, textareas, selects): no offset ring — the field's own border
+ * turns ink (black in light mode) and 2px thick (1px border + 1px ring), so an active field
+ * never reads as an error. Designer, 12 Nov 2026. Buttons keep FOCUS. */
+export const FIELD_FOCUS =
+  "outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0";
+
 // ── Buttons, tabs, inputs and table headers — design spec v2 (docs/08 § Components).
 // Controls are 36px with a 10px radius; compact (in-row) controls 28px / 8px. The primary
 // keeps the brand fill in both themes (deviation 4) and darkens on hover, never lightens.
@@ -73,7 +79,7 @@ export const COMPACT = `inline-flex h-[var(--ds-control-h-compact)] items-center
 /** The compact primary (an in-row "Confirm & Send"). */
 export const COMPACT_PRIMARY = `inline-flex h-[var(--ds-control-h-compact)] items-center justify-center gap-1 whitespace-nowrap rounded-[var(--ds-radius-compact)] px-[11px] text-[12px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${PRIMARY_FILL} ${FOCUS}`;
 /** U3 — a text input / select at the control size and radius. */
-export const INPUT = `h-[var(--ds-control-h)] rounded-[var(--ds-radius-control)] border border-[var(--ds-line)] bg-[var(--ds-card)] px-3 text-[13px] text-[var(--ds-ink)] placeholder:text-[var(--ds-placeholder)] focus:border-[var(--ds-brand)] ${FOCUS}`;
+export const INPUT = `h-[var(--ds-control-h)] rounded-[var(--ds-radius-control)] border border-[var(--ds-line)] bg-[var(--ds-card)] px-3 text-[13px] text-[var(--ds-ink)] placeholder:text-[var(--ds-placeholder)] ${FIELD_FOCUS}`;
 /** Table header row (put on <thead>): its own grey band (`--ds-thead`, a step darker than the
  * row hover so the two never look alike), rounded ends, 12.5px/600 ink2 Title Case labels —
  * not uppercase. Designer, 12 Nov 2026: larger and roomier than the design's 11px `.sgt`. */

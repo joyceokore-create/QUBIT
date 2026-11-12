@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { ArrowLeft, Check, Circle } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
-import { FOCUS } from "@/lib/surface";
+import { FIELD_FOCUS, FOCUS } from "@/lib/surface";
 import { cn } from "@/lib/utils";
 
 /**
@@ -117,7 +117,7 @@ export function Field({ label, hint, children, htmlFor }: { label: ReactNode; hi
 }
 
 /** Field control classes (`.fi`): 36px, line border, radius 10, 13px ink. */
-export const FIELD_INPUT = `min-h-[var(--ds-control-h)] w-full rounded-[var(--ds-radius-control)] border border-[var(--ds-line)] bg-[var(--ds-card)] px-[11px] text-[13px] text-[var(--ds-ink)] placeholder:text-[var(--ds-placeholder)] ${FOCUS}`;
+export const FIELD_INPUT = `min-h-[var(--ds-control-h)] w-full rounded-[var(--ds-radius-control)] border border-[var(--ds-line)] bg-[var(--ds-card)] px-[11px] text-[13px] text-[var(--ds-ink)] placeholder:text-[var(--ds-placeholder)] ${FIELD_FOCUS}`;
 export const FIELD_TEXTAREA = `${FIELD_INPUT} min-h-16 py-[9px] leading-[1.5]`;
 
 export interface ChoiceOption<T extends string> {

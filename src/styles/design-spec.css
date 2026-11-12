@@ -222,3 +222,7 @@
 .ds-form :is([data-slot="input"], textarea)::placeholder {
   color: var(--ds-placeholder);
 }
+.ds-form :is([data-slot="input"], [data-slot="select-trigger"], textarea):focus,
+.ds-form :is([data-slot="input"], [data-slot="select-trigger"], textarea):focus-visible {
+  border-color: var(--ds-ink);
+}

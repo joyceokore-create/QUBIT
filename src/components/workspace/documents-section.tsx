@@ -326,7 +326,7 @@ function AddDialog({ projectId, onClose, onAdded }: { projectId: string; onClose
             onChange={(e) => setContent(e.target.value)}
             rows={8}
             placeholder="Paste document text / markdown here…"
-            className="rounded-[10px] border border-ink-4 bg-background p-3 text-xs text-foreground outline-none focus:border-brand"
+            className="rounded-[10px] border border-ink-4 bg-background p-3 text-xs text-foreground outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none"
           />
           <label className="flex cursor-pointer items-center gap-2 text-xs text-ink-3">
             <input type="file" accept="application/pdf" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />

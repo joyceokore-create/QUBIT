@@ -83,7 +83,7 @@ function Composer({
         onChange={(e) => setBody(e.target.value)}
         rows={2}
         placeholder={placeholder}
-        className="resize-none rounded-[8px] border border-ink-4 bg-background p-2.5 text-xs text-foreground outline-none focus:border-brand"
+        className="resize-none rounded-[8px] border border-ink-4 bg-background p-2.5 text-xs text-foreground outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none"
       />
       <div className="flex flex-wrap items-center gap-1.5">
         <DropdownMenu>
@@ -273,7 +273,7 @@ function PromoteForm({ comment, onDone }: { comment: CommentJson; onDone: () => 
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="rounded-[8px] border border-ink-4 bg-background px-2.5 py-2 text-xs font-normal text-foreground outline-none focus:border-brand"
+          className="rounded-[8px] border border-ink-4 bg-background px-2.5 py-2 text-xs font-normal text-foreground outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none"
         />
       </label>
       <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--ink3)]">
@@ -282,7 +282,7 @@ function PromoteForm({ comment, onDone }: { comment: CommentJson; onDone: () => 
           value={rationale}
           onChange={(e) => setRationale(e.target.value)}
           rows={3}
-          className="resize-none rounded-[8px] border border-ink-4 bg-background p-2.5 text-xs font-normal text-foreground outline-none focus:border-brand"
+          className="resize-none rounded-[8px] border border-ink-4 bg-background p-2.5 text-xs font-normal text-foreground outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none"
         />
       </label>
       {error && <p className="text-[11px] text-[var(--bad)]">{error}</p>}

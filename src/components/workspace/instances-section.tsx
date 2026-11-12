@@ -104,7 +104,7 @@ export function InstancesSection({
             void add();
           }}
         >
-          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} autoFocus placeholder="e.g. For Schools" aria-label="Instance name" className={`h-8 min-w-[220px] rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-brand ${FOCUS}`} />
+          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} autoFocus placeholder="e.g. For Schools" aria-label="Instance name" className={`h-8 min-w-[220px] rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none`} />
           <button type="submit" disabled={busy !== null || !name.trim()} className={PRIMARY}>
             {busy === "add" ? "Adding…" : "Add"}
           </button>

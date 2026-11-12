@@ -19,7 +19,7 @@ const STATE_LABEL: Record<string, string> = { Planned: "Planned", Build: "Build"
 const STATE_TOK: Record<string, string> = { Planned: "--ink4", Build: "--qinfo", UAT: "--warn", Live: "--ok", NotApplicable: "--ink5" };
 /** "Agent channels" → "agent channel"; "Modules" → "module". */
 const singular = (label: string) => label.toLowerCase().replace(/s$/, "");
-const INPUT = `h-8 rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-brand ${FOCUS}`;
+const INPUT = `h-8 rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none`;
 
 /** The state a row shows in the "All markets" column: the shared one, or "" when markets differ. */
 const allState = (cells: { orgUnitId: string | null; state: string }[]) => {

@@ -54,7 +54,7 @@ export function StatusUpdatesSection({ projectId, canEdit }: { projectId: string
             onChange={(e) => setBody(e.target.value)}
             rows={2}
             placeholder="Post an update — the project's managers and testers get notified…"
-            className="resize-none rounded-[8px] border border-ink-4 bg-background p-2.5 text-xs text-foreground outline-none focus:border-brand"
+            className="resize-none rounded-[8px] border border-ink-4 bg-background p-2.5 text-xs text-foreground outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none"
           />
           <div className="flex items-center gap-2">
             <Select value={rag} onValueChange={(v) => v && setRag(v)} items={{ Green: "Green", Amber: "Amber", Red: "Red" }}>

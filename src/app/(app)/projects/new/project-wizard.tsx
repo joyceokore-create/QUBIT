@@ -501,7 +501,7 @@ export function ProjectWizard({
                 placeholder="e.g. For Schools, For Marketplace — Enter to add"
                 maxLength={60}
                 aria-label="Add an instance"
-                className="h-8 min-w-[260px] rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-brand"
+                className="h-8 min-w-[260px] rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none"
               />
             </div>
             <p className="mt-2 text-[11px] text-[var(--ink4)]">A named variant of the product (Asset Valuation for Schools, for Marketplace). Each runs as its own project — its own gates, the same track in every market above.</p>
@@ -526,7 +526,7 @@ export function ProjectWizard({
                 placeholder="e.g. POS, USSD, Agent Portal — Enter to add"
                 maxLength={60}
                 aria-label="Add a module"
-                className="h-8 min-w-[260px] rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-brand"
+                className="h-8 min-w-[260px] rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none"
               />
             </div>
             <p className="mt-2 text-[11px] text-[var(--ink4)]">Components or channels of the product, tracked by a state per market (Live, UAT, N/A). Whether a module has its own gates is chosen per module on the Delivery tab.</p>

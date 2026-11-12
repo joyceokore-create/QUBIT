@@ -6,7 +6,7 @@ import { Check, Download, FileText } from "lucide-react";
 import { LocalTime } from "@/components/reports/local-time";
 import { ReportEmailButton } from "@/components/reports/report-email-button";
 import { RecipientsDialog, type RecipientJson } from "@/components/reports/recipients-dialog";
-import { CARD, CARD_BG, FOCUS, PRIMARY, QUIET, SECONDARY, ragChipStyle, ragFill } from "@/lib/surface";
+import { CARD, CARD_BG, PRIMARY, QUIET, SECONDARY, ragChipStyle, ragFill } from "@/lib/surface";
 
 /**
  * Milestone B — the Head's roll-up rail: the week's spread, the one line for the
@@ -142,7 +142,7 @@ export function RollupRail({
               maxLength={1000}
               value={narrative}
               onChange={(e) => setNarrative(e.target.value)}
-              className={`w-full resize-none rounded-[8px] border border-[var(--input)] bg-background px-3 py-2.5 text-[13px] leading-[1.5] text-foreground focus:border-brand ${FOCUS}`}
+              className={`w-full resize-none rounded-[8px] border border-[var(--input)] bg-background px-3 py-2.5 text-[13px] leading-[1.5] text-foreground focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none`}
             />
           )}
         </div>

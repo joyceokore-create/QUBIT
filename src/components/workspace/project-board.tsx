@@ -492,7 +492,7 @@ export function ProjectBoard({
                             }}
                             placeholder="Blocked by…"
                             autoFocus
-                            className="h-6 min-w-0 flex-1 rounded-[5px] border border-ink-4 bg-background px-1.5 text-[10.5px] text-foreground outline-none focus:border-brand"
+                            className="h-6 min-w-0 flex-1 rounded-[5px] border border-ink-4 bg-background px-1.5 text-[10.5px] text-foreground outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none"
                           />
                           <button type="button" onClick={() => flagBlocked(t.id)} className="text-[10px] font-semibold text-[var(--bad)]" aria-label="Confirm blocked">
                             Flag

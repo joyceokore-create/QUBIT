@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { FOCUS } from "@/lib/surface";
+import { FIELD_FOCUS, FOCUS } from "@/lib/surface";
 import { cn } from "@/lib/utils";
 
 /**
@@ -73,7 +73,7 @@ export function SearchField({
         maxLength={100}
         className={cn(
           "h-[var(--ds-control-h)] w-full rounded-[var(--ds-radius-control)] border border-[var(--ds-line)] bg-[var(--ds-card)] pl-[30px] pr-3 text-[12.5px] text-[var(--ds-ink)] placeholder:text-[var(--ds-placeholder)]",
-          FOCUS,
+          FIELD_FOCUS,
         )}
       />
     </div>

@@ -48,7 +48,7 @@ interface Person {
 
 const STATUSES = ["Planning", "InProgress", "UAT", "Live", "OnHold"] as const;
 const STATUS_LABEL: Record<string, string> = { Planning: "Planning", InProgress: "In progress", UAT: "UAT", Live: "Live", OnHold: "On hold", Retired: "Retired" };
-const INPUT = `h-8 rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-brand ${FOCUS}`;
+const INPUT = `h-8 rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none`;
 
 export function MarketsTab({
   projectId,

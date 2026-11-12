@@ -145,7 +145,7 @@ export function GovernanceEditor({
             maxLength={200}
             autoFocus
             placeholder="One line for the pipeline table — what should the portfolio read this week?"
-            className="h-7 min-w-0 flex-1 rounded-[7px] border border-ink-4 bg-background px-2 text-[11.5px] text-foreground outline-none focus:border-brand"
+            className="h-7 min-w-0 flex-1 rounded-[7px] border border-ink-4 bg-background px-2 text-[11.5px] text-foreground outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none"
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 void patch({ statusNote: note.trim() || null }).then((ok) => ok && setEditingNote(false));
@@ -193,7 +193,7 @@ export function GovernanceEditor({
               maxLength={30}
               aria-label="What this product calls its modules"
               onBlur={(e) => e.target.value.trim().length >= 2 && e.target.value.trim() !== shape.moduleLabel && void patch({ moduleLabel: e.target.value.trim() })}
-              className="h-7 w-[140px] rounded-[7px] border border-[var(--input)] bg-background px-2 text-[11px] text-foreground focus:border-brand"
+              className="h-7 w-[140px] rounded-[7px] border border-[var(--input)] bg-background px-2 text-[11px] text-foreground focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none"
             />
           </label>
         </div>

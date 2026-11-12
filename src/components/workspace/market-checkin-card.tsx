@@ -70,7 +70,7 @@ export function MarketCheckInCard({
             rows={5}
             maxLength={1000}
             placeholder="What is this market focused on, and what is in the way?"
-            className="w-full resize-y rounded-[10px] border border-[var(--w07)] bg-[var(--wash)] p-2.5 text-[12.5px] text-[var(--ink2)] outline-none focus:border-[var(--brand)]"
+            className="w-full resize-y rounded-[10px] border border-[var(--w07)] bg-[var(--wash)] p-2.5 text-[12.5px] text-[var(--ink2)] outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none"
           />
           <div className="flex flex-wrap items-center gap-2">
             <span className="flex items-center gap-1 rounded-full border border-[var(--w07)] bg-[var(--wash)] p-0.5">

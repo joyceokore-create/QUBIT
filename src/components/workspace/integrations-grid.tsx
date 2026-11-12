@@ -406,7 +406,7 @@ function MapField({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         rows={2}
-        className="rounded-[8px] border border-[var(--w12)] bg-transparent p-2 font-mono text-[11.5px] text-[var(--qink)] outline-none focus:border-brand"
+        className="rounded-[8px] border border-[var(--w12)] bg-transparent p-2 font-mono text-[11.5px] text-[var(--qink)] outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none"
       />
     </label>
   );

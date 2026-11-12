@@ -149,6 +149,7 @@ by `tests/unit/design-spec-contrast.test.ts`.
 | 6 | No phone layouts | Must work at 390px; not required to match | The design is desktop-only. |
 | 7 | Page background #f3f5f8 / dark #020617, ambient glow | **#fafafa** light, **#01030a** dark; **only the brand-red glow** (navy and green dropped) | Designer's decision, 12 Nov 2026: a lighter (and in dark, deeper) page so grey chips and tab counts read without adding borders. ink3 text on #fafafa is 5.1:1. |
 | 8 | Table header 11px/700 ink3 on `--surface2`, cells 10px | Header **12.5px/600 ink2** on its own **`--ds-thead`** (#edeff2; dark #1b2a44), padding 11×14; cells **14px padding, 13px text** | Designer, 12 Nov 2026: tables felt cramped, and the header must differ from the row hover (`--ds-surface2`). ink2 on #edeff2 is 7.6:1. |
+| 9 | Brand focus ring with offset on every control | **Text fields** (inputs, textareas, selects): no offset ring; the border turns ink and 2px (1px border + 1px ring) — `FIELD_FOCUS`. Buttons, tabs and links keep the brand ring. | Designer, 12 Nov 2026: a red double outline on an active field read as an error. |
 
 ### Tokens
 

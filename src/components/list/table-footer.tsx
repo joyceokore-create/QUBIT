@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { PAGE_SIZES, pageWindow, type PageInfo, type PageSize } from "@/lib/list-state";
-import { CARD, FOCUS } from "@/lib/surface";
+import { CARD, FIELD_FOCUS, FOCUS } from "@/lib/surface";
 import { cn } from "@/lib/utils";
 
 /**
@@ -52,7 +52,7 @@ export function TableFooter({
               value={size}
               aria-label="Rows per page"
               onChange={(e) => onSize(Number(e.target.value) as PageSize)}
-              className={`h-[var(--ds-control-h-compact)] appearance-none rounded-[var(--ds-radius-pager)] border border-[var(--ds-line)] bg-[var(--ds-card)] pl-2 pr-6 text-[12px] font-semibold text-[var(--ds-ink)] ${FOCUS}`}
+              className={`h-[var(--ds-control-h-compact)] appearance-none rounded-[var(--ds-radius-pager)] border border-[var(--ds-line)] bg-[var(--ds-card)] pl-2 pr-6 text-[12px] font-semibold text-[var(--ds-ink)] ${FIELD_FOCUS}`}
             >
               {PAGE_SIZES.map((s) => (
                 <option key={s} value={s}>

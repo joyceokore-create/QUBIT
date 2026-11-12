@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import { CARD_GLASS as CARD, CARD_BG, FOCUS, PRIMARY, QUIET, SECONDARY } from "@/lib/surface";
+import { CARD_GLASS as CARD, CARD_BG, PRIMARY, QUIET, SECONDARY } from "@/lib/surface";
 
 /**
  * docs/38 — markets (= subsidiaries): code (immutable — projects, reports and the
@@ -20,7 +20,7 @@ interface Unit {
   createdAt: string;
 }
 
-const INPUT = `h-8 rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-brand ${FOCUS}`;
+const INPUT = `h-8 rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none`;
 
 export function OrgUnitsPanel({ initial }: { initial: Unit[] }) {
   const [rows, setRows] = useState<Unit[]>(initial);

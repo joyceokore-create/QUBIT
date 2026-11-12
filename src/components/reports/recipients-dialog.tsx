@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/drawer-dialog";
-import { FOCUS, PRIMARY, QUIET, SECONDARY } from "@/lib/surface";
+import { PRIMARY, QUIET, SECONDARY } from "@/lib/surface";
 
 /**
  * Milestone D — the Head edits the roll-up distribution list: current rows (remove ×),
@@ -25,7 +25,7 @@ interface Candidate {
   roles: string[];
 }
 
-const INPUT = `h-9 rounded-[8px] border border-[var(--input)] bg-background px-3 text-[13px] text-foreground focus:border-brand ${FOCUS}`;
+const INPUT = `h-9 rounded-[8px] border border-[var(--input)] bg-background px-3 text-[13px] text-foreground focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none`;
 
 export function RecipientsDialog({ open, onOpenChange, onChange }: { open: boolean; onOpenChange: (o: boolean) => void; onChange: (rows: RecipientJson[]) => void }) {
   const [rows, setRows] = useState<RecipientJson[]>([]);

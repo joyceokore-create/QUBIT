@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { AlertTriangle, Check, CircleAlert, Search } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CARD, CARD_BG, FOCUS, PRIMARY, QUIET, SECONDARY } from "@/lib/surface";
+import { CARD, CARD_BG, PRIMARY, QUIET, SECONDARY } from "@/lib/surface";
 
 /**
  * Configs › Integrations › YouTrack — the redesigned module. One instance + one token per
@@ -72,7 +72,7 @@ const TASK_STATUS_LABEL: Record<(typeof TASK_STATUSES)[number], string> = {
 // Common YouTrack states to offer in the Status-mapping tab (the connector's defaults).
 const COMMON_YT_STATES = ["Submitted", "Open", "In Progress", "In Review", "To Verify", "Fixed", "Verified", "Blocked"];
 
-const INPUT = `h-10 w-full rounded-[8px] border border-[var(--input)] bg-background px-3 text-[13px] text-foreground focus:border-brand ${FOCUS}`;
+const INPUT = `h-10 w-full rounded-[8px] border border-[var(--input)] bg-background px-3 text-[13px] text-foreground focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none`;
 const LABEL = "text-[12.5px] font-semibold text-[var(--ink2)]";
 const HINT = "text-[11.5px] text-[var(--ink4)]";
 const EYEBROW = "font-mono text-[10px] font-semibold uppercase tracking-[2px] text-[var(--ink4)]";

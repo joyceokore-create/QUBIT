@@ -226,7 +226,7 @@ export function CheckpointMatrix({ projectId, orgUnitId = null, moduleId = null 
                 onChange={(e) => setOverrideReason(e.target.value)}
                 maxLength={300}
                 placeholder="Why is it being closed anyway? This is recorded."
-                className="h-8 rounded-[8px] border border-[var(--w07)] bg-[var(--wash)] px-2.5 text-[12px] text-[var(--ink2)] outline-none focus:border-[var(--brand)]"
+                className="h-8 rounded-[8px] border border-[var(--w07)] bg-[var(--wash)] px-2.5 text-[12px] text-[var(--ink2)] outline-none focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none"
               />
               <div className="flex items-center gap-2">
                 <button
