@@ -19,7 +19,7 @@ export const esc = (s: string | null | undefined): string =>
 
 /** The print palette. Greys for everything structural; the tone colours appear on status
  * words only (U4: always alongside a symbol or a word, never colour alone). */
-export const INK = { text: "#231f20", body: "#2b2b2b", muted: "#6b6b6b", faint: "#9f9f9f", rule: "#d9d9d9", hair: "#ececec", panel: "#f3f3f3" } as const;
+export const INK = { text: "#231f20", body: "#2b2b2b", muted: "#6b6b6b", faint: "#9f9f9f", rule: "#d9d9d9", hair: "#ececec", panel: "#f3f3f3", thead: "#eceef2" } as const;
 
 export type Tone = "ok" | "warn" | "bad" | "info" | "muted";
 export const TONE: Record<Tone, string> = { ok: "#15803d", warn: "#b45309", bad: "#b91c1c", info: "#1d4ed8", muted: "#6b6b6b" };
@@ -102,9 +102,14 @@ const css = (orientation: Orientation) => `
   .ul { margin: 0; padding-left: 16px; color: ${INK.body}; }
   .ul li { padding: 1px 0; }
 
-  .t { width: 100%; border-collapse: collapse; }
-  .t th { text-align: left; font-size: 9.5px; font-weight: 600; color: ${INK.muted}; padding: 4px 8px 4px 0; border-bottom: 1px solid ${INK.text}; white-space: nowrap; }
-  .t td { padding: 4px 8px 4px 0; border-bottom: 1px solid ${INK.hair}; vertical-align: top; color: ${INK.body}; overflow-wrap: anywhere; }
+  /* Designer, 12 Nov 2026: a soft grey header band with rounded ends and bold dark labels; rows
+     separated by muted hairlines (no heavy rule under the header). Separate borders so the band
+     can round. */
+  .t { width: 100%; border-collapse: separate; border-spacing: 0; }
+  .t th { text-align: left; font-size: 9.5px; font-weight: 700; color: ${INK.text}; background: ${INK.thead}; padding: 6px 9px; white-space: nowrap; }
+  .t th:first-child { border-radius: 5px 0 0 5px; }
+  .t th:last-child { border-radius: 0 5px 5px 0; }
+  .t td { padding: 6px 9px; border-bottom: 1px solid ${INK.hair}; vertical-align: top; color: ${INK.body}; overflow-wrap: anywhere; }
   .t th.r, .t td.r { text-align: right; }
   .t td.g { padding-top: 8px; font-size: 9.5px; font-weight: 700; color: ${INK.muted}; text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid ${INK.rule}; }
   .t .sub { display: block; font-size: 9.5px; color: ${INK.muted}; }
