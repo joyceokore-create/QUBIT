@@ -1,11 +1,21 @@
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/rbac";
+import { withTenant } from "@/lib/tenant";
+import { parseListParams } from "@/lib/list-state";
+import { AR_TAB_SORT, AR_TAB_STATUS, AR_TABS, parseArTab, type AdminRequestRow } from "@/lib/admin-home";
+import { REQUESTABLE_ROLES } from "@/lib/access-request-schema";
 import { Forbidden } from "@/components/forbidden";
-import { AdminHeader } from "../admin-header";
-import { listAccessRequests } from "@/server/access-requests";
+import { accessRequestStatusCounts, listAccessRequestsPaged } from "@/server/access-requests";
+import { getTenantTimeZone } from "@/server/preferences";
 import { AccessRequestsClient } from "./access-requests-client";
 
-export default async function AdminAccessRequestsPage() {
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+// UX5 (L1–L5) + UX fidelity F1 (design: "Access requests"): status tabs Waiting · Approved ·
+// Declined, search, a row list and the shared review drawer. Paged and searched on the
+// server (L4). access_request is a system table (no tenant_id — requests arrive before a
+// tenant exists), so the read is gated on iam:manage here rather than scoped by RLS.
+export default async function AdminAccessRequestsPage({ searchParams }: { searchParams: SearchParams }) {
   const session = await auth();
   if (!session?.user) return null;
   const ctx = {
@@ -16,22 +26,53 @@ export default async function AdminAccessRequestsPage() {
   };
   if (!can(ctx, "iam:manage")) return <Forbidden />;
 
-  const rows = await listAccessRequests();
-  const newCount = rows.filter((r) => r.status === "NEW").length;
+  const params = parseListParams(await searchParams, { defaultSize: 5, filters: { tab: AR_TABS, role: REQUESTABLE_ROLES.map((r) => r.key) } });
+  const tab = parseArTab(params.filters.tab);
+  const role = REQUESTABLE_ROLES.find((r) => r.key === params.filters.role)?.key;
+  const mayInvite = can(ctx, "users:invite");
+  const [{ rows, info }, counts, tz, grantOptions] = await Promise.all([
+    listAccessRequestsPaged({ q: params.q, page: params.page, size: params.size, status: AR_TAB_STATUS[tab], sort: AR_TAB_SORT[tab], role }),
+    accessRequestStatusCounts(),
+    getTenantTimeZone(ctx),
+    mayInvite
+      ? withTenant(ctx, (tx) =>
+          Promise.all([
+            tx.department.findMany({ select: { id: true, name: true }, orderBy: [{ name: "asc" }, { id: "asc" }] }),
+            tx.team.findMany({ select: { id: true, name: true }, orderBy: [{ name: "asc" }, { id: "asc" }] }),
+          ]),
+        )
+      : Promise.resolve(null),
+  ]);
+
+  // The reviewer's name, only if they're in this tenant (looked up under RLS).
+  const reviewerIds = [...new Set(rows.map((r) => r.reviewedById).filter((x): x is string => !!x))];
+  const reviewers = reviewerIds.length ? await withTenant(ctx, (tx) => tx.user.findMany({ where: { id: { in: reviewerIds } }, select: { id: true, name: true } })) : [];
+  const names = new Map(reviewers.map((u) => [u.id, u.name]));
+
+  const list: AdminRequestRow[] = rows.map((r) => ({
+    id: r.id,
+    fullName: r.fullName,
+    email: r.email,
+    company: r.company,
+    jobTitle: r.jobTitle,
+    requestedRole: r.requestedRole,
+    reason: r.reason,
+    status: r.status,
+    createdAt: r.createdAt.toISOString(),
+    reviewedAt: r.reviewedAt?.toISOString() ?? null,
+    reviewedBy: r.reviewedById ? (names.get(r.reviewedById) ?? null) : null,
+  }));
 
   return (
-    <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
-      <AdminHeader subtitle={`${newCount} new · ${rows.length} total · request-access submissions`} />
+    <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_22px_90px]">
       <AccessRequestsClient
-        rows={rows.map((r) => ({
-          id: r.id,
-          fullName: r.fullName,
-          email: r.email,
-          company: r.company,
-          jobTitle: r.jobTitle,
-          status: r.status,
-          createdAt: r.createdAt.toISOString(),
-        }))}
+        tab={tab}
+        counts={counts}
+        rows={list}
+        info={info}
+        timeZone={tz}
+        nowIso={new Date().toISOString()}
+        grant={grantOptions ? { departments: grantOptions[0], teams: grantOptions[1], canGrantSuperAdmin: ctx.roles.includes("PlatformSuperAdmin") } : null}
       />
     </main>
   );

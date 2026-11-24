@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/api-guard";
+import { validationError } from "@/server/errors";
+import { PORTFOLIO_ERROR_FIELD } from "@/lib/portfolio-schema";
 import { getPortfolioDetail } from "@/server/projects";
 import { PortfolioError, updatePortfolio, UpdatePortfolioSchema } from "@/server/portfolios";
 
@@ -24,19 +26,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if ("response" in guard) return guard.response;
   const { id } = await params;
   const parsed = UpdatePortfolioSchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: "VALIDATION", message: parsed.error.issues[0]?.message ?? "Invalid input." } },
-      { status: 400 },
-    );
-  }
+  if (!parsed.success) return validationError(parsed.error);
   try {
     const portfolio = await updatePortfolio(guard.ctx, id, parsed.data);
     return NextResponse.json({ portfolio: { id: portfolio.id, name: portfolio.name, category: portfolio.category } });
   } catch (e) {
     if (e instanceof PortfolioError) {
       const status = e.code === "PORTFOLIO_NOT_FOUND" ? 404 : 400;
-      return NextResponse.json({ error: { code: e.code, message: e.message } }, { status });
+      const field = PORTFOLIO_ERROR_FIELD[e.code];
+      return NextResponse.json({ error: { code: e.code, message: e.message, ...(field ? { fields: { [field]: e.message } } : {}) } }, { status });
     }
     throw e;
   }

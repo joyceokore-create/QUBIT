@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission } from "@/lib/api-guard";
+import { validationError } from "@/server/errors";
+import { roleDescription, roleErrorField, roleName } from "@/lib/role-schema";
 import { RolePermissionError, setCustomRoleStatus, updateCustomRole } from "@/server/role-permissions";
 
 const Body = z
   .object({
-    name: z.string().min(1).max(64).optional(),
-    description: z.string().max(500).nullable().optional(),
+    name: roleName.optional(),
+    description: roleDescription.nullable().optional(),
     status: z.enum(["Active", "Deactivated"]).optional(),
-    reason: z.string().max(500).optional(),
+    reason: z.string().max(500, "The reason must be 500 characters or fewer.").optional(),
   })
   .refine((b) => b.name !== undefined || b.description !== undefined || b.status !== undefined, {
     message: "Nothing to update.",
@@ -23,9 +25,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json({ error: { code: "VALIDATION", message: "Invalid input." } }, { status: 400 });
-  }
+  if (!parsed.success) return validationError(parsed.error);
   const { name, description, status, reason } = parsed.data;
 
   try {
@@ -38,7 +38,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e instanceof RolePermissionError) {
-      return NextResponse.json({ error: { code: e.code, message: e.message } }, { status: 400 });
+      const field = roleErrorField(e.code, e.message);
+      return NextResponse.json({ error: { code: e.code, message: e.message, ...(field ? { fields: { [field]: e.message } } : {}) } }, { status: 400 });
     }
     throw e;
   }

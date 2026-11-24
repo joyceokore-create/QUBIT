@@ -3,7 +3,7 @@ import { RequestAccessForm } from "./request-access-form";
 
 export const metadata: Metadata = { title: "Request access — QUBIT" };
 
-// Request access ("Get started"). The form renders its own full-screen brand canvas via AuthShell.
+// Request access ("Get started"). The form renders the shared two-panel AuthShell (UX plan D8c).
 export default function RequestAccessPage() {
   return <RequestAccessForm />;
 }

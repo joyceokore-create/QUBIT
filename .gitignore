@@ -58,3 +58,6 @@ docker/.deploy.env
 # Local session artifacts (Impeccable cache, staged removals) — not for review
 .impeccable/
 _to_delete/
+
+# Personal, per-developer instructions for this project (not shared)
+/mwashukes-desk/

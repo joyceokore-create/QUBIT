@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
+import { teamName, teamDescription } from "@/lib/team-schema";
 
 /**
  * Teams — cross-functional groups of people, distinct from the Department org
@@ -16,16 +17,16 @@ export class TeamError extends Error {
 }
 
 export const CreateTeamInput = z.object({
-  name: z.string().min(1),
-  description: z.string().nullable().optional(),
+  name: teamName,
+  description: teamDescription.nullable().optional(),
   leadUserId: z.string().uuid().nullable().optional(),
   memberIds: z.array(z.string().uuid()).optional(),
 });
 export type CreateTeamInput = z.infer<typeof CreateTeamInput>;
 
 export const UpdateTeamInput = z.object({
-  name: z.string().min(1).optional(),
-  description: z.string().nullable().optional(),
+  name: teamName.optional(),
+  description: teamDescription.nullable().optional(),
   leadUserId: z.string().uuid().nullable().optional(),
   memberIds: z.array(z.string().uuid()).optional(),
 });

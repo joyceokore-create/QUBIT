@@ -8,12 +8,14 @@ import {
 } from "@/lib/password";
 
 describe("password policy", () => {
-  it("rejects passwords under 8 characters", () => {
-    expect(validatePasswordPolicy("Sh0rt!")).toMatch(/at least 8/);
+  it("rejects passwords under 12 characters (D-F8)", () => {
+    expect(validatePasswordPolicy("Sh0rt!")).toMatch(/at least 12/);
+    expect(validatePasswordPolicy("Elevenchar1")).toMatch(/at least 12/);
+    expect(validatePasswordPolicy("Twelve-chars")).toBeNull();
   });
 
-  it("accepts an 8+ character password", () => {
-    expect(validatePasswordPolicy("Passw0rd!")).toBeNull();
+  it("accepts a 12+ character password", () => {
+    expect(validatePasswordPolicy("Passw0rd!2026")).toBeNull();
   });
 });
 

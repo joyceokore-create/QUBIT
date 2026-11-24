@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { accessRequestSchema } from "@/lib/access-request-schema";
+import { validationError } from "@/server/errors";
 import { prisma } from "@/lib/db";
 import { checkRateLimit, recordFailure } from "@/lib/rate-limit";
 
@@ -36,10 +37,10 @@ export async function POST(req: Request) {
   const parsed = accessRequestSchema.safeParse(body);
   if (!parsed.success) {
     recordFailure(key);
-    return NextResponse.json({ error: { code: "VALIDATION", message: "Invalid request." } }, { status: 400 });
+    return validationError(parsed.error);
   }
 
-  const { fullName, email, company, jobTitle, companyUrl } = parsed.data;
+  const { fullName, email, company, jobTitle, requestedRole, reason, companyUrl } = parsed.data;
 
   // Honeypot filled → almost certainly a bot. Ack success, store nothing.
   if (companyUrl) {
@@ -48,7 +49,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true }, { status: 201 });
   }
 
-  await prisma.accessRequest.create({ data: { fullName, email, company, jobTitle } });
+  await prisma.accessRequest.create({ data: { fullName, email, company, jobTitle, requestedRole, reason } });
   // Public write endpoint: count every accepted attempt (not just failures) toward the limit.
   recordFailure(key);
   return NextResponse.json({ ok: true }, { status: 201 });

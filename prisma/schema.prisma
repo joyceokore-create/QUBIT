@@ -21,6 +21,9 @@ model Tenant {
   // tenant" is enforced in application code (resolveTenantByEmailDomain takes the first
   // match; keep domain lists disjoint when configuring tenants).
   domains    String[] @default([])
+  // UX2 (UX plan Q3/U5): the IANA time zone every "today", "overdue" and due-date
+  // calculation uses. Riverbank is Africa/Nairobi; Super Admin can change it (UX11).
+  timeZone   String   @default("Africa/Nairobi") @map("time_zone")
   // M-P1e (docs/31) — stamped when the org-setup wizard finishes; NULL shows the
   // "finish setting up" banner to Super Admins. Existing tenants were backfilled
   // (they were bootstrapped by script/seed, not by the wizard).
@@ -79,6 +82,8 @@ model Tenant {
   nudgeSnoozes            NudgeSnooze[]
   workComments            WorkComment[]
   decisions               Decision[]
+  decisionRequests        DecisionRequest[]
+  glcActions              GlcAction[]
   absences                Absence[]
   notificationPreferences NotificationPreference[]
   projectTaskDependencies ProjectTaskDependency[]
@@ -168,6 +173,16 @@ model User {
    * never auto-starts again on any device; "Show me around" in the user menu replays it.
    */
   tourCompletedAt        DateTime?   @map("tour_completed_at")
+  /**
+   * UX2 (UX plan D11): this person's layout during the staged rollout — "new" | "classic";
+   * null follows the FEATURE_NEW_UI default. Changed from the profile menu, audited.
+   */
+  uiMode                 String?     @map("ui_mode")
+  /**
+   * UX3 (UX plan D2a): the role last chosen in "Viewing as" — picks the home page and menu
+   * only, never permissions. Null = land on the highest role held. Every switch is audited.
+   */
+  lastViewRole           String?     @map("last_view_role")
   status                 String      @default("ACTIVE") // "ACTIVE" | "INVITED" | "SUSPENDED" | "DELETED"
   deletedAt              DateTime?   @map("deleted_at")
   lastLoginAt            DateTime?   @map("last_login_at") // null = invited but never signed in
@@ -187,6 +202,7 @@ model User {
   // direct lookup, so it's inert bad data rather than an active bug (unlike Department's
   // parentId, which IS walked for cycle prevention because hierarchy queries rely on it).
   /**
+   * /**
    * /**
    * /**
    * /**
@@ -225,6 +241,7 @@ model User {
   authoredCommitLinks      TaskCommitLink[]         @relation("CommitAuthor")
   inviteTokens             InviteToken[]            @relation("UserInviteTokens")
   ownedBlockers            Blocker[]                @relation("BlockerOwner")
+  raisedBlockers           Blocker[]                @relation("BlockerRaiser")
   authoredDocuments        ProjectDocument[]        @relation("DocumentAuthor")
   statusUpdatesPosted      ProjectStatusUpdate[]    @relation("StatusAuthor")
   notifications            Notification[]           @relation("UserNotifications")
@@ -246,6 +263,9 @@ model User {
   nudgeSnoozes             NudgeSnooze[]            @relation("UserNudgeSnoozes")
   workComments             WorkComment[]            @relation("WorkCommentAuthor")
   decisionsMade            Decision[]               @relation("DecisionDecider")
+  decisionRequestsRaised   DecisionRequest[]        @relation("DecisionRequestRaiser")
+  decisionRequestsDecided  DecisionRequest[]        @relation("DecisionRequestDecider")
+  glcActionsOwned          GlcAction[]              @relation("GlcActionOwner")
   resourceRequestsRaised   ResourceRequest[]        @relation("ResourceRequestRaiser")
   resourceRequestsResolved ResourceRequest[]        @relation("ResourceRequestResolver")
   projectDependenciesMade  ProjectDependency[]      @relation("ProjectDependencyAuthor")
@@ -521,6 +541,10 @@ model Blocker {
   status             String             @default("Open") // Open | Resolved
   ownerId            String?            @map("owner_id")
   owner              User?              @relation("BlockerOwner", fields: [ownerId], references: [id])
+  // UX6 — who raised it (the owner is who can unblock it). NULL on rows raised before UX6
+  // and on machine-raised blockers (commit #blocked), never guessed.
+  raisedById         String?            @map("raised_by_id")
+  raisedBy           User?              @relation("BlockerRaiser", fields: [raisedById], references: [id], onDelete: SetNull)
   // Optional link to the task this blocker stalls (Phase 6.1 blocked-as-flag). A task is
   // "blocked" while an Open blocker points at it. Survives task deletion (SetNull).
   taskId             String?            @map("task_id")
@@ -533,6 +557,7 @@ model Blocker {
 
   @@index([tenantId, projectId])
   @@index([projectId, orgUnitId])
+  @@index([tenantId, raisedById])
   @@map("blocker")
 }
 
@@ -681,8 +706,10 @@ model TenantIntegration {
   status        String    @default("connected") // connected | error
   lastCheckedAt DateTime? @map("last_checked_at")
   lastError     String?   @map("last_error")
-  /** Non-secret settings: { stateMap: {<youtrackState>: <qubitStatus>}, syncIntervalMinutes,
-   *  firstImportSince, archiveRemoved }. Never put a token here. */
+  /**
+   * Non-secret settings: { stateMap: {<youtrackState>: <qubitStatus>}, syncIntervalMinutes,
+   * firstImportSince, archiveRemoved }. Never put a token here.
+   */
   config        Json?     @db.JsonB
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
@@ -1005,6 +1032,9 @@ model Project {
   // docs/18 §1 — the business pipeline: Exploring | Evaluating | Approved | Paused.
   // Audited + evented on change; the exec dashboard groups by this.
   pipelineStage   String     @default("Exploring") @map("pipeline_stage")
+  /// UX10 (D8b) — when the project entered its current lifecycle stage (src/lib/lifecycle.ts).
+  /// Set on create and whenever the stage changes; backfilled from audit history.
+  stageEnteredAt  DateTime?  @default(now()) @map("stage_entered_at")
   // docs/18 §7 — the one-line status/comment column; dashboards fall back to the
   // latest confirmed check-in narrative when unset.
   statusNote      String?    @map("status_note")
@@ -1050,6 +1080,8 @@ model Project {
   nudges               Nudge[]
   workComments         WorkComment[]
   decisions            Decision[]
+  decisionRequests     DecisionRequest[]
+  glcActions           GlcAction[]
   memberReportAcks     MemberReportAck[]
   checkpointTemplate   CheckpointTemplate?    @relation(fields: [checkpointTemplateId], references: [id])
   checkpointTemplateId String?                @map("checkpoint_template_id")
@@ -1154,6 +1186,14 @@ model Checkpoint {
   template   CheckpointTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
   name       String
   orderIndex Int                @default(0) @map("order_index")
+  /// UX9 (D10) — a testing gate (SIT/UAT entry and exit). Head of QA may set only these.
+  /// NULL = not set: the name decides (src/lib/testing-gates.ts). An admin can set it
+  /// explicitly either way.
+  testing    Boolean?
+  /// WS1 (Tier 4) — a sign-off gate: closing it needs an approver (Head; Head of QA for a
+  /// testing gate; Super Admin). NULL = the name decides (Go-Live, SIT exit, UAT exit —
+  /// src/lib/gate-approval.ts). An admin can set it explicitly either way.
+  requiresApproval Boolean? @map("requires_approval")
   statuses   CheckpointStatus[]
 
   @@unique([templateId, name])
@@ -1313,12 +1353,23 @@ model CheckpointStatus {
   source         String?        @map("source")
   sourceAt       DateTime?      @map("source_at")
   sourceById     String?        @map("source_by_id")
+  // WS1 (Tier 4) — sign-off, separate from `state` so delivery progress keeps working:
+  // none | submitted | approved | approved_with_exception | returned. Approving sets
+  // state = Done; submitting and returning leave `state` alone.
+  approval       String         @default("none")
+  submittedById  String?        @map("submitted_by_id")
+  submittedAt    DateTime?      @map("submitted_at")
+  decidedById    String?        @map("decided_by_id")
+  decidedAt      DateTime?      @map("decided_at")
+  // Required for an approval with exception and for a return; shown to the PM.
+  decisionNote   String?        @map("decision_note")
   updatedAt      DateTime       @updatedAt @map("updated_at")
 
   // Postgres treats NULLs as distinct, so the null combinations (project-level row, and
   // track-level rows without a module) are pinned by partial unique indexes in the migration.
   @@unique([projectId, checkpointId, orgUnitId, moduleId])
   @@index([tenantId, projectId])
+  @@index([tenantId, approval])
   @@map("checkpoint_status")
 }
 
@@ -1687,18 +1738,34 @@ model TeamTemplate {
 // Public INSERT via the bare prisma client; reads/updates are gated by RBAC (iam:manage),
 // NOT by tenant RLS. Deliberately omitted from prisma/rls.sql's table array (RLS stays off).
 model AccessRequest {
-  id           String              @id @default(cuid())
-  fullName     String              @map("full_name")
-  email        String
-  company      String
-  jobTitle     String?             @map("job_title")
-  status       AccessRequestStatus @default(NEW)
-  reviewedById String?             @map("reviewed_by_id")
-  reviewedAt   DateTime?           @map("reviewed_at")
-  createdAt    DateTime            @default(now()) @map("created_at")
+  id            String              @id @default(cuid())
+  fullName      String              @map("full_name")
+  email         String
+  company       String
+  jobTitle      String?             @map("job_title")
+  /// UX fidelity D-F3: the role asked for on the public form (ONBOARDING_ROLE_TIERS key, never PlatformSuperAdmin).
+  requestedRole String?             @map("requested_role")
+  /// Optional reason, up to 300 characters.
+  reason        String?             @db.VarChar(300)
+  status        AccessRequestStatus @default(NEW)
+  reviewedById  String?             @map("reviewed_by_id")
+  reviewedAt    DateTime?           @map("reviewed_at")
+  createdAt     DateTime            @default(now()) @map("created_at")
 
   @@index([status, createdAt])
   @@map("access_request")
+}
+
+/// UX fidelity D-F3b — platform-wide settings (no tenant, no RLS — the same pattern as
+/// access_request, which these govern). Written only by a PlatformSuperAdmin through
+/// src/server/platform-settings.ts, audited in the actor's tenant. Key → JSON value.
+model PlatformSetting {
+  key         String   @id
+  value       Json
+  updatedById String?  @map("updated_by_id")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_setting")
 }
 
 enum AccessRequestStatus {
@@ -1769,6 +1836,8 @@ model ProjectSnapshot {
   tasksOverdue   Int      @map("tasks_overdue")
   blockersOpen   Int      @map("blockers_open")
   risksOpen      Int      @map("risks_open")
+  /// UX10 (D8b) — the lifecycle stage that day (src/lib/lifecycle.ts); NULL before UX10.
+  stage          String?
   createdAt      DateTime @default(now()) @map("created_at")
 
   @@unique([tenantId, projectId, day])
@@ -2004,6 +2073,7 @@ model Decision {
   sourceCommentId String?  @map("source_comment_id")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
+  request         DecisionRequest? // WS2: the request this Register entry came from, if any
 
   @@index([tenantId, projectId, decidedAt])
   @@map("decision")
@@ -2018,9 +2088,13 @@ model StageTerm {
   id          String   @id @default(cuid())
   tenantId    String   @map("tenant_id")
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
-  /** The phrase, folded (lower case, letters/digits/spaces). */
+  /**
+   * The phrase, folded (lower case, letters/digits/spaces).
+   */
   term        String
-  /** The gate's name on the Product build track ("Prototype"). */
+  /**
+   * The gate's name on the Product build track ("Prototype").
+   */
   gateName    String   @map("gate_name")
   createdById String?  @map("created_by_id")
   createdAt   DateTime @default(now()) @map("created_at")
@@ -2028,4 +2102,67 @@ model StageTerm {
   @@unique([tenantId, term])
   @@index([tenantId])
   @@map("stage_term")
+}
+
+/**
+ * WS2 (UX fidelity Tier 4, mwashukes-desk/plans/ws1-ws2-proposals.md) — a decision waiting on
+ * the Group. Raised by a Head (any project) or a PM (their own projects); decided by an
+ * Executive. waiting → decided (outcome approved | declined) or deferred (new due date, still
+ * waiting on the Group). A decided request with a project writes a `Decision` (the project's
+ * Register entry) and keeps its id here; the request keeps the history.
+ */
+model DecisionRequest {
+  id          String      @id @default(cuid())
+  tenantId    String      @map("tenant_id")
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  projectId   String?     @map("project_id")
+  project     Project?    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String
+  /// What is being asked (sentence case, plain words).
+  context     String?
+  /// [{ label: "If approved", text: "…" }, { label: "If declined", text: "…" }]
+  options     Json        @default("[]")
+  raisedById  String      @map("raised_by_id")
+  raisedBy    User        @relation("DecisionRequestRaiser", fields: [raisedById], references: [id])
+  dueDate     DateTime?   @map("due_date")
+  status      String      @default("waiting") // waiting | decided | deferred
+  outcome     String? // approved | declined
+  /// The note for the record: required for declined and deferred.
+  outcomeNote String?     @map("outcome_note")
+  decidedById String?     @map("decided_by_id")
+  decidedBy   User?       @relation("DecisionRequestDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedAt   DateTime?   @map("decided_at")
+  decisionId  String?     @unique @map("decision_id") // the Register entry once decided
+  decision    Decision?   @relation(fields: [decisionId], references: [id], onDelete: SetNull)
+  glcActions  GlcAction[]
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  @@index([tenantId, status, dueDate])
+  @@index([tenantId, projectId])
+  @@map("decision_request")
+}
+
+/**
+ * WS2 — a Group-level committee (GLC) action item: work someone owes after a decision or a
+ * committee meeting, with an owner, a due date and open | done.
+ */
+model GlcAction {
+  id                String           @id @default(cuid())
+  tenantId          String           @map("tenant_id")
+  tenant            Tenant           @relation(fields: [tenantId], references: [id])
+  projectId         String?          @map("project_id")
+  project           Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  decisionRequestId String?          @map("decision_request_id")
+  decisionRequest   DecisionRequest? @relation(fields: [decisionRequestId], references: [id], onDelete: SetNull)
+  title             String
+  ownerId           String?          @map("owner_id")
+  owner             User?            @relation("GlcActionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  dueDate           DateTime?        @map("due_date")
+  status            String           @default("open") // open | done
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  @@index([tenantId, status, dueDate])
+  @@map("glc_action")
 }

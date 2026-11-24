@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { checkRateLimit, recordFailure } from "@/lib/rate-limit";
 import { consumeInviteToken, InviteError } from "@/server/invites";
+import { validationError } from "@/server/errors";
+import { newPassword, PASSWORD_ERROR_FIELD } from "@/lib/password-schema";
 
 /**
  * POST /api/onboarding/accept — PUBLIC (docs/22 §6). The caller has no session by
@@ -18,7 +20,7 @@ export const dynamic = "force-dynamic";
 
 const Body = z.object({
   token: z.string().min(1),
-  password: z.string().min(1),
+  password: newPassword,
 });
 
 export async function POST(req: Request) {
@@ -36,7 +38,7 @@ export async function POST(req: Request) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     recordFailure(key);
-    return NextResponse.json({ error: { code: "VALIDATION", message: "Invalid request." } }, { status: 400 });
+    return validationError(parsed.error);
   }
 
   try {
@@ -47,7 +49,12 @@ export async function POST(req: Request) {
       // A bad token counts against the limiter; a weak/reused password does not — that's
       // a legitimate user getting it wrong, not someone probing.
       if (e.code === "INVALID_TOKEN") recordFailure(key);
-      return NextResponse.json({ error: { code: e.code, message: e.message } }, { status: 400 });
+      // docs/08 § Errors: a weak or reused password goes back on the password field.
+      const field = PASSWORD_ERROR_FIELD[e.code];
+      return NextResponse.json(
+        { error: { code: e.code, message: e.message, ...(field ? { fields: { [field]: e.message } } : {}) } },
+        { status: 400 },
+      );
     }
     throw e;
   }

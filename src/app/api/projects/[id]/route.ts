@@ -3,6 +3,8 @@ import { requirePermission } from "@/lib/api-guard";
 import { can } from "@/lib/rbac";
 import { canContributeToProject, canWriteProject } from "@/lib/access";
 import { getTenantContext, withTenant } from "@/lib/tenant";
+import { END_BEFORE_START, endBeforeStart } from "@/lib/project-schema";
+import { validationError } from "@/server/errors";
 import { getProjectPanelData, updateProject, UpdateProjectInput } from "@/server/projects";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -47,10 +49,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const parsed = UpdateProjectInput.safeParse(await req.json());
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: "VALIDATION", message: "Invalid input." } },
-      { status: 400 },
-    );
+    return validationError(parsed.error);
+  }
+  if (endBeforeStart(parsed.data.startDate, parsed.data.dueDate)) {
+    return NextResponse.json({ error: { code: "VALIDATION", message: END_BEFORE_START, fields: { dueDate: END_BEFORE_START } } }, { status: 400 });
   }
 
   // docs/18 §7: governance-only edits (stage / priority / status note) are open to the

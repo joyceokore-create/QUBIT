@@ -1,0 +1,266 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   QUBIT design spec tokens — UX fidelity F0 (docs/08 § "Design spec v2").
+
+   Source: the approved role-journeys design (Riverbank). Values are copied from the
+   design's stylesheet, with four recorded deviations (docs/08 § Deviations):
+     1. Status TEXT uses darker "-text" tokens in light mode (the design's hues are
+        2.9–4.5:1 as text); fills, meters and RAG bars keep the design's hues.
+     2. Sidebar group labels use 55% white (the design's 42% is 3.4–4.1:1).
+     3. Placeholders use --ds-ink3 (≥4.88:1); --ds-ink4 is decoration only.
+     4. Primary buttons keep Riverbank red #ED1C24 with white text (4.38:1) —
+        accepted by the designer as the brand colour (11 Nov 2026).
+
+   Every token is namespaced --ds-* so defining them changes nothing on screen:
+   components opt in one by one (UX fidelity F1+). They are defined at :root (not
+   inside the app shell) so portalled drawers, menus and toasts inherit them.
+   Tenant brand flows through var(--brand); Riverbank pins its exact values below.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Brand (any tenant: derived from the tenant brand) */
+  --ds-brand: var(--brand);
+  --ds-on-brand: #ffffff;
+  --ds-brand-ink: color-mix(in oklab, var(--brand) 80%, black); /* red/green text, links */
+  --ds-brand-wash: color-mix(in oklab, var(--brand) 10%, white); /* active chip/count fill */
+
+  /* Surfaces */
+  --ds-bg: #fafafa; /* deviation 7: lighter neutral page (design #f3f5f8) */
+  --ds-card: #ffffff;
+  --ds-surface2: #f6f7f9; /* kv panels, row hover, in-card search, active in-card tab */
+  --ds-thead: #edeff2; /* table header band — a step darker than the row hover (designer, 12 Nov 2026) */
+  --ds-bd: transparent; /* card border — none in light mode: shadow only (designer, 12 Nov 2026) */
+  --ds-line: #e7e9ee; /* control borders, dividers, dotted row rules */
+
+  /* Ink ramp (design names; NOT the legacy --ink2…--ink6, which are one step darker) */
+  --ds-ink: #231f20; /* 16.3:1 on card */
+  --ds-ink2: #4b4b4b; /* 8.7:1 */
+  --ds-ink3: #6b6b6b; /* 5.3:1 card · 4.97:1 surface2 · 4.88:1 bg */
+  --ds-ink4: #9f9f9f; /* 2.65:1 — decoration only (dividers, disabled, chart axes) */
+  --ds-placeholder: var(--ds-ink3);
+
+  /* Status — fills (RAG bars, meters, bars, gate cells, solid segmented buttons) */
+  --ds-ok: #16a34a;
+  --ds-warn: #d97706;
+  --ds-bad: #dc2626;
+  --ds-info: #2563eb;
+  --ds-vio: #7c3aed;
+  --ds-teal: #0f8b8d;
+  /* Status — text (chips, KPI context lines, coloured words). AA on wash and card. */
+  --ds-ok-text: #166534; /* 6.4:1 on --ds-okw */
+  --ds-warn-text: #92400e; /* 6.4:1 */
+  --ds-bad-text: #b91c1c; /* 5.7:1 */
+  --ds-info-text: #1d4ed8; /* 5.8:1 */
+  --ds-vio-text: #6d28d9; /* 6.1:1 */
+  --ds-teal-text: #0f766e; /* 4.8:1 */
+  /* Status — washes */
+  --ds-okw: #e7f6ec;
+  --ds-warnw: #fdf2e2;
+  --ds-badw: #fdecec;
+  --ds-infow: #e8effd;
+  --ds-viow: #f1ebfe;
+  --ds-tealw: #e2f3f3;
+  --ds-mutedw: #eef0f3; /* muted chip, tab count, meter track */
+
+  /* Featured (dark) KPI card */
+  --ds-feat-bg: #231f20;
+  --ds-feat-fg: #ffffff;
+  --ds-feat-sub: rgba(255, 255, 255, 0.66);
+  --ds-feat-track: rgba(255, 255, 255, 0.16);
+
+  /* Elevation */
+  --ds-shadow: 0 1px 2px rgba(35, 31, 32, 0.06), 0 8px 24px -12px rgba(35, 31, 32, 0.18);
+  --ds-shadow-drawer: -16px 0 40px rgba(15, 23, 42, 0.22);
+  /* White controls that sit on the page (search, filter chips, secondary buttons): a soft lift so
+     they read against the #fafafa page without a heavier border (designer, 12 Nov 2026). */
+  --ds-shadow-control: 0 1px 2px rgba(35, 31, 32, 0.05), 0 1px 4px -2px rgba(35, 31, 32, 0.10);
+  --ds-shadow-menu: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --ds-scrim: rgba(15, 23, 42, 0.38);
+
+  /* Sidebar */
+  --ds-side: linear-gradient(180deg, #241f20, color-mix(in oklab, var(--brand) 45%, #241f20));
+  --ds-side-active: color-mix(in oklab, var(--brand) 85%, black);
+  --ds-side-ink: rgba(255, 255, 255, 0.78);
+  --ds-side-dim: rgba(255, 255, 255, 0.55); /* design: .42 — raised for AA */
+  --ds-side-count: rgba(255, 255, 255, 0.16);
+  --ds-side-rule: rgba(255, 255, 255, 0.12);
+
+  /* Metrics (theme-independent) */
+  --ds-sidebar-w: 232px;
+  --ds-topbar-h: 58px;
+  --ds-rail-w: 340px;
+  --ds-drawer-w: 440px;
+  --ds-drawer-w-wide: 580px;
+  --ds-page-pad: 22px;
+  --ds-gap: 16px; /* page body, columns, rail cards */
+  --ds-gap-kpi: 12px;
+  --ds-control-h: 36px;
+  --ds-control-h-compact: 28px;
+  --ds-radius-card: 18px; /* cards, panels, drawers' panels */
+  --ds-radius-kpi: 16px;
+  --ds-radius-kv: 12px;
+  --ds-radius-control: 10px; /* buttons, inputs, filter chips, tabs (top corners) */
+  --ds-radius-compact: 8px; /* 28px buttons, close button, table header band ends */
+  --ds-radius-pager: 7px;
+}
+
+/* ── Riverbank: exact brand values from the design ── */
+[data-tenant="riverbank"] {
+  --ds-brand: #ed1c24; /* primary fill — brand, kept (deviation 4) */
+  --ds-brand-ink: #c9181f; /* 5.8:1 on card, 5.1:1 on wash; also primary hover/pressed */
+  --ds-brand-wash: #fdecec;
+  --ds-side: linear-gradient(180deg, #241f20, #5c0f13);
+  --ds-side-active: #b81c22; /* white on it 6.5:1; active count text on white 6.5:1 */
+}
+
+/* ── Dark (the design's dark palette; layout identical) ── */
+.dark {
+  --ds-brand-ink: color-mix(in oklab, var(--brand) 55%, white);
+  --ds-brand-wash: color-mix(in oklab, var(--brand) 16%, transparent);
+
+  --ds-bg: #01030a; /* deviation 7: a touch darker (design #020617) */
+  --ds-card: #0f172a;
+  --ds-surface2: #132036;
+  --ds-thead: #1b2a44;
+  --ds-bd: rgba(148, 163, 184, 0.16);
+  --ds-line: #1e293b;
+
+  --ds-ink: #e5e9f0; /* 14.7:1 */
+  --ds-ink2: #cbd5e1; /* 12.0:1 */
+  --ds-ink3: #94a3b8; /* 7.0:1 card · 6.4:1 surface2 */
+  --ds-ink4: #64748b; /* 3.75:1 — decoration only */
+
+  /* The design's dark hues pass as text on their washes (5.2–7.3:1), so text = fill. */
+  --ds-ok: #22c55e;
+  --ds-warn: #f59e0b;
+  --ds-bad: #f87171;
+  --ds-info: #60a5fa;
+  --ds-vio: #a78bfa;
+  --ds-teal: #2dd4bf;
+  --ds-ok-text: var(--ds-ok);
+  --ds-warn-text: var(--ds-warn);
+  --ds-bad-text: var(--ds-bad);
+  --ds-info-text: var(--ds-info);
+  --ds-vio-text: var(--ds-vio);
+  --ds-teal-text: var(--ds-teal);
+  --ds-okw: rgba(34, 197, 94, 0.14);
+  --ds-warnw: rgba(245, 158, 11, 0.15);
+  --ds-badw: rgba(248, 113, 113, 0.15);
+  --ds-infow: rgba(96, 165, 250, 0.15);
+  --ds-viow: rgba(167, 139, 250, 0.15);
+  --ds-tealw: rgba(45, 212, 191, 0.14);
+  --ds-mutedw: rgba(148, 163, 184, 0.14);
+
+  --ds-feat-bg: #1e293b;
+  --ds-feat-fg: #f8fafc;
+  --ds-feat-sub: rgba(248, 250, 252, 0.62);
+  --ds-feat-track: rgba(255, 255, 255, 0.12);
+
+  --ds-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  --ds-shadow-control: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --ds-side: linear-gradient(180deg, #0b0f1a, color-mix(in oklab, var(--brand) 25%, #0b0f1a));
+}
+
+.dark[data-tenant="riverbank"],
+.dark [data-tenant="riverbank"] {
+  --ds-brand: #ed1c24; /* brand kept in dark too (the design's #f0353c is not used) */
+  --ds-brand-ink: #ff8a8f; /* 7.9:1 on card, 7.1:1 on wash */
+  --ds-brand-wash: rgba(237, 28, 36, 0.16);
+  --ds-side: linear-gradient(180deg, #0b0f1a, #3a0a0d);
+}
+
+/* Tailwind utilities for the spec tokens (generated only when used, e.g. bg-ds-card,
+   text-ds-ink3, border-ds-line). `inline` keeps them as var() references. */
+@theme inline {
+  --color-ds-brand: var(--ds-brand);
+  --color-ds-on-brand: var(--ds-on-brand);
+  --color-ds-brand-ink: var(--ds-brand-ink);
+  --color-ds-brand-wash: var(--ds-brand-wash);
+  --color-ds-bg: var(--ds-bg);
+  --color-ds-card: var(--ds-card);
+  --color-ds-surface2: var(--ds-surface2);
+  --color-ds-bd: var(--ds-bd);
+  --color-ds-line: var(--ds-line);
+  --color-ds-ink: var(--ds-ink);
+  --color-ds-ink2: var(--ds-ink2);
+  --color-ds-ink3: var(--ds-ink3);
+  --color-ds-ink4: var(--ds-ink4);
+  --color-ds-placeholder: var(--ds-placeholder);
+  --color-ds-ok: var(--ds-ok);
+  --color-ds-warn: var(--ds-warn);
+  --color-ds-bad: var(--ds-bad);
+  --color-ds-info: var(--ds-info);
+  --color-ds-vio: var(--ds-vio);
+  --color-ds-teal: var(--ds-teal);
+  --color-ds-ok-text: var(--ds-ok-text);
+  --color-ds-warn-text: var(--ds-warn-text);
+  --color-ds-bad-text: var(--ds-bad-text);
+  --color-ds-info-text: var(--ds-info-text);
+  --color-ds-vio-text: var(--ds-vio-text);
+  --color-ds-teal-text: var(--ds-teal-text);
+  --color-ds-okw: var(--ds-okw);
+  --color-ds-warnw: var(--ds-warnw);
+  --color-ds-badw: var(--ds-badw);
+  --color-ds-infow: var(--ds-infow);
+  --color-ds-viow: var(--ds-viow);
+  --color-ds-tealw: var(--ds-tealw);
+  --color-ds-mutedw: var(--ds-mutedw);
+  --color-ds-feat-bg: var(--ds-feat-bg);
+  --color-ds-feat-fg: var(--ds-feat-fg);
+  --color-ds-side-active: var(--ds-side-active);
+}
+
+/* UX fidelity Tier 3 — forms inside the drawer-dialog (src/components/ui/drawer-dialog.tsx)
+ * take the drawer field spec (docs/08 § Drawer · Field) without rewriting each form: labels
+ * 11.5/600 ink3, controls 36px with a 10px radius on the line border. */
+.ds-form :is(label, span).text-sm.font-medium {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ds-ink3);
+}
+.ds-form :is([data-slot="input"], [data-slot="select-trigger"], textarea) {
+  min-height: var(--ds-control-h);
+  border-radius: var(--ds-radius-control);
+  border-color: var(--ds-line);
+  font-size: 13px;
+}
+.ds-form :is([data-slot="input"], textarea)::placeholder {
+  color: var(--ds-placeholder);
+}
+.ds-form :is([data-slot="input"], [data-slot="select-trigger"], textarea):focus,
+.ds-form :is([data-slot="input"], [data-slot="select-trigger"], textarea):focus-visible {
+  border-color: var(--ds-ink);
+}
+
+/* Account-style menus (designer, 12 Nov 2026): the filter dropdown's card — 12px radius, menu
+   shadow, line ring — with lighter, roomier rows: 12.5px ink2 text, 8px vertical padding,
+   ink3 icons; quiet section labels; hairline separators. */
+.ds-menu :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]) {
+  gap: 10px;
+  border-radius: 8px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  padding-left: 9px;
+  font-size: 12.5px;
+  color: var(--ds-ink2);
+}
+.ds-menu :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]) svg { color: var(--ds-ink3); }
+/* Hover = grey + bold dark; selected (radio/checkbox) = red wash + bold red, hovered or not. */
+.ds-menu :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"])[data-highlighted]:not([data-variant="destructive"]),
+.ds-menu :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"])[data-highlighted]:not([data-variant="destructive"]) svg { background-color: var(--ds-surface2); color: var(--ds-ink); font-weight: 600; }
+.ds-menu :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"])[data-highlighted] svg { background-color: transparent; }
+.ds-menu :is([role="menuitemradio"], [role="menuitemcheckbox"])[data-checked],
+.ds-menu :is([role="menuitemradio"], [role="menuitemcheckbox"])[data-checked] svg { color: var(--ds-brand-ink); font-weight: 600; }
+.ds-menu :is([role="menuitemradio"], [role="menuitemcheckbox"])[data-checked] { background-color: var(--ds-brand-wash); }
+.ds-menu [data-slot="dropdown-menu-label"] { padding: 8px 9px 4px; font-size: 11px; font-weight: 600; color: var(--ds-ink3); }
+.ds-menu [data-slot="dropdown-menu-separator"] { margin: 6px -6px; background: var(--ds-line); }
+.ds-menu [data-variant="destructive"], .ds-menu [data-variant="destructive"] svg { color: var(--ds-bad-text); }
+
+/* Error state (docs/08 § Errors): drawer-form controls marked aria-invalid get the error red —
+   these must come after the .ds-form border/focus rules above (unlayered, so they win). */
+.ds-form :is([data-slot="input"], [data-slot="select-trigger"], textarea)[aria-invalid="true"] {
+  border-color: var(--ds-bad);
+}
+.ds-form :is([data-slot="input"], [data-slot="select-trigger"], textarea)[aria-invalid="true"]:is(:focus, :focus-visible) {
+  border-color: var(--ds-bad);
+  box-shadow: 0 0 0 1px var(--ds-bad);
+}

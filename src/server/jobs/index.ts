@@ -6,6 +6,7 @@ import { checkinChase, nudgerJob } from "@/server/jobs/nudger-jobs";
 import { nightlySnapshot } from "@/server/jobs/nightly-snapshot";
 import { dailyDigest } from "@/server/jobs/digest";
 import { youtrackSync } from "@/server/jobs/youtrack-sync";
+import { accessRequestRetention } from "@/server/jobs/access-request-retention";
 import type { AnyJobDefinition, JobDefinition, JobRunResult } from "@/server/jobs/types";
 
 /**
@@ -28,7 +29,7 @@ const heartbeat: JobDefinition = {
 const REGISTRY = new Map<string, AnyJobDefinition>(
   [
     heartbeat, nightlySnapshot, fridayCheckinDrafts, fridayMemberDrafts, fridayReport,
-    nudgerJob, checkinChase, dailyDigest, youtrackSync,
+    nudgerJob, checkinChase, dailyDigest, youtrackSync, accessRequestRetention,
   ].map((job) => [job.name, job as AnyJobDefinition]),
 );
 
@@ -63,6 +64,23 @@ export async function runJob(name: string, idempotencyKey: string): Promise<JobR
 
   const detail: Record<string, unknown> = {};
   let failed = false;
+
+  // A system job runs once, outside any tenant (it only touches system tables).
+  if ("system" in job) {
+    try {
+      Object.assign(detail, (await job.run()) ?? { ok: true });
+    } catch (err) {
+      failed = true;
+      detail.error = err instanceof Error ? err.message : String(err);
+    }
+    const status = failed ? "Failed" : "Succeeded";
+    await prisma.jobRun.update({
+      where: { id: run.id },
+      data: { status, finishedAt: new Date(), detail: detail as Prisma.InputJsonValue, error: failed ? String(detail.error) : null },
+    });
+    return { runId: run.id, job: name, status, detail };
+  }
+
   const tenants = await prisma.tenant.findMany({ select: { id: true, slug: true }, orderBy: { slug: "asc" } });
   for (const tenant of tenants) {
     try {

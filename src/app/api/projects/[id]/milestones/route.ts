@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { validationError } from "@/server/errors";
 import { getTenantContext } from "@/lib/tenant";
 import { canViewProject } from "@/lib/project-access";
 import { requirePermission } from "@/lib/api-guard";
@@ -23,7 +24,7 @@ export async function POST(req: Request, { params }: Ctx) {
   if ("response" in guard) return guard.response;
   const parsed = CreateMilestoneInput.safeParse(await req.json());
   if (!parsed.success) {
-    return NextResponse.json({ error: { code: "VALIDATION", message: "A milestone needs a name." } }, { status: 400 });
+    return validationError(parsed.error);
   }
   const { id } = await params;
   const m = await createMilestone(guard.ctx, id, parsed.data);

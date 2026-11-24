@@ -1,9 +1,7 @@
-import Link from "next/link";
-import { TAB_LINK, TAB_LINK_ACTIVE } from "@/lib/surface";
+import { TabStrip } from "@/components/ui/tab-strip";
 
-// Milestone B — the view's three tabs as URL-driven links (so ?week=, ?as= and ?tab=
-// compose, and every panel stays a server component with its own reads). Same look as
-// the workspace's underline tabs.
+// Milestone B — the view's tabs as URL-driven links (so ?week=, ?as= and ?tab= compose, and
+// every panel stays a server component with its own reads). UX2: the shared U1 tab strip.
 export function ReportTabs({
   tabs,
   active,
@@ -13,20 +11,5 @@ export function ReportTabs({
   active: string;
   hrefFor: (key: string) => string;
 }) {
-  return (
-    <nav aria-label="Report views" className="border-b border-[var(--border)]">
-      <ul className="flex gap-0 overflow-x-auto [scrollbar-width:thin]">
-        {tabs.map((t) => {
-          const on = t.key === active;
-          return (
-            <li key={t.key}>
-              <Link href={hrefFor(t.key)} aria-current={on ? "page" : undefined} className={`inline-flex ${TAB_LINK} ${on ? TAB_LINK_ACTIVE : ""}`}>
-                {t.label}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
-  );
+  return <TabStrip label="Report views" active={active} tabs={tabs.map((t) => ({ ...t, href: hrefFor(t.key) }))} />;
 }

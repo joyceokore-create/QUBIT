@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { youtrackBaseUrl, integrationToken } from "@/lib/workspace-schema";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
@@ -91,9 +92,9 @@ export const SetIntegrationInput = z.object({
   connected: z.boolean(),
   resource: z.string().nullable().optional(),
   /** Plaintext access token — encrypted before storage; omit to leave unchanged. */
-  token: z.string().min(1).optional(),
+  token: integrationToken.optional(),
   /** Non-secret settings. Never put a token in here — it is stored unencrypted. */
-  config: z.object({ baseUrl: z.string().url(), fieldMap: FieldMapInput }).nullable().optional(),
+  config: z.object({ baseUrl: youtrackBaseUrl, fieldMap: FieldMapInput }).nullable().optional(),
   syncIntervalMinutes: z.number().int().min(5).max(1440).optional(),
 });
 export type SetIntegrationInput = z.infer<typeof SetIntegrationInput>;

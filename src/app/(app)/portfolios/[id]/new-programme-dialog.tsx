@@ -3,8 +3,11 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DialogTrigger } from "@/components/ui/dialog";
+import { DialogTrigger } from "@/components/ui/drawer-dialog";
 import { Input } from "@/components/ui/input";
+import { Field } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { NewProgrammeFormSchema } from "@/lib/portfolio-schema";
 import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
 import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { Chip } from "@/components/wizard/wizard-shell";
@@ -26,22 +29,21 @@ export function NewProgrammeDialog({
   const [parentId, setParentId] = useState(portfolioId ?? "");
   const { busy, error, setError, mutate } = useAdminMutation();
 
+  // docs/08 § Errors: Name and the parent portfolio show their problems on the field.
+  const fe = useFieldErrors({ schema: NewProgrammeFormSchema, values: { name, portfolioId: parentId }, idPrefix: "pg", paths: { portfolioId: "portfolioId" } });
+
   async function submit() {
-    if (name.trim().length < 2) {
-      setError("Name is required.");
-      return;
-    }
-    if (!parentId) {
-      setError("A programme lives inside a portfolio — pick one.");
-      return;
-    }
+    setError(null);
+    if (!fe.validate()) return;
     await mutate(
       "/api/programmes",
       "POST",
       { name: name.trim(), portfolioId: parentId, category },
       {
         fallback: "Could not create the programme.",
+        onFieldErrors: (fields) => fe.setServerErrors(fields, ["portfolioId", "name"]),
         onSuccess: () => {
+          fe.reset();
           setOpen(false);
           setName("");
           setCategory("Exploring");
@@ -55,28 +57,31 @@ export function NewProgrammeDialog({
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
-        if (!o) setError(null);
+        if (!o) {
+          setError(null);
+          fe.reset();
+        }
       }}
-      title="New programme"
+      title="New Programme"
       description="A grouping inside this portfolio — it inherits the portfolio's markets and report recipients."
       error={error}
       busy={busy}
-      submitLabel="Create programme"
+      submitLabel="Create Programme"
       onSubmit={submit}
       trigger={
         <DialogTrigger render={<Button variant="outline" size="sm" />}>
-          <Plus /> New programme
+          <Plus /> New Programme
         </DialogTrigger>
       }
     >
       <div className="flex flex-col gap-3">
         {portfolios && (
-          <div>
-            <span className="text-[11px] font-semibold tracking-[0.6px] text-[var(--ink4)] uppercase">Parent portfolio</span>
+          <Field label="Parent Portfolio" htmlFor={fe.idOf("portfolioId")} error={fe.errors.portfolioId}>
             <select
+              {...fe.bind("portfolioId")}
               value={parentId}
               onChange={(e) => setParentId(e.target.value)}
-              className="mt-1.5 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
+              className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm aria-invalid:border-[var(--ds-bad)]"
             >
               <option value="">— pick —</option>
               {portfolios.map((p) => (
@@ -85,14 +90,11 @@ export function NewProgrammeDialog({
                 </option>
               ))}
             </select>
-          </div>
+          </Field>
         )}
-        <div>
-          <label htmlFor="pg-name" className="text-[11px] font-semibold tracking-[0.6px] text-[var(--ink4)] uppercase">
-            Name
-          </label>
-          <Input id="pg-name" value={name} onChange={(e) => setName(e.target.value)} className="mt-1.5" autoFocus />
-        </div>
+        <Field label="Name" htmlFor={fe.idOf("name")} error={fe.errors.name}>
+          <Input {...fe.bind("name")} required value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+        </Field>
         <div>
           <span className="text-[11px] font-semibold tracking-[0.6px] text-[var(--ink4)] uppercase">Category</span>
           <div className="mt-2">

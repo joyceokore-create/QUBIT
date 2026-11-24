@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { validationError } from "@/server/errors";
 import { requirePermission, forbidden } from "@/lib/api-guard";
 import { canContributeToProject } from "@/lib/access";
 import { listBlockers, createBlocker, CreateBlockerInput, BlockerError } from "@/server/blockers";
@@ -21,7 +22,7 @@ export async function POST(req: Request, { params }: Ctx) {
   }
   const parsed = CreateBlockerInput.safeParse(await req.json());
   if (!parsed.success) {
-    return NextResponse.json({ error: { code: "VALIDATION", message: "Invalid blocker." } }, { status: 400 });
+    return validationError(parsed.error);
   }
   try {
     const b = await createBlocker(guard.ctx, id, parsed.data);

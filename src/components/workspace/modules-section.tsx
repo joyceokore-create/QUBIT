@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { InstanceNameFormSchema } from "@/lib/workspace-schema";
+import { readApiError } from "@/lib/form-errors";
+import { FieldError } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
 import { useRouter } from "next/navigation";
 import { FileText, Loader2, Plus, ShieldAlert, X } from "lucide-react";
 import type { NamedInstanceJson } from "@/components/panels/project-panel-json";
-import { CARD_GLASS as CARD, CARD_BG, FOCUS, PRIMARY, QUIET, SECONDARY } from "@/lib/surface";
+import { CARD_GLASS as CARD, CARD_BG, FIELD_INVALID, FOCUS, PRIMARY, QUIET, SECONDARY, THEAD, TROW } from "@/lib/surface";
 
 /**
  * docs/38 — the Delivery tab's Modules grid: the product's components or channels (Swipe
@@ -19,7 +23,7 @@ const STATE_LABEL: Record<string, string> = { Planned: "Planned", Build: "Build"
 const STATE_TOK: Record<string, string> = { Planned: "--ink4", Build: "--qinfo", UAT: "--warn", Live: "--ok", NotApplicable: "--ink5" };
 /** "Agent channels" → "agent channel"; "Modules" → "module". */
 const singular = (label: string) => label.toLowerCase().replace(/s$/, "");
-const INPUT = `h-8 rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-brand ${FOCUS}`;
+const INPUT = `h-8 rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none`;
 
 /** The state a row shows in the "All markets" column: the shared one, or "" when markets differ. */
 const allState = (cells: { orgUnitId: string | null; state: string }[]) => {
@@ -54,6 +58,9 @@ export function ModulesSection({
   const [draft, setDraft] = useState({ name: "", parentId: "", ownGates: false });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // docs/08 § Errors: the name's problem shows on the field; Add stays enabled except while sending.
+  const nameSchema = useMemo(() => InstanceNameFormSchema(singular(label)), [label]);
+  const fe = useFieldErrors({ schema: nameSchema, values: { name: draft.name }, idPrefix: "module" });
   // docs/38 — at All every market is a column (edit any); with a market selected, that
   // market alone is edited.
   const allColumns: { orgUnitId: string | null; label: string }[] = [{ orgUnitId: null, label: "Product" }, ...markets.map((m) => ({ orgUnitId: m.orgUnitId, label: `${m.flag ? `${m.flag} ` : ""}${m.code}` }))];
@@ -69,14 +76,15 @@ export function ModulesSection({
     ...instances.map((i) => ({ parentId: i.id, label: i.name, rows: rows.filter((r) => r.parentId === i.id) })),
   ].filter((g) => g.rows.length > 0 || g.parentId === null);
 
-  const call = async (key: string, url: string, init: RequestInit) => {
+  const call = async (key: string, url: string, init: RequestInit, onFields?: (f: Record<string, string>) => boolean) => {
     setBusy(key);
     setError(null);
     const res = await fetch(url, { headers: { "content-type": "application/json" }, ...init });
     const d = await res.json().catch(() => null);
     setBusy(null);
     if (!res.ok) {
-      setError(d?.error?.message ?? "Could not save.");
+      const { message, fields } = readApiError(d, "Could not save.");
+      if (!onFields?.(fields)) setError(message);
       return false;
     }
     if (Array.isArray(d?.data)) setRows(d.data);
@@ -84,9 +92,17 @@ export function ModulesSection({
     return true;
   };
   const add = async () => {
-    if (!draft.name.trim()) return;
-    if (await call("add", `/api/projects/${projectId}/instances`, { method: "POST", body: JSON.stringify({ name: draft.name.trim(), kind: "module", parentId: draft.parentId || null, ownGates: draft.ownGates }) })) {
+    if (busy !== null || !fe.validate()) return;
+    const ok = await call("add", `/api/projects/${projectId}/instances`, { method: "POST", body: JSON.stringify({ name: draft.name.trim(), kind: "module", parentId: draft.parentId || null, ownGates: draft.ownGates }) }, (f) => {
+      const { _: root, ...onFields } = f;
+      if (Object.keys(onFields).length === 0) return false;
+      fe.setServerErrors(onFields);
+      if (root) setError(root);
+      return true;
+    });
+    if (ok) {
       setDraft({ name: "", parentId: "", ownGates: false });
+      fe.reset();
       setAdding(false);
     }
   };
@@ -111,13 +127,17 @@ export function ModulesSection({
       </div>
       {adding && (
         <form
-          className="mb-3 flex flex-wrap items-center gap-2"
+          className="mb-3 flex flex-wrap items-start gap-2"
+          noValidate
           onSubmit={(e) => {
             e.preventDefault();
             void add();
           }}
         >
-          <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} maxLength={60} autoFocus placeholder="e.g. USSD" aria-label={`${singular(label)} name`} className={`${INPUT} min-w-[180px]`} />
+          <div className="flex flex-col gap-1.5">
+            <input {...fe.bind("name")} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} maxLength={60} autoFocus placeholder="e.g. USSD" aria-label={`${singular(label)} name`} className={`${INPUT} ${FIELD_INVALID} min-w-[180px]`} />
+            {fe.errors.name && <FieldError id={`${fe.idOf("name")}-error`}>{fe.errors.name}</FieldError>}
+          </div>
           {instances.length > 0 && (
             <select value={draft.parentId} onChange={(e) => setDraft({ ...draft, parentId: e.target.value })} aria-label="Under" className={INPUT}>
               <option value="">Under the product</option>
@@ -132,10 +152,10 @@ export function ModulesSection({
             <input type="checkbox" checked={draft.ownGates} onChange={(e) => setDraft({ ...draft, ownGates: e.target.checked })} className="size-3.5 accent-[var(--brand)]" />
             Its own gates
           </label>
-          <button type="submit" disabled={busy !== null || !draft.name.trim()} className={PRIMARY}>
+          <button type="submit" disabled={busy !== null} className={PRIMARY}>
             {busy === "add" ? "Adding…" : "Add"}
           </button>
-          <button type="button" onClick={() => setAdding(false)} className={QUIET}>
+          <button type="button" onClick={() => { setAdding(false); fe.reset(); }} className={QUIET}>
             Cancel
           </button>
         </form>
@@ -147,17 +167,21 @@ export function ModulesSection({
       )}
       {rows.length > 0 && (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[460px] border-collapse text-left text-[12px]">
-            <thead>
-              <tr className="font-mono text-[9px] font-bold uppercase tracking-[1px] text-[var(--ink4)]">
-                <th className="py-1.5 pr-3">{singular(label)}</th>
+          <table className="w-full min-w-[460px] border-separate border-spacing-0 text-left text-[12.5px]">
+            <thead className={THEAD}>
+              <tr>
+                <th scope="col">{singular(label)}</th>
                 {columns.map((c) => (
-                  <th key={c.orgUnitId ?? "product"} className="px-2 py-1.5 text-center">
+                  <th key={c.orgUnitId ?? "product"} scope="col" className="!text-center">
                     {c.label}
                   </th>
                 ))}
-                <th className="px-2 py-1.5 text-center">Own gates</th>
-                {canManage && <th className="w-8" />}
+                <th scope="col" className="!text-center">Own Gates</th>
+                {canManage && (
+                  <th scope="col" className="w-8">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -198,15 +222,15 @@ function GroupRows({
   return (
     <>
       {showHeader && (
-        <tr className="border-t border-[var(--hair2)]">
-          <td colSpan={columns.length + 2 + (canManage ? 1 : 0)} className="bg-[var(--card2)] px-2 py-1 text-[10.5px] font-semibold uppercase tracking-[.8px] text-[var(--ink4)]">
+        <tr className={TROW}>
+          <td colSpan={columns.length + 2 + (canManage ? 1 : 0)} className="!bg-[var(--ds-surface2)] !py-2 !text-[12px] font-semibold text-[var(--ds-ink2)]">
             {group.label}
           </td>
         </tr>
       )}
       {group.rows.map((r) => (
-        <tr key={r.id} className="border-t border-[var(--hair2)]">
-          <td className="py-2 pr-3">
+        <tr key={r.id} className={TROW}>
+          <td>
             <span className="font-semibold text-[var(--qink)]">{r.name}</span>
             <span className="ml-1.5 font-mono text-[10px] text-[var(--ink4)]">{r.code}</span>
             {r.ownGates && (
@@ -224,7 +248,7 @@ function GroupRows({
             const mixed = c.all && cell.state === "";
             const k = `${r.id}:${c.orgUnitId ?? "-"}`;
             return (
-              <td key={k} className="px-2 py-2 text-center">
+              <td key={k} className="text-center">
                 <div className="inline-flex flex-col items-center gap-1">
                   {canManage && c.editable ? (
                     <select
@@ -271,7 +295,7 @@ function GroupRows({
               </td>
             );
           })}
-          <td className="px-2 py-2 text-center">
+          <td className="text-center">
             {canManage ? (
               <input type="checkbox" checked={r.ownGates} onChange={(e) => void toggleGates(r.id, e.target.checked)} aria-label={`${r.name} has its own gates`} className="size-3.5 accent-[var(--brand)]" />
             ) : (
@@ -279,7 +303,7 @@ function GroupRows({
             )}
           </td>
           {canManage && (
-            <td className="py-2 text-right">
+            <td className="text-right">
               <button type="button" onClick={() => void remove(r.id)} aria-label={`Remove ${r.name}`} className={`${QUIET} px-1 text-[var(--ink4)]`} title="Remove (only while it carries no work)">
                 <X className="size-3" aria-hidden />
               </button>

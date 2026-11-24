@@ -47,7 +47,7 @@ describe("admin access-request routes", () => {
     const res = await patch({ status: "REVIEWED" });
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({ ok: true });
-    expect(reviewAccessRequest).toHaveBeenCalledWith(okCtx.ctx, "req_1", "REVIEWED");
+    expect(reviewAccessRequest).toHaveBeenCalledWith(okCtx.ctx, "req_1", "REVIEWED", {});
   });
 
   it("PATCH rejects an invalid status with 400", async () => {

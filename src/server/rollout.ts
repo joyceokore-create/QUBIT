@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { marketNarrative } from "@/lib/workspace-schema";
 import type { Prisma } from "@prisma/client";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
@@ -405,7 +406,7 @@ export async function getMarketTrack(
 }
 
 export const MarketCheckInInput = z.object({
-  narrative: z.string().trim().min(1, "Say what the focus and blockers are.").max(1000),
+  narrative: marketNarrative,
   rag: z.enum(MARKET_RAGS),
 });
 export type MarketCheckInInputT = z.infer<typeof MarketCheckInInput>;

@@ -3,6 +3,8 @@
 // every transition is audited and the raiser is notified. The asker never resolves their
 // own ask: raising is delivery-owner-scoped (access.ts), resolving is staffing:manage.
 import { z } from "zod";
+import { formMessages } from "@/lib/form-messages";
+import { staffingAllocation, staffingNote, WINDOW_END_BEFORE_START } from "@/lib/staffing-schema";
 import type { Prisma } from "@prisma/client";
 import { audit } from "@/lib/audit";
 import { can } from "@/lib/rbac";
@@ -20,12 +22,12 @@ export class StaffingError extends Error {
 }
 
 export const RaiseRequestInput = z.object({
-  projectId: z.string().uuid(),
+  projectId: z.string().uuid(formMessages.choose("a project")),
   role: z.enum(PROJECT_ROLES),
-  allocationPct: z.number().int().min(1).max(100),
-  windowStart: z.string().datetime(),
-  windowEnd: z.string().datetime(),
-  note: z.string().trim().max(300).optional(),
+  allocationPct: staffingAllocation,
+  windowStart: z.string().datetime(formMessages.enter("a start date")),
+  windowEnd: z.string().datetime(formMessages.enter("an end date")),
+  note: staffingNote.optional(),
 });
 export type RaiseRequestInputT = z.infer<typeof RaiseRequestInput>;
 
@@ -94,7 +96,7 @@ export async function createResourceRequestInTx(
 
 export async function raiseResourceRequest(ctx: TenantContext, input: RaiseRequestInputT) {
   if (new Date(input.windowStart) > new Date(input.windowEnd)) {
-    throw new StaffingError("The window cannot end before it starts.", "BAD_WINDOW");
+    throw new StaffingError(WINDOW_END_BEFORE_START, "BAD_WINDOW");
   }
   if (!(await canRaiseResourceRequest(ctx, input.projectId))) {
     throw new StaffingError("Only the project's lead or PM can raise a request for it.", "FORBIDDEN");
@@ -129,11 +131,15 @@ export interface ResourceRequestRow {
   createdAt: Date;
 }
 
-/** Head (staffing:manage) sees every request; anyone else sees the ones they raised. */
-export async function listResourceRequests(ctx: TenantContext): Promise<ResourceRequestRow[]> {
+/** Head (staffing:manage) sees every request; anyone else sees the ones they raised.
+ * UX8 — `openOnly` narrows to the Open queue (Approvals) without loading the history. */
+export async function listResourceRequests(ctx: TenantContext, opts: { openOnly?: boolean } = {}): Promise<ResourceRequestRow[]> {
   return withTenant(ctx, async (tx) => {
     const rows = await tx.resourceRequest.findMany({
-      where: can(ctx, "staffing:manage") ? {} : { raisedById: ctx.userId },
+      where: {
+        ...(can(ctx, "staffing:manage") ? {} : { raisedById: ctx.userId }),
+        ...(opts.openOnly ? { status: "Open" } : {}),
+      },
       include: {
         project: { select: { code: true, name: true } },
         raisedBy: { select: { name: true } },
@@ -168,6 +174,12 @@ export async function listResourceRequests(ctx: TenantContext): Promise<Resource
       createdAt: r.createdAt,
     }));
   });
+}
+
+/** UX8 — open requests waiting for the Head (the Approvals badge). 0 without staffing:manage. */
+export async function countOpenResourceRequests(ctx: TenantContext): Promise<number> {
+  if (!can(ctx, "staffing:manage")) return 0;
+  return withTenant(ctx, (tx) => tx.resourceRequest.count({ where: { status: "Open" } }));
 }
 
 export interface BenchRow {

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { validationError } from "@/server/errors";
 import { requirePermission } from "@/lib/api-guard";
 import { canContributeToProject } from "@/lib/access";
 import { AddLessonInput, addLesson, listLessons } from "@/server/lessons";
@@ -27,10 +28,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
   const parsed = AddLessonInput.safeParse(await req.json());
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: "VALIDATION", message: parsed.error.issues[0]?.message ?? "Invalid input." } },
-      { status: 400 },
-    );
+    return validationError(parsed.error);
   }
   return NextResponse.json({ data: await addLesson(guard.ctx, id, parsed.data) });
 }

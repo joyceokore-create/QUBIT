@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { Chip, OptionCard, WizardCard, WizardShell } from "@/components/wizard/wizard-shell";
 import { Input } from "@/components/ui/input";
+import { FieldError } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { FIELD_INVALID, TROW } from "@/lib/surface";
+import { PORTFOLIO_WIZARD_FIELD_STEP, PortfolioWizardFormSchema } from "@/lib/portfolio-wizard-schema";
 import { draftKey, nextStep, prevStep, type WizardStep } from "@/lib/wizard";
 
 /**
@@ -70,6 +74,10 @@ export function PortfolioWizard({
   // owns it, and "(me)" pre-selected is one less field to think about.
   const [d, setD] = useState<Draft>({ ...EMPTY, ownerId: selfId });
   const [loaded, setLoaded] = useState(false);
+  // docs/08 § Errors: you can't leave a step with errors — Next shows them on the step's fields.
+  const fe = useFieldErrors({ schema: PortfolioWizardFormSchema, values: { name: d.name, description: d.description, ownerId: d.ownerId, marketIds: d.marketIds }, idPrefix: "pf" });
+  // A server rejection with no visible field (shown as a banner above the step).
+  const [notice, setNotice] = useState<string | null>(null);
 
   // Draft resume (docs/26 §5: leave and come back). Load once, save on every change.
   useEffect(() => {
@@ -96,13 +104,11 @@ export function PortfolioWizard({
   const set = (patch: Partial<Draft>) => setD((cur) => ({ ...cur, ...patch }));
   const go = (i: number) => set({ step: i });
 
+  const IDENTITY_FIELDS = ["name", "description"];
   function validateIdentity(): boolean {
-    if (d.name.trim().length < 2) {
-      setError("Name is required.");
-      return false;
-    }
     setError(null);
-    return true;
+    setNotice(null);
+    return fe.validate(IDENTITY_FIELDS);
   }
 
   async function create() {
@@ -110,6 +116,7 @@ export function PortfolioWizard({
       go(0);
       return;
     }
+    setNotice(null);
     await mutate(
       "/api/portfolios",
       "POST",
@@ -123,6 +130,15 @@ export function PortfolioWizard({
       },
       {
         fallback: "Could not create the portfolio.",
+        // A rejection that belongs to an earlier step jumps back to it and shows on the field.
+        onFieldErrors: (fields) => {
+          const keys = Object.keys(fields);
+          const target = Math.min(...keys.map((k) => PORTFOLIO_WIZARD_FIELD_STEP[k] ?? STEPS.length - 1));
+          go(target);
+          fe.setServerErrors(fields, ["name", "description", "ownerId", "marketIds"]);
+          const unseen = keys.filter((k) => !["name", "description", "ownerId", "marketIds"].includes(k));
+          if (unseen.length > 0) setNotice(fields[unseen[0]]);
+        },
         onSuccess: (data) => {
           try {
             window.localStorage.removeItem(key);
@@ -153,7 +169,10 @@ export function PortfolioWizard({
       steps={STEPS}
       current={step}
       skipped={NO_SKIPS}
-      onStep={go}
+      onStep={(i) => {
+        if (i > step && cur === "identity" && !validateIdentity()) return;
+        go(i);
+      }}
       onBack={() => go(prevStep(STEPS, step, NO_SKIPS))}
       onNext={() => {
         if (cur === "identity" && !validateIdentity()) return;
@@ -163,43 +182,51 @@ export function PortfolioWizard({
       onCreateAnother={createAnother}
       createLabel="Create portfolio"
       busy={busy}
-      error={error}
+      error={error ?? notice}
     >
       {cur === "identity" && (
         <WizardCard title="Who is this portfolio, and who answers for it?">
           <div className="flex flex-col gap-3">
             <div>
-              <label htmlFor="pf-name" className="text-[11px] font-semibold tracking-[0.6px] text-[var(--ink4)] uppercase">
+              <label htmlFor={fe.idOf("name")} className="text-[11px] font-semibold tracking-[0.6px] text-[var(--ink4)] uppercase">
                 Name
               </label>
               <Input
-                id="pf-name"
+                {...fe.bind("name")}
                 value={d.name}
                 onChange={(e) => set({ name: e.target.value })}
                 placeholder="e.g. Open Banking"
                 className="mt-1.5"
                 autoFocus
               />
-              <p className="mt-1 text-[11px] text-[var(--ink4)]">Shown on cards, reports and the exec dashboard.</p>
+              {fe.errors.name ? (
+                <div className="mt-1"><FieldError id={`${fe.idOf("name")}-error`}>{fe.errors.name}</FieldError></div>
+              ) : (
+                <p className="mt-1 text-[11px] text-[var(--ink4)]">Shown on cards, reports and the exec dashboard.</p>
+              )}
             </div>
             <div>
-              <label htmlFor="pf-desc" className="text-[11px] font-semibold tracking-[0.6px] text-[var(--ink4)] uppercase">
-                Description (optional)
+              <label htmlFor={fe.idOf("description")} className="text-[11px] font-semibold tracking-[0.6px] text-[var(--ink4)] uppercase">
+                Description (Optional)
               </label>
               <Input
-                id="pf-desc"
+                {...fe.bind("description")}
                 value={d.description}
                 onChange={(e) => set({ description: e.target.value })}
                 className="mt-1.5"
               />
+              {fe.errors.description && <div className="mt-1"><FieldError id={`${fe.idOf("description")}-error`}>{fe.errors.description}</FieldError></div>}
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <span className="text-[11px] font-semibold tracking-[0.6px] text-[var(--ink4)] uppercase">Owner</span>
+                <label htmlFor="pf-ownerId" className="text-[11px] font-semibold tracking-[0.6px] text-[var(--ink4)] uppercase">Owner</label>
                 <select
+                  id="pf-ownerId"
                   value={d.ownerId}
                   onChange={(e) => set({ ownerId: e.target.value })}
-                  className="mt-1.5 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                  aria-invalid={fe.errors.ownerId ? true : undefined}
+                  aria-describedby={fe.errors.ownerId ? "pf-ownerId-error" : undefined}
+                  className={`mt-1.5 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm ${FIELD_INVALID}`}
                 >
                   <option value="">— none yet —</option>
                   {owners.map((o) => (
@@ -209,7 +236,11 @@ export function PortfolioWizard({
                     </option>
                   ))}
                 </select>
-                <p className="mt-1 text-[11px] text-[var(--ink4)]">Must be a Head or Executive.</p>
+                {fe.errors.ownerId ? (
+                  <div className="mt-1"><FieldError id="pf-ownerId-error">{fe.errors.ownerId}</FieldError></div>
+                ) : (
+                  <p className="mt-1 text-[11px] text-[var(--ink4)]">Must be a Head or Executive.</p>
+                )}
               </div>
               <div>
                 <span className="text-[11px] font-semibold tracking-[0.6px] text-[var(--ink4)] uppercase">Category</span>
@@ -269,9 +300,13 @@ export function PortfolioWizard({
                       </Chip>
                     );
                   })}
-                  <p className="mt-2 text-[11px] text-[var(--ink4)]">
-                    Projects created inside inherit these — editable per project.
-                  </p>
+                  {fe.errors.marketIds ? (
+                    <div className="mt-2"><FieldError id="pf-marketIds-error">{fe.errors.marketIds}</FieldError></div>
+                  ) : (
+                    <p className="mt-2 text-[11px] text-[var(--ink4)]">
+                      Projects created inside inherit these — editable per project.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -284,7 +319,7 @@ export function PortfolioWizard({
 
       {cur === "review" && (
         <WizardCard title="Review — create when it reads right">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full border-separate border-spacing-0 text-left text-[12.5px]">
             <tbody>
               {[
                 ["Name", d.name.trim() || "—"],
@@ -298,9 +333,9 @@ export function PortfolioWizard({
                     : "—",
                 ],
               ].map(([l, v]) => (
-                <tr key={l} className="border-b border-[var(--w06)] last:border-0">
-                  <td className="w-[130px] py-2 text-[10px] font-semibold tracking-[0.8px] text-[var(--ink4)] uppercase">{l}</td>
-                  <td className="py-2 font-semibold text-[var(--qink)]">{v}</td>
+                <tr key={l} className={TROW}>
+                  <td className="w-[130px] font-semibold text-[var(--ds-ink3)]">{l}</td>
+                  <td className="font-semibold text-[var(--ds-ink)]">{v}</td>
                 </tr>
               ))}
             </tbody>

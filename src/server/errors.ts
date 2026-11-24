@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
+import { fieldErrorsFromIssues } from "@/lib/form-errors";
 
 /**
  * API error envelope + typed errors (docs/clickup-transformation/05-api-spec.md).
@@ -71,14 +72,7 @@ export class UnprocessableError extends ApiError {
 
 /** Serialize any thrown error to the standard envelope. Unknown errors → 500 (message hidden). */
 export function toErrorResponse(err: unknown): NextResponse {
-  if (err instanceof ZodError) {
-    const fields: Record<string, string> = {};
-    for (const issue of err.issues) fields[issue.path.join(".") || "_"] = issue.message;
-    return NextResponse.json(
-      { error: { code: "VALIDATION", message: "Invalid request.", fields } },
-      { status: 400 },
-    );
-  }
+  if (err instanceof ZodError) return validationError(err);
   if (err instanceof ApiError) {
     return NextResponse.json(
       { error: { code: err.code, message: err.message, ...(err.fields && { fields: err.fields }) } },
@@ -89,6 +83,20 @@ export function toErrorResponse(err: unknown): NextResponse {
   return NextResponse.json(
     { error: { code: "INTERNAL", message: "Something went wrong." } },
     { status: 500 },
+  );
+}
+
+/**
+ * A rejected request body → 400 `{ error: { code: "VALIDATION", message, fields } }` (docs/08 §
+ * Errors). `fields` maps each path to its FIRST issue (nested paths dot-joined, root → `_`), so a
+ * form can put each message on its field; `message` is the first issue's text (or `fallback`),
+ * so clients that only read `message` still say something useful. Additive to the old envelope.
+ */
+export function validationError(err: ZodError, fallback = "Check the highlighted fields."): NextResponse {
+  const fields = fieldErrorsFromIssues(err.issues);
+  return NextResponse.json(
+    { error: { code: "VALIDATION", message: err.issues[0]?.message ?? fallback, fields } },
+    { status: 400 },
   );
 }
 

@@ -151,7 +151,7 @@ export default async function PortfolioDetailPage({
             {canCreateProgramme && <NewProgrammeDialog portfolioId={portfolio.id} />}
             {canCreate && (
               <Button nativeButton={false} render={<Link href={`/projects/new?portfolio=${portfolio.id}`} />}>
-                <Plus /> New project
+                <Plus /> New Project
               </Button>
             )}
           </div>

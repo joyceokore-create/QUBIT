@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getTenantContext } from "@/lib/tenant";
 import { canViewProject } from "@/lib/project-access";
 import { requirePermission } from "@/lib/api-guard";
+import { validationError } from "@/server/errors";
 import { listDocuments, createDocument, CreateDocumentInput, DocumentError } from "@/server/documents";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -25,10 +26,7 @@ export async function POST(req: Request, { params }: Ctx) {
   if ("response" in guard) return guard.response;
   const parsed = CreateDocumentInput.safeParse(await req.json());
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: "VALIDATION", message: parsed.error.issues[0]?.message ?? "Invalid document." } },
-      { status: 400 },
-    );
+    return validationError(parsed.error);
   }
   const { id } = await params;
   try {

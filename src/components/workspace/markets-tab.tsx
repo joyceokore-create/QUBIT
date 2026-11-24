@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
+import { readApiError } from "@/lib/form-errors";
+import { FieldError } from "@/components/ui/drawer";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, Plus, ShieldAlert, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CARD_GLASS as CARD, CARD_BG, FOCUS, PRIMARY, QUIET, SECONDARY, ragFill } from "@/lib/surface";
+import { CARD_GLASS as CARD, CARD_BG, FOCUS, PRIMARY, QUIET, SECONDARY, ragFill, GROUP_INVALID } from "@/lib/surface";
 
 /**
  * docs/38 — the Markets tab: where the product ships (Kenya, Uganda …), each with its lead
@@ -48,7 +51,7 @@ interface Person {
 
 const STATUSES = ["Planning", "InProgress", "UAT", "Live", "OnHold"] as const;
 const STATUS_LABEL: Record<string, string> = { Planning: "Planning", InProgress: "In progress", UAT: "UAT", Live: "Live", OnHold: "On hold", Retired: "Retired" };
-const INPUT = `h-8 rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-brand ${FOCUS}`;
+const INPUT = `h-8 rounded-[8px] border border-[var(--input)] bg-background px-2.5 text-[12.5px] text-foreground focus:border-[var(--ds-ink)] focus:ring-1 focus:ring-[var(--ds-ink)] focus:ring-offset-0 focus:outline-none`;
 
 export function MarketsTab({
   projectId,
@@ -71,6 +74,8 @@ export function MarketsTab({
   const [people, setPeople] = useState<Person[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
+  // docs/08 § Errors: "choose at least one" shows under the chips; Add stays enabled except while sending.
+  const [pickError, setPickError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [setups, setSetups] = useState<Record<string, Setup>>({});
@@ -106,14 +111,15 @@ export function MarketsTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows]);
 
-  const call = async (key: string, url: string, init: RequestInit) => {
+  const call = async (key: string, url: string, init: RequestInit, onFields?: (f: Record<string, string>) => boolean) => {
     setBusy(key);
     setError(null);
     const res = await fetch(url, { headers: { "content-type": "application/json" }, ...init });
     const d = await res.json().catch(() => null);
     setBusy(null);
     if (!res.ok) {
-      setError(d?.error?.message ?? "Could not save.");
+      const { message, fields } = readApiError(d, "Could not save.");
+      if (!onFields?.(fields)) setError(message);
       return false;
     }
     if (Array.isArray(d?.data)) setRows(d.data);
@@ -123,9 +129,19 @@ export function MarketsTab({
   };
 
   const add = async () => {
-    if (!picked.length) return;
-    if (await call("add", `/api/projects/${projectId}/markets`, { method: "POST", body: JSON.stringify({ orgUnitIds: picked }) })) {
+    if (busy !== null) return;
+    if (!picked.length) {
+      setPickError(`Choose at least one ${label.toLowerCase()}.`);
+      return;
+    }
+    const ok = await call("add", `/api/projects/${projectId}/markets`, { method: "POST", body: JSON.stringify({ orgUnitIds: picked }) }, (f) => {
+      if (!f.orgUnitIds) return false;
+      setPickError(f.orgUnitIds);
+      return true;
+    });
+    if (ok) {
       setPicked([]);
+      setPickError(null);
       setAddOpen(false);
     }
   };
@@ -244,13 +260,13 @@ export function MarketsTab({
         </ol>
       )}
 
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+      <Dialog open={addOpen} onOpenChange={(o) => { setAddOpen(o); if (!o) setPickError(null); }}>
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
             <DialogTitle>Add {plural}</DialogTitle>
             <DialogDescription>Each one gets its own gates, weekly check-in and set-up checklist. Missing one? Admin › Markets holds the list.</DialogDescription>
           </DialogHeader>
-          <div className="flex flex-wrap gap-1.5">
+          <div role="group" tabIndex={-1} aria-label={`${plural} to add`} data-invalid={pickError ? true : undefined} aria-describedby={pickError ? "markets-add-error" : undefined} className={cn("flex flex-wrap gap-1.5", GROUP_INVALID)}>
             {addable.map((u) => {
               const on = picked.includes(u.id);
               return (
@@ -258,7 +274,10 @@ export function MarketsTab({
                   key={u.id}
                   type="button"
                   aria-pressed={on}
-                  onClick={() => setPicked((p) => (on ? p.filter((x) => x !== u.id) : [...p, u.id]))}
+                  onClick={() => {
+                    setPicked((p) => (on ? p.filter((x) => x !== u.id) : [...p, u.id]));
+                    setPickError(null);
+                  }}
                   className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-semibold transition-colors ${FOCUS} ${on ? "border-[var(--qink)] bg-[var(--qink)] text-[var(--qcard)]" : "border-[var(--border)] text-[var(--ink3)] hover:text-[var(--qink)]"}`}
                 >
                   {u.flag ? `${u.flag} ` : ""}
@@ -268,11 +287,12 @@ export function MarketsTab({
             })}
             {addable.length === 0 && <p className="text-[12.5px] text-[var(--ink4)]">Nothing left to add.</p>}
           </div>
+          {pickError && <FieldError id="markets-add-error">{pickError}</FieldError>}
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => void add()} disabled={busy !== null || picked.length === 0} className={PRIMARY}>
+            <button type="button" onClick={() => void add()} disabled={busy !== null} className={PRIMARY}>
               {busy === "add" ? "Adding…" : `Add ${picked.length || ""}`.trim()}
             </button>
-            <button type="button" onClick={() => setAddOpen(false)} className={QUIET}>
+            <button type="button" onClick={() => { setAddOpen(false); setPickError(null); }} className={QUIET}>
               Cancel
             </button>
           </div>

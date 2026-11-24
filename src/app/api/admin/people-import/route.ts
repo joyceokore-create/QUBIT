@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { requirePermission } from "@/lib/api-guard";
+import { validationError } from "@/server/errors";
+import { PeopleImportBodySchema } from "@/lib/people-import-schema";
 import { parsePeopleCsv } from "@/lib/people-csv";
 import { importPeople, PeopleImportError, previewImport } from "@/server/people-import";
 
@@ -8,16 +9,14 @@ import { importPeople, PeopleImportError, previewImport } from "@/server/people-
 // the retired org-setup wizard; Oct 2026 — projects column + dry run). Parsing happens
 // BEFORE anything touches the database, so the caller can preview valid/invalid rows, and
 // a bad line never aborts the batch. `?dryRun=1` returns the preview and writes nothing.
-const Body = z.object({ csv: z.string().min(1).max(200_000) });
+const Body = PeopleImportBodySchema;
 
 export async function POST(req: Request) {
   const guard = await requirePermission("users:invite");
   if ("response" in guard) return guard.response;
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json({ error: { code: "VALIDATION", message: "Paste or upload the CSV first." } }, { status: 400 });
-  }
+  if (!parsed.success) return validationError(parsed.error);
   const dryRun = new URL(req.url).searchParams.get("dryRun") === "1";
   const { rows, errors } = parsePeopleCsv(parsed.data.csv);
   try {

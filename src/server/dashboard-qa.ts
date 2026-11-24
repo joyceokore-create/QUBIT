@@ -73,6 +73,19 @@ export interface QaDashboard {
   delta: DeltaFeed;
 }
 
+/**
+ * Requirement coverage, percent (docs/16 §6 traceability): an Accepted requirement is
+ * covered once at least one non-Draft task links to it. null = no requirements captured,
+ * so no coverage claim. Shared with the cockpit (UX1) so the two can never disagree.
+ */
+export function requirementCoveragePct(
+  reqs: { taskLinks: { task: { approvalStatus: string } }[] }[],
+): number | null {
+  if (!reqs.length) return null;
+  const covered = reqs.filter((r) => r.taskLinks.some((l) => l.task.approvalStatus !== "Draft")).length;
+  return Math.round((covered / reqs.length) * 100);
+}
+
 function agingBand(days: number): QaAging {
   if (days > AGING_BUSINESS_DAYS) return "bad";
   if (days >= QA_WARN_BUSINESS_DAYS) return "warn";
@@ -211,10 +224,8 @@ export async function getQaDashboard(ctx: TenantContext, now = new Date()): Prom
 
   const coverageByProject = new Map<string, number>();
   for (const p of live.projects) {
-    const reqs = live.requirements.filter((r) => r.projectId === p.id);
-    if (!reqs.length) continue; // no requirements captured → no coverage claim
-    const covered = reqs.filter((r) => r.taskLinks.some((l) => l.task.approvalStatus !== "Draft")).length;
-    coverageByProject.set(p.id, Math.round((covered / reqs.length) * 100));
+    const pct = requirementCoveragePct(live.requirements.filter((r) => r.projectId === p.id));
+    if (pct !== null) coverageByProject.set(p.id, pct);
   }
 
   const quality: QaProjectQuality[] = live.projects

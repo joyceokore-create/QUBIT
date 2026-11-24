@@ -6,6 +6,7 @@ import { mfaRequired } from "@/lib/mfa-policy";
 import { isUserGroup, landingPersona } from "@/lib/personas";
 import { GROUP_LABELS } from "@/components/admin/labels";
 import { TenantScope } from "@/components/layout/tenant-scope";
+import { AuthHeading, AuthShell } from "@/components/auth/auth-shell";
 import { OnboardingForm } from "./onboarding-form";
 
 // First-login acceptance screen. Reachable only when signed in; the middleware sends
@@ -44,28 +45,25 @@ export default async function OnboardingPage() {
   };
 
   return (
-    <div
-      // TenantScope mirrors data-tenant onto <html> so token-derived colours (bg-primary
-      // → --primary → --brand) resolve to the tenant brand here too — the inline --brand
-      // below only reaches components that read var(--brand) directly.
-      data-tenant={session.user.tenantSlug}
-      className="app-shell flex min-h-screen items-center justify-center px-5 py-10"
-      style={{
-        ["--brand" as string]: brand,
-        backgroundColor: "var(--qbg)",
-        backgroundImage:
-          "radial-gradient(1200px 520px at 72% -160px, color-mix(in oklab, var(--brand) 13%, transparent), transparent 62%), radial-gradient(var(--w06) 1px, transparent 1.5px)",
-        backgroundSize: "auto, 26px 26px",
-      }}
-    >
+    // TenantScope mirrors data-tenant onto <html> so token-derived colours resolve to the
+    // tenant brand here too (bg-primary → --primary → --brand), and the --qcard surface the
+    // two-panel shell sits on picks up the tenant's palette.
+    <div data-tenant={session.user.tenantSlug} style={{ ["--brand" as string]: brand }}>
       <TenantScope slug={session.user.tenantSlug} />
-      <div className="w-full max-w-[420px] rounded-[18px] border border-[var(--w08)] bg-[var(--qcard)] p-7">
-        <h1 className="text-[20px] font-bold text-[var(--qink)]">Welcome to QUBIT</h1>
-        <p className="mt-1 text-[13px] leading-relaxed text-[var(--ink3)]">
-          Hi {viewer.firstName} — a few quick steps and you&apos;re in.
-        </p>
+      <AuthShell
+        brand={brand}
+        art="setup"
+        heading="Let’s get you set up"
+        sentence={
+          viewer.mfaRequired && !viewer.mfaEnrolled
+            ? "Set a password and connect your authenticator. It takes about two minutes."
+            : "A few quick steps and you’re in. It takes about two minutes."
+        }
+        footer={session.user.tenantName}
+      >
+        <AuthHeading title="Set Up Your Account" lead={<>Hi {viewer.firstName}. Two quick steps and you&apos;re in.</>} />
         <OnboardingForm viewer={viewer} needsPassword={!me.passwordSetAt} />
-      </div>
+      </AuthShell>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getTenantContext } from "@/lib/tenant";
+import { validationError } from "@/server/errors";
 import { canViewProject } from "@/lib/project-access";
 import { canWriteProject } from "@/lib/access";
 import {
@@ -49,12 +50,7 @@ export async function POST(req: Request, { params }: Ctx) {
     return NextResponse.json({ error: { code: "FORBIDDEN", message: "Confirming a check-in is PM-level." } }, { status: 403 });
   }
   const parsed = ConfirmCheckInInput.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: "VALIDATION", message: parsed.error.issues[0]?.message ?? "Invalid check-in." } },
-      { status: 400 },
-    );
-  }
+  if (!parsed.success) return validationError(parsed.error);
   const view = await confirmCheckIn(auth.ctx, id, parsed.data);
   return NextResponse.json({ data: { ...view, canConfirm: true } }, { status: 201 });
 }
@@ -67,12 +63,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
     return NextResponse.json({ error: { code: "FORBIDDEN", message: "Saving a draft is PM-level." } }, { status: 403 });
   }
   const parsed = SaveCheckInDraftInput.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: "VALIDATION", message: parsed.error.issues[0]?.message ?? "Invalid draft." } },
-      { status: 400 },
-    );
-  }
+  if (!parsed.success) return validationError(parsed.error);
   try {
     const view = await saveCheckInDraft(auth.ctx, id, parsed.data);
     return NextResponse.json({ data: { ...view, canConfirm: true } });

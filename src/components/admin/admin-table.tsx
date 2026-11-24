@@ -1,12 +1,14 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { CARD, THEAD, TROW } from "@/lib/surface";
+import { cn } from "@/lib/utils";
 
 /**
- * The shared admin directory table (docs/21 M-O2b). Tokens and spacing are lifted verbatim
- * from the users directory (`admin/users/users-client.tsx`) so adopting screens look
- * identical to the one that already sets the standard — this is consolidation, not a
- * restyle. No colours are invented here.
+ * The shared admin directory table — design spec v2 (docs/08 § Table): a real <table> on a card
+ * with the standard header band (`THEAD`) and dotted rows (`TROW`), the same as Users,
+ * Departments and Access Requests. The page header already carries the title and count, so the
+ * table has no caption bar (an sr-only <caption> names it).
  *
  * Presentational only: callers render their own cells and own their data/mutations.
  */
@@ -14,92 +16,66 @@ import type { ReactNode } from "react";
 export interface AdminColumn<T> {
   key: string;
   header: string;
-  /** A grid-template track, e.g. "minmax(0,1.6fr)" or "120px". */
+  /** Column width, e.g. "110px"; omit to share the remaining space. Grid-track values such as
+   * "minmax(0,1.6fr)" are accepted for compatibility and ignored. */
   width: string;
   render: (row: T) => ReactNode;
   align?: "start" | "end";
 }
 
-const CARD =
-  "rounded-[16px] border border-[var(--cardbd)] shadow-[var(--cardsh)] backdrop-blur-[var(--glassblur)] backdrop-saturate-[1.25]";
+const fixedWidth = (w: string) => (/^\d+(px|%)$/.test(w.trim()) ? w.trim() : undefined);
 
 export function AdminTable<T>({
   title,
-  count,
-  countLabel,
   columns,
   rows,
   getRowKey,
   empty = "Nothing here yet.",
   minWidth = 720,
-  action,
 }: {
+  /** Names the table for screen readers. */
   title: string;
-  /** Defaults to rows.length; pass explicitly when the caption counts something else. */
+  /** Kept for call-site compatibility; the count lives in the page header. */
   count?: number;
-  /** Singular noun for the caption, e.g. "team" → "1 TEAM" / "3 TEAMS". */
   countLabel?: string;
   columns: AdminColumn<T>[];
   rows: T[];
   getRowKey: (row: T) => string;
   empty?: string;
-  /** Horizontal-scroll floor, matching the users directory default. */
   minWidth?: number;
-  /** Optional trailing slot in the caption bar. */
   action?: ReactNode;
 }) {
-  const grid = `grid items-center gap-3.5`;
-  const template = columns.map((c) => c.width).join(" ");
-  const n = count ?? rows.length;
-  const caption = countLabel
-    ? `${n} ${(n === 1 ? countLabel : `${countLabel}s`).toUpperCase()}`
-    : null;
-
   return (
-    <div className={`overflow-hidden ${CARD}`} style={{ background: "var(--cardbg)" }}>
-      <div className="flex items-center gap-3.5 border-b border-[var(--hair)] p-[13px_18px]">
-        <span className="font-heading text-[14px] rv:text-heading-xs font-bold text-[var(--qink)]">{title}</span>
-        {caption && (
-          <span className="font-mono rv:font-sans text-[10px] rv:text-overline tracking-[1px] text-[var(--ink4)]">
-            {caption}
-          </span>
-        )}
-        <span className="flex-1" />
-        {action}
-      </div>
-
-      <div className="overflow-x-auto">
-        <div style={{ minWidth }}>
-          <div
-            className={`${grid} border-b border-[var(--hair)] p-[9px_18px] font-mono rv:font-sans text-[9px] rv:text-overline font-semibold uppercase tracking-[1.6px] text-[var(--ink4)]`}
-            style={{ gridTemplateColumns: template }}
-          >
-            {columns.map((c) => (
-              <span key={c.key} className={c.align === "end" ? "justify-self-end" : undefined}>
-                {c.header}
-              </span>
-            ))}
-          </div>
-
-          {rows.length === 0 && (
-            <p className="p-[18px] text-[12px] text-[var(--ink3)]">{empty}</p>
-          )}
-
-          {rows.map((row) => (
-            <div
-              key={getRowKey(row)}
-              className={`${grid} border-b border-[var(--hair2)] p-[11px_18px] transition-colors last:border-0 hover:bg-[var(--wash)]`}
-              style={{ gridTemplateColumns: template }}
-            >
-              {columns.map((c) => (
-                <span key={c.key} className={`min-w-0 ${c.align === "end" ? "justify-self-end" : ""}`}>
-                  {c.render(row)}
-                </span>
+    <section className={cn(CARD, "flex flex-col gap-3 overflow-hidden px-[18px] py-4")} style={{ background: "var(--ds-card)" }}>
+      {rows.length === 0 ? (
+        <p className="py-6 text-center text-[12.5px] text-[var(--ds-ink3)]">{empty}</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full border-separate border-spacing-0 text-left text-[12.5px]" style={{ minWidth }}>
+            <caption className="sr-only">{title}</caption>
+            <thead className={THEAD}>
+              <tr>
+                {columns.map((c) => (
+                  <th key={c.key} scope="col" className={c.align === "end" ? "text-right!" : undefined} style={{ width: fixedWidth(c.width) }}>
+                    {c.header === "Actions" ? <span className="sr-only">Actions</span> : c.header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={getRowKey(row)} className={cn(TROW, "transition-colors hover:[&>td]:bg-[var(--ds-surface2)]")}>
+                  {columns.map((c, i) => (
+                    <td key={c.key} className={cn("min-w-0", c.align === "end" && "text-right", i === 0 ? "text-[var(--ds-ink)]" : "text-[var(--ds-ink2)]")}>
+                      {c.render(row)}
+                    </td>
+                  ))}
+                </tr>
               ))}
-            </div>
-          ))}
+            </tbody>
+          </table>
         </div>
-      </div>
-    </div>
+      )}
+    </section>
   );
 }

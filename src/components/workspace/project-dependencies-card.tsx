@@ -1,9 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { DependencyFormSchema } from "@/lib/workspace-schema";
+import { readApiError } from "@/lib/form-errors";
+import { FieldError } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
 import Link from "next/link";
 import { Plus, X } from "lucide-react";
-import { RAG_TOKEN as RAG_TOK } from "@/lib/surface";
+import { RAG_TOKEN as RAG_TOK, FIELD_INVALID } from "@/lib/surface";
 
 // M-P2c (docs/33) — the workspace "waits on / blocks" card. Declaring a dependency is
 // PM/Head territory (the route's engine enforces it); everyone reads both directions.
@@ -38,6 +42,9 @@ export function ProjectDependenciesCard({
   const [pick, setPick] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  // docs/08 § Errors: problems show on their field; Add stays enabled except while sending.
+  const fe = useFieldErrors({ schema: DependencyFormSchema, values: { dependsOnProjectId: pick, note }, idPrefix: "dep" });
 
   const load = useCallback(async () => {
     const d = await fetch(`/api/projects/${projectId}/dependencies`).then((r) => r.json());
@@ -49,17 +56,25 @@ export function ProjectDependenciesCard({
   }, [load]);
 
   async function add() {
-    if (!pick) return;
     setError(null);
+    if (busy || !fe.validate()) return;
+    setBusy(true);
     const res = await fetch(`/api/projects/${projectId}/dependencies`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ dependsOnProjectId: pick, note: note.trim() || undefined }),
-    });
-    if (!res.ok) {
-      setError((await res.json().catch(() => null))?.error?.message ?? "Could not add.");
+    }).catch(() => null);
+    setBusy(false);
+    if (!res?.ok) {
+      const { message, fields } = readApiError(await res?.json().catch(() => null), "Could not add the dependency. Try again.");
+      const { _: root, ...onFields } = fields;
+      if (Object.keys(onFields).length > 0) {
+        fe.setServerErrors(onFields, ["dependsOnProjectId", "note"]);
+        if (root) setError(root);
+      } else setError(message);
       return;
     }
+    fe.reset();
     setAdding(false);
     setPick("");
     setNote("");
@@ -128,9 +143,11 @@ export function ProjectDependenciesCard({
       {adding && (
         <div className="flex flex-col gap-1.5 rounded-[8px] border border-[var(--w08)] p-2">
           <select
+            {...fe.bind("dependsOnProjectId")}
+            aria-label="Project this one waits on"
             value={pick}
             onChange={(e) => setPick(e.target.value)}
-            className="h-8 w-full rounded-lg border border-input bg-background px-2 text-xs"
+            className={`h-8 w-full rounded-lg border border-input bg-background px-2 text-xs ${FIELD_INVALID}`}
           >
             <option value="">— waits on which project? —</option>
             {candidates.map((p) => (
@@ -139,18 +156,22 @@ export function ProjectDependenciesCard({
               </option>
             ))}
           </select>
+          {fe.errors.dependsOnProjectId && <FieldError id={`${fe.idOf("dependsOnProjectId")}-error`}>{fe.errors.dependsOnProjectId}</FieldError>}
           <input
+            {...fe.bind("note")}
+            aria-label="Why it waits (optional)"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Why? e.g. UAT waits on their API (optional)"
-            className="h-8 w-full rounded-lg border border-input bg-background px-2 text-xs"
+            className={`h-8 w-full rounded-lg border border-input bg-background px-2 text-xs ${FIELD_INVALID}`}
           />
-          {error && <p className="text-[11px] text-status-red">{error}</p>}
+          {fe.errors.note && <FieldError id={`${fe.idOf("note")}-error`}>{fe.errors.note}</FieldError>}
+          {error && <p role="alert" className="text-[11px] text-status-red">{error}</p>}
           <div className="flex gap-1.5">
-            <button type="button" onClick={() => void add()} disabled={!pick} className="rounded-[7px] bg-[color-mix(in_oklab,var(--brand)_14%,transparent)] px-2.5 py-1 text-[11px] font-semibold text-brand disabled:opacity-40">
+            <button type="button" onClick={() => void add()} disabled={busy} className="rounded-[7px] bg-[color-mix(in_oklab,var(--brand)_14%,transparent)] px-2.5 py-1 text-[11px] font-semibold text-brand disabled:opacity-40">
               Add dependency
             </button>
-            <button type="button" onClick={() => { setAdding(false); setError(null); }} className="px-2 py-1 text-[11px] text-ink-3">
+            <button type="button" onClick={() => { setAdding(false); setError(null); fe.reset(); }} className="px-2 py-1 text-[11px] text-ink-3">
               Cancel
             </button>
           </div>

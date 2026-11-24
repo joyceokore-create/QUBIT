@@ -4,6 +4,7 @@ import { withTenant, type TenantContext } from "@/lib/tenant";
 import { audit } from "@/lib/audit";
 import { projectRoleCategory, type ProjectRoleCategory } from "@/lib/roles";
 import { emitDomainEvent } from "@/server/events";
+import { PM_SELECT, pmIdsOf } from "@/lib/ownership";
 import { SOURCE_SYSTEM } from "@/server/connectors/youtrack-sync";
 import { mockEnabled, mockPlanFromText } from "@/server/q/mock";
 import { llmChat, llmEnabled, llmModel } from "@/server/q/llm";
@@ -666,22 +667,58 @@ export async function setTaskStatus(ctx: TenantContext, taskId: string, status: 
 
 /** Flag a task blocked: creates an Open Blocker linked to the task (a reason is required —
  * that's what makes the flag useful to the nudger and reports). Audited. */
+export const BLOCKED_SINCE_MAX_DAYS = 90;
+
 export async function flagTaskBlocked(
   ctx: TenantContext,
   taskId: string,
-  /** ownerId: undefined = the caller owns it; null = ownerless — the machine paths
-   *  (M7-B commit `#blocked` with no matched committer) pass null, because ctx.userId is
-   *  a sentinel there and Blocker.ownerId is a real FK. */
-  input: { description: string; severity?: "Low" | "Medium" | "Critical"; ownerId?: string | null },
+  /** ownerId: undefined = a person raised it (UX6 rules below); null = ownerless — the
+   *  machine paths (M7-B commit `#blocked` with no matched committer) pass null, because
+   *  ctx.userId is a sentinel there and Blocker.ownerId is a real FK. */
+  input: {
+    description: string;
+    severity?: "Low" | "Medium" | "Critical";
+    ownerId?: string | null;
+    /** UX6 "Who can unblock it?": someone on the project. Becomes the blocker's owner. */
+    unblockerId?: string | null;
+    /** UX6 "Blocked since": not in the future, at most 90 days back. Default: now. */
+    since?: Date;
+  },
+  now = new Date(),
 ) {
   if (!input.description.trim()) throw new TaskError("A blocked reason is required.", "BAD_INPUT");
+  const human = input.ownerId === undefined;
+  if (input.since) {
+    if (input.since.getTime() > now.getTime()) throw new TaskError("Blocked since can't be in the future.", "BAD_INPUT");
+    if (now.getTime() - input.since.getTime() > BLOCKED_SINCE_MAX_DAYS * 86_400_000) {
+      throw new TaskError(`Blocked since can be at most ${BLOCKED_SINCE_MAX_DAYS} days ago.`, "BAD_INPUT");
+    }
+  }
   return withTenant(ctx, async (tx) => {
     const task = await tx.projectTask.findUnique({
       where: { id: taskId },
-      select: { projectId: true, blockers: { where: { status: "Open" }, select: { id: true } } },
+      select: {
+        projectId: true,
+        title: true,
+        taskKey: true,
+        externalKey: true,
+        blockers: { where: { status: "Open" }, select: { id: true } },
+        project: { select: { name: true, ...PM_SELECT } },
+      },
     });
     if (!task) throw new TaskError("Task not found.", "NOT_FOUND");
     if (task.blockers.length > 0) throw new TaskError("Task is already flagged blocked.", "BAD_INPUT");
+
+    const pmIds = pmIdsOf(task.project);
+    // "Who can unblock it?" must be someone on this project (a member, the lead or a PM), so
+    // a blocker can't be pointed at an arbitrary person. RLS already limits it to the tenant.
+    if (human && input.unblockerId) {
+      const onProject =
+        pmIds.includes(input.unblockerId) ||
+        (await tx.projectMember.count({ where: { projectId: task.projectId, userId: input.unblockerId } })) > 0;
+      if (!onProject) throw new TaskError("Choose someone on this project to unblock it.", "BAD_INPUT");
+    }
+
     const blocker = await tx.blocker.create({
       data: {
         tenantId: ctx.tenantId,
@@ -690,7 +727,10 @@ export async function flagTaskBlocked(
         description: input.description.trim(),
         severity: input.severity ?? "Medium",
         status: "Open",
-        ownerId: input.ownerId === undefined ? ctx.userId : input.ownerId,
+        // The owner is who can unblock it: the chosen person, else (as before UX6) the raiser.
+        ownerId: human ? (input.unblockerId ?? ctx.userId) : input.ownerId,
+        raisedById: human ? ctx.userId : null,
+        ...(input.since ? { dateRaised: input.since } : {}),
       },
     });
     await tx.projectTask.update({ where: { id: taskId }, data: { lastActivityAt: new Date() } });
@@ -698,13 +738,40 @@ export async function flagTaskBlocked(
       action: "create",
       entityType: "blocker",
       entityId: blocker.id,
-      after: { taskId, description: blocker.description, severity: blocker.severity },
+      after: {
+        taskId,
+        description: blocker.description,
+        severity: blocker.severity,
+        ownerId: blocker.ownerId,
+        raisedById: blocker.raisedById,
+        dateRaised: blocker.dateRaised.toISOString(),
+      },
     });
+
+    // UX6: the PM sees a raised blocker at once — the project's PMs and the chosen unblocker
+    // are notified (never the raiser). Machine-raised blockers notify nobody, as before.
+    let notify: { userId: string; kind: string; message: string; link: string }[] = [];
+    if (human) {
+      const raiser = await tx.user.findUnique({ where: { id: ctx.userId }, select: { name: true } });
+      const label = task.externalKey ?? task.taskKey ?? task.title.slice(0, 60);
+      const link = `/projects/${task.projectId}?tab=Board&task=${taskId}`;
+      const recipients = [...new Set([...pmIds, ...(input.unblockerId ? [input.unblockerId] : [])])].filter((id) => id !== ctx.userId);
+      notify = recipients.map((userId) => ({
+        userId,
+        kind: "blocker.opened",
+        message:
+          userId === input.unblockerId
+            ? `${raiser?.name ?? "A teammate"} needs you to unblock ${label} on ${task.project.name}.`
+            : `${raiser?.name ?? "A teammate"} is blocked on ${label} (${task.project.name}).`,
+        link,
+      }));
+    }
     await emitDomainEvent(tx, ctx, {
       type: "blocker.opened",
       entityType: "blocker",
       entityId: blocker.id,
       payload: { projectId: task.projectId, taskId, severity: blocker.severity },
+      notify,
     });
     return blocker;
   });

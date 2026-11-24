@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { rollupNarrative } from "@/lib/workspace-schema";
+import { validationError } from "@/server/errors";
 import { z } from "zod";
 import { requirePermission } from "@/lib/api-guard";
 import { approveRollup, RollupError } from "@/server/portfolio-reports";
 
-const Body = z.object({ narrative: z.string().trim().min(5).max(1000), acknowledgeUnsent: z.boolean().optional() });
+const Body = z.object({ narrative: rollupNarrative, acknowledgeUnsent: z.boolean().optional() });
 
 // M-P3b — the approve step the Head queue has been honestly deferring since M-W1b.
 export async function POST(req: Request) {
@@ -11,10 +13,7 @@ export async function POST(req: Request) {
   if ("response" in guard) return guard.response;
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: "VALIDATION", message: "The roll-up needs the Head's narrative line." } },
-      { status: 400 },
-    );
+    return validationError(parsed.error);
   }
   try {
     return NextResponse.json({ data: await approveRollup(guard.ctx, parsed.data.narrative, new Date(), { acknowledgeUnsent: parsed.data.acknowledgeUnsent }) }, { status: 201 });

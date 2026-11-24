@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/api-guard";
+import { validationError } from "@/server/errors";
+import { DEPARTMENT_ERROR_FIELD } from "@/lib/department-schema";
 import { canManageDepartment } from "@/lib/access";
 import {
   updateDepartment,
@@ -25,7 +27,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const parsed = UpdateDepartmentInput.safeParse(await req.json());
   if (!parsed.success) {
-    return NextResponse.json({ error: { code: "VALIDATION", message: "Invalid input." } }, { status: 400 });
+    return validationError(parsed.error);
   }
 
   try {
@@ -33,7 +35,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e instanceof DepartmentAdminError) {
-      return NextResponse.json({ error: { code: e.code, message: e.message } }, { status: 400 });
+      const field = DEPARTMENT_ERROR_FIELD[e.code];
+      return NextResponse.json({ error: { code: e.code, message: e.message, ...(field ? { fields: { [field]: e.message } } : {}) } }, { status: 400 });
     }
     throw e;
   }
@@ -50,7 +53,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e instanceof DepartmentAdminError) {
-      return NextResponse.json({ error: { code: e.code, message: e.message } }, { status: 400 });
+      const field = DEPARTMENT_ERROR_FIELD[e.code];
+      return NextResponse.json({ error: { code: e.code, message: e.message, ...(field ? { fields: { [field]: e.message } } : {}) } }, { status: 400 });
     }
     throw e;
   }

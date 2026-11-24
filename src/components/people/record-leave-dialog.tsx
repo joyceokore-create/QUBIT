@@ -4,8 +4,11 @@ import { useEffect, useState } from "react";
 import { CalendarOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Field } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { RecordLeaveFormSchema } from "@/lib/absence-schema";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DialogTrigger } from "@/components/ui/dialog";
+import { DialogTrigger } from "@/components/ui/drawer-dialog";
 import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
 import { useAdminMutation } from "@/components/admin/use-admin-mutation";
 import { ABSENCE_TYPES, type AbsenceType } from "@/server/absence";
@@ -31,6 +34,9 @@ export function RecordLeaveDialog({ people }: { people: { id: string; name: stri
   const [end, setEnd] = useState("");
   const [note, setNote] = useState("");
 
+  // docs/08 § Errors: Person, the two dates and the note show their problems on the field.
+  const fe = useFieldErrors({ schema: RecordLeaveFormSchema, values: { userId, startDate: start, endDate: end, note }, idPrefix: "record-leave" });
+
   // Reset on open so a second "Record leave" doesn't inherit the last attempt.
   useEffect(() => {
     if (!open) return;
@@ -40,21 +46,13 @@ export function RecordLeaveDialog({ people }: { people: { id: string; name: stri
     setEnd("");
     setNote("");
     setError(null);
+    fe.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when the dialog opens
   }, [open, setError]);
 
   async function submit() {
-    if (!userId) {
-      setError("Pick a person.");
-      return;
-    }
-    if (!start || !end) {
-      setError("Enter the first and last day away.");
-      return;
-    }
-    if (new Date(end) < new Date(start)) {
-      setError("The last day away cannot be before the first.");
-      return;
-    }
+    setError(null);
+    if (!fe.validate()) return;
     await mutate(
       "/api/absences",
       "POST",
@@ -68,6 +66,7 @@ export function RecordLeaveDialog({ people }: { people: { id: string; name: stri
       },
       {
         fallback: "Could not record the absence.",
+        onFieldErrors: (fields) => fe.setServerErrors(fields, ["userId", "startDate", "endDate", "note"]),
         onSuccess: () => setOpen(false),
       },
     );
@@ -77,7 +76,7 @@ export function RecordLeaveDialog({ people }: { people: { id: string; name: stri
     <AdminFormDialog
       open={open}
       onOpenChange={setOpen}
-      title="Record leave"
+      title="Record Leave"
       description="Capacity, badges and reminders all react to this one entry (imported/HR leave stays read-only)."
       error={error}
       busy={busy}
@@ -85,20 +84,19 @@ export function RecordLeaveDialog({ people }: { people: { id: string; name: stri
       busyLabel="Recording…"
       onSubmit={submit}
       trigger={
-        <DialogTrigger render={<Button size="sm" variant="outline" className="rounded-full" />}>
-          <CalendarOff /> Record leave
+        <DialogTrigger render={<Button variant="outline" />}>
+          <CalendarOff /> Record Leave
         </DialogTrigger>
       }
     >
-      <div className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium text-ink-2">Person</span>
+      <Field label="Person" error={fe.errors.userId}>
         <Select
           value={userId || null}
           onValueChange={(v) => setUserId(v ?? "")}
           items={Object.fromEntries(people.map((p) => [p.id, p.name]))}
         >
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Pick a person" />
+          <SelectTrigger {...fe.bind("userId")} className="w-full">
+            <SelectValue placeholder="Choose a person" />
           </SelectTrigger>
           <SelectContent>
             {people.map((p) => (
@@ -108,7 +106,7 @@ export function RecordLeaveDialog({ people }: { people: { id: string; name: stri
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </Field>
 
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-ink-2">Type</span>
@@ -131,32 +129,22 @@ export function RecordLeaveDialog({ people }: { people: { id: string; name: stri
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="record-leave-start" className="text-sm font-medium text-ink-2">
-            First day away
-          </label>
-          <Input id="record-leave-start" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="record-leave-end" className="text-sm font-medium text-ink-2">
-            Last day away
-          </label>
-          <Input id="record-leave-end" type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
-        </div>
+        <Field label="First Day Away" htmlFor={fe.idOf("startDate")} error={fe.errors.startDate}>
+          <Input {...fe.bind("startDate")} type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+        </Field>
+        <Field label="Last Day Away" htmlFor={fe.idOf("endDate")} error={fe.errors.endDate}>
+          <Input {...fe.bind("endDate")} type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+        </Field>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="record-leave-note" className="text-sm font-medium text-ink-2">
-          Note <span className="font-normal text-[var(--ink4)]">(optional)</span>
-        </label>
+      <Field label="Note (Optional)" htmlFor={fe.idOf("note")} error={fe.errors.note}>
         <Input
-          id="record-leave-note"
+          {...fe.bind("note")}
           value={note}
-          maxLength={300}
           onChange={(e) => setNote(e.target.value)}
           placeholder="e.g. Annual leave, back Monday"
         />
-      </div>
+      </Field>
     </AdminFormDialog>
   );
 }

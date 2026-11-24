@@ -2,7 +2,6 @@ import { auth } from "@/lib/auth";
 import { can, PERMISSION_CATALOGUE } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
 import { listRolePermissions } from "@/server/role-permissions";
-import { AdminHeader } from "../admin-header";
 import { RolesEditor } from "./roles-editor";
 import { ModuleCatalogue } from "./module-catalogue";
 
@@ -42,15 +41,7 @@ export default async function AdminRolesPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 p-[22px_24px_90px]">
-      <AdminHeader canManageIam={can(ctx, "iam:manage")}
-        subtitle={
-          canManage
-            ? "Edit each role's permissions. Changes apply on the affected user's next sign-in. PlatformSuperAdmin is fixed at full access."
-            : "Built-in roles and their permissions. Only a Platform Super Admin can edit them."
-        }
-      />
-
-      <RolesEditor roles={roles} catalogue={[...PERMISSION_CATALOGUE]} canManage={canManage} />
+      <RolesEditor roles={roles} catalogue={[...PERMISSION_CATALOGUE]} canManage={canManage} canManageIam={can(ctx, "iam:manage")} />
 
       {canViewCatalogue && <ModuleCatalogue modules={modules} />}
     </main>

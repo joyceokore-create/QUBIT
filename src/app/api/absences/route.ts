@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/api-guard";
 import { can } from "@/lib/rbac";
+import { validationError } from "@/server/errors";
 import { AbsenceError, CreateAbsenceInput, createAbsence, listAbsences } from "@/server/absence";
 
 // GET  /api/absences?userId= — who is away (defaults to the next 30 days)
@@ -27,13 +28,8 @@ export async function POST(req: Request) {
   if (!(can(guard.ctx, "iam:manage") || can(guard.ctx, "project:update"))) {
     return NextResponse.json({ error: { code: "FORBIDDEN" } }, { status: 403 });
   }
-  const parsed = CreateAbsenceInput.safeParse(await req.json());
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: "VALIDATION", message: parsed.error.issues[0]?.message ?? "Invalid input." } },
-      { status: 400 },
-    );
-  }
+  const parsed = CreateAbsenceInput.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return validationError(parsed.error);
   try {
     return NextResponse.json({ data: await createAbsence(guard.ctx, parsed.data) });
   } catch (e) {

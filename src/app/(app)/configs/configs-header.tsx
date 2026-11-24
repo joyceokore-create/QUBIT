@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
+import { TabStrip } from "@/components/ui/tab-strip";
 import { usePathname } from "next/navigation";
 
-// Configs section header — eyebrow + title + chip tabs, mirroring AdminHeader. One tab for
+// Configs section header — eyebrow + title + U1 tabs, mirroring AdminHeader. One tab for
 // now (Integrations); add sections here as Configs grows. `action` is an optional trailing slot.
 const TABS = [{ label: "Integrations", href: "/configs/integrations" }];
 
@@ -21,25 +21,11 @@ export function ConfigsHeader({ subtitle, action }: { subtitle?: string; action?
         </div>
         {action}
       </div>
-      <div className="flex flex-wrap gap-1.5">
-        {TABS.map((t) => {
-          const active = path === t.href || path.startsWith(`${t.href}/`);
-          return (
-            <Link
-              key={t.href}
-              href={t.href}
-              className="rounded-full border px-3.5 py-1.5 text-[12px] font-semibold transition-colors"
-              style={{
-                borderColor: active ? "var(--brand)" : "var(--hair)",
-                background: active ? "color-mix(in oklab, var(--brand) 10%, transparent)" : "transparent",
-                color: active ? "var(--brand)" : "var(--ink3)",
-              }}
-            >
-              {t.label}
-            </Link>
-          );
-        })}
-      </div>
+      <TabStrip
+        label="Configs sections"
+        active={TABS.find((t) => path === t.href || path.startsWith(`${t.href}/`))?.href ?? ""}
+        tabs={TABS.map((t) => ({ key: t.href, label: t.label, href: t.href }))}
+      />
     </div>
   );
 }

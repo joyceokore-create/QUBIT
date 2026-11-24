@@ -1,84 +1,125 @@
 "use client";
 
-import { useState } from "react";
-import { format } from "date-fns";
-import { useAdminMutation } from "@/components/admin/use-admin-mutation";
-import { CARD_GLASS as CARD } from "@/lib/surface";
+import { useMemo, useState } from "react";
+import { AccessRequestDrawer } from "@/components/admin-home/admin-home";
+import { PageHeader } from "@/components/list/page-header";
+import { FilterSelect, ListToolbar, SearchField } from "@/components/list/list-toolbar";
+import { ListEmpty, TableCard, TableFooter } from "@/components/list/table-footer";
+import { useListUrl } from "@/components/list/use-list-url";
+import { Chip } from "@/components/ui/status-pill";
+import { TabStrip } from "@/components/ui/tab-strip";
+import { AR_TAB_LABEL, AR_TAB_STATUS, AR_TABS, agoLabel, daysOld, requestChip, type AdminHomeData, type AdminRequestRow, type ArStatus, type ArTab } from "@/lib/admin-home";
+import { formatDate } from "@/lib/dates";
+import { REQUESTABLE_ROLES, requestedRoleLabel } from "@/lib/access-request-schema";
+import type { PageInfo } from "@/lib/list-state";
+import { COMPACT, THEAD, TROW } from "@/lib/surface";
+import { cn } from "@/lib/utils";
 
-interface Row {
-  id: string;
-  fullName: string;
-  email: string;
-  company: string;
-  jobTitle: string | null;
-  status: "NEW" | "REVIEWED" | "DISMISSED";
-  createdAt: string;
-}
+// UX5 (L1–L5) + UX fidelity F1. The server pages and searches (page.tsx); this renders the
+// header, status tabs, toolbar, the table with its pager, and the shared review drawer.
+// Filters: Requested Role (from the public form, D-F3). The design's "Department" filter isn't
+// offered: department is chosen by the admin at grant time and isn't stored on the request.
 
-const ROW = "grid grid-cols-[120px_minmax(0,1.2fr)_minmax(0,1fr)_110px_150px] items-center gap-3.5 p-[10px_18px]";
-
-const STATUS_STYLE: Record<Row["status"], string> = {
-  NEW: "bg-[var(--okbg)] text-[var(--ok)]",
-  REVIEWED: "bg-[var(--wash2)] text-[var(--ink3)]",
-  DISMISSED: "bg-[var(--wash2)] text-[var(--ink4)]",
+const EMPTY_HINT: Record<ArTab, string> = {
+  waiting: "Requests from the sign-in page's “Request access” form appear here, oldest first.",
+  reviewed: "Requests you approve appear here, most recent first.",
+  dismissed: "Requests you decline appear here, most recent first.",
 };
 
-export function AccessRequestsClient({ rows }: { rows: Row[] }) {
-  const { error, mutate } = useAdminMutation();
-  // Which ROW is in flight — the hook's `busy` is a single boolean, and this table
-  // disables per row. Previously the response was ignored entirely, so a failed review
-  // looked identical to a successful one; the hook surfaces the server's message now.
-  const [busy, setBusy] = useState<string | null>(null);
-
-  async function review(id: string, status: "REVIEWED" | "DISMISSED") {
-    setBusy(id);
-    try {
-      await mutate(`/api/admin/access-requests/${id}`, "PATCH", { status }, {
-        fallback: "Could not update the request.",
-      });
-    } finally {
-      setBusy(null);
-    }
-  }
+export function AccessRequestsClient({
+  tab,
+  counts,
+  rows,
+  info,
+  timeZone,
+  nowIso,
+  grant,
+}: {
+  tab: ArTab;
+  counts: Record<ArStatus, number>;
+  rows: AdminRequestRow[];
+  info: PageInfo;
+  timeZone: string;
+  nowIso: string;
+  grant: AdminHomeData["grant"];
+}) {
+  const list = useListUrl("admin-access-requests", 5);
+  const now = useMemo(() => new Date(nowIso), [nowIso]);
+  const [open, setOpen] = useState<AdminRequestRow | null>(null);
+  const role = list.get("role");
+  const filtered = !!list.q || !!role;
 
   return (
-    <div className="flex flex-col gap-2">
-      {error && (
-        <p role="alert" className="text-sm text-status-red">
-          {error}
-        </p>
-      )}
-      <div className={`overflow-hidden ${CARD}`} style={{ background: "var(--cardbg)" }}>
-      <div className="overflow-x-auto">
-        <div className="min-w-[720px]">
-          <div className={`${ROW} border-b border-[var(--hair)] font-mono rv:font-sans text-[9px] rv:text-overline font-semibold uppercase tracking-[1.6px] text-[var(--ink4)]`}>
-            <span>When</span><span>Requester</span><span>Company</span><span>Status</span><span>Actions</span>
-          </div>
-          {rows.map((r) => (
-            <div key={r.id} className={`${ROW} border-b border-[var(--hair2)] last:border-0 hover:bg-[var(--wash)]`}>
-              <span className="font-mono rv:font-data text-[10px] rv:text-data-sm text-[var(--ink4)]">{format(new Date(r.createdAt), "MMM d HH:mm")}</span>
-              <span className="min-w-0">
-                <span className="block truncate text-[12px] rv:text-body-sm font-medium text-[var(--ink2)]">{r.fullName}{r.jobTitle ? ` · ${r.jobTitle}` : ""}</span>
-                <span className="block truncate text-[11px] rv:text-body-xs text-[var(--ink4)]">{r.email}</span>
-              </span>
-              <span className="truncate text-[12px] rv:text-body-sm text-[var(--ink3)]">{r.company}</span>
-              <span className={`justify-self-start rounded-[5px] px-2 py-[3px] text-[10px] font-semibold ${STATUS_STYLE[r.status]}`}>{r.status.toLowerCase()}</span>
-              <span className="flex gap-1.5">
-                <button type="button" disabled={busy === r.id || r.status === "REVIEWED"} onClick={() => review(r.id, "REVIEWED")}
-                  className="rounded-[6px] border border-[var(--hair)] px-2 py-1 text-[11px] font-semibold text-[var(--ink2)] transition-colors hover:border-[var(--brand)] disabled:opacity-40">
-                  Reviewed
-                </button>
-                <button type="button" disabled={busy === r.id || r.status === "DISMISSED"} onClick={() => review(r.id, "DISMISSED")}
-                  className="rounded-[6px] border border-[var(--hair)] px-2 py-1 text-[11px] font-semibold text-[var(--ink4)] transition-colors hover:border-[var(--bad)] disabled:opacity-40">
-                  Dismiss
-                </button>
-              </span>
-            </div>
-          ))}
-          {rows.length === 0 && <div className="p-8 text-center text-[12px] rv:text-body-sm text-[var(--ink5)]">No access requests yet.</div>}
-        </div>
-      </div>
-    </div>
-    </div>
+    <>
+      <PageHeader title="Access Requests" description="People asking to join QUBIT." />
+      <TabStrip
+        label="Access request views"
+        active={tab}
+        tabs={AR_TABS.map((t) => ({ key: t, label: AR_TAB_LABEL[t], count: counts[AR_TAB_STATUS[t]], href: t === "waiting" ? "/admin/access-requests" : `/admin/access-requests?tab=${t}` }))}
+      />
+      <ListToolbar label="Search access requests">
+        <SearchField value={list.q} onChange={(q) => list.set({ q })} placeholder="Search by name, email or company" label="Search access requests" />
+        <FilterSelect label="Requested Role" allLabel="All roles" value={role} options={REQUESTABLE_ROLES.map((r) => ({ value: r.key, label: r.label }))} onChange={(v) => list.set({ role: v })} />
+      </ListToolbar>
+      <TableCard footer={<TableFooter info={info} noun="access requests" onPage={list.setPage} onSize={list.setSize} />}>
+        {rows.length === 0 ? (
+          <ListEmpty filtered={filtered} noun="access requests" onClear={() => list.set({ q: "", role: null })} hint={filtered ? undefined : EMPTY_HINT[tab]} />
+        ) : (
+          <table className="w-full min-w-[760px] border-separate border-spacing-0 text-left text-[12.5px]">
+            <caption className="sr-only">{AR_TAB_LABEL[tab]} access requests</caption>
+            <thead className={THEAD}>
+              <tr>
+                <th scope="col">Person</th>
+                <th scope="col">Requested Role</th>
+                <th scope="col">Company</th>
+                <th scope="col">Status</th>
+                <th scope="col">{tab === "waiting" ? "Requested" : "Decided By"}</th>
+                <th scope="col" className="w-[90px]">
+                  <span className="sr-only">Action</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const days = daysOld(r.createdAt, now, timeZone);
+                const chip = requestChip(r.status, days, r.requestedRole);
+                return (
+                  <tr key={r.id} className={cn(TROW, "transition-colors hover:[&>td]:bg-[var(--ds-surface2)]")}>
+                    <td className="max-w-[300px]">
+                      <span className="block truncate font-semibold text-[var(--ds-ink)]">{r.fullName}</span>
+                      <span className="block truncate text-[12px] text-[var(--ds-ink3)]">{r.email}</span>
+                    </td>
+                    <td className="whitespace-nowrap text-[var(--ds-ink2)]">{requestedRoleLabel(r.requestedRole) ?? <span className="text-[var(--ds-ink3)]">Not given</span>}</td>
+                    <td className="max-w-[240px]">
+                      <span className="block truncate text-[var(--ds-ink2)]">{r.company}</span>
+                      {r.jobTitle && <span className="block truncate text-[12px] text-[var(--ds-ink3)]">{r.jobTitle}</span>}
+                    </td>
+                    <td>
+                      <Chip tone={chip.tone}>{chip.label}</Chip>
+                    </td>
+                    <td className="whitespace-nowrap text-[var(--ds-ink3)]">
+                      {tab === "waiting" ? (
+                        <span title={`Requested ${formatDate(r.createdAt, timeZone)}`}>{agoLabel(days)}</span>
+                      ) : (
+                        <>
+                          <span className="block text-[var(--ds-ink2)]">{r.reviewedBy ?? "—"}</span>
+                          {r.reviewedAt && <span className="block text-[12px]">{formatDate(r.reviewedAt, timeZone)}</span>}
+                        </>
+                      )}
+                    </td>
+                    <td className="text-right">
+                      <button type="button" onClick={() => setOpen(r)} className={COMPACT} aria-label={`${r.status === "NEW" ? "Review" : "View"} ${r.fullName}'s request`}>
+                        {r.status === "NEW" ? "Review" : "View"}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </TableCard>
+      <AccessRequestDrawer request={open} grant={grant} tz={timeZone} now={now} onClose={() => setOpen(null)} />
+    </>
   );
 }

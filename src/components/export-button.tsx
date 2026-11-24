@@ -1,6 +1,7 @@
 "use client";
 
 import { Download } from "lucide-react";
+import { SECONDARY } from "@/lib/surface";
 
 /**
  * "Export CSV" (docs/16 §9, M9) — a plain anchor to /api/export (or any CSV endpoint):
@@ -12,9 +13,11 @@ export function ExportButton({ href, label = "Export CSV" }: { href: string; lab
     <a
       href={href}
       download
-      className="flex items-center gap-1.5 rounded-full border border-[var(--hair)] px-3 py-1.5 text-[11.5px] font-semibold text-[var(--ink3)] transition-colors hover:border-brand hover:text-brand"
+      // UX5 (U3): the standard secondary button — same 36px control size as the header's
+      // primary action, so header actions line up and never look like a filter pill.
+      className={SECONDARY}
     >
-      <Download className="size-3.5" /> {label}
+      <Download className="size-4" aria-hidden /> {label}
     </a>
   );
 }

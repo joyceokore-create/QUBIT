@@ -1,123 +1,80 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { SeverityPill } from "@/components/raid/severity-pill";
+import { raidRef } from "@/lib/raid-ref";
 import { IssueRowActions } from "@/components/raid/issue-row-actions";
-import { ISSUE_STATUSES, type IssueListItem } from "@/server/issues";
+import { Chip } from "@/components/ui/status-pill";
+import { THEAD, TROW } from "@/lib/surface";
+import type { IssueListItem } from "@/server/issues";
 import type { AdminUserSummary } from "@/server/users";
 
-const FILTER_CHIPS: { label: string; value: string | null }[] = [
-  { label: "All", value: null },
-  ...ISSUE_STATUSES.map((s) => ({ label: s, value: s })),
-];
-
+/**
+ * UX5 — one server-sliced page of issues (src/server/issues.ts listIssuesPage). Search,
+ * filters and paging live in the URL; this only renders the rows it is given.
+ */
 interface IssueTableProps {
   issues: IssueListItem[];
   users: AdminUserSummary[];
   canUpdate: boolean;
 }
 
+export function IssueStatus({ status }: { status: string }) {
+  const done = status === "Closed" || status === "Resolved";
+  return <Chip tone={done ? "muted" : status === "Investigating" ? "vio" : "info"}>{status === "Investigating" ? "In progress" : status}</Chip>;
+}
+
+/** Short, stable reference shown in the ID column (the first characters of the issue id). */
+export const issueRef = raidRef;
+
+function ageOf(createdAt: Date | string): string {
+  const days = Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000));
+  return days === 0 ? "Today" : days === 1 ? "1 day" : `${days} days`;
+}
+
 export function IssueTable({ issues, users, canUpdate }: IssueTableProps) {
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return issues.filter((i) => {
-      if (statusFilter && i.status !== statusFilter) return false;
-      if (q && !i.title.toLowerCase().includes(q)) return false;
-      return true;
-    });
-  }, [issues, statusFilter, query]);
-
   return (
-    <div className="overflow-hidden rounded-[10px] border border-ink-4 bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-background p-3">
-        <div className="flex flex-wrap gap-1.5">
-          {FILTER_CHIPS.map((chip) => (
-            <Button
-              key={chip.label}
-              type="button"
-              size="sm"
-              variant={statusFilter === chip.value ? "default" : "outline"}
-              onClick={() => setStatusFilter(chip.value)}
-            >
-              {chip.label}
-            </Button>
-          ))}
-        </div>
-        <div className="relative w-full max-w-[240px]">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-ink-3" />
-          <Input
-            placeholder="Search issues…"
-            className="pl-8"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
-      </div>
-
-      {/* Artifact-style table (the dashboard's .sgt look) — see .sgt-app in globals.css. */}
-      <div className="overflow-x-auto px-3 pt-1 pb-3">
-        <table className="sgt-app">
-          <thead>
-            <tr>
-              <th>Title</th>
-              <th>Project</th>
-              <th>Severity</th>
-              <th>Owner</th>
-              <th>Status</th>
-              <th>Origin</th>
-              {canUpdate && <th className="r">Actions</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((issue) => (
-              <tr key={issue.id}>
-                <td>
-                  <span className="name">{issue.title}</span>
-                </td>
-                <td className="text-ink-2">{issue.projectCode ?? "—"}</td>
-                <td>
-                  <SeverityPill severity={issue.severity} />
-                </td>
-                <td className="text-ink-2">{issue.ownerName ?? "—"}</td>
-                <td>
-                  <Badge variant={issue.status === "Closed" ? "outline" : "secondary"}>{issue.status}</Badge>
-                </td>
-                <td className="text-ink-3">
-                  {issue.originRiskTitle ? (
-                    <span className="text-[11px]">
-                      <span className="mr-1 rounded-[3px] bg-background px-1.5 py-0.5 text-[9px] font-semibold text-ink-3 uppercase">
-                        From risk
-                      </span>
-                      {issue.originRiskTitle}
-                    </span>
-                  ) : (
-                    <span className="text-[11px] text-ink-4">No prior risk</span>
-                  )}
-                </td>
-                {canUpdate && (
-                  <td className="r">
-                    <IssueRowActions issue={issue} users={users} />
-                  </td>
-                )}
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={canUpdate ? 7 : 6} className="text-center text-ink-3">
-                  No issues match this filter.
-                </td>
-              </tr>
+    <table className="w-full min-w-[880px] border-separate border-spacing-0 text-left text-[12.5px]">
+      <thead className={THEAD}>
+        <tr>
+          <th scope="col">ID</th>
+          <th scope="col">Issue</th>
+          <th scope="col">Project</th>
+          <th scope="col">Severity</th>
+          <th scope="col">Owner</th>
+          <th scope="col">Age</th>
+          <th scope="col">Status</th>
+          {canUpdate && (
+            <th scope="col">
+              <span className="sr-only">Actions</span>
+            </th>
+          )}
+        </tr>
+      </thead>
+      <tbody>
+        {issues.map((issue) => (
+          <tr key={issue.id} className={TROW}>
+            <td className="whitespace-nowrap font-mono text-[11.5px] text-[var(--ds-ink3)]">{issueRef(issue.id)}</td>
+            <td className="max-w-[320px]">
+              <b className="font-semibold text-[var(--ds-ink)]">{issue.title}</b>
+              {issue.originRiskTitle && <span className="block truncate text-[12px] text-[var(--ds-ink3)]">From risk: {issue.originRiskTitle}</span>}
+            </td>
+            <td className="max-w-[200px] truncate text-[var(--ds-ink2)]">{issue.projectName ?? issue.projectCode ?? "No project"}</td>
+            <td className="whitespace-nowrap">
+              <SeverityPill severity={issue.severity} />
+            </td>
+            <td className="whitespace-nowrap text-[var(--ds-ink2)]">{issue.ownerName ?? <Chip tone="warn">Unassigned</Chip>}</td>
+            <td className="whitespace-nowrap tabular-nums text-[var(--ds-ink3)]">{ageOf(issue.createdAt)}</td>
+            <td className="whitespace-nowrap">
+              <IssueStatus status={issue.status} />
+            </td>
+            {canUpdate && (
+              <td className="text-right">
+                <IssueRowActions issue={issue} users={users} />
+              </td>
             )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }

@@ -31,7 +31,7 @@ export default async function AcceptInvitePage({
       }}
     >
       <div className="w-full max-w-[420px] rounded-[18px] border border-[var(--w08)] bg-[var(--qcard)] p-7">
-        <h1 className="text-[20px] font-bold text-[var(--qink)]">Welcome to QUBIT</h1>
+        <h1 className="text-[24px] font-extrabold text-[var(--qink)]">Set Up Your Account</h1>
 
         {token ? (
           <>

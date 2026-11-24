@@ -4,6 +4,8 @@ import { getTenantContext, withTenant } from "@/lib/tenant";
 import { decryptMfaSecret, verifyTotp } from "@/lib/mfa";
 import { generateRecoveryCodes } from "@/lib/mfa-recovery";
 import { audit } from "@/lib/audit";
+import { validationError } from "@/server/errors";
+import { mfaCode } from "@/lib/mfa-schema";
 
 /**
  * POST /api/auth/mfa/verify — confirm a TOTP code and complete enrolment (docs/23 §3).
@@ -15,7 +17,7 @@ import { audit } from "@/lib/audit";
  * On success the pending secret graduates to `mfaSecret`, the pending slot is cleared, and
  * recovery codes are generated: hashes stored, plaintext returned exactly once.
  */
-const VerifySchema = z.object({ token: z.string().length(6) });
+const VerifySchema = z.object({ token: mfaCode });
 
 export async function POST(req: Request) {
   let ctx;
@@ -27,7 +29,7 @@ export async function POST(req: Request) {
 
   const parsed = VerifySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: { code: "VALIDATION", message: "Enter the 6-digit code." } }, { status: 400 });
+    return validationError(parsed.error);
   }
 
   const pending = await withTenant(ctx, (tx) =>
@@ -45,7 +47,7 @@ export async function POST(req: Request) {
     // The pending secret survives a wrong code: the user re-reads their app and retries
     // without rescanning.
     return NextResponse.json(
-      { error: { code: "INVALID_CODE", message: "Incorrect authentication code." } },
+      { error: { code: "INVALID_CODE", message: "Incorrect authentication code.", fields: { token: "Incorrect authentication code. Check your app and try again." } } },
       { status: 400 },
     );
   }

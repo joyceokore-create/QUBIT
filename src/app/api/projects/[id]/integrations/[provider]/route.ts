@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { validationError } from "@/server/errors";
 import { requirePermission } from "@/lib/api-guard";
 import { setIntegration, SetIntegrationInput } from "@/server/integrations";
 
@@ -9,7 +10,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if ("response" in guard) return guard.response;
   const parsed = SetIntegrationInput.safeParse(await req.json());
   if (!parsed.success) {
-    return NextResponse.json({ error: { code: "VALIDATION", message: "Invalid request." } }, { status: 400 });
+    return validationError(parsed.error);
   }
   const { id, provider } = await params;
   try {

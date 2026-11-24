@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
+import { readApiError } from "@/lib/form-errors";
 
 type JsonBody = Record<string, unknown> | unknown[];
 
@@ -16,6 +17,9 @@ interface MutateOptions {
   refresh?: boolean;
   /** Message shown when the server returns no `{ error: { message } }` body. */
   fallback?: string;
+  /** docs/08 § Errors: when the server names fields (`error.fields`), they go here so the form
+   * shows each on its field; the form-level `error` is then only set for a root (`_`) message. */
+  onFieldErrors?: (fields: Record<string, string>) => void;
 }
 
 /**
@@ -49,11 +53,14 @@ export function useAdminMutation() {
         // Read the body once: it carries either the error envelope or the success payload.
         const payload = await res.json().catch(() => null);
         if (!res.ok) {
-          setError(
-            (payload as { error?: { message?: string } } | null)?.error?.message ??
-              options.fallback ??
-              "Something went wrong.",
-          );
+          const { message, fields } = readApiError(payload, options.fallback ?? "Something went wrong.");
+          const { _: root, ...onFields } = fields;
+          if (options.onFieldErrors && Object.keys(onFields).length > 0) {
+            options.onFieldErrors(onFields);
+            setError(root ?? null);
+          } else {
+            setError(message);
+          }
           return false;
         }
         if (options.refresh !== false) router.refresh();

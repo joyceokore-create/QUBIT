@@ -5,6 +5,11 @@ import { useState, type FormEvent } from "react";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Field } from "@/components/ui/drawer";
+import { Banner } from "@/components/ui/panel";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { readApiError } from "@/lib/form-errors";
+import { EditProjectFormSchema } from "@/lib/project-schema";
 import { StatusDot } from "@/components/status-dot";
 import {
   Select,
@@ -21,7 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
+} from "@/components/ui/drawer-dialog";
 
 // DM1.73 — shared enums; the old hardcoded ["Low","Medium","High","Critical"] list
 // silently discarded whole saves when the server enum rejected the priority.
@@ -67,9 +72,13 @@ export function EditProjectDialog({ project, onUpdated }: EditProjectDialogProps
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // docs/08 § Errors: Name and the date pair show their problems on the field; Save stays enabled.
+  const fe = useFieldErrors({ schema: EditProjectFormSchema, values: { name, startDate, dueDate }, idPrefix: "edit-project" });
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!fe.validate()) return;
     setLoading(true);
 
     const res = await fetch(`/api/projects/${project.id}`, {
@@ -92,8 +101,12 @@ export function EditProjectDialog({ project, onUpdated }: EditProjectDialogProps
     setLoading(false);
 
     if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      setError(body?.error?.message ?? "Could not update project.");
+      const { message, fields } = readApiError(await res.json().catch(() => null), "Could not update the project.");
+      const { _: root, ...onFields } = fields;
+      if (Object.keys(onFields).length > 0) {
+        fe.setServerErrors(onFields, ["name", "startDate", "dueDate"]);
+        if (root) setError(root);
+      } else setError(message);
       return;
     }
 
@@ -103,22 +116,20 @@ export function EditProjectDialog({ project, onUpdated }: EditProjectDialogProps
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setError(null); fe.reset(); } }}>
       <DialogTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Edit project" />}>
         <Pencil className="h-3.5 w-3.5" />
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit project</DialogTitle>
+          <DialogTitle>Edit Project</DialogTitle>
           <DialogDescription>Changes are audited.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="edit-project-name" className="text-sm font-medium text-ink-2">
-              Name
-            </label>
-            <Input id="edit-project-name" required value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
+          {error && <Banner tone="bad">{error}</Banner>}
+          <Field label="Name" htmlFor={fe.idOf("name")} error={fe.errors.name}>
+            <Input {...fe.bind("name")} required value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="edit-project-desc" className="text-sm font-medium text-ink-2">
@@ -133,7 +144,7 @@ export function EditProjectDialog({ project, onUpdated }: EditProjectDialogProps
               <Input id="edit-project-client" value={client} onChange={(e) => setClient(e.target.value)} />
             </div>
             <div className="flex flex-1 flex-col gap-1.5">
-              <label htmlFor="edit-project-owner" className="text-sm font-medium text-ink-2">Business owner</label>
+              <label htmlFor="edit-project-owner" className="text-sm font-medium text-ink-2">Business Owner</label>
               <Input id="edit-project-owner" value={businessOwner} onChange={(e) => setBusinessOwner(e.target.value)} />
             </div>
           </div>
@@ -144,7 +155,7 @@ export function EditProjectDialog({ project, onUpdated }: EditProjectDialogProps
               <Input id="edit-project-obj" value={objective} onChange={(e) => setObjective(e.target.value)} />
             </div>
             <div className="flex flex-1 flex-col gap-1.5">
-              <label htmlFor="edit-project-mission" className="text-sm font-medium text-ink-2">Mission statement</label>
+              <label htmlFor="edit-project-mission" className="text-sm font-medium text-ink-2">Mission Statement</label>
               <Input id="edit-project-mission" value={mission} onChange={(e) => setMission(e.target.value)} />
             </div>
           </div>
@@ -184,13 +195,15 @@ export function EditProjectDialog({ project, onUpdated }: EditProjectDialogProps
           </div>
 
           <div className="flex gap-3">
-            <div className="flex flex-1 flex-col gap-1.5">
-              <label htmlFor="edit-project-start" className="text-sm font-medium text-ink-2">Start date</label>
-              <Input id="edit-project-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <div className="flex-1">
+              <Field label="Start Date" htmlFor={fe.idOf("startDate")} error={fe.errors.startDate}>
+                <Input {...fe.bind("startDate")} type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              </Field>
             </div>
-            <div className="flex flex-1 flex-col gap-1.5">
-              <label htmlFor="edit-project-due" className="text-sm font-medium text-ink-2">End date</label>
-              <Input id="edit-project-due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            <div className="flex-1">
+              <Field label="End Date" htmlFor={fe.idOf("dueDate")} error={fe.errors.dueDate}>
+                <Input {...fe.bind("dueDate")} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              </Field>
             </div>
           </div>
 
@@ -201,15 +214,9 @@ export function EditProjectDialog({ project, onUpdated }: EditProjectDialogProps
             <Input id="edit-project-budget" value={budget} onChange={(e) => setBudget(e.target.value)} />
           </div>
 
-          {error && (
-            <p role="alert" className="text-sm text-status-red">
-              {error}
-            </p>
-          )}
-
           <DialogFooter>
             <Button type="submit" disabled={loading}>
-              {loading ? "Saving…" : "Save changes"}
+              {loading ? "Saving…" : "Save Changes"}
             </Button>
           </DialogFooter>
         </form>

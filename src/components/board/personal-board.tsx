@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ExternalLink, ShieldAlert, UserRound } from "lucide-react";
+import { ExternalLink, ShieldAlert } from "lucide-react";
+import { FilterSelect } from "@/components/list/list-toolbar";
+import { Chip } from "@/components/ui/status-pill";
+import { CARD, CARD_BG } from "@/lib/surface";
+import { cn } from "@/lib/utils";
 
 // The personal board (docs/18 §4): lanes To do · Doing · Done as VIEWS over the
 // 5-status taxonomy (docs/15 6.1 untouched) — Doing wears an InProgress/InReview/InQA
@@ -27,18 +31,19 @@ interface BoardTask {
   externalKey: string | null;
   externalUrl: string | null;
   dueDate: string | null;
+  updatedAt?: string;
 }
 
 const DOING = ["InProgress", "InReview", "InQA"];
 const LANES = [
-  { key: "todo", label: "To do", statuses: ["NotStarted"] },
-  { key: "doing", label: "Doing", statuses: DOING },
-  { key: "done", label: "Done", statuses: ["Completed"] },
+  { key: "todo", label: "To Do", statuses: ["NotStarted"] },
+  { key: "doing", label: "In Progress", statuses: DOING },
+  { key: "done", label: "Done This Week", statuses: ["Completed"] },
 ] as const;
 
 /** Allowed moves per docs/18 §4 — QA owns Completed for Feature/Bug. */
 
-export function PersonalBoard({ viewerName }: { viewerName: string }) {
+export function PersonalBoard({ viewerName: _viewerName }: { viewerName: string }) {
   const [tasks, setTasks] = useState<BoardTask[]>([]);
   const [projectTab, setProjectTab] = useState<string>("all");
 
@@ -68,90 +73,74 @@ export function PersonalBoard({ viewerName }: { viewerName: string }) {
   const visible = projectTab === "all" ? tasks : tasks.filter((t) => t.projectId === projectTab);
 
 
+  // "Done This Week": completed tasks last updated since Monday (local), the closest signal
+  // to completion time the board carries.
+  const monday = (() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return d.getTime();
+  })();
+  const due = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+
   return (
     <div className="flex flex-col gap-3">
-      {/* Project tabs — grouping, not a wall. */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {([["all", "All"], ...projects] as [string, string][]).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setProjectTab(id)}
-            className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${
-              projectTab === id
-                ? "border-[var(--brand)] bg-[color-mix(in_oklab,var(--brand)_10%,transparent)] text-[var(--brand)]"
-                : "border-[var(--w08)] text-[var(--ink3)] hover:text-[var(--qink)]"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="flex justify-end">
+        <FilterSelect label="Project" allLabel="All projects" value={projectTab === "all" ? "" : projectTab} options={projects.map(([id, name]) => ({ value: id, label: name }))} onChange={(v) => setProjectTab(v || "all")} />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+      <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-3">
         {LANES.map((lane) => {
           const laneTasks = visible
             .filter((t) => (lane.statuses as readonly string[]).includes(t.status))
-            .slice(0, lane.key === "done" ? 15 : undefined);
+            .filter((t) => lane.key !== "done" || !t.updatedAt || new Date(t.updatedAt).getTime() >= monday);
           return (
-            <div key={lane.key} className="flex min-h-[180px] flex-col gap-2 rounded-[14px] border border-[var(--cardbd)] bg-[var(--wash)] p-2.5">
-              <div className="flex items-baseline gap-2 px-1">
-                <span className="font-heading text-[12.5px] font-bold text-[var(--qink)]">{lane.label}</span>
-                <span className="font-mono text-[9.5px] tabular-nums text-[var(--ink4)]">{laneTasks.length}</span>
-                {lane.key === "done" && <span className="font-mono text-[8px] uppercase tracking-[.8px] text-[var(--ink5)]">feeds your weekly report</span>}
+            // Designer, 12 Nov 2026: lanes are standard cards (white, card shadow); tasks inside are flat
+            // grey tiles (no border, no shadow) that step darker on hover — one elevation level.
+            <section key={lane.key} aria-label={lane.label} className={cn(CARD, "flex min-h-[180px] flex-col gap-2 p-3.5")} style={CARD_BG}>
+              <div className="flex items-center justify-between px-0.5 pb-0.5 text-[13px]">
+                <b className="font-bold text-[var(--ds-ink)]">{lane.label}</b>
+                <span className="rounded-full bg-[var(--ds-mutedw)] px-[7px] text-[11px] font-bold tabular-nums text-[var(--ds-ink2)]">{laneTasks.length}</span>
               </div>
-              {laneTasks.length === 0 && <p className="px-1 text-[11px] text-[var(--ink5)]">Empty.</p>}
+              {laneTasks.length === 0 && <p className="px-1 py-2 text-[12px] text-[var(--ds-ink3)]">{lane.key === "done" ? "Nothing finished yet this week." : "Nothing here."}</p>}
               {laneTasks.map((t) => (
-                <div key={t.id} className="flex flex-col gap-1.5 rounded-[10px] border border-[var(--w06)] bg-[var(--qcard)] p-2.5">
-                  <Link href={`/projects/${t.projectId}?tab=Board&task=${t.id}`} className="text-[12.5px] font-semibold leading-[1.35] text-[var(--qink)] hover:text-brand">
+                <article key={t.id} className="flex flex-col gap-[3px] rounded-[11px] bg-[var(--ds-surface2)] px-3 py-2.5 transition-colors hover:bg-[var(--ds-thead)]">
+                  <Link href={`/projects/${t.projectId}?tab=Board&task=${t.id}`} className="rounded-[3px] text-[13px] font-semibold leading-[1.35] text-[var(--ds-ink)] hover:underline">
                     {t.title}
                   </Link>
-                  <div className="flex flex-wrap items-center gap-1.5 font-mono text-[8.5px] uppercase tracking-[.6px] text-[var(--ink4)]">
-                    <span>{t.projectCode}</span>
-                    {t.type !== "Feature" && <span>· {t.type}</span>}
-                    {t.dueDate && <span>· due {new Date(t.dueDate).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>}
-                    {lane.key === "doing" && DOING.includes(t.status) && (
-                      <span className="rounded-[4px] bg-[var(--wash2)] px-1 py-0.5 text-[var(--qinfo)]">
-                        {t.status === "InQA" ? "with QA" : t.status === "InReview" ? "in review" : "in progress"}
-                      </span>
-                    )}
-                    {t.addedBy && (
-                      <span className="flex items-center gap-0.5 normal-case text-[var(--ink3)]" title={`Assigned by ${t.addedBy}`}>
-                        <UserRound className="size-2.5" /> added by {t.addedBy}
-                      </span>
-                    )}
-                    {t.externalKey && (
-                      <a
-                        href={t.externalUrl ?? undefined}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        title="Open in YouTrack — this issue is moved there"
-                        className="flex items-center gap-0.5 rounded-[4px] bg-[var(--wash2)] px-1 py-0.5 text-[var(--ink3)] hover:text-brand"
-                      >
-                        {t.externalKey}
-                        <ExternalLink className="size-2.5" />
-                      </a>
-                    )}
+                  <span className="text-[12px] text-[var(--ds-ink3)]">
+                    {t.projectName}
+                    {t.type !== "Feature" ? ` · ${t.type}` : ""}
+                    {t.addedBy ? ` · added by ${t.addedBy}` : ""}
+                  </span>
+                  <div className="mt-1 flex items-center justify-between gap-2 text-[11.5px] text-[var(--ds-ink3)]">
+                    <span className="flex items-center gap-1.5">
+                      {t.blocked ? (
+                        <Chip tone="bad">Blocked</Chip>
+                      ) : lane.key === "doing" ? (
+                        <Chip tone={t.status === "InProgress" ? "info" : "vio"}>{t.status === "InQA" ? "With QA" : t.status === "InReview" ? "In review" : "In progress"}</Chip>
+                      ) : null}
+                      {t.externalKey && (
+                        <a href={t.externalUrl ?? undefined} target="_blank" rel="noreferrer noopener" title="Open in YouTrack, where this task is moved" className="inline-flex items-center gap-0.5 rounded-[4px] hover:text-[var(--ds-brand-ink)]">
+                          {t.externalKey}
+                          <ExternalLink className="size-3" aria-hidden />
+                        </a>
+                      )}
+                    </span>
+                    <span>{t.dueDate ? due(t.dueDate) : ""}</span>
                   </div>
                   {t.blocked && t.blockedReason && (
-                    <p className="flex items-center gap-1 text-[10px] text-[var(--bad)]">
-                      <ShieldAlert className="size-2.5 flex-none" /> {t.blockedReason}
+                    <p className="flex items-center gap-1 text-[11.5px] text-[var(--ds-bad-text)]">
+                      <ShieldAlert className="size-3 flex-none" aria-hidden /> {t.blockedReason}
                     </p>
                   )}
-                  {/* M-P2a (docs/25 §1): tasks move in YouTrack; this board reflects. */}
-                  {lane.key !== "done" && (
-                    <p className="text-[10px] italic text-[var(--ink5)]">Move it in YouTrack.</p>
-                  )}
-                </div>
+                </article>
               ))}
-            </div>
+            </section>
           );
         })}
       </div>
-      <p className="text-[10px] text-[var(--ink5)]">
-        Signed in as {viewerName}. Work items move in YouTrack and this board reflects them;
-        flag anything stuck as blocked from the project board.
-      </p>
+      <p className="text-[12px] text-[var(--ds-ink3)]">Tasks move in YouTrack and this board follows. Flag anything stuck as blocked from the project board.</p>
     </div>
   );
 }

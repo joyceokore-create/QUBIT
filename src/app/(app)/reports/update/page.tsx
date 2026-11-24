@@ -1,16 +1,15 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { isValidIsoWeek, isoWeekId } from "@/lib/iso-week";
 import { getStatusWorkspace } from "@/server/status-report-upload";
+import { getTenantTimeZone } from "@/server/preferences";
 import { StatusWorkspace } from "@/components/reports/status-workspace";
 
 /**
- * Reports › Update all my projects — the weekly update workspace: one card per project the
- * viewer runs, prefilled from QUBIT, every gate, channel state, market check-in and line
- * editable in place; a status report file only prefills it. Lines drafted here are sent
- * from the queue (Reports › This week). ?upload=1 (the walkthrough's door) spotlights the
- * file button.
+ * Reports › Weekly Update — the weekly update workspace: one card per project the viewer
+ * runs, prefilled from QUBIT, every gate, channel state, market check-in and line editable
+ * in place; a status report file (the Upload drawer) only prefills it. Each card saves a
+ * draft or confirms and sends its line; Confirm & Send All sends every ready card.
+ * ?upload=1 (the walkthrough's door) opens the Upload drawer.
  */
 export const dynamic = "force-dynamic";
 
@@ -21,21 +20,11 @@ export default async function UpdateAllPage({ searchParams }: { searchParams: Pr
   const sp = await searchParams;
   const currentWeek = isoWeekId(new Date());
   const week = sp.week && isValidIsoWeek(sp.week) && sp.week <= currentWeek ? sp.week : currentWeek;
-  const initial = await getStatusWorkspace(ctx, week);
+  const [initial, timeZone] = await Promise.all([getStatusWorkspace(ctx, week), getTenantTimeZone(ctx)]);
   return (
     <main className="mx-auto flex w-full max-w-[1360px] flex-col gap-5 p-[22px_24px_90px]">
       <div className="[animation:rise_.5s_cubic-bezier(.22,1,.36,1)_both]">
-        <Link href="/reports" className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-[var(--ink3)] hover:text-[var(--qink)]">
-          <ArrowLeft className="size-3.5" aria-hidden /> Reports
-        </Link>
-        <h1 className="mt-1 font-heading text-[26px] rv:text-heading-lg font-bold tracking-[-.7px] text-[var(--qink)]">Update all my projects</h1>
-        <p className="mt-1 max-w-[720px] text-[13.5px] text-[var(--ink3)] [text-wrap:pretty]">
-          Every project you run, as QUBIT has it now. Set each gate, each channel state per market, each market&apos;s check-in and the line for the Head, then
-          apply once. A status report can prefill the cards. Lines go to the Head only when you send them from the queue.
-        </p>
-      </div>
-      <div className="[animation:rise_.5s_cubic-bezier(.22,1,.36,1)_.06s_both]">
-        <StatusWorkspace initial={initial} uploadHint={sp.upload === "1"} />
+        <StatusWorkspace initial={initial} uploadHint={sp.upload === "1"} timeZone={timeZone} tenantName={session.user.tenantName ?? ""} />
       </div>
     </main>
   );

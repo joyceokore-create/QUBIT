@@ -1,7 +1,9 @@
 // M-P1b (docs/27 §2) — portfolio & programme creation, feeding the wizards. Server-only.
 // Categories are the business-pipeline axis (docs/26 §2); markets are OrgUnit.kind=Market
 // rows picked at org level and inherited by the project wizard.
+import { lifecycleStage } from "@/lib/lifecycle";
 import { z } from "zod";
+import { portfolioDescription, portfolioIdChoice, portfolioName, programmeName } from "@/lib/portfolio-schema";
 import { audit } from "@/lib/audit";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { emitDomainEvent } from "@/server/events";
@@ -18,8 +20,8 @@ export const CATEGORIES = ["Approved", "Exploring", "Shelved"] as const;
 export const VIEW_KINDS = ["Pipeline", "Rollout"] as const;
 
 export const CreatePortfolioSchema = z.object({
-  name: z.string().trim().min(2, "Name is required.").max(120),
-  description: z.string().trim().max(500).optional(),
+  name: portfolioName,
+  description: portfolioDescription.optional(),
   category: z.enum(CATEGORIES).default("Exploring"),
   viewKind: z.enum(VIEW_KINDS).default("Pipeline"),
   ownerId: z.string().uuid().optional(),
@@ -29,9 +31,9 @@ export const CreatePortfolioSchema = z.object({
 export type CreatePortfolioInput = z.infer<typeof CreatePortfolioSchema>;
 
 export const CreateProgrammeSchema = z.object({
-  name: z.string().trim().min(2, "Name is required.").max(120),
-  description: z.string().trim().max(500).optional(),
-  portfolioId: z.string().uuid(),
+  name: programmeName,
+  description: portfolioDescription.optional(),
+  portfolioId: portfolioIdChoice,
   category: z.enum(CATEGORIES).default("Exploring"),
 });
 export type CreateProgrammeInput = z.infer<typeof CreateProgrammeSchema>;
@@ -115,8 +117,8 @@ export async function createProgramme(ctx: TenantContext, input: CreateProgramme
 }
 
 export const UpdatePortfolioSchema = z.object({
-  name: z.string().trim().min(2).max(120).optional(),
-  description: z.string().trim().max(500).nullable().optional(),
+  name: portfolioName.optional(),
+  description: portfolioDescription.nullable().optional(),
   category: z.enum(CATEGORIES).optional(),
   viewKind: z.enum(VIEW_KINDS).optional(),
   ownerId: z.string().uuid().nullable().optional(),
@@ -154,6 +156,15 @@ export async function updatePortfolio(ctx: TenantContext, id: string, input: Upd
         ...(input.marketIds !== undefined ? { defaultMarkets: input.marketIds.length ? input.marketIds : undefined } : {}),
       },
     });
+    // UX10 (D8b): shelving or un-shelving a portfolio moves its projects' lifecycle stage, so
+    // restart the stage clock for each project whose stage actually changes.
+    if (input.category !== undefined && (before.category === "Shelved") !== (portfolio.category === "Shelved")) {
+      const projects = await tx.project.findMany({ where: { portfolioId: id }, select: { id: true, status: true, pipelineStage: true, priority: true } });
+      const moved = projects
+        .filter((p) => lifecycleStage({ ...p, portfolioCategory: before.category }) !== lifecycleStage({ ...p, portfolioCategory: portfolio.category }))
+        .map((p) => p.id);
+      if (moved.length) await tx.project.updateMany({ where: { id: { in: moved } }, data: { stageEnteredAt: new Date() } });
+    }
     await audit(tx, ctx, {
       action: "update",
       entityType: "portfolio",

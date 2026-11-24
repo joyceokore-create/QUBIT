@@ -1,8 +1,13 @@
 import bcrypt from "bcryptjs";
+import { PASSWORD_MIN_LENGTH } from "@/lib/password-rules";
 
-// NFR-04 / docs/11-security-compliance.md: min 8 chars, no reuse of last 3 hashes.
+export { PASSWORD_MIN_LENGTH };
+
+// NFR-04 / docs/11-security-compliance.md: no reuse of last 3 hashes. Minimum length raised
+// from 8 to 12 (UX fidelity D-F8, 2026-11-11) — applies when a password is set or changed;
+// existing passwords keep working. Security team informed via the backend notes.
 const SALT_ROUNDS = 12;
-const MIN_LENGTH = 8;
+const MIN_LENGTH = PASSWORD_MIN_LENGTH;
 const HISTORY_SIZE = 3;
 
 export async function hashPassword(password: string): Promise<string> {

@@ -45,6 +45,23 @@ export function derivedRag(s: RagSignals): Rag {
   return "Green";
 }
 
+/**
+ * UX7 — the reasons behind derivedRag, in plain words, so a RAG dispute can say WHY QUBIT
+ * calculates what it does. Same thresholds as derivedRag; empty when it calculates Green.
+ */
+export function derivedRagReasons(s: RagSignals): string[] {
+  if (s.status === "Completed" || s.status === "Cancelled") return [];
+  const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
+  const out: string[] = [];
+  if (s.status === "Overdue") out.push("The project's status is Overdue");
+  else if (s.status === "AtRisk") out.push("The project's status is At risk");
+  if ((s.gatesBlocked ?? 0) > 0) out.push(n(s.gatesBlocked!, "gate is blocked", "gates are blocked"));
+  if ((s.openBlockers ?? 0) > 0) out.push(n(s.openBlockers!, "open blocker", "open blockers"));
+  if ((s.overdueTasks ?? 0) > 0) out.push(n(s.overdueTasks!, "task is overdue", "tasks are overdue"));
+  if ((s.milestonesSlipped ?? 0) > 0) out.push(n(s.milestonesSlipped!, "milestone is past its date", "milestones are past their date"));
+  return out;
+}
+
 /** True when the project belongs in every "needs attention" list. */
 export function needsAttention(status: string): boolean {
   return projectRag(status) !== "Green";

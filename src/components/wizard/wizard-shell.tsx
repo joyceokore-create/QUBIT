@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Banner } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
 import type { WizardStep } from "@/lib/wizard";
 
@@ -37,6 +38,7 @@ export function WizardShell({
   onCreateAnother?: () => void;
   createLabel: string;
   busy?: boolean;
+  /** Form-level error (not tied to a field): shown as a banner above the step. */
   error?: string | null;
   children: ReactNode;
 }) {
@@ -81,12 +83,10 @@ export function WizardShell({
       </div>
 
       <div className="min-w-0">
+        {/* docs/08 § Errors: field problems sit on their fields (the step's own markup); this banner
+            is only for what isn't tied to a field (network, a rule with no field). */}
+        {error && <Banner tone="bad" className="mb-3">{error}</Banner>}
         {children}
-        {error && (
-          <p role="alert" className="mt-3 text-[12.5px] text-status-red">
-            {error}
-          </p>
-        )}
         <div className="mt-4 flex items-center gap-2.5">
           {current > 0 && (
             <Button type="button" variant="outline" onClick={onBack} disabled={busy}>

@@ -38,10 +38,11 @@ describe("custom reports engine", () => {
     }
   });
 
-  it("allowedDatasetKeys follows permissions (wildcard sees all; bare session sees workload only)", () => {
+  it("allowedDatasetKeys follows permissions (wildcard sees all; bare session sees only self-scoped sets)", () => {
     expect(allowedDatasetKeys(rbCtx).sort()).toEqual(REPORT_DATASETS.map((d) => d.key).sort());
     const bare: TenantContext = { tenantId: riverbankId, userId: "u", roles: [], permissions: [] };
-    expect(allowedDatasetKeys(bare)).toEqual(["workload"]);
+    // workload (own row) + the UX6 "My …" sets — each builder scopes rows to the caller.
+    expect(allowedDatasetKeys(bare)).toEqual(["workload", "myTasks", "myProjects", "myBlockers"]);
   });
 
   it("returns only the requested columns, in registry order", async () => {
@@ -65,6 +66,37 @@ describe("custom reports engine", () => {
     const rbCodes = new Set(rb.rows.map((r) => r.code));
     for (const row of b.rows) expect(rbCodes.has(row.code)).toBe(false);
     expect(rb.rows.length).toBeGreaterThan(0);
+  });
+
+  it("UX fidelity Tier 3 datasets: row counts match each tenant's own data (RLS)", async () => {
+    for (const ctx of [rbCtx, bCtx]) {
+      const [milestones, checkins, requirements, risks, issues] = await withTenant(ctx, (tx) =>
+        Promise.all([tx.projectMilestone.count(), tx.checkIn.count(), tx.requirement.count(), tx.risk.count(), tx.issue.count()]),
+      );
+      expect((await runCustomReport(ctx, "milestones", ["name"])).rows.length).toBe(milestones);
+      expect((await runCustomReport(ctx, "checkins", ["week"])).rows.length).toBe(checkins);
+      expect((await runCustomReport(ctx, "requirements", ["ref"])).rows.length).toBe(requirements);
+      expect((await runCustomReport(ctx, "riskIssues", ["kind"])).rows.length).toBe(risks + issues);
+    }
+  });
+
+  it("UX fidelity Tier 3 datasets: tenant B sees none of Riverbank's milestones, requirements or test tasks", async () => {
+    const [rbM, bM, rbR, bR, rbT, bT] = await Promise.all([
+      runCustomReport(rbCtx, "milestones", ["project", "name"]),
+      runCustomReport(bCtx, "milestones", ["project", "name"]),
+      runCustomReport(rbCtx, "requirements", ["project", "ref"]),
+      runCustomReport(bCtx, "requirements", ["project", "ref"]),
+      runCustomReport(rbCtx, "testTasks", ["key", "project"]),
+      runCustomReport(bCtx, "testTasks", ["key", "project"]),
+    ]);
+    const key = (r: Record<string, unknown>) => JSON.stringify(r);
+    const rb = new Set([...rbM.rows, ...rbR.rows, ...rbT.rows].map(key));
+    for (const row of [...bM.rows, ...bR.rows, ...bT.rows]) expect(rb.has(key(row))).toBe(false);
+  });
+
+  it("test tasks are a subset of tasks", async () => {
+    const [tasks, tests] = await Promise.all([runCustomReport(rbCtx, "tasks", ["key"]), runCustomReport(rbCtx, "testTasks", ["key"])]);
+    expect(tests.rows.length).toBeLessThanOrEqual(tasks.rows.length);
   });
 
   it("tasks: only Published tasks appear (Drafts are excluded), full set for a tenant-wide PM", async () => {

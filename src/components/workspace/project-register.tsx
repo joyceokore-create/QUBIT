@@ -1,6 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { NewRiskFormSchema } from "@/lib/risk-schema";
+import { readApiError } from "@/lib/form-errors";
+import { FieldError } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
 import { Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -149,24 +153,32 @@ function RisksSection({
   const [impact, setImpact] = useState("3");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // docs/08 § Errors: the title's problem shows on the field; Raise stays enabled except while sending.
+  const fe = useFieldErrors({ schema: NewRiskFormSchema, values: { title, probability: Number(probability), impact: Number(impact) }, idPrefix: "project-risk" });
 
   const raise = async () => {
-    if (title.trim().length < 3) return;
-    setBusy(true);
     setError(null);
+    if (busy || !fe.validate()) return;
+    setBusy(true);
     const res = await fetch("/api/risks", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ projectId, title: title.trim(), probability: Number(probability), impact: Number(impact) }),
-    });
+    }).catch(() => null);
     setBusy(false);
-    if (res.ok) {
+    if (res?.ok) {
       setTitle("");
       setProbability("3");
       setImpact("3");
+      fe.reset();
       void onChanged();
     } else {
-      setError((await res.json().catch(() => null))?.error?.message ?? "Could not raise the risk.");
+      const { message, fields } = readApiError(await res?.json().catch(() => null), "Could not raise the risk. Try again.");
+      const { _: root, ...onFields } = fields;
+      if (Object.keys(onFields).length > 0) {
+        fe.setServerErrors(onFields, ["title", "probability", "impact"]);
+        if (root) setError(root);
+      } else setError(message);
     }
   };
 
@@ -194,8 +206,11 @@ function RisksSection({
 
       {canContribute && (
         <>
-          <div className="flex items-center gap-2">
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Raise a risk…" className="h-8 flex-1 text-xs" onKeyDown={(e) => e.key === "Enter" && raise()} />
+          <div className="flex items-start gap-2">
+            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+              <Input {...fe.bind("title")} aria-label="Risk" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Raise a risk…" className="h-8 text-xs" onKeyDown={(e) => e.key === "Enter" && raise()} />
+              {fe.errors.title && <FieldError id={`${fe.idOf("title")}-error`}>{fe.errors.title}</FieldError>}
+            </div>
             <Select value={probability} onValueChange={(v) => v && setProbability(v)}>
               <SelectTrigger className="h-8 w-[90px] text-[11px]" aria-label="Probability"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -211,13 +226,13 @@ function RisksSection({
             <button
               type="button"
               onClick={raise}
-              disabled={busy || title.trim().length < 3}
+              disabled={busy}
               className="flex items-center gap-1 rounded-[8px] bg-[color-mix(in_oklab,var(--brand)_14%,transparent)] px-3 py-1.5 text-xs font-semibold text-brand disabled:opacity-50"
             >
               <Plus className="size-3.5" /> Raise
             </button>
           </div>
-          {error && <p className="text-[11px] text-[var(--bad)]">{error}</p>}
+          {error && <p role="alert" className="text-[11px] text-[var(--bad)]">{error}</p>}
         </>
       )}
     </div>

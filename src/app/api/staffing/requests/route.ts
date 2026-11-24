@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { validationError } from "@/server/errors";
 import { requireSession } from "@/lib/api-guard";
 import { RaiseRequestInput, raiseResourceRequest, StaffingError } from "@/server/staffing";
 
@@ -10,10 +11,7 @@ export async function POST(req: Request) {
 
   const parsed = RaiseRequestInput.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: "VALIDATION", message: parsed.error.issues[0]?.message ?? "Invalid input." } },
-      { status: 400 },
-    );
+    return validationError(parsed.error);
   }
   try {
     const request = await raiseResourceRequest(guard.ctx, parsed.data);
@@ -21,7 +19,9 @@ export async function POST(req: Request) {
   } catch (e) {
     if (e instanceof StaffingError) {
       const status = e.code === "FORBIDDEN" ? 403 : 400;
-      return NextResponse.json({ error: { code: e.code, message: e.message } }, { status });
+      // A window that ends before it starts is the end date's problem — show it there.
+      const fields = e.code === "BAD_WINDOW" ? { windowEnd: e.message } : undefined;
+      return NextResponse.json({ error: { code: e.code, message: e.message, ...(fields && { fields }) } }, { status });
     }
     throw e;
   }

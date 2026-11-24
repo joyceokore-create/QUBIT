@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, ExternalLink, Mail, RefreshCw } from "lucide-react";
 import { syncBadge } from "@/components/workspace/project-board";
-import { CARD_GLASS as CARD, CARD_BG, FOCUS } from "@/lib/surface";
+import { CARD_GLASS as CARD, CARD_BG, COMPACT, FOCUS } from "@/lib/surface";
 
 /**
  * "What moved this week" — the evidence the status update is drafted from. A read-only
@@ -165,11 +165,11 @@ export function WeekActivity({ projectId, canNudge }: { projectId: string; canNu
 
   return (
     <section className={`${CARD} overflow-hidden`} style={CARD_BG} aria-labelledby="week-activity">
-      <header className="flex flex-wrap items-center gap-x-3 gap-y-2 p-[12px_16px]">
-        <h2 id="week-activity" className="font-heading text-[14px] rv:text-heading-xs font-bold text-[var(--qink)]">
-          What moved this week
+      <header className="flex flex-wrap items-center gap-x-3 gap-y-2 px-[18px] py-4">
+        <h2 id="week-activity" className="text-[16px] font-bold text-[var(--ds-ink)]">
+          Board This Week
         </h2>
-        <span className="text-[11px]" style={{ color: `var(${source.tok})` }} title={badge?.label}>
+        <span className="text-[12px]" style={{ color: `var(${source.tok})` }} title={badge?.label}>
           {source.text}
         </span>
         <div className="ml-auto flex flex-wrap gap-1.5">
@@ -293,7 +293,7 @@ function NudgeControl({
         type="button"
         aria-disabled="true"
         title={who ? `${who} isn't a QUBIT user — nudge them in YouTrack` : "No assignee to nudge"}
-        className={`inline-flex flex-none items-center gap-1 rounded-[6px] border border-[var(--input)] px-2 py-0.5 text-[11px] font-semibold text-[var(--ink5)] ${FOCUS}`}
+        className={`${COMPACT} flex-none !cursor-not-allowed opacity-50`}
       >
         <Mail className="size-3" aria-hidden /> <span className="hidden sm:inline">Nudge</span>
       </button>
@@ -306,7 +306,7 @@ function NudgeControl({
         onClick={onNudge}
         disabled={state?.kind === "sending"}
         aria-label={who ? `Nudge ${who}` : "Nudge"}
-        className={`inline-flex items-center gap-1 rounded-[6px] border border-[var(--input)] bg-background px-2 py-0.5 text-[11px] font-semibold text-[var(--ink2)] transition-colors hover:text-brand disabled:opacity-60 ${FOCUS}`}
+        className={COMPACT}
       >
         <Mail className="size-3" aria-hidden /> <span className="hidden sm:inline">{state?.kind === "sending" ? "Sending…" : "Nudge"}</span>
       </button>

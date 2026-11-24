@@ -1,6 +1,11 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { Field } from "@/components/ui/drawer";
+import { Banner } from "@/components/ui/panel";
+import { NewRiskFormSchema } from "@/lib/risk-schema";
+import { readApiError } from "@/lib/form-errors";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,7 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
+} from "@/components/ui/drawer-dialog";
 import type { AdminUserSummary } from "@/server/users";
 
 interface NewRiskDialogProps {
@@ -28,9 +33,9 @@ interface NewRiskDialogProps {
   projects: { id: string; code: string; name: string }[];
 }
 
-export function NewRiskDialog({ users, projects }: NewRiskDialogProps) {
+export function NewRiskDialog({ users, projects, defaultOpen = false }: NewRiskDialogProps & { defaultOpen?: boolean }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [probability, setProbability] = useState("3");
@@ -40,6 +45,12 @@ export function NewRiskDialog({ users, projects }: NewRiskDialogProps) {
   const [projectId, setProjectId] = useState("none");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // docs/08 § Errors: problems show on their field; the button stays enabled.
+  const fe = useFieldErrors({
+    schema: NewRiskFormSchema,
+    values: { title, probability: Number(probability), impact: Number(impact) },
+    idPrefix: "new-risk",
+  });
 
   function reset() {
     setTitle("");
@@ -50,11 +61,13 @@ export function NewRiskDialog({ users, projects }: NewRiskDialogProps) {
     setOwnerId("none");
     setProjectId("none");
     setError(null);
+    fe.reset();
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!fe.validate()) return;
     setLoading(true);
 
     const res = await fetch("/api/risks", {
@@ -73,8 +86,14 @@ export function NewRiskDialog({ users, projects }: NewRiskDialogProps) {
     setLoading(false);
 
     if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      setError(body?.error?.message ?? "Could not create risk.");
+      const { message, fields } = readApiError(await res.json().catch(() => null), "Could not create the risk.");
+      const { _: root, ...onFields } = fields;
+      if (Object.keys(onFields).length > 0) {
+        fe.setServerErrors(onFields, ["title", "projectId", "probability", "impact", "ownerId"]);
+        if (root) setError(root);
+      } else {
+        setError(message);
+      }
       return;
     }
 
@@ -92,20 +111,18 @@ export function NewRiskDialog({ users, projects }: NewRiskDialogProps) {
       }}
     >
       <DialogTrigger render={<Button />}>
-        <Plus /> New risk
+        <Plus /> New Risk
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New risk</DialogTitle>
+          <DialogTitle>New Risk</DialogTitle>
           <DialogDescription>Adds a risk to the register.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="new-risk-title" className="text-sm font-medium text-ink-2">
-              Title
-            </label>
-            <Input id="new-risk-title" required value={title} onChange={(e) => setTitle(e.target.value)} />
-          </div>
+          {error && <Banner tone="bad">{error}</Banner>}
+          <Field label="Title" htmlFor={fe.idOf("title")} error={fe.errors.title}>
+            <Input {...fe.bind("title")} required value={title} onChange={(e) => setTitle(e.target.value)} />
+          </Field>
 
           <div className="flex gap-3">
             <div className="flex flex-1 flex-col gap-1.5">
@@ -198,15 +215,9 @@ export function NewRiskDialog({ users, projects }: NewRiskDialogProps) {
             </Select>
           </div>
 
-          {error && (
-            <p role="alert" className="text-sm text-status-red">
-              {error}
-            </p>
-          )}
-
           <DialogFooter>
             <Button type="submit" disabled={loading}>
-              {loading ? "Creating…" : "Create risk"}
+              {loading ? "Creating…" : "Create Risk"}
             </Button>
           </DialogFooter>
         </form>

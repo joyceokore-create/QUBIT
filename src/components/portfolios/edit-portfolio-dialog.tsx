@@ -5,6 +5,11 @@ import { useState, type FormEvent } from "react";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Field, FieldError } from "@/components/ui/drawer";
+import { Banner } from "@/components/ui/panel";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
+import { readApiError } from "@/lib/form-errors";
+import { EditPortfolioFormSchema } from "@/lib/portfolio-schema";
 import {
   Dialog,
   DialogContent,
@@ -13,7 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
+} from "@/components/ui/drawer-dialog";
 
 // DM1.73 (Wave C, D3) — the wizard's Review step promises "everything can be changed
 // later"; this dialog is where that promise is kept. Fields mirror exactly what
@@ -53,9 +58,13 @@ export function EditPortfolioDialog({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // docs/08 § Errors: Name and Description show their problems on the field; Save stays enabled.
+  const fe = useFieldErrors({ schema: EditPortfolioFormSchema, values: { name, description }, idPrefix: "edit-portfolio" });
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!fe.validate()) return;
     setLoading(true);
 
     const res = await fetch(`/api/portfolios/${portfolio.id}`, {
@@ -72,8 +81,12 @@ export function EditPortfolioDialog({
     setLoading(false);
 
     if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      setError(body?.error?.message ?? "Could not update portfolio.");
+      const { message, fields } = readApiError(await res.json().catch(() => null), "Could not update the portfolio.");
+      const { _: root, ...onFields } = fields;
+      if (Object.keys(onFields).length > 0) {
+        fe.setServerErrors(onFields, ["name", "description", "ownerId"]);
+        if (root) setError(root);
+      } else setError(message);
       return;
     }
 
@@ -82,29 +95,24 @@ export function EditPortfolioDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setError(null); fe.reset(); } }}>
       <DialogTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Edit portfolio" />}>
         <Pencil className="h-3.5 w-3.5" />
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit portfolio</DialogTitle>
+          <DialogTitle>Edit Portfolio</DialogTitle>
           <DialogDescription>Governance edits — changes are audited.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="edit-portfolio-name" className="text-sm font-medium text-ink-2">
-              Name
-            </label>
-            <Input id="edit-portfolio-name" required value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
+          {error && <Banner tone="bad">{error}</Banner>}
+          <Field label="Name" htmlFor={fe.idOf("name")} error={fe.errors.name}>
+            <Input {...fe.bind("name")} required value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
 
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="edit-portfolio-desc" className="text-sm font-medium text-ink-2">
-              Description
-            </label>
-            <Input id="edit-portfolio-desc" value={description} onChange={(e) => setDescription(e.target.value)} />
-          </div>
+          <Field label="Description" htmlFor={fe.idOf("description")} error={fe.errors.description}>
+            <Input {...fe.bind("description")} value={description} onChange={(e) => setDescription(e.target.value)} />
+          </Field>
 
           <div className="flex gap-3">
             <div className="flex flex-1 flex-col gap-1.5">
@@ -149,6 +157,8 @@ export function EditPortfolioDialog({
             </label>
             <select
               id="edit-portfolio-owner"
+              aria-invalid={fe.errors.ownerId ? true : undefined}
+              aria-describedby={fe.errors.ownerId ? "edit-portfolio-owner-error" : undefined}
               value={ownerId}
               onChange={(e) => setOwnerId(e.target.value)}
               className={SELECT_CLS}
@@ -160,17 +170,12 @@ export function EditPortfolioDialog({
                 </option>
               ))}
             </select>
+            {fe.errors.ownerId && <FieldError id="edit-portfolio-owner-error">{fe.errors.ownerId}</FieldError>}
           </div>
-
-          {error && (
-            <p role="alert" className="text-sm text-status-red">
-              {error}
-            </p>
-          )}
 
           <DialogFooter>
             <Button type="submit" disabled={loading}>
-              {loading ? "Saving…" : "Save changes"}
+              {loading ? "Saving…" : "Save Changes"}
             </Button>
           </DialogFooter>
         </form>

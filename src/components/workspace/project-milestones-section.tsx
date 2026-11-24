@@ -1,6 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { MilestoneFormSchema } from "@/lib/workspace-schema";
+import { readApiError } from "@/lib/form-errors";
+import { FieldError } from "@/components/ui/drawer";
+import { useFieldErrors } from "@/components/forms/use-field-errors";
 import { Check, Flag, Plus, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
@@ -18,6 +22,10 @@ export function ProjectMilestonesSection({ projectId, canEdit }: { projectId: st
   const [items, setItems] = useState<Milestone[]>([]);
   const [name, setName] = useState("");
   const [due, setDue] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  // docs/08 § Errors: the name's problem shows on the field; Add stays enabled except while sending.
+  const fe = useFieldErrors({ schema: MilestoneFormSchema, values: { name }, idPrefix: "milestone" });
 
   const load = useCallback(async () => {
     const d = await fetch(`/api/projects/${projectId}/milestones`).then((r) => r.json());
@@ -28,17 +36,25 @@ export function ProjectMilestonesSection({ projectId, canEdit }: { projectId: st
   }, [load]);
 
   const add = async () => {
-    if (!name.trim()) return;
-    const ok = await fetch(`/api/projects/${projectId}/milestones`, {
+    setError(null);
+    if (adding || !fe.validate()) return;
+    setAdding(true);
+    const res = await fetch(`/api/projects/${projectId}/milestones`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name: name.trim(), dueDate: due ? new Date(due).toISOString() : null }),
-    }).then((r) => r.ok);
-    if (ok) {
+    }).catch(() => null);
+    setAdding(false);
+    if (res?.ok) {
       setName("");
       setDue("");
+      fe.reset();
       void load();
+      return;
     }
+    const { message, fields } = readApiError(await res?.json().catch(() => null), "Could not add the milestone. Try again.");
+    if (fields.name) fe.setServerErrors({ name: fields.name });
+    else setError(message);
   };
   const toggle = async (m: Milestone) => {
     const ok = await fetch(`/api/milestones/${m.id}`, {
@@ -104,17 +120,24 @@ export function ProjectMilestonesSection({ projectId, canEdit }: { projectId: st
       </div>
 
       {canEdit && (
-        <div className="flex items-center gap-2">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Milestone name…" className="h-8 flex-1 text-xs" onKeyDown={(e) => e.key === "Enter" && add()} />
+        <div className="flex flex-col gap-1.5">
+        <div className="flex items-start gap-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <Input {...fe.bind("name")} aria-label="Milestone name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Milestone name…" className="h-8 text-xs" onKeyDown={(e) => e.key === "Enter" && add()} />
+            {fe.errors.name && <FieldError id={`${fe.idOf("name")}-error`}>{fe.errors.name}</FieldError>}
+          </div>
           <Input
             type="date"
+            aria-label="Due date"
             value={due}
             onChange={(e) => setDue(e.target.value)}
             className="h-8 w-auto text-xs"
           />
-          <button type="button" onClick={add} className="flex items-center gap-1 rounded-[8px] bg-[color-mix(in_oklab,var(--brand)_14%,transparent)] px-3 py-1.5 text-xs font-semibold text-brand">
+          <button type="button" onClick={add} disabled={adding} className="flex items-center gap-1 rounded-[8px] bg-[color-mix(in_oklab,var(--brand)_14%,transparent)] px-3 py-1.5 text-xs font-semibold text-brand disabled:opacity-60">
             <Plus className="size-3.5" /> Add
           </button>
+        </div>
+        {error && <p role="alert" className="text-[11.5px] text-[var(--bad)]">{error}</p>}
         </div>
       )}
     </div>

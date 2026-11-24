@@ -126,7 +126,9 @@ describe("M8-A gate checklists", () => {
   });
 
   it("the closure gate needs lessons learned, and recording one satisfies it", async () => {
-    const err = await setCheckpointState(ctx, projectId, { checkpointId: gateIds["Go-Live"], state: "Done" }).catch((e) => e);
+    // WS1: Go-Live is a sign-off gate — only an approver closes it by hand (a Member's Done
+    // would submit it), so the checklist is asked of a Head.
+    const err = await setCheckpointState({ ...ctx, roles: ["HeadOfProjects"] }, projectId, { checkpointId: gateIds["Go-Live"], state: "Done" }).catch((e) => e);
     expect((err as CheckpointError).unmet!.map((r) => r.key)).toContain("lessons-captured");
 
     await addLesson(ctx, projectId, {
