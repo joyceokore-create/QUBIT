@@ -12,12 +12,21 @@ import { addMarkets } from "@/server/markets";
 import { createProjectInstance, listProjectInstances } from "@/server/project-instances";
 import { composeFromMarkets, draftFromMarkets } from "@/server/market-rollup";
 import { getMarketTrack, saveMarketCheckIn } from "@/server/rollout";
-import { applyStatusReport, getDeliveryCatalog, getStatusWorkspace, saveStageTerm } from "@/server/status-report-upload";
+import { applyStatusReport, getDeliveryCatalog, getStatusWorkspace, recordUpload, saveStageTerm, UploadNotFoundError, UploadWeekError } from "@/server/status-report-upload";
+import { getDocument } from "@/server/documents";
+import { purgeStaleUploads } from "@/server/jobs/status-upload-retention";
 import { resolveDelivery } from "@/lib/status-report-delivery";
 import { createUsers, cleanupFixtureUsers } from "./_users";
 
 const NOW = new Date("2026-10-07T10:00:00Z");
 const WEEK = isoWeekId(NOW);
+
+/** A parsed line as the preview hands it to recordUpload (the parser is unit-tested). */
+const line = (n: number, project: string, projectId: string | null) =>
+  ({
+    line: n, project, code: null, market: null, status: null, stage: "", update: "", warnings: [], gates: [], cells: [], dimensions: [], sections: [],
+    match: { projectId, confidence: projectId ? "exact" : "none" },
+  }) as unknown as Parameters<typeof recordUpload>[1]["rows"][number];
 
 describe("status-report upload — apply", () => {
   let rbId: string;
@@ -58,6 +67,7 @@ describe("status-report upload — apply", () => {
     await withTenant(pm, async (tx) => {
       const ids = [mine, mineSent, notMine, product];
       await tx.projectDocument.deleteMany({ where: { projectId: { in: ids } } });
+      await tx.statusUpload.deleteMany({ where: { uploadedById: { in: [pm.userId, other.userId] } } });
       await tx.checkIn.deleteMany({ where: { projectId: { in: ids } } });
       await tx.notification.deleteMany({ where: { createdAt: { gte: new Date(Date.now() - 120_000) }, link: { contains: "/reports" } } });
       await tx.domainEvent.deleteMany({ where: { entityId: { in: ids } } });
@@ -71,18 +81,26 @@ describe("status-report upload — apply", () => {
   });
 
   it("fills my draft with a reasoned override, status note and attachment; refuses / skips the rest per row", async () => {
+    const uploadId = await recordUpload(pm, {
+      buf: Buffer.from("PK fixture"),
+      fileName: "status.docx",
+      format: "docx",
+      isoWeek: WEEK,
+      rows: [line(1, "Upload SRU-A", mine), line(2, "Upload SRU-B", mineSent), line(3, "Upload SRU-C", notMine), line(4, "Somebody else's", null)],
+    });
     const out = await applyStatusReport(
       pm,
       {
         preparedBy: "Fixture PM",
         reportDate: "7 October 2026",
         rows: [
-          { projectId: mine, rag: "Amber", stage: "UAT / Pilot Readiness (VAPT in progress)", narrative: "All stages up to UAT complete; VAPT report due Thursday." },
-          { projectId: mineSent, rag: "Green", stage: "Pilot", narrative: "Live." },
-          { projectId: notMine, rag: "Red", stage: "", narrative: "Not my project." },
+          { projectId: mine, rag: "Amber", stage: "UAT / Pilot Readiness (VAPT in progress)", narrative: "All stages up to UAT complete; VAPT report due Thursday.", lines: [1] },
+          { projectId: mineSent, rag: "Green", stage: "Pilot", narrative: "Live.", lines: [2] },
+          { projectId: notMine, rag: "Red", stage: "", narrative: "Not my project.", lines: [3] },
           { projectId: foreign, rag: "Green", stage: "", narrative: "Other tenant." },
         ],
-        file: { name: "status.docx", format: "docx", base64: Buffer.from("PK fixture").toString("base64") },
+        uploadId,
+        attach: true,
       },
       NOW,
     );
@@ -99,13 +117,28 @@ describe("status-report upload — apply", () => {
     const [project, docs] = await withTenant(pm, (tx) =>
       Promise.all([
         tx.project.findUniqueOrThrow({ where: { id: mine }, select: { statusNote: true } }),
-        tx.projectDocument.findMany({ where: { projectId: mine }, select: { title: true, kind: true, format: true, fileData: true } }),
+        tx.projectDocument.findMany({ where: { projectId: mine }, select: { id: true, title: true, kind: true, format: true, fileData: true, statusUploadId: true } }),
       ]),
     );
     expect(project.statusNote).toBe("UAT / Pilot Readiness (VAPT in progress)");
     expect(docs).toHaveLength(1);
     expect(docs[0]).toMatchObject({ title: `Status report · Week ${WEEK.split("-W")[1]} · Fixture PM`, kind: "Other", format: "docx" });
-    expect(Buffer.from(docs[0]!.fileData!, "base64").toString()).toBe("PK fixture");
+    // One copy: the document points at the upload instead of holding the bytes, and reads them from it.
+    expect(docs[0]).toMatchObject({ fileData: null, statusUploadId: uploadId });
+    const detail = await getDocument(pm, docs[0]!.id);
+    expect(detail).toMatchObject({ hasFile: true });
+    expect(Buffer.from(detail!.fileData!, "base64").toString()).toBe("PK fixture");
+
+    // The upload records what became of each line: the applied one links to the week's check-in.
+    const [upload, uploadRows] = await withTenant(pm, (tx) =>
+      Promise.all([
+        tx.statusUpload.findUniqueOrThrow({ where: { id: uploadId }, select: { status: true, format: true, sizeBytes: true } }),
+        tx.statusUploadRow.findMany({ where: { uploadId }, select: { line: true, state: true, appliedCheckInId: true }, orderBy: { line: "asc" } }),
+      ]),
+    );
+    expect(upload).toMatchObject({ status: "partially_applied", format: "docx", sizeBytes: 10 });
+    expect(uploadRows.map((r) => [r.line, r.state])).toEqual([[1, "applied_by_uploader"], [2, "pending"], [3, "pending"], [4, "unmatched"]]);
+    expect(uploadRows[0]!.appliedCheckInId).toBe(ci.id);
 
     // The already-sent project was left exactly as sent; the foreign tenant has nothing.
     expect((await getCurrentCheckIn(pm, mineSent, NOW)).narrative).toBe("Already sent this week.");
@@ -247,5 +280,31 @@ describe("status-report upload — apply", () => {
     expect(foreignCatalog?.stageTerms ?? []).not.toEqual(expect.arrayContaining([{ term: "build ongoing", gateName: "Prototype" }]));
     expect(await saveStageTerm(pm, { term: "build ongoing", gateName: null })).toEqual({ term: "build ongoing", gateName: null });
     expect((await getDeliveryCatalog(pm, mine))!.stageTerms).not.toEqual(expect.arrayContaining([{ term: "build ongoing", gateName: "Prototype" }]));
+  });
+
+  it("keeps one preview per file and week, and refuses an upload that isn't yours or is for another week", async () => {
+    const input = { buf: Buffer.from("PK same file"), fileName: "again.docx", format: "docx" as const, isoWeek: WEEK, rows: [line(1, "Upload SRU-A", mine)] };
+    const first = await recordUpload(pm, input);
+    expect(await recordUpload(pm, { ...input, fileName: "renamed.docx" })).toBe(first);
+    expect(await withTenant(pm, (tx) => tx.statusUploadRow.count({ where: { uploadId: first } }))).toBe(1);
+
+    // Another PM — same tenant — can't apply it: their id lookup answers "not found".
+    await expect(applyStatusReport(other, { uploadId: first, attach: true, rows: [{ projectId: notMine, narrative: "Borrowed upload." }] }, NOW)).rejects.toBeInstanceOf(UploadNotFoundError);
+    // A random id is the same answer.
+    await expect(applyStatusReport(pm, { uploadId: "00000000-0000-4000-8000-000000000000", rows: [{ projectId: mine, narrative: "x" }] }, NOW)).rejects.toBeInstanceOf(UploadNotFoundError);
+    // The file was read for this week; using it for last week means uploading it again.
+    await expect(applyStatusReport(pm, { uploadId: first, week: shiftIsoWeek(WEEK, -1), rows: [{ projectId: mine, narrative: "x" }] }, NOW)).rejects.toBeInstanceOf(UploadWeekError);
+    // Another tenant can't see it at all (RLS).
+    expect(await withTenant({ tenantId: dbId, userId: "seed" }, (tx) => tx.statusUpload.findUnique({ where: { id: first } }))).toBeNull();
+  });
+
+  it("purges previews nobody applied after a week, never one a project links to", async () => {
+    const stale = await recordUpload(pm, { buf: Buffer.from("PK stale"), fileName: "stale.docx", format: "docx", isoWeek: WEEK, rows: [] });
+    const kept = await withTenant(pm, (tx) => tx.projectDocument.findFirstOrThrow({ where: { projectId: mine, statusUploadId: { not: null } }, select: { statusUploadId: true } }));
+    const old = new Date(Date.now() - 8 * 86_400_000);
+    await withTenant(pm, (tx) => tx.statusUpload.updateMany({ where: { id: { in: [stale, kept.statusUploadId!] } }, data: { createdAt: old } }));
+    await withTenant(pm, (tx) => purgeStaleUploads(tx));
+    const left = await withTenant(pm, (tx) => tx.statusUpload.findMany({ where: { id: { in: [stale, kept.statusUploadId!] } }, select: { id: true } }));
+    expect(left.map((u) => u.id)).toEqual([kept.statusUploadId]);
   });
 });

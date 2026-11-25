@@ -68,7 +68,7 @@ export async function listDocuments(ctx: TenantContext, projectId: string): Prom
       where: { projectId },
       select: {
         id: true, title: true, kind: true, format: true, status: true, source: true,
-        createdAt: true, fileData: true, version: true, supersedesId: true,
+        createdAt: true, fileData: true, statusUploadId: true, version: true, supersedesId: true,
         createdBy: { select: { name: true } },
         supersededBy: { select: { id: true } },
         approvals: {
@@ -89,7 +89,7 @@ export async function listDocuments(ctx: TenantContext, projectId: string): Prom
       status: d.status,
       source: d.source,
       authorName: d.createdBy?.name ?? null,
-      hasFile: Boolean(d.fileData),
+      hasFile: Boolean(d.fileData || d.statusUploadId),
       createdAt: d.createdAt,
       version: d.version,
       supersedesId: d.supersedesId,
@@ -112,6 +112,8 @@ export async function getDocument(ctx: TenantContext, id: string): Promise<Docum
       include: {
         createdBy: { select: { name: true } },
         supersededBy: { select: { id: true } },
+        // A status report attached from an upload keeps its file on the upload (one copy).
+        statusUpload: { select: { fileData: true } },
         approvals: {
           select: {
             approverId: true, decision: true, comment: true, decidedAt: true,
@@ -122,6 +124,7 @@ export async function getDocument(ctx: TenantContext, id: string): Promise<Docum
       },
     });
     if (!d) return null;
+    const fileData = d.fileData ?? d.statusUpload?.fileData ?? null;
     return {
       id: d.id,
       title: d.title,
@@ -130,7 +133,7 @@ export async function getDocument(ctx: TenantContext, id: string): Promise<Docum
       status: d.status,
       source: d.source,
       authorName: d.createdBy?.name ?? null,
-      hasFile: Boolean(d.fileData),
+      hasFile: Boolean(fileData),
       createdAt: d.createdAt,
       version: d.version,
       supersedesId: d.supersedesId,
@@ -143,7 +146,7 @@ export async function getDocument(ctx: TenantContext, id: string): Promise<Docum
         decidedAt: a.decidedAt,
       })),
       content: d.content,
-      fileData: d.fileData,
+      fileData,
     };
   });
 }
@@ -168,7 +171,7 @@ export const CreateDocumentInput = z
   .refine(documentHasBody, { path: ["content"], message: DOCUMENT_BODY_MESSAGE });
 export type CreateDocumentInput = z.infer<typeof CreateDocumentInput>;
 
-export async function createDocument(ctx: TenantContext, projectId: string, input: CreateDocumentInput) {
+export async function createDocument(ctx: TenantContext, projectId: string, input: CreateDocumentInput, opts: { statusUploadId?: string } = {}) {
   return withTenant(ctx, async (tx) => {
     await tx.project.findUniqueOrThrow({ where: { id: projectId } });
     const doc = await tx.projectDocument.create({
@@ -180,6 +183,7 @@ export async function createDocument(ctx: TenantContext, projectId: string, inpu
         format: input.format ?? (input.fileData ? "pdf" : "text"),
         content: input.content ?? null,
         fileData: input.fileData ?? null,
+        statusUploadId: opts.statusUploadId ?? null,
         // docs/16 §6: documents enter the register as drafts and are approved through
         // the review workflow — nothing arrives pre-approved.
         status: input.status ?? "Draft",
@@ -358,6 +362,7 @@ export async function newVersion(
         format: prev.format,
         content: input.content !== undefined ? input.content : prev.content,
         fileData: prev.fileData,
+        statusUploadId: prev.statusUploadId,
         status: "Draft",
         source: prev.source,
         createdById: ctx.userId,

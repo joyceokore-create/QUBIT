@@ -1,4 +1,6 @@
 import "server-only";
+import { createHash } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { canWriteProject } from "@/lib/access";
@@ -55,6 +57,14 @@ export class UploadWeekError extends Error {
   }
 }
 
+/** /apply named an upload this person didn't make (or one that was purged). */
+export class UploadNotFoundError extends Error {
+  constructor() {
+    super("That upload wasn't found. Upload the file again.");
+    this.name = "UploadNotFoundError";
+  }
+}
+
 /** The week a report is for: this week (default) or a past ISO week. Past weeks are
  * written "as of" that week's Friday 17:00 UTC so the rows sit in the right week. */
 export function resolveReportWeek(week: string | null | undefined, now = new Date()): { isoWeek: string; at: Date; past: boolean } {
@@ -78,6 +88,8 @@ export interface PreviewRow extends ParsedRow {
 }
 
 export interface UploadPreview {
+  /** The stored upload: /apply names this instead of sending the file back. */
+  uploadId: string;
   format: ReportFormat;
   preparedBy: string | null;
   reportDate: string | null;
@@ -235,17 +247,16 @@ export const ApplyInput = z.object({
           .optional(),
         /** This week's market check-ins (focus & blockers per market). */
         markets: z.array(z.object({ orgUnitId: z.string().uuid(), rag: z.enum(RAGS), narrative: z.string().trim().min(1).max(1000) })).max(40).optional(),
+        /** The upload's lines this row came from, so the upload records what became of them. */
+        lines: z.array(z.number().int().min(0)).max(200).optional(),
       }),
     )
     .min(1)
     .max(60),
-  file: z
-    .object({
-      name: z.string().trim().min(1).max(200),
-      format: z.enum(["docx", "xlsx", "pdf", "pptx"]),
-      base64: z.string().min(1).max(7_200_000), // 5 MB file → ~6.8 MB of base64
-    })
-    .optional(),
+  /** The upload these rows came from (from the preview). The file is never sent back. */
+  uploadId: z.string().uuid().optional(),
+  /** Attach the upload's file to each project something was applied to. */
+  attach: z.boolean().optional(),
 });
 export type ApplyInputT = z.input<typeof ApplyInput>;
 
@@ -308,7 +319,69 @@ export async function previewStatusReport(ctx: TenantContext, buf: Buffer, fileN
     }
     rows.push({ ...r, match, alreadySent, computedRag: match.projectId ? (computed[match.projectId] ?? null) : null, delivery, warnings: alreadySent ? [...r.warnings, "This week's update was already sent — tick Replace to resend it with this row."] : r.warnings });
   }
-  return { format: report.format, preparedBy: report.preparedBy, reportDate: report.reportDate, isoWeek, past, rows, projects, catalogs, warnings: report.warnings };
+  const uploadId = await recordUpload(ctx, { buf, fileName, format: report.format, isoWeek, rows });
+  return { uploadId, format: report.format, preparedBy: report.preparedBy, reportDate: report.reportDate, isoWeek, past, rows, projects, catalogs, warnings: report.warnings };
+}
+
+/** An unmatched line stays "unmatched"; a matched one (exact or suggested) waits as "pending". */
+function rowState(match: RowMatch): "pending" | "unmatched" {
+  return match.projectId ? "pending" : "unmatched";
+}
+
+/**
+ * Keep the file once, server-side, with its parsed lines. Re-previewing the same file for
+ * the same week replaces the earlier, never-applied preview instead of storing a copy.
+ * The audit row carries counts only — never the file's content.
+ */
+export async function recordUpload(
+  ctx: TenantContext,
+  input: { buf: Buffer; fileName: string; format: ReportFormat; isoWeek: string; rows: (ParsedRow & { match: RowMatch })[] },
+): Promise<string> {
+  const sha256 = createHash("sha256").update(input.buf).digest("hex");
+  const fileName = input.fileName.slice(0, 200);
+  return withTenant(ctx, async (tx) => {
+    const previous = await tx.statusUpload.findFirst({
+      where: { uploadedById: ctx.userId, sha256, isoWeek: input.isoWeek, status: "previewed" },
+      select: { id: true },
+    });
+    const upload = previous
+      ? await tx.statusUpload.update({ where: { id: previous.id }, data: { fileName }, select: { id: true } })
+      : await tx.statusUpload.create({
+          data: {
+            tenantId: ctx.tenantId,
+            uploadedById: ctx.userId,
+            fileName,
+            format: input.format,
+            sizeBytes: input.buf.length,
+            sha256,
+            fileData: input.buf.toString("base64"),
+            isoWeek: input.isoWeek,
+          },
+          select: { id: true },
+        });
+    if (previous) await tx.statusUploadRow.deleteMany({ where: { uploadId: upload.id } });
+    if (input.rows.length) {
+      await tx.statusUploadRow.createMany({
+        data: input.rows.map(({ match, ...row }) => ({
+          tenantId: ctx.tenantId,
+          uploadId: upload.id,
+          line: row.line,
+          parsed: row as unknown as Prisma.InputJsonValue,
+          projectId: match.projectId,
+          matchConfidence: match.confidence,
+          state: rowState(match),
+        })),
+        skipDuplicates: true,
+      });
+    }
+    await audit(tx, ctx, {
+      action: previous ? "update" : "create",
+      entityType: "status_upload",
+      entityId: upload.id,
+      after: { format: input.format, sizeBytes: input.buf.length, isoWeek: input.isoWeek, rows: input.rows.length, matched: input.rows.filter((r) => r.match.projectId).length },
+    });
+    return upload.id;
+  });
 }
 
 const GATE_WORD: Record<CheckpointState, string> = { NotStarted: "not started", InProgress: "in progress", Done: "done", Blocked: "blocked" };
@@ -354,12 +427,20 @@ async function applyModules(ctx: TenantContext, projectId: string, modules: { mo
 
 export async function applyStatusReport(ctx: TenantContext, raw: ApplyInputT, realNow = new Date()): Promise<ApplyRow[]> {
   const input = ApplyInput.parse(raw);
-  const { isoWeek, at: now, past } = resolveReportWeek(input.week, realNow);
+  // The upload is looked up as the uploader's own — another person's id answers "not found".
+  const upload = input.uploadId
+    ? await withTenant(ctx, (tx) =>
+        tx.statusUpload.findFirst({ where: { id: input.uploadId, uploadedById: ctx.userId }, select: { id: true, fileName: true, format: true, isoWeek: true } }),
+      )
+    : null;
+  if (input.uploadId && !upload) throw new UploadNotFoundError();
+  if (upload && input.week && input.week !== upload.isoWeek) throw new UploadWeekError(`This file was read for week ${upload.isoWeek.split("-W")[1]}. Upload it again to use it for another week.`);
+  const { isoWeek, at: now, past } = resolveReportWeek(input.week ?? upload?.isoWeek, realNow);
   const week = isoWeek.split("-W")[1];
   const dateLabel = realNow.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
   const reason = `From the status report uploaded ${dateLabel}${input.preparedBy ? ` (prepared by ${input.preparedBy})` : ""}`.slice(0, 300);
   // The stamp gates and module states carry: the report (its file name) and the week.
-  const origin: StateOrigin = { source: `Status report · Week ${week}${input.file ? ` · ${input.file.name}` : ""}` };
+  const origin: StateOrigin = { source: `Status report · Week ${week}${upload ? ` · ${upload.fileName}` : ""}` };
   const projectsIn = await withTenant(ctx, (tx) =>
     tx.project.findMany({
       where: { id: { in: input.rows.map((r) => r.projectId) } },
@@ -451,22 +532,50 @@ export async function applyStatusReport(ctx: TenantContext, raw: ApplyInputT, re
       // ── the file, once per project, when something was applied ──
       let attached = false;
       const applied = outcome === "drafted" || outcome === "resent" || outcome === "sent" || markets || gates || modules;
-      if (input.file && applied) {
-        await createDocument(ctx, row.projectId, {
-          title: `Status report · Week ${week}${input.preparedBy ? ` · ${input.preparedBy}` : ""}`,
-          kind: "Other",
-          format: input.file.format,
-          fileData: input.file.base64,
-          source: "Uploaded",
-        });
+      if (upload && input.attach && applied) {
+        // One copy of the file: the document points at the upload rather than holding it.
+        await createDocument(
+          ctx,
+          row.projectId,
+          { title: `Status report · Week ${week}${input.preparedBy ? ` · ${input.preparedBy}` : ""}`, kind: "Other", format: upload.format as ReportFormat, source: "Uploaded" },
+          { statusUploadId: upload.id },
+        );
         attached = true;
       }
+      if (upload && applied) await markRowsApplied(ctx, upload.id, row.projectId, row.lines, isoWeek, realNow);
       out.push({ projectId: row.projectId, code, outcome, message, attached, markets, gates, modules, problems });
     } catch (e) {
       out.push({ projectId: row.projectId, code, outcome: "error", message: e instanceof Error ? e.message : "Could not apply.", attached: false });
     }
   }
+  if (upload) await settleUpload(ctx, upload.id, realNow);
   return out;
+}
+
+/** The upload's lines a row came from become "applied_by_uploader", linked to the week's check-in.
+ * Without line numbers (an older client), the project's still-pending lines are the ones. */
+async function markRowsApplied(ctx: TenantContext, uploadId: string, projectId: string, lines: number[] | undefined, isoWeek: string, now: Date): Promise<void> {
+  await withTenant(ctx, async (tx) => {
+    const checkIn = await tx.checkIn.findFirst({ where: { projectId, isoWeek }, select: { id: true } });
+    await tx.statusUploadRow.updateMany({
+      where: { uploadId, ...(lines?.length ? { line: { in: lines } } : { projectId, state: "pending" }) },
+      data: { state: "applied_by_uploader", projectId, appliedCheckInId: checkIn?.id ?? null, appliedAt: now },
+    });
+  });
+}
+
+/** After an apply: "applied" once no matched line is left waiting, else "partially_applied". */
+async function settleUpload(ctx: TenantContext, uploadId: string, now: Date): Promise<void> {
+  await withTenant(ctx, async (tx) => {
+    const [applied, waiting] = await Promise.all([
+      tx.statusUploadRow.count({ where: { uploadId, state: "applied_by_uploader" } }),
+      tx.statusUploadRow.count({ where: { uploadId, state: "pending" } }),
+    ]);
+    if (applied === 0) return;
+    const status = waiting === 0 ? "applied" : "partially_applied";
+    await tx.statusUpload.update({ where: { id: uploadId }, data: { status, appliedAt: now } });
+    await audit(tx, ctx, { action: "update", entityType: "status_upload", entityId: uploadId, after: { status, applied, waiting } });
+  });
 }
 
 /**

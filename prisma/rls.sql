@@ -46,6 +46,8 @@ BEGIN
     'notification',
     'project_integration',
     'tenant_integration',
+    'status_upload',
+    'status_upload_row',
     'project_milestone',
     'project_status_update',
     'shared_report',

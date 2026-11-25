@@ -7,6 +7,7 @@ import { nightlySnapshot } from "@/server/jobs/nightly-snapshot";
 import { dailyDigest } from "@/server/jobs/digest";
 import { youtrackSync } from "@/server/jobs/youtrack-sync";
 import { accessRequestRetention } from "@/server/jobs/access-request-retention";
+import { statusUploadRetention } from "@/server/jobs/status-upload-retention";
 import type { AnyJobDefinition, JobDefinition, JobRunResult } from "@/server/jobs/types";
 
 /**
@@ -29,7 +30,7 @@ const heartbeat: JobDefinition = {
 const REGISTRY = new Map<string, AnyJobDefinition>(
   [
     heartbeat, nightlySnapshot, fridayCheckinDrafts, fridayMemberDrafts, fridayReport,
-    nudgerJob, checkinChase, dailyDigest, youtrackSync, accessRequestRetention,
+    nudgerJob, checkinChase, dailyDigest, youtrackSync, accessRequestRetention, statusUploadRetention,
   ].map((job) => [job.name, job as AnyJobDefinition]),
 );
 

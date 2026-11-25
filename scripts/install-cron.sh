@@ -38,6 +38,7 @@ cat >> /tmp/qubit-jobs <<'CRON'
 0 10 * * 1 cd $DEST && ./scripts/run-cron-job.sh checkin-chase  # qubit-job
 */30 7-19 * * 1-5 cd $DEST && ./scripts/run-cron-job.sh youtrack-sync  # qubit-job board mirror
 15 2 * * * cd $DEST && ./scripts/run-cron-job.sh access-request-retention  # qubit-job decided access requests
+25 2 * * * cd $DEST && ./scripts/run-cron-job.sh status-upload-retention  # qubit-job unapplied status-report previews
 CRON
 crontab /tmp/qubit-jobs
 rm -f /tmp/qubit-jobs
@@ -59,6 +60,8 @@ Schedule installed:
   23:55 daily     nightly-snapshot   — the history every WoW delta and sparkline reads
   02:15 daily     access-request-retention — deletes approved/declined access requests older
                                        than the Super Admin's setting (default 30 days)
+  02:25 daily     status-upload-retention — deletes status-report previews nobody applied
+                                       within 7 days (applied uploads stay)
   07:30 Mon–Fri   nudger             — the working week's chasers
   every 30 min    youtrack-sync      — 07:00–19:30 Mon–Fri: mirrors connected YouTrack projects
                                        onto their boards (skips itself while FEATURE_YOUTRACK is off)

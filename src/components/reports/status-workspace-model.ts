@@ -49,7 +49,8 @@ export interface Preview {
   rows: PreviewRow[];
   warnings: string[];
   fileName: string;
-  base64: string;
+  /** The upload kept server-side; Save names it instead of sending the file back. */
+  uploadId: string;
 }
 export interface ApplyRow {
   projectId: string;

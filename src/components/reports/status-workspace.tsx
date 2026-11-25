@@ -56,6 +56,8 @@ export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantN
   const [placedCount, setPlacedCount] = useState(0);
   const [attach, setAttach] = useState(true);
   const [attachedTo, setAttachedTo] = useState<Set<string>>(new Set());
+  /** The file's lines placed on each project, so the upload records what became of them. */
+  const [linesOf, setLinesOf] = useState<Record<string, number[]>>({});
   const [query, setQuery] = useState("");
   const [onlyChanged, setOnlyChanged] = useState(false);
   const [busy, setBusy] = useState<Busy>(null);
@@ -119,6 +121,7 @@ export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantN
     setCards(Object.fromEntries(next.projects.map((p) => [p.catalog.projectId, baseCard(p)])));
     setFile(null);
     setAttachedTo(new Set());
+    setLinesOf({});
   }
   useEffect(() => {
     if (week && week !== ws.isoWeek) void load(week);
@@ -206,6 +209,9 @@ export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantN
     setFile(r.preview);
     setAttach(r.attach);
     setAttachedTo(new Set());
+    const lines: Record<string, number[]> = {};
+    for (const pl of r.placements) (lines[pl.projectId] ??= []).push(pl.row.line);
+    setLinesOf(lines);
     setPlacedCount(r.placements.length);
     setResults(null);
     for (const pl of r.placements) {
@@ -237,8 +243,8 @@ export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantN
         week: ws.isoWeek,
         preparedBy: file?.preparedBy ?? null,
         reportDate: file?.reportDate ?? null,
-        rows,
-        ...(withFile && file ? { file: { name: file.fileName, format: file.format, base64: file.base64 } } : {}),
+        rows: file ? rows.map((r) => (linesOf[r.projectId] ? { ...r, lines: linesOf[r.projectId] } : r)) : rows,
+        ...(file ? { uploadId: file.uploadId, attach: withFile } : {}),
       }),
     });
     const body = await res.json().catch(() => null);

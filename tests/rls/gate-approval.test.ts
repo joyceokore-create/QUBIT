@@ -76,7 +76,7 @@ describe("WS1 gate sign-off", () => {
   });
 
   it("a status-report upload that says Go-Live is done SUBMITS it (from the file), it does not close it", async () => {
-    const [out] = await applyStatusReport(pm, { rows: [{ projectId, gates: [{ checkpointId: gate["Go-Live"]!, state: "Done" }] }], file: undefined }, new Date());
+    const [out] = await applyStatusReport(pm, { rows: [{ projectId, gates: [{ checkpointId: gate["Go-Live"]!, state: "Done" }] }] }, new Date());
     expect(out).toMatchObject({ outcome: "none", gates: "Go-Live submitted for sign-off", problems: [] });
     const live = await row("Go-Live");
     expect(live).toMatchObject({ state: "NotStarted", approval: "submitted", submitted: { byId: pm.userId } });

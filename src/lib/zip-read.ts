@@ -5,7 +5,16 @@ import { inflateRawSync } from "node:zlib";
  * .xlsx are ZIPs of XML). Walks the central directory, inflates on demand. Stored (0) and
  * deflate (8) entries only; zip64 and encrypted archives are refused with a clear error —
  * Word and Excel never produce them for files this size. Standard library only.
+ *
+ * Inflation is CAPPED (zip-bomb guard): one entry may expand to ENTRY_MAX_BYTES and the
+ * whole archive, across every read(), to TOTAL_MAX_BYTES. A 5 MB upload can't be made to
+ * claim gigabytes of memory — the inflater stops at the cap and the read is refused.
  */
+
+/** One XML part of a 5 MB Office file is a few MB at most; 32 MB is generous. */
+export const ENTRY_MAX_BYTES = 32 * 1024 * 1024;
+/** Everything read from one archive, summed. */
+export const TOTAL_MAX_BYTES = 96 * 1024 * 1024;
 
 export interface ZipEntry {
   name: string;
@@ -24,7 +33,10 @@ export class ZipError extends Error {
   }
 }
 
-export function readZip(buf: Buffer): Map<string, ZipEntry> {
+export function readZip(buf: Buffer, limits: { entryMax?: number; totalMax?: number } = {}): Map<string, ZipEntry> {
+  const entryMax = limits.entryMax ?? ENTRY_MAX_BYTES;
+  const totalMax = limits.totalMax ?? TOTAL_MAX_BYTES;
+  let inflated = 0;
   // End of central directory: last 22 bytes + up to 64 KiB of comment.
   const min = Math.max(0, buf.length - 22 - 0xffff);
   let eocd = -1;
@@ -65,7 +77,24 @@ export function readZip(buf: Buffer): Map<string, ZipEntry> {
         const le = buf.readUInt16LE(localOffset + 28);
         const start = localOffset + 30 + ln + le;
         const data = buf.subarray(start, start + compressedSize);
-        return method === 0 ? Buffer.from(data) : inflateRawSync(data);
+        // The declared size is attacker-controlled, so it's only an early refusal; the real
+        // bound is maxOutputLength, which stops the inflater itself.
+        const budget = Math.min(entryMax, totalMax - inflated);
+        if (size > budget) throw new ZipError(`"${name}" is too large to read.`);
+        let out: Buffer;
+        if (method === 0) {
+          if (data.length > budget) throw new ZipError(`"${name}" is too large to read.`);
+          out = Buffer.from(data);
+        } else {
+          try {
+            out = inflateRawSync(data, { maxOutputLength: Math.max(1, budget) });
+          } catch (e) {
+            if ((e as NodeJS.ErrnoException).code === "ERR_BUFFER_TOO_LARGE" || e instanceof RangeError) throw new ZipError(`"${name}" is too large to read.`);
+            throw new ZipError(`"${name}" could not be decompressed.`);
+          }
+        }
+        inflated += out.length;
+        return out;
       },
     });
   }

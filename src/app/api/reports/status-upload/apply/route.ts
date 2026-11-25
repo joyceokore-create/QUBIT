@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-guard";
-import { ApplyInput, applyStatusReport, UploadWeekError } from "@/server/status-report-upload";
+import { ApplyInput, applyStatusReport, UploadNotFoundError, UploadWeekError } from "@/server/status-report-upload";
 
 // POST /api/reports/status-upload/apply — fill the chosen projects' weekly drafts from the
-// reviewed rows (narrative + RAG override + status note) and attach the file. Each row is
+// reviewed rows (narrative + RAG override + status note) and attach the upload's file (by
+// uploadId — the bytes are never sent back by the browser). Each row is
 // a result; the PM then sends with the queue's own confirm & send.
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,7 @@ export async function POST(req: Request) {
   try {
     return NextResponse.json({ data: await applyStatusReport(guard.ctx, parsed.data) });
   } catch (e) {
+    if (e instanceof UploadNotFoundError) return NextResponse.json({ error: { code: "NOT_FOUND", message: e.message } }, { status: 404 });
     if (e instanceof UploadWeekError) return NextResponse.json({ error: { code: "BAD_WEEK", message: e.message } }, { status: 400 });
     throw e;
   }

@@ -582,6 +582,12 @@ export function parsePptx(buf: Buffer): ParsedReport {
 export async function extractStatusReport(buf: Buffer, fileName: string): Promise<ParsedReport & { format: ReportFormat }> {
   if (buf.length > FILE_MAX_BYTES) throw new ParseError("The file is larger than 5 MB.");
   const format = detectFormat(fileName, buf);
-  const report = format === "docx" ? parseDocx(buf) : format === "xlsx" ? parseXlsx(buf) : format === "pptx" ? parsePptx(buf) : await parsePdf(buf);
-  return { ...report, format };
+  try {
+    const report = format === "docx" ? parseDocx(buf) : format === "xlsx" ? parseXlsx(buf) : format === "pptx" ? parsePptx(buf) : await parsePdf(buf);
+    return { ...report, format };
+  } catch (e) {
+    // An entry read late (a sheet, a slide) can still hit the ZIP reader's size cap.
+    if (e instanceof ZipError) throw new ParseError(`Could not open the file: ${e.message}`);
+    throw e;
+  }
 }
