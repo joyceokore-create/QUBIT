@@ -63,6 +63,7 @@ export function UpdateCard({
   onTeach,
   onSave,
   onSend,
+  banner,
 }: {
   p: WorkspaceProject;
   c: Card;
@@ -81,6 +82,8 @@ export function UpdateCard({
   onTeach: (term: string, gateName: string | null) => void;
   onSave: () => void;
   onSend: () => void;
+  /** Shown under the header: lines a colleague's report sent to this project (Phase 2). */
+  banner?: React.ReactNode;
 }) {
   const id = p.catalog.projectId;
   const [more, setMore] = useState(false);
@@ -139,6 +142,8 @@ export function UpdateCard({
           <HealthPill value={c.rag} />
         </div>
       </div>
+
+      {banner}
 
       {/* gate chips */}
       {p.catalog.gates.length === 0 ? (

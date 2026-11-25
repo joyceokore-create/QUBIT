@@ -7,7 +7,8 @@ import { canWriteProject } from "@/lib/access";
 import { can } from "@/lib/rbac";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { isoWeekId, isoWeekMonday, isValidIsoWeek } from "@/lib/iso-week";
-import { runsProjectWhere } from "@/lib/ownership";
+import { PM_SELECT, pmIdsOf, runsProjectWhere } from "@/lib/ownership";
+import { emitDomainEvent } from "@/server/events";
 
 import { confirmCheckIn, getCurrentCheckIn, RAGS, saveCheckInDraft } from "@/server/checkins";
 import { CHECKPOINT_STATES, CheckpointError, listCheckpointTemplates, setCheckpointState, setProjectTemplate, type CheckpointState, type GateScope, type StateOrigin } from "@/server/checkpoints";
@@ -85,6 +86,9 @@ export interface PreviewRow extends ParsedRow {
   computedRag: Rag | null;
   /** What the slide would change on the matched project's delivery (null = no project). */
   delivery: DeliveryPlan | null;
+  /** Phase 2: the line names (exactly) a project somebody ELSE runs — who that is. The
+   * uploader can send it to them; it never writes to their project from here. */
+  owner: { userId: string; name: string } | null;
 }
 
 export interface UploadPreview {
@@ -178,6 +182,19 @@ export interface WorkspaceProject {
   };
   /** This week's market check-ins (rag null = none yet). */
   markets: { orgUnitId: string; rag: Rag | null; narrative: string }[];
+  /** Phase 2: lines a colleague's report sent to this project, waiting for its PM. */
+  routed: RoutedLine[];
+}
+
+/** A line from someone else's status report, sent to the PM who runs the project. */
+export interface RoutedLine {
+  rowId: string;
+  line: number;
+  /** Who uploaded the report. */
+  from: string;
+  fileName: string;
+  sentAt: Date;
+  row: ParsedRow;
 }
 export interface StatusWorkspace {
   isoWeek: string;
@@ -190,11 +207,22 @@ export async function getStatusWorkspace(ctx: TenantContext, week?: string | nul
   const projects = await matchableProjects(ctx);
   const ids = projects.map((p) => p.id);
   const extra = await withTenant(ctx, async (tx) => {
-    const [notes, marketCheckIns] = await Promise.all([
+    const [notes, marketCheckIns, routedRows] = await Promise.all([
       tx.project.findMany({ where: { id: { in: ids } }, select: { id: true, statusNote: true } }),
       tx.marketCheckIn.findMany({ where: { projectId: { in: ids }, isoWeek }, select: { projectId: true, orgUnitId: true, narrative: true, rag: true } }),
+      tx.statusUploadRow.findMany({
+        where: { projectId: { in: ids }, state: "routed", upload: { isoWeek } },
+        select: { id: true, line: true, parsed: true, projectId: true, updatedAt: true, upload: { select: { fileName: true, uploadedBy: { select: { name: true } } } } },
+        orderBy: { updatedAt: "asc" },
+      }),
     ]);
-    return { notes: new Map(notes.map((n) => [n.id, n.statusNote ?? ""])), market: new Map(marketCheckIns.map((c) => [`${c.projectId}:${c.orgUnitId}`, c])) };
+    const routed = new Map<string, RoutedLine[]>();
+    for (const r of routedRows) {
+      const list = routed.get(r.projectId!) ?? [];
+      list.push({ rowId: r.id, line: r.line, from: r.upload.uploadedBy?.name ?? "A colleague", fileName: r.upload.fileName, sentAt: r.updatedAt, row: r.parsed as unknown as ParsedRow });
+      routed.set(r.projectId!, list);
+    }
+    return { notes: new Map(notes.map((n) => [n.id, n.statusNote ?? ""])), market: new Map(marketCheckIns.map((c) => [`${c.projectId}:${c.orgUnitId}`, c])), routed };
   });
   const out: WorkspaceProject[] = [];
   for (const p of projects) {
@@ -214,6 +242,7 @@ export async function getStatusWorkspace(ctx: TenantContext, week?: string | nul
         const c = extra.market.get(`${p.id}:${m.orgUnitId}`);
         return { orgUnitId: m.orgUnitId, rag: (c?.rag as Rag | undefined) ?? null, narrative: c?.narrative ?? "" };
       }),
+      routed: extra.routed.get(p.id) ?? [],
     });
   }
   return { isoWeek, past, projects: out };
@@ -249,6 +278,8 @@ export const ApplyInput = z.object({
         markets: z.array(z.object({ orgUnitId: z.string().uuid(), rag: z.enum(RAGS), narrative: z.string().trim().min(1).max(1000) })).max(40).optional(),
         /** The upload's lines this row came from, so the upload records what became of them. */
         lines: z.array(z.number().int().min(0)).max(200).optional(),
+        /** Phase 2: lines a colleague sent to this project that the PM used for this row. */
+        routedRowIds: z.array(z.string().uuid()).max(20).optional(),
       }),
     )
     .min(1)
@@ -293,9 +324,32 @@ async function matchableProjects(ctx: TenantContext): Promise<MatchableProject[]
   ).then((rows) => rows.map(({ orgStatuses, ...p }) => ({ ...p, markets: orgStatuses.map((o) => ({ orgUnitId: o.orgUnitId, code: o.orgUnit.code, name: o.orgUnit.name })) })));
 }
 
+/** Phase 2 — active projects somebody else runs, with who runs them (lead first), so a line
+ * naming one can be sent to its PM. Detection only: nothing here grants a write. */
+async function othersProjects(ctx: TenantContext, ownIds: string[]): Promise<(MatchableProject & { owner: { userId: string; name: string } })[]> {
+  return withTenant(ctx, async (tx) => {
+    const rows = await tx.project.findMany({
+      where: { status: { notIn: ["Completed", "Cancelled"] }, id: { notIn: ownIds } },
+      select: { id: true, code: true, name: true, ...PM_SELECT, orgStatuses: { where: { retiredAt: null }, select: { orgUnitId: true, leadUserId: true, orgUnit: { select: { code: true, name: true } } } } },
+    });
+    const ownerIds = new Map(rows.map((r) => [r.id, pmIdsOf(r).find((id) => id !== ctx.userId) ?? null]));
+    const users = await tx.user.findMany({ where: { id: { in: [...new Set([...ownerIds.values()].filter((x): x is string => Boolean(x)))] } }, select: { id: true, name: true } });
+    const nameOf = new Map(users.map((u) => [u.id, u.name]));
+    return rows.flatMap((r) => {
+      const ownerId = ownerIds.get(r.id);
+      // Nobody runs it: there's no one to send the line to, so it stays an open question.
+      if (!ownerId) return [];
+      return [{ id: r.id, code: r.code, name: r.name, markets: r.orgStatuses.map((o) => ({ orgUnitId: o.orgUnitId, code: o.orgUnit.code, name: o.orgUnit.name })), owner: { userId: ownerId, name: nameOf.get(ownerId) ?? "its PM" } }];
+    });
+  });
+}
+
 export async function previewStatusReport(ctx: TenantContext, buf: Buffer, fileName: string, week?: string | null, now = new Date()): Promise<UploadPreview> {
   const { isoWeek, past } = resolveReportWeek(week, now);
   const [report, projects] = await Promise.all([extractStatusReport(buf, fileName), matchableProjects(ctx)]);
+  // Only an EXACT name or code for someone else's project is offered for sending; a fuzzy
+  // guess never routes a line to a colleague. Own projects are matched first, as before.
+  const others = await othersProjects(ctx, projects.map((p) => p.id));
   const sentIds = new Set(
     (
       await withTenant(ctx, (tx) =>
@@ -308,16 +362,25 @@ export async function previewStatusReport(ctx: TenantContext, buf: Buffer, fileN
   const rows: PreviewRow[] = [];
   const { at } = resolveReportWeek(week, now);
   for (const r of report.rows) {
-    const match = matchProjectAndMarket(r.project, projects, { code: r.code, market: r.market });
+    let match = matchProjectAndMarket(r.project, projects, { code: r.code, market: r.market });
+    let owner: PreviewRow["owner"] = null;
+    if (match.confidence !== "exact" && others.length) {
+      const theirs = matchProjectAndMarket(r.project, others, { code: r.code, market: r.market });
+      const project = theirs.confidence === "exact" ? others.find((o) => o.id === theirs.projectId) : undefined;
+      if (project) {
+        match = theirs;
+        owner = project.owner;
+      }
+    }
     // A market one-pager writes the market's check-in: the product's sent state is moot.
-    const alreadySent = Boolean(match.projectId && !match.orgUnitId && sentIds.has(match.projectId));
+    const alreadySent = Boolean(match.projectId && !owner && !match.orgUnitId && sentIds.has(match.projectId));
     let delivery: DeliveryPlan | null = null;
-    if (match.projectId) {
+    if (match.projectId && !owner) {
       catalogs[match.projectId] ??= (await getDeliveryCatalog(ctx, match.projectId))!;
       computed[match.projectId] ??= (await getCurrentCheckIn(ctx, match.projectId, at)).computedRag;
       delivery = resolveDelivery(r, catalogs[match.projectId]!, match.orgUnitId ? { market: catalogs[match.projectId]!.markets.find((m) => m.orgUnitId === match.orgUnitId) ?? null } : {});
     }
-    rows.push({ ...r, match, alreadySent, computedRag: match.projectId ? (computed[match.projectId] ?? null) : null, delivery, warnings: alreadySent ? [...r.warnings, "This week's update was already sent — tick Replace to resend it with this row."] : r.warnings });
+    rows.push({ ...r, match, owner, alreadySent, computedRag: match.projectId && !owner ? (computed[match.projectId] ?? null) : null, delivery, warnings: alreadySent ? [...r.warnings, "This week's update was already sent — tick Replace to resend it with this row."] : r.warnings });
   }
   const uploadId = await recordUpload(ctx, { buf, fileName, format: report.format, isoWeek, rows });
   return { uploadId, format: report.format, preparedBy: report.preparedBy, reportDate: report.reportDate, isoWeek, past, rows, projects, catalogs, warnings: report.warnings };
@@ -335,7 +398,7 @@ function rowState(match: RowMatch): "pending" | "unmatched" {
  */
 export async function recordUpload(
   ctx: TenantContext,
-  input: { buf: Buffer; fileName: string; format: ReportFormat; isoWeek: string; rows: (ParsedRow & { match: RowMatch })[] },
+  input: { buf: Buffer; fileName: string; format: ReportFormat; isoWeek: string; rows: (ParsedRow & { match: RowMatch; owner?: PreviewRow["owner"] })[] },
 ): Promise<string> {
   const sha256 = createHash("sha256").update(input.buf).digest("hex");
   const fileName = input.fileName.slice(0, 200);
@@ -362,15 +425,20 @@ export async function recordUpload(
     if (previous) await tx.statusUploadRow.deleteMany({ where: { uploadId: upload.id } });
     if (input.rows.length) {
       await tx.statusUploadRow.createMany({
-        data: input.rows.map(({ match, ...row }) => ({
+        // Keep the parsed line only — not the preview's view of the project (delivery, RAG).
+        data: input.rows.map(({ match, owner, ...rest }) => {
+          const { alreadySent: _a, computedRag: _c, delivery: _d, ...row } = rest as typeof rest & Partial<Pick<PreviewRow, "alreadySent" | "computedRag" | "delivery">>;
+          return {
           tenantId: ctx.tenantId,
           uploadId: upload.id,
           line: row.line,
           parsed: row as unknown as Prisma.InputJsonValue,
           projectId: match.projectId,
           matchConfidence: match.confidence,
+          ownerUserId: owner?.userId ?? null,
           state: rowState(match),
-        })),
+          };
+        }),
         skipDuplicates: true,
       });
     }
@@ -543,6 +611,10 @@ export async function applyStatusReport(ctx: TenantContext, raw: ApplyInputT, re
         attached = true;
       }
       if (upload && applied) await markRowsApplied(ctx, upload.id, row.projectId, row.lines, isoWeek, realNow);
+      if (row.routedRowIds?.length && applied) {
+        const took = await acceptRoutedLines(ctx, row.projectId, row.routedRowIds, isoWeek, week, realNow);
+        if (took.attached) attached = true;
+      }
       out.push({ projectId: row.projectId, code, outcome, message, attached, markets, gates, modules, problems });
     } catch (e) {
       out.push({ projectId: row.projectId, code, outcome: "error", message: e instanceof Error ? e.message : "Could not apply.", attached: false });
@@ -568,8 +640,8 @@ async function markRowsApplied(ctx: TenantContext, uploadId: string, projectId: 
 async function settleUpload(ctx: TenantContext, uploadId: string, now: Date): Promise<void> {
   await withTenant(ctx, async (tx) => {
     const [applied, waiting] = await Promise.all([
-      tx.statusUploadRow.count({ where: { uploadId, state: "applied_by_uploader" } }),
-      tx.statusUploadRow.count({ where: { uploadId, state: "pending" } }),
+      tx.statusUploadRow.count({ where: { uploadId, state: { in: ["applied_by_uploader", "accepted"] } } }),
+      tx.statusUploadRow.count({ where: { uploadId, state: { in: ["pending", "routed"] } } }),
     ]);
     if (applied === 0) return;
     const status = waiting === 0 ? "applied" : "partially_applied";
@@ -591,4 +663,112 @@ export async function createProjectFromReport(ctx: TenantContext, name: string):
   const template = (await listCheckpointTemplates(ctx))[0];
   if (template) await setProjectTemplate(ctx, project.id, template.id);
   return { id: project.id, code: project.code, name: project.name };
+}
+
+
+// ── Phase 2: lines for projects somebody else runs ────────────────────────────────────
+
+/**
+ * Send the uploader's chosen lines to the PMs who run those projects. Each line must be
+ * the uploader's own upload, still pending, matched exactly to a project somebody else runs
+ * (re-checked now — ownership may have changed since the preview). Nothing is written to the
+ * project: the line waits on its PM's Weekly Update until they use or dismiss it.
+ */
+export async function routeUploadLines(ctx: TenantContext, uploadId: string, lines: number[]): Promise<{ routed: number; owners: string[] }> {
+  return withTenant(ctx, async (tx) => {
+    const upload = await tx.statusUpload.findFirst({ where: { id: uploadId, uploadedById: ctx.userId }, select: { id: true, fileName: true, isoWeek: true } });
+    if (!upload) throw new UploadNotFoundError();
+    if (!lines.length) return { routed: 0, owners: [] };
+    const rows = await tx.statusUploadRow.findMany({
+      where: { uploadId, line: { in: lines }, state: "pending", matchConfidence: "exact", ownerUserId: { not: null } },
+      select: { id: true, ownerUserId: true, project: { select: { id: true, code: true, status: true, ...PM_SELECT } } },
+    });
+    const ok = rows.filter((r) => r.project && r.ownerUserId !== ctx.userId && !["Completed", "Cancelled"].includes(r.project.status) && pmIdsOf(r.project).includes(r.ownerUserId!));
+    if (!ok.length) return { routed: 0, owners: [] };
+    await tx.statusUploadRow.updateMany({ where: { id: { in: ok.map((r) => r.id) } }, data: { state: "routed" } });
+
+    const codesBy = new Map<string, string[]>();
+    for (const r of ok) codesBy.set(r.ownerUserId!, [...new Set([...(codesBy.get(r.ownerUserId!) ?? []), r.project!.code])]);
+    const [me, owners] = await Promise.all([
+      tx.user.findUnique({ where: { id: ctx.userId }, select: { name: true } }),
+      tx.user.findMany({ where: { id: { in: [...codesBy.keys()] } }, select: { id: true, name: true } }),
+    ]);
+    const from = me?.name ?? "A colleague";
+    await emitDomainEvent(tx, ctx, {
+      type: "status_upload.routed",
+      entityType: "status_upload",
+      entityId: upload.id,
+      payload: { lines: ok.length, owners: codesBy.size },
+      notify: [...codesBy].map(([userId, codes]) => ({
+        userId,
+        kind: "status_upload.routed",
+        message: `${from} sent you ${codes.length === 1 ? "a line" : `${ok.filter((r) => r.ownerUserId === userId).length} lines`} from their status report for ${codes.join(", ")}. Use or dismiss it on your Weekly Update.`,
+        link: `/reports/update?week=${upload.isoWeek}`,
+      })),
+    });
+    await audit(tx, ctx, { action: "update", entityType: "status_upload", entityId: upload.id, after: { routed: ok.length, owners: codesBy.size } });
+    return { routed: ok.length, owners: owners.map((o) => o.name) };
+  });
+}
+
+/** The PM used routed lines on their card and saved: mark them accepted, attach the report
+ * (one link per upload and project), settle each source upload and tell its uploader. */
+async function acceptRoutedLines(ctx: TenantContext, projectId: string, rowIds: string[], isoWeek: string, week: string, now: Date): Promise<{ attached: boolean }> {
+  const rows = await withTenant(ctx, (tx) =>
+    tx.statusUploadRow.findMany({
+      where: { id: { in: rowIds }, projectId, state: "routed" },
+      select: { id: true, uploadId: true, upload: { select: { uploadedById: true, format: true, uploadedBy: { select: { name: true } } } }, project: { select: { code: true } } },
+    }),
+  );
+  if (!rows.length) return { attached: false };
+  let attached = false;
+  await withTenant(ctx, async (tx) => {
+    const checkIn = await tx.checkIn.findFirst({ where: { projectId, isoWeek }, select: { id: true } });
+    await tx.statusUploadRow.updateMany({ where: { id: { in: rows.map((r) => r.id) } }, data: { state: "accepted", appliedCheckInId: checkIn?.id ?? null, appliedAt: now } });
+    const me = await tx.user.findUnique({ where: { id: ctx.userId }, select: { name: true } });
+    for (const uploadId of new Set(rows.map((r) => r.uploadId))) {
+      const r = rows.find((x) => x.uploadId === uploadId)!;
+      await audit(tx, ctx, { action: "update", entityType: "status_upload_row", entityId: r.id, after: { state: "accepted", projectId } });
+      if (r.upload.uploadedById && r.upload.uploadedById !== ctx.userId) {
+        await emitDomainEvent(tx, ctx, {
+          type: "status_upload.accepted",
+          entityType: "status_upload",
+          entityId: uploadId,
+          notify: [{ userId: r.upload.uploadedById, kind: "status_upload.accepted", message: `${me?.name ?? "The PM"} used your status report line for ${r.project?.code ?? "their project"}.`, link: `/reports/update?week=${isoWeek}` }],
+        });
+      }
+    }
+  });
+  for (const uploadId of new Set(rows.map((r) => r.uploadId))) {
+    const r = rows.find((x) => x.uploadId === uploadId)!;
+    const has = await withTenant(ctx, (tx) => tx.projectDocument.count({ where: { projectId, statusUploadId: uploadId } }));
+    if (!has) {
+      await createDocument(ctx, projectId, { title: `Status report · Week ${week} · from ${r.upload.uploadedBy?.name ?? "a colleague"}`, kind: "Other", format: r.upload.format as ReportFormat, source: "Uploaded" }, { statusUploadId: uploadId });
+      attached = true;
+    }
+    await settleUpload(ctx, uploadId, now);
+  }
+  return { attached };
+}
+
+/** The PM dismissed a line a colleague sent: it stays on the upload as "dismissed", and the
+ * uploader is told. Only somebody who may write the project can dismiss its lines. */
+export async function dismissRoutedLine(ctx: TenantContext, rowId: string): Promise<void> {
+  const row = await withTenant(ctx, (tx) =>
+    tx.statusUploadRow.findFirst({ where: { id: rowId, state: "routed" }, select: { id: true, projectId: true, uploadId: true, upload: { select: { uploadedById: true, isoWeek: true } }, project: { select: { code: true } } } }),
+  );
+  if (!row || !row.projectId || !(await canWriteProject(ctx, row.projectId))) throw new UploadNotFoundError();
+  await withTenant(ctx, async (tx) => {
+    await tx.statusUploadRow.update({ where: { id: row.id }, data: { state: "dismissed" } });
+    await audit(tx, ctx, { action: "update", entityType: "status_upload_row", entityId: row.id, after: { state: "dismissed" } });
+    const me = await tx.user.findUnique({ where: { id: ctx.userId }, select: { name: true } });
+    if (row.upload.uploadedById && row.upload.uploadedById !== ctx.userId) {
+      await emitDomainEvent(tx, ctx, {
+        type: "status_upload.dismissed",
+        entityType: "status_upload",
+        entityId: row.uploadId,
+        notify: [{ userId: row.upload.uploadedById, kind: "status_upload.dismissed", message: `${me?.name ?? "The PM"} didn't use your status report line for ${row.project?.code ?? "their project"}.`, link: `/reports/update?week=${row.upload.isoWeek}` }],
+      });
+    }
+  });
 }

@@ -37,6 +37,8 @@ export interface UploadResult {
   attach: boolean;
   placements: Placement[];
   answers: StageAnswer[];
+  /** Lines for projects other PMs run, to send to them (plan Phase 2). */
+  send: number[];
 }
 
 const GATE_TONE: Record<CheckpointState, ChipTone> = { Done: "ok", InProgress: "warn", Blocked: "bad", NotStarted: "muted" };
@@ -76,6 +78,8 @@ export function StatusUploadDrawer({
   /** project id → the answer to "which gate is this stage?" (NOT_A_GATE = none). */
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [remember, setRemember] = useState<Record<string, boolean>>({});
+  /** line → send it to the PM who runs its project (default on). */
+  const [send, setSend] = useState<Record<number, boolean>>({});
 
   async function read(f: File | undefined) {
     if (!f || !week) return;
@@ -98,6 +102,7 @@ export function StatusUploadDrawer({
     setPlaced(Object.fromEntries(p.rows.map((r) => [r.line, r.match.projectId && r.match.confidence === "exact" && projects.some((x) => x.catalog.projectId === r.match.projectId) ? r.match.projectId : ""])));
     setAnswers({});
     setRemember({});
+    setSend(Object.fromEntries(p.rows.filter((r) => r.owner).map((r) => [r.line, true])));
   }
 
   const projectOf = (id: string) => projects.find((x) => x.catalog.projectId === id) ?? null;
@@ -111,7 +116,10 @@ export function StatusUploadDrawer({
 
   const rows = preview?.rows ?? [];
   const placedRows = rows.filter((r) => placed[r.line] && placed[r.line] !== "skip" && projectOf(placed[r.line]!));
-  const unplaced = rows.filter((r) => !placed[r.line]);
+  // Lines naming a project somebody else runs: offered for sending, never a question here.
+  const others = rows.filter((r) => r.owner && !placed[r.line]);
+  const toSend = others.filter((r) => send[r.line]).map((r) => r.line);
+  const unplaced = rows.filter((r) => !placed[r.line] && !r.owner);
   // Stage questions: product-level lines whose stage QUBIT could not read as a gate.
   const questions = placedRows.flatMap((r) => {
     const project = projectOf(placed[r.line]!)!;
@@ -125,7 +133,7 @@ export function StatusUploadDrawer({
 
   function apply() {
     if (!preview) return;
-    if (placedRows.length === 0) {
+    if (placedRows.length === 0 && toSend.length === 0) {
       setPlaceError("Place at least one line on a project, or choose a different file.");
       return;
     }
@@ -143,6 +151,7 @@ export function StatusUploadDrawer({
         const gateName = a === NOT_A_GATE ? null : a;
         return [{ projectId: q.project.catalog.projectId, gateName, remember: gateName ? q.clauses.filter((cl) => remember[`${q.project.catalog.projectId}:${cl}`]) : [] }];
       }),
+      send: toSend,
     });
   }
 
@@ -195,7 +204,7 @@ export function StatusUploadDrawer({
     <DrawerFrame
       header={<DrawerHeader step="Status Report" title={preview.fileName} subtitle={`${rows.length} ${rows.length === 1 ? "line" : "lines"} read · ${openQuestions === 0 ? "nothing needs your answer" : `${openQuestions} ${openQuestions === 1 ? "needs" : "need"} your answer`}`} />}
       footer={
-        <DrawerFooter note={`${placedRows.length} of ${rows.length} placed`}>
+        <DrawerFooter note={`${placedRows.length} of ${rows.length} placed${toSend.length ? ` · ${toSend.length} to send` : ""}`}>
           <button type="button" onClick={onClose} className={SECONDARY}>
             Cancel
           </button>
@@ -264,6 +273,28 @@ export function StatusUploadDrawer({
           </ul>
         )}
       </DrawerSection>
+
+      {others.length > 0 && (
+        <DrawerSection title={others.length === 1 ? "A Project Another PM Runs" : `${others.length} Projects Other PMs Run`}>
+          <DrawerText hint>QUBIT sends each line to the PM who runs the project, to use or dismiss on their Weekly Update. Nothing changes on their project until they do.</DrawerText>
+          <ul className="m-0 flex list-none flex-col p-0">
+            {others.map((r) => (
+              <li key={r.line} className="flex items-start justify-between gap-3 border-b border-dotted border-[var(--ds-line)] py-2.5 last:border-b-0">
+                <label className="flex min-w-0 items-start gap-2 text-[13px] text-[var(--ds-ink)]">
+                  <input type="checkbox" checked={Boolean(send[r.line])} onChange={(e) => setSend((x) => ({ ...x, [r.line]: e.target.checked }))} className="mt-0.5 size-4 flex-none accent-[var(--ds-brand)]" />
+                  <span className="min-w-0">
+                    <b className="block font-semibold">“{r.update || r.stage || r.project}”</b>
+                    <span className="text-[12px] text-[var(--ds-ink3)]">
+                      {r.project} · send to {r.owner!.name}
+                    </span>
+                  </span>
+                </label>
+                {r.status && <HealthPill value={r.status} className="flex-none" />}
+              </li>
+            ))}
+          </ul>
+        </DrawerSection>
+      )}
 
       {openQuestions > 0 || questions.length > 0 ? (
         <DrawerSection title={unplaced.length + questions.length === 1 ? "One Question" : `${unplaced.length + questions.length} Questions`}>

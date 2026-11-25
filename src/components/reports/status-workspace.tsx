@@ -16,7 +16,8 @@ import { Drawer } from "@/components/ui/drawer";
 import { TextLink } from "@/components/ui/text-link";
 import { UpdateCard, type CardNotice } from "@/components/reports/update-card";
 import { StatusUploadDrawer, type UploadResult } from "@/components/reports/status-upload-drawer";
-import { applyRowFor, baseCard, diffCard, mkey, readStage, WEIGHT, type ApplyRow, type Card, type Preview, type PreviewRow, type StatusWorkspaceJson, type WorkspaceProject, ratingReasonMissing } from "@/components/reports/status-workspace-model";
+import { applyRowFor, baseCard, diffCard, mkey, readStage, WEIGHT, type ApplyRow, type Card, type Preview, type PreviewRow, type RoutedLine, type StatusWorkspaceJson, type WorkspaceProject, ratingReasonMissing } from "@/components/reports/status-workspace-model";
+import { RoutedLines } from "@/components/reports/routed-lines";
 
 export type { StatusWorkspaceJson } from "@/components/reports/status-workspace-model";
 
@@ -58,6 +59,10 @@ export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantN
   const [attachedTo, setAttachedTo] = useState<Set<string>>(new Set());
   /** The file's lines placed on each project, so the upload records what became of them. */
   const [linesOf, setLinesOf] = useState<Record<string, number[]>>({});
+  /** Phase 2: colleagues' lines used on each card (row ids), accepted when the card saves. */
+  const [taken, setTaken] = useState<Record<string, string[]>>({});
+  /** Phase 2: what sending lines to other PMs did (shown with the prefill banner). */
+  const [sentNote, setSentNote] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
   const [query, setQuery] = useState("");
   const [onlyChanged, setOnlyChanged] = useState(false);
   const [busy, setBusy] = useState<Busy>(null);
@@ -122,6 +127,8 @@ export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantN
     setFile(null);
     setAttachedTo(new Set());
     setLinesOf({});
+    setTaken({});
+    setSentNote(null);
   }
   useEffect(() => {
     if (week && week !== ws.isoWeek) void load(week);
@@ -197,7 +204,7 @@ export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantN
     const body = await res.json().catch(() => null);
     if (!res.ok) return { error: body?.error?.message ?? "Could not create the project." };
     const catalog = body.data.catalog as DeliveryCatalog;
-    const project: WorkspaceProject = { catalog, product: { status: "None", narrative: "", computedRag: "Green", ragOverride: null, statusNote: "", alreadySent: false }, markets: [] };
+    const project: WorkspaceProject = { catalog, product: { status: "None", narrative: "", computedRag: "Green", ragOverride: null, statusNote: "", alreadySent: false }, markets: [], routed: [] };
     setWs((w) => ({ ...w, projects: [...w.projects, project].sort((a, b) => a.catalog.name.localeCompare(b.catalog.name)) }));
     setCards((all) => ({ ...all, [catalog.projectId]: baseCard(project) }));
     return { id: catalog.projectId };
@@ -220,6 +227,40 @@ export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantN
     }
     for (const a of r.answers) rereadStage(a.projectId, a.gateName);
     for (const a of r.answers) for (const term of a.remember) await teach(a.projectId, term, a.gateName);
+    setSentNote(null);
+    if (r.send.length) await sendToOwners(r.preview.uploadId, r.send);
+  }
+
+  /** Phase 2: send lines for projects other PMs run to those PMs (nothing is written to them). */
+  async function sendToOwners(uploadId: string, lines: number[]) {
+    const res = await fetch("/api/reports/status-upload/send", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ uploadId, lines }) });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) return setSentNote({ tone: "bad", text: body?.error?.message ?? "Could not send the lines to the other PMs." });
+    const { routed, owners } = body.data as { routed: number; owners: string[] };
+    const names = owners.length > 1 ? `${owners.slice(0, -1).join(", ")} and ${owners.at(-1)}` : (owners[0] ?? "");
+    setSentNote(
+      routed
+        ? { tone: "ok", text: `Sent ${routed === 1 ? "1 line" : `${routed} lines`} to ${names} to use or dismiss.` }
+        : { tone: "bad", text: "No line could be sent: those projects' PMs may have changed. Upload the file again." },
+    );
+  }
+
+  /** Phase 2: lay a colleague's line on the card, like a line of your own file. */
+  function takeRouted(p: WorkspaceProject, r: RoutedLine) {
+    const want = r.row.market?.toLowerCase() ?? null;
+    const market = want ? (p.catalog.markets.find((m) => m.code.toLowerCase() === want || m.name.toLowerCase() === want) ?? null) : null;
+    mergeRow({ ...r.row, match: { projectId: p.catalog.projectId, confidence: "exact" }, owner: null }, p.catalog.projectId, market?.orgUnitId ?? null, p);
+    setTaken((t) => ({ ...t, [p.catalog.projectId]: [...new Set([...(t[p.catalog.projectId] ?? []), r.rowId])] }));
+  }
+
+  async function dismissRouted(p: WorkspaceProject, r: RoutedLine) {
+    const id = p.catalog.projectId;
+    const res = await fetch("/api/reports/status-upload/routed/dismiss", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rowId: r.rowId }) });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) return setNotices((n) => ({ ...n, [id]: { tone: "bad", text: body?.error?.message ?? "Could not dismiss the line." } }));
+    setWs((w) => ({ ...w, projects: w.projects.map((x) => (x.catalog.projectId === id ? { ...x, routed: (x.routed ?? []).filter((y) => y.rowId !== r.rowId) } : x)) }));
+    setTaken((t) => ({ ...t, [id]: (t[id] ?? []).filter((x) => x !== r.rowId) }));
+    setNotices((n) => ({ ...n, [id]: { tone: "ok", text: `Dismissed ${r.from}'s line` } }));
   }
 
   const diffs = useMemo(() => Object.fromEntries(ws.projects.map((p) => [p.catalog.projectId, diffCard(p, cards[p.catalog.projectId] ?? bases[p.catalog.projectId]!, bases[p.catalog.projectId]!)])), [ws, cards, bases]);
@@ -243,7 +284,11 @@ export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantN
         week: ws.isoWeek,
         preparedBy: file?.preparedBy ?? null,
         reportDate: file?.reportDate ?? null,
-        rows: file ? rows.map((r) => (linesOf[r.projectId] ? { ...r, lines: linesOf[r.projectId] } : r)) : rows,
+        rows: rows.map((r) => ({
+          ...r,
+          ...(file && linesOf[r.projectId] ? { lines: linesOf[r.projectId] } : {}),
+          ...(taken[r.projectId]?.length ? { routedRowIds: taken[r.projectId] } : {}),
+        })),
         ...(file ? { uploadId: file.uploadId, attach: withFile } : {}),
       }),
     });
@@ -481,6 +526,8 @@ export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantN
         </Banner>
       )}
 
+      {sentNote && <Banner tone={sentNote.tone === "bad" ? "bad" : undefined}>{sentNote.text}</Banner>}
+
       {results && results.length > 0 && (
         <Panel title="Saved and Sent" action={<TextLink href="/reports">Reports › This Week</TextLink>}>
           <ul className="m-0 flex list-none flex-col p-0">
@@ -554,6 +601,11 @@ export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantN
                 onTeach={(term, gate) => void teach(id, term, gate)}
                 onSave={() => void saveCard(id)}
                 onSend={() => void sendCard(id)}
+                banner={
+                  p.routed?.length ? (
+                    <RoutedLines lines={p.routed} used={taken[id] ?? []} locked={locked} onUse={(r) => takeRouted(p, r)} onDismiss={(r) => void dismissRouted(p, r)} />
+                  ) : null
+                }
               />
             );
           })}

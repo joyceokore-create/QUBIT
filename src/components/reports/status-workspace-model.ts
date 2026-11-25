@@ -21,6 +21,17 @@ export interface WorkspaceProject {
   catalog: DeliveryCatalog;
   product: Product;
   markets: { orgUnitId: string; rag: Rag | null; narrative: string }[];
+  /** Lines a colleague's status report sent to this project (plan Phase 2). */
+  routed?: RoutedLine[];
+}
+/** A line from someone else's report, waiting for this project's PM to use or dismiss. */
+export interface RoutedLine {
+  rowId: string;
+  line: number;
+  from: string;
+  fileName: string;
+  sentAt: string | Date;
+  row: Omit<PreviewRow, "match" | "owner">;
 }
 export interface StatusWorkspaceJson {
   isoWeek: string;
@@ -41,6 +52,8 @@ export interface PreviewRow {
   dimensions: { name: string; value: string }[];
   sections: { title: string; lines: string[] }[];
   match: { projectId: string | null; confidence: "exact" | "suggested" | "none"; orgUnitId?: string | null };
+  /** Someone else runs the matched project: the line can be sent to them, not placed here. */
+  owner?: { userId: string; name: string } | null;
 }
 export interface Preview {
   format: "docx" | "xlsx" | "pdf" | "pptx";
