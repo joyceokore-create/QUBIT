@@ -18,7 +18,7 @@ export class RollupError extends Error {
   }
 }
 
-function assertHead(ctx: TenantContext): void {
+export function assertHead(ctx: TenantContext): void {
   if (!ctx.roles.some((r) => r === "HeadOfProjects" || r === "PlatformSuperAdmin")) {
     throw new RollupError("The roll-up is the Head's to build and approve.", "FORBIDDEN");
   }

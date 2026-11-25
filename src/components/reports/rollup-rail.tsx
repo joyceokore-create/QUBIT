@@ -6,7 +6,7 @@ import { readApiError } from "@/lib/form-errors";
 import { FieldError } from "@/components/ui/drawer";
 import { useFieldErrors } from "@/components/forms/use-field-errors";
 import { useRouter } from "next/navigation";
-import { Check, Download, FileText } from "lucide-react";
+import { Check, Download, FileText, Loader2, Sparkles } from "lucide-react";
 import { LocalTime } from "@/components/reports/local-time";
 import { ReportEmailButton } from "@/components/reports/report-email-button";
 import { RecipientsDialog, type RecipientJson } from "@/components/reports/recipients-dialog";
@@ -59,6 +59,10 @@ export function RollupRail({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsAck, setNeedsAck] = useState(false);
+  // Plan Phase 4: the drafted summary pre-fills the line; the previous text stays undoable.
+  const [drafting, setDrafting] = useState(false);
+  const [draftNote, setDraftNote] = useState<string | null>(null);
+  const [beforeDraft, setBeforeDraft] = useState<string | null>(null);
   // docs/08 § Errors: the line's problem shows on the field; Approve stays enabled except while sending.
   const fe = useFieldErrors({ schema: RollupFormSchema, values: { narrative }, idPrefix: "rollup" });
   const n = isoWeek.split("-W")[1];
@@ -87,6 +91,23 @@ export function RollupRail({
     const { message, fields } = readApiError(payload, "Could not approve. Try again.");
     if (fields.narrative) fe.setServerErrors({ narrative: fields.narrative });
     else setError(message);
+  };
+
+  const draft = async () => {
+    setError(null);
+    setDrafting(true);
+    const res = await fetch("/api/rollup/summary", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ week: isoWeek }) });
+    setDrafting(false);
+    const payload = await res.json().catch(() => null);
+    if (!res.ok) {
+      setError(readApiError(payload, "Could not draft the summary. Try again.").message);
+      return;
+    }
+    const { text, engine, reason } = payload.data as { text: string; engine: "ai" | "rules"; reason?: "off" | "cap" | "failed" | "rejected" };
+    setBeforeDraft(narrative);
+    setNarrative(text);
+    const why = reason === "cap" ? " (today's AI limit is used)" : reason === "failed" ? " (the AI didn't answer)" : reason === "rejected" ? " (the AI's draft didn't pass the checks)" : "";
+    setDraftNote(engine === "ai" ? "Drafted by Q from this week's updates. Check it, then edit before you approve." : `Drafted from this week's updates${why}. Edit before you approve.`);
   };
 
   return (
@@ -122,13 +143,21 @@ export function RollupRail({
         </div>
 
         <div>
-          <label htmlFor={fe.idOf("narrative")} className="mb-1.5 block text-[11.5px] font-semibold text-[var(--ink4)]">
-            The week in one line, for the executive
-          </label>
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <label htmlFor={fe.idOf("narrative")} className="block text-[11.5px] font-semibold text-[var(--ink4)]">
+              The week in one line, for the executive
+            </label>
+            {!approved && canApprove && (
+              <button type="button" onClick={() => void draft()} disabled={drafting || busy} className={`${QUIET} inline-flex items-center gap-1`}>
+                {drafting ? <Loader2 className="size-3 animate-spin" aria-hidden /> : <Sparkles className="size-3" aria-hidden />}
+                {drafting ? "Drafting…" : "Draft Summary"}
+              </button>
+            )}
+          </div>
           {approved || !canApprove ? (
             <>
               {rollup.narrative ? (
-                <blockquote className="text-[13.5px] leading-[1.5] text-[var(--qink)]">“{rollup.narrative}”</blockquote>
+                <blockquote className="whitespace-pre-line text-[13.5px] leading-[1.5] text-[var(--qink)]">“{rollup.narrative}”</blockquote>
               ) : (
                 <p className="text-[12.5px] italic text-[var(--ink5)]">No narrative</p>
               )}
@@ -149,7 +178,7 @@ export function RollupRail({
             <>
               <textarea
                 {...fe.bind("narrative")}
-                rows={3}
+                rows={narrative.includes("\n") ? 7 : 3}
                 maxLength={1000}
                 value={narrative}
                 onChange={(e) => setNarrative(e.target.value)}
@@ -159,6 +188,24 @@ export function RollupRail({
                 <div className="mt-1.5">
                   <FieldError id={`${fe.idOf("narrative")}-error`}>{fe.errors.narrative}</FieldError>
                 </div>
+              )}
+              {draftNote && (
+                <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[12px] text-[var(--ink4)]">
+                  {draftNote}
+                  {beforeDraft !== null && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNarrative(beforeDraft);
+                        setBeforeDraft(null);
+                        setDraftNote(null);
+                      }}
+                      className={QUIET}
+                    >
+                      Undo
+                    </button>
+                  )}
+                </p>
               )}
             </>
           )}

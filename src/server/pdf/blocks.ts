@@ -170,6 +170,17 @@ export function prose(text: string): string {
   return `<p class="prose">${esc(text)}</p>`;
 }
 
+/** Multi-line prose (the Head's managerial summary): one paragraph per line, so its
+ * labelled lines stay apart instead of running together. */
+export function proseLines(text: string): string {
+  return text
+    .split(/\n+/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map(prose)
+    .join("");
+}
+
 /** The footer as Chromium draws it on every page: source + "as of" (tenant time) left, page chip right. */
 export function footer(source: string, asOf: Date, timeZone: string): string {
   return footerTemplate(source, `${stamp(asOf, timeZone)} ${zoneLabel(timeZone)}`);

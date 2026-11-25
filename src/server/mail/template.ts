@@ -246,7 +246,7 @@ export function rollupEmail(opts: {
   const subject = `Week ${n} roll-up — ${opts.tenantName}`;
   const body = [
     opts.narrative
-      ? `<blockquote style="margin:0 0 16px;padding-left:12px;border-left:3px solid ${escapeHtml(opts.brandColor)};font-size:15px;line-height:1.5">“${escapeHtml(opts.narrative)}”</blockquote>`
+      ? `<blockquote style="margin:0 0 16px;padding-left:12px;border-left:3px solid ${escapeHtml(opts.brandColor)};font-size:15px;line-height:1.5">“${escapeHtml(opts.narrative).replace(/\n/g, "<br>")}”</blockquote>`
       : "",
     `<p style="font-size:14px;line-height:1.6;margin:0 0 6px">${escapeHtml(spread)}.</p>`,
     `<p style="font-size:12px;color:#6b6b6b;margin:0 0 16px">Week ${escapeHtml(n ?? "")} · ${escapeHtml(opts.range)} · prepared by ${escapeHtml(opts.preparedBy)}</p>`,

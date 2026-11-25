@@ -1,5 +1,5 @@
 import { DEFAULT_TIME_ZONE, formatDate, formatDayMonth } from "@/lib/dates";
-import { bullets, health, labReport, prose, raw, section, stacked, statusCell, statusMarker, table, type Cell, type MarkerKind, type Notice, type Row, type StatusItem } from "@/server/pdf/blocks";
+import { bullets, health, labReport, prose, proseLines, raw, section, stacked, statusCell, statusMarker, table, type Cell, type MarkerKind, type Notice, type Row, type StatusItem } from "@/server/pdf/blocks";
 import type { Orientation } from "@/server/pdf/shell";
 import type { DigestReportData, DigestRow, GateCell, ProjectReportData, TableReportData } from "@/server/pdf/report-data";
 import type { ReportCell } from "@/server/custom-reports";
@@ -269,7 +269,7 @@ export function renderDigest(d: DigestReportData, opts: RenderOptions = {}): Ren
         { label: "Computed (not confirmed)", value: c.computed, tone: "muted" },
       ],
     },
-    sections: [section("Head's summary", null, d.narrative ? prose(d.narrative) : null), ...(groups.length ? groups : [section("Projects", 0, null)])],
+    sections: [section("Head's summary", null, d.narrative ? proseLines(d.narrative) : null), ...(groups.length ? groups : [section("Projects", 0, null)])],
     source: approved
       ? `QUBIT weekly roll-up, Week ${d.week.number} · Status as confirmed by project managers; RAG approved by the Head${d.approvedAt ? ` on ${formatDayMonth(d.approvedAt, tz)}` : ""}`
       : `QUBIT weekly roll-up, Week ${d.week.number} · Draft, not yet approved by the Head`,
