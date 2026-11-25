@@ -91,6 +91,16 @@ const baseCallbacks = authConfig.callbacks!;
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
+  events: {
+    // Plan Phase 5: signing out ends the person's in-product assistant sessions, so a
+    // delegation token Lumi holds stops working at once. Best-effort; never blocks sign-out.
+    async signOut(message) {
+      const token = "token" in message ? message.token : null;
+      if (!token?.sub || !token.tenantId) return;
+      const { endAssistantForUser } = await import("@/server/assistant/sessions");
+      await endAssistantForUser({ tenantId: token.tenantId as string, userId: token.sub }).catch(() => undefined);
+    },
+  },
   callbacks: {
     ...baseCallbacks,
     // SSO gate: Entra authenticated the person (including the org's MFA policy) — this

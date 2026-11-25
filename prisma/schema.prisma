@@ -99,6 +99,7 @@ model Tenant {
   moduleInstanceStatuses  ModuleInstanceStatus[]
   stageTerms              StageTerm[]
   statusUploads           StatusUpload[]
+  assistantSessions       AssistantSession[]
   statusUploadRows        StatusUploadRow[]
   ideas                   Idea[]
 
@@ -278,6 +279,7 @@ model User {
 
   statusUploads          StatusUpload[]    @relation("StatusUploadAuthor")
   statusUploadRowsOwned  StatusUploadRow[] @relation("StatusUploadRowOwner")
+  assistantSessions      AssistantSession[]
   @@unique([tenantId, email])
   @@map("user")
 }
@@ -1450,6 +1452,9 @@ model AuditLog {
   entityId   String   @map("entity_id")
   before     Json?
   after      Json?
+  /// Plan Phase 5: "lumi" when the change came through the in-product assistant, acting
+  /// as the actor with their own permissions; null for the app itself.
+  via        String?
   createdAt  DateTime @default(now()) @map("created_at")
 
   @@map("audit_log")
@@ -2230,4 +2235,25 @@ model GlcAction {
 
   @@index([tenantId, status, dueDate])
   @@map("glc_action")
+}
+
+/// Plan Phase 5 — one in-product assistant session: QUBIT lets Lumi call its assistant API
+/// as this person until expiresAt, through a signed delegation token whose id is this row's
+/// id (so it can be revoked: sign-out, panel close, or an admin). The Lumi session token is
+/// kept encrypted (src/lib/secret-box.ts) and never reaches the browser.
+model AssistantSession {
+  id               String    @id @default(uuid())
+  tenantId         String    @map("tenant_id")
+  tenant           Tenant    @relation(fields: [tenantId], references: [id])
+  userId           String    @map("user_id")
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt        DateTime  @map("expires_at")
+  revokedAt        DateTime? @map("revoked_at")
+  lumiSessionId    String?   @map("lumi_session_id")
+  lumiSessionToken String?   @map("lumi_session_token") // encrypted
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([tenantId, userId, expiresAt])
+  @@map("assistant_session")
 }

@@ -11,6 +11,7 @@ import { SlidePanelStateProvider } from "@/components/panels/panel-context";
 import { SlidePanel } from "@/components/panels/slide-panel";
 import { QProvider } from "@/components/q/q-provider";
 import { QDrawer } from "@/components/q/q-drawer";
+import { assistantProvider } from "@/server/assistant/sessions";
 import { AmbientField } from "@/components/layout/ambient-field";
 import { ssoEnabled } from "@/lib/sso";
 import { TourProvider } from "@/components/tour/tour-provider";
@@ -42,6 +43,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   };
   const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
   const canReports = can(ctx, "reports:read");
+  // Plan Phase 5: Ask Q's engine — Lumi's in-product assistant when switched on and connected.
+  const assistant = await assistantProvider(ctx).catch(() => "local" as const);
 
   // Riverbank uses a collapsible left-sidebar shell; every other tenant keeps the
   // top-navigation bar. Resolve the shell's data once (mirrors what Topbar queries).
@@ -112,7 +115,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </div>
           )}
           <SlidePanel />
-          <QDrawer canReports={canReports} />
+          <QDrawer canReports={canReports} assistant={assistant} />
         </SlidePanelStateProvider>
         </TourProvider>
       </QProvider>

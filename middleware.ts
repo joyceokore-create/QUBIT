@@ -36,7 +36,10 @@ export const config = {
   // api/health (M-P0a) is excluded for a subtler reason: a probe that gets redirected to
   // /login answers 302, and anything checking "did I get a 2xx/3xx?" would read a dead
   // database as healthy. It must reach the route to be worth anything.
+  // api/assistant/v1 (plan Phase 5) is Lumi calling QUBIT as a person: no cookie, only the
+  // Bearer delegation token, which every route checks (src/server/assistant/route.ts).
+  // lumi/ serves the configuration files Lumi fetches (lumi.yaml, openapi.json, overview.md).
   matcher: [
-    "/((?!api/auth|api/internal|api/webhooks|api/onboarding/accept|api/health|_next/static|_next/image|favicon.ico).*)",
+    "/((?!api/auth|api/internal|api/webhooks|api/onboarding/accept|api/health|api/assistant/v1|lumi/|_next/static|_next/image|favicon.ico).*)",
   ],
 };

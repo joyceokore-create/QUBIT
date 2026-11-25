@@ -39,7 +39,7 @@ export interface AuditEntry {
  */
 export async function audit(
   tx: Prisma.TransactionClient,
-  ctx: Pick<TenantContext, "tenantId" | "userId">,
+  ctx: Pick<TenantContext, "tenantId" | "userId" | "via">,
   entry: AuditEntry,
 ): Promise<void> {
   await tx.auditLog.create({
@@ -51,6 +51,7 @@ export async function audit(
       entityId: entry.entityId,
       before: entry.before === undefined ? undefined : (entry.before as Prisma.InputJsonValue),
       after: entry.after === undefined ? undefined : (entry.after as Prisma.InputJsonValue),
+      via: ctx.via ?? null,
     },
   });
 }

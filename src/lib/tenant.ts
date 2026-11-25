@@ -12,6 +12,9 @@ export interface TenantContext {
    * so tests and internal contexts can construct a ctx from roles alone.
    */
   permissions?: string[];
+  /** Plan Phase 5: set when the request came through the in-product assistant (Lumi acting
+   * as this person). Audit rows carry it, so every change made that way is marked. */
+  via?: "lumi";
 }
 
 /**

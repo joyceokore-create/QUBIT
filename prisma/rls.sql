@@ -48,6 +48,7 @@ BEGIN
     'tenant_integration',
     'status_upload',
     'status_upload_row',
+    'assistant_session',
     'project_milestone',
     'project_status_update',
     'shared_report',

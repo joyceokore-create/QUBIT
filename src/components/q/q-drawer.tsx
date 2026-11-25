@@ -7,6 +7,8 @@ import { Markdown } from "@/components/q/markdown";
 import { useQ } from "@/components/q/q-provider";
 import { qSuggestionChips } from "@/lib/q-chips";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useLumiChat } from "@/components/q/use-lumi-chat";
+import { LumiReply } from "@/components/q/lumi-parts";
 
 type ReportType = "project" | "resource" | "portfolio" | "manager" | "member";
 interface ProjectOpt {
@@ -19,8 +21,13 @@ interface ChatMsg {
   content: string;
 }
 
-export function QDrawer({ canReports = false }: { canReports?: boolean }) {
+export function QDrawer({ canReports = false, assistant = "local" }: { canReports?: boolean; assistant?: "lumi" | "local" }) {
   const { open, closeQ, userId, roles, pending, clearPending } = useQ();
+  // Plan Phase 5: with Lumi as the assistant, chat goes to Lumi acting as this person; if Lumi
+  // turns out to be off, this drawer falls back to the local Ask Q for the rest of the visit.
+  const lumi = useLumiChat();
+  const [lumiOff, setLumiOff] = useState(false);
+  const lumiOn = assistant === "lumi" && !lumiOff;
   const [view, setView] = useState<"home" | "picker" | "loading" | "report" | "chat">("home");
   const [markdown, setMarkdown] = useState("");
   const [usedAi, setUsedAi] = useState(false);
@@ -77,7 +84,16 @@ export function QDrawer({ canReports = false }: { canReports?: boolean }) {
 
   async function sendChat(text: string) {
     const q = text.trim();
-    if (!q || chatBusy) return;
+    if (!q || chatBusy || lumi.busy) return;
+    if (lumiOn) {
+      setChatInput("");
+      setView("chat");
+      setError(null);
+      const out = await lumi.send(q);
+      setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }), 50);
+      if (out !== "off") return;
+      setLumiOff(true);
+    }
     const next: ChatMsg[] = [...chat, { role: "user", content: q }];
     setChat(next);
     setChatInput("");
@@ -194,7 +210,22 @@ export function QDrawer({ canReports = false }: { canReports?: boolean }) {
             </div>
           )}
 
-          {view === "chat" && (
+          {view === "chat" && lumi.messages.length > 0 && (
+            <div className="flex flex-col gap-3">
+              {lumi.messages.map((m) =>
+                m.role === "user" ? (
+                  <div key={m.id} className="ml-auto max-w-[85%] rounded-[14px] rounded-br-[4px] bg-[color-mix(in_oklab,var(--brand)_16%,transparent)] px-3.5 py-2 text-[12.5px] font-medium text-[var(--qink)]">
+                    {m.content}
+                  </div>
+                ) : (
+                  <LumiReply key={m.id} msg={m} busy={lumi.busy} onDecide={(approve) => void lumi.decide(m, approve)} onAnswer={(t) => void lumi.answer(m, t)} onRate={(r) => void lumi.rate(m, r)} />
+                ),
+              )}
+              <div className="font-mono text-[8.5px] uppercase tracking-[1.4px] text-[var(--ink5)]">Q with Lumi · acts as you · every change waits for your approval</div>
+            </div>
+          )}
+
+          {view === "chat" && lumi.messages.length === 0 && (
             <div className="flex flex-col gap-3">
               {chat.map((m, i) =>
                 m.role === "user" ? (
@@ -289,6 +320,7 @@ export function QDrawer({ canReports = false }: { canReports?: boolean }) {
                 type="button"
                 onClick={() => {
                   setChat([]);
+                  lumi.reset();
                   setView("home");
                 }}
                 aria-label="New chat"
@@ -305,7 +337,7 @@ export function QDrawer({ canReports = false }: { canReports?: boolean }) {
             />
             <button
               type="submit"
-              disabled={chatBusy || !chatInput.trim()}
+              disabled={chatBusy || lumi.busy || !chatInput.trim()}
               aria-label="Send"
               className="flex size-[38px] flex-none items-center justify-center rounded-full bg-[var(--brand)] text-[var(--onbrand)] disabled:opacity-50"
               style={{ boxShadow: "0 4px 16px color-mix(in oklab, var(--brand) var(--glowA), transparent)" }}
