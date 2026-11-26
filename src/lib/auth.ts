@@ -94,11 +94,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   events: {
     // Plan Phase 5: signing out ends the person's in-product assistant sessions, so a
     // delegation token Lumi holds stops working at once. Best-effort; never blocks sign-out.
+    // Revokes the rows here rather than importing src/server/assistant (server-only): client
+    // components reach this file through src/lib/tenant, and the production build refuses
+    // server-only in that graph. Lumi's own session dies on its next call (no live row).
     async signOut(message) {
       const token = "token" in message ? message.token : null;
       if (!token?.sub || !token.tenantId) return;
-      const { endAssistantForUser } = await import("@/server/assistant/sessions");
-      await endAssistantForUser({ tenantId: token.tenantId as string, userId: token.sub }).catch(() => undefined);
+      const ctx = { tenantId: token.tenantId as string, userId: token.sub };
+      await withTenant(ctx, async (tx) => {
+        const { count } = await tx.assistantSession.updateMany({ where: { userId: ctx.userId, revokedAt: null }, data: { revokedAt: new Date() } });
+        if (count) await audit(tx, ctx, { action: "update", entityType: "assistant_session", entityId: ctx.userId, after: { revoked: count } });
+      }).catch(() => undefined);
     },
   },
   callbacks: {
