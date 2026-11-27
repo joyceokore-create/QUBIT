@@ -94,6 +94,10 @@ interface CallOptions {
   idempotent?: boolean;
   /** Return the raw response for an event stream (no timeout, no JSON). */
   stream?: boolean;
+  /** Multipart body (file uploads) — sent as-is instead of JSON. */
+  form?: () => FormData;
+  /** Overrides the 30 s timeout (a wait-mode run can take up to 120 s). */
+  timeoutMs?: number;
   signal?: AbortSignal;
 }
 
@@ -111,12 +115,12 @@ export async function lumiFetch(conn: LumiConnection, path: string, opts: CallOp
       method: opts.method ?? "GET",
       headers: {
         authorization: `Bearer ${bearer}`,
-        ...(opts.body !== undefined ? { "content-type": "application/json" } : {}),
+        ...(opts.body !== undefined && !opts.form ? { "content-type": "application/json" } : {}),
         ...(key ? { "idempotency-key": key } : {}),
         ...(opts.stream ? { accept: "text/event-stream" } : {}),
       },
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-      signal: opts.signal ?? (opts.stream ? undefined : AbortSignal.timeout(TIMEOUT_MS)),
+      body: opts.form ? opts.form() : opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      signal: opts.signal ?? (opts.stream ? undefined : AbortSignal.timeout(opts.timeoutMs ?? TIMEOUT_MS)),
     });
     if (res.ok) return res;
     const err = await errorOf(res);
@@ -190,3 +194,70 @@ export const listMessages = async (conn: LumiConnection, sessionToken: string, c
   json<{ data: unknown[]; next_cursor: string | null }>(
     await lumiFetch(conn, `/conversations/${encodeURIComponent(conversationId)}/messages?limit=200${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`, { as: { session: sessionToken } }),
   );
+
+// ── general tasks (plan Phase 3: one-off runs on uploaded files) ─────────────────────────
+export interface LumiFile {
+  file_id: string;
+  status: "processing" | "ready" | "rejected";
+  error?: unknown;
+}
+
+/** POST /files (multipart). Lumi scans it, reads its text once (OCR where needed) and masks personal data. */
+export async function uploadLumiFile(conn: LumiConnection, buf: Buffer, fileName: string, mediaType: string): Promise<LumiFile> {
+  return json<LumiFile>(
+    await lumiFetch(conn, "/files", {
+      method: "POST",
+      idempotent: true,
+      timeoutMs: 120_000,
+      form: () => {
+        const fd = new FormData();
+        fd.append("file", new Blob([new Uint8Array(buf)], { type: mediaType }), fileName);
+        return fd;
+      },
+    }),
+  );
+}
+
+export interface LumiRun {
+  run_id: string;
+  conversation_id: string;
+  status: "queued" | "running" | "done" | "failed" | "needs_approval" | "needs_input" | "cancelled" | string;
+  output: { text: string; data: unknown };
+  usage?: { model_calls?: number; input_tokens?: number; output_tokens?: number; tool_calls?: number };
+  /** A run that stopped to ask (needs_approval, needs_input, needs_context …): what it asks. */
+  pending?: { pending_id?: string; type?: string; text?: string } | null;
+  model?: string;
+  error?: { error?: string; message?: string } | null;
+}
+
+const RUN_POLL_MS = 2_000;
+const RUN_DEADLINE_MS = 30 * 60_000;
+/** Lumi is still working only while queued or running; any other status (done, failed, or a
+ * pause such as needs_approval / needs_context — new ones may appear) is final for a poll. */
+const WORKING = new Set(["queued", "running"]);
+
+/**
+ * POST /runs in wait mode. Lumi answers 200 with the finished run, or 202 after ~120 s while
+ * it keeps working; then GET /runs/{id} is polled until it settles or 30 minutes pass.
+ * A run that pauses for approval or input is returned as it is — the caller decides.
+ */
+export async function createLumiRun(
+  conn: LumiConnection,
+  input: { message: string; file_ids?: string[]; output?: { format: "text" | "json"; schema?: unknown }; metadata?: Record<string, string> },
+  opts: { pollMs?: number; deadlineMs?: number; now?: () => number } = {},
+): Promise<LumiRun> {
+  const now = opts.now ?? Date.now;
+  const started = now();
+  let run = await json<LumiRun>(await lumiFetch(conn, "/runs", { method: "POST", idempotent: true, timeoutMs: 150_000, body: { ...input, mode: "wait" } }));
+  while (WORKING.has(run.status)) {
+    if (now() - started > (opts.deadlineMs ?? RUN_DEADLINE_MS)) throw new LumiError("Lumi did not finish reading the file in time.", 504, "run_timeout");
+    await sleep(opts.pollMs ?? RUN_POLL_MS);
+    run = await json<LumiRun>(await lumiFetch(conn, `/runs/${encodeURIComponent(run.run_id)}`));
+  }
+  return run;
+}
+
+/** DELETE /conversations/{id}: the transcript, its files and Lumi's personal-data lookup go with it. */
+export const deleteLumiConversation = async (conn: LumiConnection, conversationId: string) => {
+  await lumiFetch(conn, `/conversations/${encodeURIComponent(conversationId)}`, { method: "DELETE" });
+};

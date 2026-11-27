@@ -50,6 +50,7 @@ export function StatusUploadDrawer({
   weekLabel,
   projects,
   tenantName,
+  lumiReader = false,
   onCreateProject,
   onApply,
   onClose,
@@ -58,6 +59,8 @@ export function StatusUploadDrawer({
   weekLabel: string;
   projects: WorkspaceProject[];
   tenantName: string;
+  /** Lumi AI is connected: offer "Read with Lumi" (plan Phase 3). */
+  lumiReader?: boolean;
   /** Create a project for a line no project matches; resolves to its id. */
   onCreateProject: (name: string) => Promise<{ id: string } | { error: string }>;
   onApply: (r: UploadResult) => void;
@@ -73,6 +76,7 @@ export function StatusUploadDrawer({
   const [placeError, setPlaceError] = useState<string | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [attach, setAttach] = useState(true);
+  const [withLumi, setWithLumi] = useState(false);
   /** line → project id ("" = not placed yet, "skip" = left out). */
   const [placed, setPlaced] = useState<Record<number, string>>({});
   /** project id → the answer to "which gate is this stage?" (NOT_A_GATE = none). */
@@ -89,6 +93,7 @@ export function StatusUploadDrawer({
     const fd = new FormData();
     fd.append("file", f);
     fd.append("week", week);
+    if (withLumi) fd.append("reader", "lumi");
     const res = await fetch("/api/reports/status-upload", { method: "POST", body: fd });
     const body = await res.json().catch(() => null);
     setReading(null);
@@ -191,10 +196,19 @@ export function StatusUploadDrawer({
           className={cn("flex flex-col items-center gap-2 rounded-[var(--ds-radius-kv)] border border-dashed border-[var(--ds-line)] bg-[var(--ds-surface2)] px-4 py-8 text-center transition-colors hover:border-[var(--ds-brand)] data-[invalid=true]:border-[var(--ds-bad)] disabled:cursor-not-allowed disabled:opacity-60", FOCUS)}
         >
           {reading ? <Loader2 className="size-5 animate-spin text-[var(--ds-ink3)]" aria-hidden /> : <Upload className="size-5 text-[var(--ds-ink3)]" aria-hidden />}
-          <span className="text-[13px] font-semibold text-[var(--ds-ink)]">{reading ? `Reading ${reading}…` : "Choose a File"}</span>
+          <span className="text-[13px] font-semibold text-[var(--ds-ink)]">{reading ? `Reading ${reading}${withLumi ? " with Lumi" : ""}…` : "Choose a File"}</span>
           <span className="text-[12px] text-[var(--ds-ink3)]">Word, Excel or PDF table, the milestone tracker, or a PowerPoint one-pager per project or market</span>
         </button>
         {fileError && <FieldError id="status-file-error">{fileError}</FieldError>}
+        {lumiReader && (
+          <label className="flex items-start gap-2 text-[13px] text-[var(--ds-ink)]">
+            <input type="checkbox" checked={withLumi} onChange={(e) => setWithLumi(e.target.checked)} disabled={reading !== null} className="mt-0.5" />
+            <span>
+              Read with Lumi AI
+              <span className="block text-[12px] text-[var(--ds-ink3)]">For a written report or a scan. QUBIT already asks Lumi when its own reading finds no project lines. You check every line before it&apos;s applied.</span>
+            </span>
+          </label>
+        )}
         <DrawerText hint>Nothing is saved until you save or send a card. Lines reach the Head only when you confirm them.</DrawerText>
       </DrawerFrame>
     );
@@ -202,7 +216,7 @@ export function StatusUploadDrawer({
 
   return (
     <DrawerFrame
-      header={<DrawerHeader step="Status Report" title={preview.fileName} subtitle={`${rows.length} ${rows.length === 1 ? "line" : "lines"} read · ${openQuestions === 0 ? "nothing needs your answer" : `${openQuestions} ${openQuestions === 1 ? "needs" : "need"} your answer`}`} />}
+      header={<DrawerHeader step="Status Report" title={preview.fileName} subtitle={`${rows.length} ${rows.length === 1 ? "line" : "lines"} read${preview.extractor === "lumi" ? " by Lumi AI" : ""} · ${openQuestions === 0 ? "nothing needs your answer" : `${openQuestions} ${openQuestions === 1 ? "needs" : "need"} your answer`}`} />}
       footer={
         <DrawerFooter note={`${placedRows.length} of ${rows.length} placed${toSend.length ? ` · ${toSend.length} to send` : ""}`}>
           <button type="button" onClick={onClose} className={SECONDARY}>

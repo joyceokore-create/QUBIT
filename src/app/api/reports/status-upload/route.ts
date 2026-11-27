@@ -6,9 +6,11 @@ import { previewStatusReport, UploadWeekError } from "@/server/status-report-upl
 
 // POST /api/reports/status-upload (multipart, field `file`) — parse the weekly status
 // report and match its rows to the viewer's projects. Writes nothing; the PM reviews, then
-// /apply fills the drafts by upload id (the file stays server-side). Node runtime: the Word/Excel readers use zlib, the PDF one pdfjs.
+// /apply fills the drafts by upload id (the file stays server-side). Lumi AI may read it
+// (plan Phase 3), which can take a while for a scan. Node runtime: the Word/Excel readers use zlib, the PDF one pdfjs.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 export async function POST(req: Request) {
   const guard = await requireSession();
@@ -31,7 +33,9 @@ export async function POST(req: Request) {
   try {
     const buf = Buffer.from(await file.arrayBuffer());
     const weekField = form?.get("week");
-    const preview = await previewStatusReport(guard.ctx, buf, file.name, typeof weekField === "string" ? weekField : null);
+    // reader=lumi: the PM ticked "Read with Lumi" (plan Phase 3); otherwise Lumi steps in only when the rules find no lines.
+    const reader = form?.get("reader") === "lumi" ? "lumi" : "auto";
+    const preview = await previewStatusReport(guard.ctx, buf, file.name, typeof weekField === "string" ? weekField : null, new Date(), reader);
     return NextResponse.json({ data: { ...preview, fileName: file.name } });
   } catch (e) {
     if (e instanceof ParseError) return NextResponse.json({ error: { code: "UNREADABLE", message: e.message } }, { status: 422 });

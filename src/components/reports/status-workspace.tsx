@@ -44,7 +44,7 @@ interface ResultRow extends ApplyRow {
 const weekLabel = (w: string) => `Week ${Number(w.split("-W")[1])} · ${weekRange(isoWeekMonday(w))}`;
 const cityOf = (tz: string) => tz.split("/").pop()!.replace(/_/g, " ");
 
-export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantName }: { initial: StatusWorkspaceJson; uploadHint?: boolean; timeZone: string; tenantName: string }) {
+export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantName, lumiReader = false }: { initial: StatusWorkspaceJson; uploadHint?: boolean; timeZone: string; tenantName: string; lumiReader?: boolean }) {
   const router = useRouter();
   const [ws, setWs] = useState<StatusWorkspaceJson>(initial);
   const [weekMode, setWeekMode] = useState<WeekMode>("this");
@@ -629,7 +629,7 @@ export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantN
       )}
 
       <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} wide>
-        {drawerOpen && <StatusUploadDrawer key={drawerKey} week={week} weekLabel={week ? weekLabel(week) : ""} projects={ws.projects} tenantName={tenantName} onCreateProject={createProject} onApply={(r) => void applyUpload(r)} onClose={() => setDrawerOpen(false)} />}
+        {drawerOpen && <StatusUploadDrawer key={drawerKey} week={week} weekLabel={week ? weekLabel(week) : ""} projects={ws.projects} tenantName={tenantName} lumiReader={lumiReader} onCreateProject={createProject} onApply={(r) => void applyUpload(r)} onClose={() => setDrawerOpen(false)} />}
       </Drawer>
     </div>
   );

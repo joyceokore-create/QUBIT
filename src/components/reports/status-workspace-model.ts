@@ -64,6 +64,8 @@ export interface Preview {
   fileName: string;
   /** The upload kept server-side; Save names it instead of sending the file back. */
   uploadId: string;
+  /** Who read the lines (plan Phase 3): QUBIT's rules or Lumi AI. */
+  extractor: "rules" | "lumi";
 }
 export interface ApplyRow {
   projectId: string;

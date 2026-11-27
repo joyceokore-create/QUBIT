@@ -18,6 +18,7 @@ import { INSTANCE_STATES, setInstanceState, type InstanceState } from "@/server/
 import { createProject, updateProject } from "@/server/projects";
 import { saveMarketCheckIn } from "@/server/rollout";
 import { extractStatusReport, NARRATIVE_MAX, STAGE_MAX, type ParsedRow, type ReportFormat } from "@/server/status-report/parse";
+import { extractWithLumi, LumiExtractError, lumiReaderAvailable } from "@/server/status-report/lumi-extract";
 import { matchProjectAndMarket, type MatchableProject, type RowMatch } from "@/server/status-report/match";
 import { resolveDelivery, type DeliveryCatalog, type DeliveryPlan } from "@/lib/status-report-delivery";
 import { requiresSignOff } from "@/lib/gate-approval";
@@ -106,6 +107,8 @@ export interface UploadPreview {
    * when the PM picks another project (other projects are fetched on demand). */
   catalogs: Record<string, DeliveryCatalog>;
   warnings: string[];
+  /** Who read the lines: QUBIT's rules, or Lumi AI (plan Phase 3) — the drawer badges Lumi's. */
+  extractor: "rules" | "lumi";
 }
 
 /** One project's delivery, as the resolver needs it: markets, modules, gates and the
@@ -344,9 +347,31 @@ async function othersProjects(ctx: TenantContext, ownIds: string[]): Promise<(Ma
   });
 }
 
-export async function previewStatusReport(ctx: TenantContext, buf: Buffer, fileName: string, week?: string | null, now = new Date()): Promise<UploadPreview> {
+/**
+ * Who reads the file: the rules always run first. Lumi reads it when the PM asks ("lumi") or
+ * when the rules found no lines (prose, a scan) and Lumi is connected. If Lumi can't, the
+ * rules' result stands with Lumi's reason as a warning — the upload never fails on Lumi.
+ */
+async function readReport(ctx: TenantContext, buf: Buffer, fileName: string, reader: "auto" | "lumi") {
+  const rules = await extractStatusReport(buf, fileName);
+  if (reader !== "lumi" && rules.rows.length > 0) return { report: rules, extractor: "rules" as const, runId: null };
+  if (!(await lumiReaderAvailable(ctx))) {
+    const note = reader === "lumi" ? ["Lumi isn't connected, so QUBIT read the file with its rules."] : [];
+    return { report: { ...rules, warnings: [...rules.warnings, ...note] }, extractor: "rules" as const, runId: null };
+  }
+  try {
+    const lumi = await extractWithLumi(ctx, { buf, fileName, format: rules.format });
+    if (lumi.rows.length === 0) return { report: { ...rules, warnings: [...rules.warnings, "Lumi found no project lines in the file either."] }, extractor: "rules" as const, runId: null };
+    return { report: { ...rules, rows: lumi.rows, warnings: ["Read by Lumi AI — check each line before you apply it.", ...lumi.warnings] }, extractor: "lumi" as const, runId: lumi.runId };
+  } catch (e) {
+    if (!(e instanceof LumiExtractError)) throw e;
+    return { report: { ...rules, warnings: [...rules.warnings, `Lumi: ${e.message}`] }, extractor: "rules" as const, runId: null };
+  }
+}
+
+export async function previewStatusReport(ctx: TenantContext, buf: Buffer, fileName: string, week?: string | null, now = new Date(), reader: "auto" | "lumi" = "auto"): Promise<UploadPreview> {
   const { isoWeek, past } = resolveReportWeek(week, now);
-  const [report, projects] = await Promise.all([extractStatusReport(buf, fileName), matchableProjects(ctx)]);
+  const [{ report, extractor, runId }, projects] = await Promise.all([readReport(ctx, buf, fileName, reader), matchableProjects(ctx)]);
   // Only an EXACT name or code for someone else's project is offered for sending; a fuzzy
   // guess never routes a line to a colleague. Own projects are matched first, as before.
   const others = await othersProjects(ctx, projects.map((p) => p.id));
@@ -382,8 +407,8 @@ export async function previewStatusReport(ctx: TenantContext, buf: Buffer, fileN
     }
     rows.push({ ...r, match, owner, alreadySent, computedRag: match.projectId && !owner ? (computed[match.projectId] ?? null) : null, delivery, warnings: alreadySent ? [...r.warnings, "This week's update was already sent — tick Replace to resend it with this row."] : r.warnings });
   }
-  const uploadId = await recordUpload(ctx, { buf, fileName, format: report.format, isoWeek, rows });
-  return { uploadId, format: report.format, preparedBy: report.preparedBy, reportDate: report.reportDate, isoWeek, past, rows, projects, catalogs, warnings: report.warnings };
+  const uploadId = await recordUpload(ctx, { buf, fileName, format: report.format, isoWeek, rows, extractor, extractorRunId: runId });
+  return { uploadId, format: report.format, preparedBy: report.preparedBy, reportDate: report.reportDate, isoWeek, past, rows, projects, catalogs, warnings: report.warnings, extractor };
 }
 
 /** An unmatched line stays "unmatched"; a matched one (exact or suggested) waits as "pending". */
@@ -398,7 +423,7 @@ function rowState(match: RowMatch): "pending" | "unmatched" {
  */
 export async function recordUpload(
   ctx: TenantContext,
-  input: { buf: Buffer; fileName: string; format: ReportFormat; isoWeek: string; rows: (ParsedRow & { match: RowMatch; owner?: PreviewRow["owner"] })[] },
+  input: { buf: Buffer; fileName: string; format: ReportFormat; isoWeek: string; rows: (ParsedRow & { match: RowMatch; owner?: PreviewRow["owner"] })[]; extractor?: "rules" | "lumi"; extractorRunId?: string | null },
 ): Promise<string> {
   const sha256 = createHash("sha256").update(input.buf).digest("hex");
   const fileName = input.fileName.slice(0, 200);
@@ -408,7 +433,7 @@ export async function recordUpload(
       select: { id: true },
     });
     const upload = previous
-      ? await tx.statusUpload.update({ where: { id: previous.id }, data: { fileName }, select: { id: true } })
+      ? await tx.statusUpload.update({ where: { id: previous.id }, data: { fileName, extractor: input.extractor ?? "rules", extractorRunId: input.extractorRunId ?? null }, select: { id: true } })
       : await tx.statusUpload.create({
           data: {
             tenantId: ctx.tenantId,
@@ -419,6 +444,8 @@ export async function recordUpload(
             sha256,
             fileData: input.buf.toString("base64"),
             isoWeek: input.isoWeek,
+            extractor: input.extractor ?? "rules",
+            extractorRunId: input.extractorRunId ?? null,
           },
           select: { id: true },
         });
