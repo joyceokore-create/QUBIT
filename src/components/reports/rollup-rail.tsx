@@ -103,11 +103,11 @@ export function RollupRail({
       setError(readApiError(payload, "Could not draft the summary. Try again.").message);
       return;
     }
-    const { text, engine, reason } = payload.data as { text: string; engine: "ai" | "rules"; reason?: "off" | "cap" | "failed" | "rejected" };
+    const { text, engine, via, reason } = payload.data as { text: string; engine: "ai" | "rules"; via?: "lumi" | "local"; reason?: "off" | "cap" | "failed" | "rejected" };
     setBeforeDraft(narrative);
     setNarrative(text);
     const why = reason === "cap" ? " (today's AI limit is used)" : reason === "failed" ? " (the AI didn't answer)" : reason === "rejected" ? " (the AI's draft didn't pass the checks)" : "";
-    setDraftNote(engine === "ai" ? "Drafted by Q from this week's updates. Check it, then edit before you approve." : `Drafted from this week's updates${why}. Edit before you approve.`);
+    setDraftNote(engine === "ai" ? `Drafted by ${via === "lumi" ? "Lumi AI" : "Q"} from this week's updates. Check it, then edit before you approve.` : `Drafted from this week's updates${why}. Edit before you approve.`);
   };
 
   return (

@@ -1,10 +1,11 @@
 // Plan Phase 4 — drafting the Head's managerial summary. Head-only; grounded in the week's
 // roll-up; the AI draft is used only when it passes the checks, otherwise the rules write it
 // (AI off, daily cap used, call failed, or an invented project code). Metrics-only logging.
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
 import { withTenant, type TenantContext } from "@/lib/tenant";
 import { confirmCheckIn } from "@/server/checkins";
+import { clearLumiTokenCache } from "@/server/connectors/lumi";
 import { generateRollupSummary, SUMMARY_PURPOSE } from "@/server/rollup-summary";
 import { createUsers, cleanupFixtureUsers } from "./_users";
 
@@ -18,6 +19,45 @@ function stubAi(reply: string | Error) {
     if (reply instanceof Error) throw reply;
     return new Response(JSON.stringify({ choices: [{ message: { content: reply }, finish_reason: "stop" }], usage: { prompt_tokens: 120, completion_tokens: 40 } }), { status: 200, headers: { "content-type": "application/json" } });
   });
+}
+
+/**
+ * Lumi (connected via env) and optionally the internal box, both stubbed. `lumi` is Lumi's
+ * draft, or an Error for a failed run. Records what Lumi was sent and what it deleted.
+ */
+function stubLumiAndAi(lumi: string | Error, box?: string) {
+  vi.stubEnv("LUMI_BASE_URL", "https://lumi.example.invalid/api/v1");
+  vi.stubEnv("LUMI_CLIENT_ID", "cred_test");
+  vi.stubEnv("LUMI_CLIENT_SECRET", "not-a-real-secret");
+  if (box !== undefined) {
+    vi.stubEnv("Q_AI_BASE_URL", "http://ai.invalid/v1");
+    vi.stubEnv("Q_AI_API_KEY", "test-key");
+  }
+  const seen = { lumiMessages: [] as string[], lumiData: [] as string[], deleted: [] as string[], boxCalls: 0 };
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const url = String(input);
+    if (url.startsWith("http://ai.invalid")) {
+      seen.boxCalls++;
+      return json({ choices: [{ message: { content: box }, finish_reason: "stop" }], usage: { prompt_tokens: 120, completion_tokens: 40 } });
+    }
+    if (url.endsWith("/oauth/token")) return json({ access_token: "tok", expires_in: 900 });
+    if (url.endsWith("/files")) {
+      seen.lumiData.push(await ((init?.body as FormData).get("file") as Blob).text());
+      return json({ file_id: "file_s", status: "ready" }, 201);
+    }
+    if (url.endsWith("/runs")) {
+      seen.lumiMessages.push((JSON.parse(String(init?.body)) as { message: string }).message);
+      if (lumi instanceof Error) return json({ error: "internal", message: lumi.message }, 500);
+      return json({ run_id: "run_s", conversation_id: "conv_s", status: "done", model: "lumi-model", output: { text: lumi, data: null }, usage: { input_tokens: 300, output_tokens: 60 } });
+    }
+    if (init?.method === "DELETE") {
+      seen.deleted.push(url.replace(/^.*\/api\/v1/, ""));
+      return new Response(null, { status: 204 });
+    }
+    return json({ error: "not_found" }, 404);
+  });
+  return seen;
 }
 
 describe("rollup summary", () => {
@@ -37,9 +77,15 @@ describe("rollup summary", () => {
     await confirmCheckIn(pm, red, { narrative: "Vendor missed the SIT drop; new date is next Tuesday.", ragOverride: "Red", overrideReason: "Vendor slip blocks SIT this week." }, NOW);
   });
 
+  // The local .env may hold a real Lumi key: no test reaches Lumi unless it stubs it.
+  beforeEach(() => {
+    for (const k of ["LUMI_BASE_URL", "LUMI_CLIENT_ID", "LUMI_CLIENT_SECRET", "Q_AI_BASE_URL", "Q_AI_API_KEY"]) vi.stubEnv(k, "");
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+    clearLumiTokenCache();
   });
 
   afterAll(async () => {
@@ -74,7 +120,7 @@ describe("rollup summary", () => {
   it("uses the AI's draft when it passes the checks, sending no PM names", async () => {
     const fetch = stubAi("**Week 41:** mostly steady.\nNeeds attention: SUM-R Summary Red is red after a vendor slip.");
     const out = await generateRollupSummary(head, { tenantName: "Riverbank" }, NOW);
-    expect(out).toEqual({ engine: "ai", text: "Week 41: mostly steady.\nNeeds attention: SUM-R Summary Red is red after a vendor slip." });
+    expect(out).toEqual({ engine: "ai", via: "local", text: "Week 41: mostly steady.\nNeeds attention: SUM-R Summary Red is red after a vendor slip." });
     const body = JSON.parse(String(fetch.mock.calls[0]![1]!.body)) as { messages: { content: string }[] };
     expect(body.messages.at(-1)!.content).toContain("SUM-R");
     expect(body.messages.at(-1)!.content).not.toContain("pmName");
@@ -94,5 +140,38 @@ describe("rollup summary", () => {
     vi.stubEnv("Q_AI_DAILY_CAP", "0");
     expect(await generateRollupSummary(head, { tenantName: "Riverbank" }, NOW)).toMatchObject({ engine: "rules", reason: "cap" });
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("Lumi drafts first when connected: grounded, no PM names, conversation deleted", async () => {
+    const seen = stubLumiAndAi("Week 41: one red.\nNeeds attention: SUM-R Summary Red slipped on the vendor's SIT drop.", "Week 41: from the box.");
+    const out = await generateRollupSummary(head, { tenantName: "Riverbank" }, NOW);
+    expect(out).toEqual({ engine: "ai", via: "lumi", text: "Week 41: one red.\nNeeds attention: SUM-R Summary Red slipped on the vendor's SIT drop." });
+    // The instructions go in the message, the week's data as an attached JSON file — no PM names.
+    expect(seen.lumiMessages[0]).toContain("Use ONLY the JSON data");
+    expect(seen.lumiMessages[0]).toContain("attached week.json");
+    expect(seen.lumiData[0]).toContain("SUM-R");
+    expect(seen.lumiData[0]).not.toContain("pmName");
+    expect(seen.deleted).toEqual(["/conversations/conv_s"]);
+    expect(seen.boxCalls).toBe(0);
+    const last = await withTenant(head, (tx) => tx.aiCallLog.findFirst({ where: { userId: head.userId, purpose: SUMMARY_PURPOSE }, orderBy: { createdAt: "desc" }, select: { model: true, usedAi: true, inputTokens: true } }));
+    expect(last).toEqual({ model: "lumi-model", usedAi: true, inputTokens: 300 });
+  });
+
+  it("a Lumi draft that fails the checks, or a failed Lumi run, passes to the in-house box, then the rules", async () => {
+    let seen = stubLumiAndAi("Week 41: Needs attention: ZZZ-9 Phantom is red.", "Week 41: steady.\nNeeds attention: SUM-R Summary Red is red.");
+    expect(await generateRollupSummary(head, { tenantName: "Riverbank" }, NOW)).toMatchObject({ engine: "ai", via: "local" });
+    expect(seen.boxCalls).toBe(1);
+    vi.restoreAllMocks();
+    vi.stubEnv("Q_AI_BASE_URL", "");
+    clearLumiTokenCache();
+
+    seen = stubLumiAndAi(new Error("boom"));
+    expect(await generateRollupSummary(head, { tenantName: "Riverbank" }, NOW)).toMatchObject({ engine: "rules", reason: "failed" });
+    vi.restoreAllMocks();
+    clearLumiTokenCache();
+
+    seen = stubLumiAndAi("Week 41: ZZZ-9 Phantom is red.");
+    expect(await generateRollupSummary(head, { tenantName: "Riverbank" }, NOW)).toMatchObject({ engine: "rules", reason: "rejected" });
+    expect(seen.boxCalls).toBe(0);
   });
 });

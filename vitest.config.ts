@@ -19,6 +19,10 @@ export default defineConfig(({ mode }) => {
   delete env.AZURE_AD_CLIENT_ID;
   delete env.AZURE_AD_CLIENT_SECRET;
   delete env.AZURE_AD_TENANT_ID;
+  // And Lumi AI: a local .env may hold a real Lumi key; a test that wants Lumi stubs it on.
+  delete env.LUMI_BASE_URL;
+  delete env.LUMI_CLIENT_ID;
+  delete env.LUMI_CLIENT_SECRET;
   Object.assign(process.env, env);
   delete process.env.Q_AI_API_KEY;
   delete process.env.Q_AI_BASE_URL;
@@ -26,6 +30,9 @@ export default defineConfig(({ mode }) => {
   delete process.env.AZURE_AD_CLIENT_ID;
   delete process.env.AZURE_AD_CLIENT_SECRET;
   delete process.env.AZURE_AD_TENANT_ID;
+  delete process.env.LUMI_BASE_URL;
+  delete process.env.LUMI_CLIENT_ID;
+  delete process.env.LUMI_CLIENT_SECRET;
 
   return {
     plugins: [react()],
@@ -38,7 +45,7 @@ export default defineConfig(({ mode }) => {
       // suites take the deterministic/mock offline path. `test.env` is the reliable channel —
       // process.env mutations in this config file don't propagate to workers. A test that
       // wants the model sets these itself and mocks `fetch` (see tests/unit/q-llm.test.ts).
-      env: { Q_AI_API_KEY: "", Q_AI_BASE_URL: "", ANTHROPIC_API_KEY: "" },
+      env: { Q_AI_API_KEY: "", Q_AI_BASE_URL: "", ANTHROPIC_API_KEY: "", LUMI_BASE_URL: "", LUMI_CLIENT_ID: "", LUMI_CLIENT_SECRET: "" },
       globals: true,
       include: ["tests/unit/**/*.test.{ts,tsx}", "tests/rls/**/*.test.ts"],
       // The RLS/integration tests all hit one shared Postgres DB; running files in

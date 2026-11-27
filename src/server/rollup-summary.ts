@@ -4,6 +4,7 @@ import { withTenant, type TenantContext } from "@/lib/tenant";
 import { checkAiSummary, composeSummary, type SummaryInput } from "@/lib/rollup-summary";
 import { leaveExposureNextWeek } from "@/server/absence";
 import { assertHead, getRollupForWeek, RollupError } from "@/server/portfolio-reports";
+import { createLumiRun, deleteLumiConversation, lumiConnection, uploadLumiFile, type LumiConnection } from "@/server/connectors/lumi";
 import { aiCapReached } from "@/server/q/ai-limits";
 import { llmChat, llmEnabled, llmModel } from "@/server/q/llm";
 import { findDecisionBlockers } from "@/server/reports-week";
@@ -13,10 +14,10 @@ import { findDecisionBlockers } from "@/server/reports-week";
  * PRE-FILLS the roll-up line: the Head edits it and approves through approveRollup, so the
  * approval, the PDF digest and the email are unchanged.
  *
- * Engines, in order: the AI model (today the in-house box via llmChat; plan Phase 3 puts
- * Lumi ahead of it), then the rule-based composer. The AI sees only the week's data as
- * JSON and must name no project that isn't in it; anything that fails the checks, the
- * daily cap, or the call itself falls back to the rules. AiCallLog records metrics only.
+ * Engines, in order: Lumi AI (a general-task run, when Lumi is connected), the in-house box
+ * via llmChat, then the rule-based composer. Each AI sees only the week's data as JSON and
+ * must name no project that isn't in it; a draft that fails the checks or a call that fails
+ * passes to the next engine. The daily cap covers both AIs. AiCallLog records metrics only.
  */
 
 export const SUMMARY_PURPOSE = "summary:rollup";
@@ -24,6 +25,8 @@ export const SUMMARY_PURPOSE = "summary:rollup";
 export interface RollupSummary {
   text: string;
   engine: "ai" | "rules";
+  /** Which AI wrote it, when one did. */
+  via?: "lumi" | "local";
   /** Why the rules wrote it: no AI configured, today's cap used, the call failed, or the
    * AI's text failed the grounding checks. */
   reason?: "off" | "cap" | "failed" | "rejected";
@@ -60,18 +63,32 @@ export async function gatherSummaryInput(ctx: TenantContext, isoWeek: string, no
 
 const SYSTEM = (tenantName: string) =>
   `You write the weekly managerial summary for ${tenantName}'s project portfolio, for its executives. ` +
-  `Use ONLY the JSON data in the user message. Never invent projects, codes, people, numbers or dates. ` +
+  `Use ONLY the JSON data you are given. Never invent projects, codes, people, numbers or dates. ` +
   `Write plain text with no Markdown, at most 900 characters, as up to five lines, each starting with one of these labels: ` +
   `"Week NN:" (the headline: the green/amber/red spread and what changed since last week), ` +
   `"Needs attention:" (red projects and those that got worse, by code and name, with the reason from their PM's line), ` +
   `"Decisions needed:", "Next week:" (milestones due and leave), "No update yet:". Leave out a line that has nothing to say. ` +
   `Lead with what needs the executive's attention. No preamble.`;
 
-async function logCall(ctx: TenantContext, entry: { usedAi: boolean; inputTokens?: number; outputTokens?: number; latencyMs?: number }) {
+/**
+ * One Lumi general-task run. The week's data goes as an attached JSON file, not inside the
+ * message: Lumi's agent didn't read JSON pasted into the message (it asked for the data),
+ * and a file has no 20,000-character limit. Deleting the conversation deletes the file too.
+ */
+async function lumiDraft(conn: LumiConnection, system: string, data: unknown) {
+  const file = await uploadLumiFile(conn, Buffer.from(JSON.stringify(data), "utf8"), "week.json", "application/json");
+  const message = `${system}\n\nThe week's data is in the attached week.json. Do not ask questions and do not create files.`;
+  const run = await createLumiRun(conn, { message, file_ids: [file.file_id], output: { format: "text" }, metadata: { purpose: SUMMARY_PURPOSE } }, { deadlineMs: 2 * 60_000 });
+  await deleteLumiConversation(conn, run.conversation_id).catch(() => undefined);
+  if (run.status !== "done") throw new Error(`Lumi run ${run.status}`);
+  return { text: run.output.text ?? "", model: run.model ?? "lumi", inputTokens: run.usage?.input_tokens ?? 0, outputTokens: run.usage?.output_tokens ?? 0 };
+}
+
+async function logCall(ctx: TenantContext, entry: { usedAi: boolean; model?: string; inputTokens?: number; outputTokens?: number; latencyMs?: number }) {
   try {
     await withTenant(ctx, (tx) =>
       tx.aiCallLog.create({
-        data: { tenantId: ctx.tenantId, userId: ctx.userId, purpose: SUMMARY_PURPOSE, model: llmModel(), usedAi: entry.usedAi, inputTokens: entry.inputTokens ?? 0, outputTokens: entry.outputTokens ?? 0, latencyMs: entry.latencyMs ?? 0 },
+        data: { tenantId: ctx.tenantId, userId: ctx.userId, purpose: SUMMARY_PURPOSE, model: entry.model ?? llmModel(), usedAi: entry.usedAi, inputTokens: entry.inputTokens ?? 0, outputTokens: entry.outputTokens ?? 0, latencyMs: entry.latencyMs ?? 0 },
       }),
     );
   } catch {
@@ -87,7 +104,8 @@ export async function generateRollupSummary(ctx: TenantContext, opts: { week?: s
   const input = await gatherSummaryInput(ctx, isoWeek, now);
   const rules = composeSummary(input);
 
-  if (!llmEnabled()) {
+  const lumi = await lumiConnection(ctx).catch(() => null);
+  if (!lumi && !llmEnabled()) {
     await logCall(ctx, { usedAi: false });
     return { text: rules, engine: "rules", reason: "off" };
   }
@@ -98,6 +116,23 @@ export async function generateRollupSummary(ctx: TenantContext, opts: { week?: s
 
   // The model sees the facts it needs, not who the PMs are.
   const data = { ...input, projects: input.projects.map(({ pmName: _pm, ...p }) => p) };
+  const codes = input.projects.map((p) => p.code);
+  let reason: "failed" | "rejected" = "failed";
+
+  if (lumi) {
+    const start = Date.now();
+    try {
+      const res = await lumiDraft(lumi, SYSTEM(opts.tenantName || "the organisation"), data);
+      await logCall(ctx, { usedAi: true, model: res.model, inputTokens: res.inputTokens, outputTokens: res.outputTokens, latencyMs: Date.now() - start });
+      const checked = checkAiSummary(res.text, codes);
+      if (checked) return { text: checked, engine: "ai", via: "lumi" };
+      reason = "rejected";
+    } catch {
+      await logCall(ctx, { usedAi: false, model: "lumi", latencyMs: Date.now() - start });
+    }
+  }
+  if (!llmEnabled()) return { text: rules, engine: "rules", reason };
+
   const start = Date.now();
   try {
     const res = await llmChat({
@@ -107,8 +142,8 @@ export async function generateRollupSummary(ctx: TenantContext, opts: { week?: s
       messages: [{ role: "user", content: "Write this week's managerial summary from this data (JSON):\n\n```json\n" + JSON.stringify(data) + "\n```" }],
     });
     await logCall(ctx, { usedAi: true, inputTokens: res.inputTokens, outputTokens: res.outputTokens, latencyMs: Date.now() - start });
-    const checked = checkAiSummary(res.text, input.projects.map((p) => p.code));
-    return checked ? { text: checked, engine: "ai" } : { text: rules, engine: "rules", reason: "rejected" };
+    const checked = checkAiSummary(res.text, codes);
+    return checked ? { text: checked, engine: "ai", via: "local" } : { text: rules, engine: "rules", reason: "rejected" };
   } catch {
     await logCall(ctx, { usedAi: false, latencyMs: Date.now() - start });
     return { text: rules, engine: "rules", reason: "failed" };

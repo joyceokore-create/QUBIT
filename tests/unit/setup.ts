@@ -13,6 +13,8 @@ import { beforeAll } from "vitest";
 // Prisma `.env` reload, so a local .env with AZURE_AD_* set would flip createUser to the
 // SSO path (users provisioned ACTIVE, no invite token) and break the credentials-based
 // invite suites. Blank them here too; a test that wants SSO stubs them with vi.stubEnv.
+// Lumi AI likewise: a local .env may hold a real Lumi key, and no suite may reach Lumi
+// unless it stubs the connection on (vi.stubEnv) and stubs fetch.
 beforeAll(() => {
   delete process.env.Q_AI_API_KEY;
   delete process.env.Q_AI_BASE_URL;
@@ -20,4 +22,7 @@ beforeAll(() => {
   delete process.env.AZURE_AD_CLIENT_ID;
   delete process.env.AZURE_AD_CLIENT_SECRET;
   delete process.env.AZURE_AD_TENANT_ID;
+  delete process.env.LUMI_BASE_URL;
+  delete process.env.LUMI_CLIENT_ID;
+  delete process.env.LUMI_CLIENT_SECRET;
 });
