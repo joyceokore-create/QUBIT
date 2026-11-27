@@ -23,6 +23,9 @@ describe("jsonFromAnswer", () => {
   it("refuses an answer with no JSON", () => {
     expect(() => jsonFromAnswer("I could not read the file.")).toThrow(LumiExtractError);
     expect(() => jsonFromAnswer("{not json}")).toThrow(LumiExtractError);
+    // Lumi's own words reach the PM (e.g. its OCR model isn't switched on).
+    expect(() => jsonFromAnswer("I cannot read the scanned PDF because the vision model is not registered.")).toThrow(/Lumi answered instead of reading: “I cannot read the scanned PDF/);
+    expect(() => jsonFromAnswer("   ")).toThrow(/empty/);
   });
 });
 

@@ -56,7 +56,8 @@ export const EXTRACT_SCHEMA = {
 } as const;
 
 export const EXTRACT_MESSAGE =
-  "Read the attached weekly project status document. For every project it reports on, give: " +
+  "Read the attached weekly project status document. If it is a scan or an image without a text layer, " +
+  "use your OCR tool to read it first; do not ask, just run it. For every project it reports on, give: " +
   "project (the name as written), code (the project code, or null), market (a country or market the line is about, or null), " +
   "rag (Green, Amber or Red, only if the document states it, else null), stage (the delivery stage as written, or empty), " +
   `update (what the document says about the project this week, under ${NARRATIVE_MAX} characters), percent (percent complete if stated, else null), ` +
@@ -95,7 +96,8 @@ export function jsonFromAnswer(raw: string): unknown {
   } catch {
     const start = s.indexOf("{");
     const end = s.lastIndexOf("}");
-    if (start < 0 || end <= start) throw new LumiExtractError("Lumi's answer held no JSON.");
+    // No JSON: Lumi answered in words (e.g. "the vision model is not registered") — pass them on.
+    if (start < 0 || end <= start) throw new LumiExtractError(s ? `Lumi answered instead of reading: “${s.replace(/\s+/g, " ").slice(0, 200)}”` : "Lumi's answer was empty.");
     try {
       return JSON.parse(s.slice(start, end + 1));
     } catch {
