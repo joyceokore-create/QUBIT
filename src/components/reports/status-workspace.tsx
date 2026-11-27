@@ -323,7 +323,7 @@ export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantN
           ? { tone: "warn", text: r.message ?? "Skipped" }
           : r.problems?.length
             ? { tone: "warn", text: `Saved, but: ${r.problems.join(" · ")}` }
-            : { tone: "ok", text: r.outcome === "drafted" ? "Draft saved" : r.outcome === "sent" ? "Sent to the Head" : r.outcome === "resent" ? "Resent to the Head" : fallback };
+            : { tone: "ok", text: `${r.outcome === "drafted" ? "Draft saved" : r.outcome === "sent" ? "Sent to the Head" : r.outcome === "resent" ? "Resent to the Head" : fallback}${r.raid ? ` · ${r.raid}` : ""}` };
 
   async function saveCard(id: string) {
     const p = ws.projects.find((x) => x.catalog.projectId === id)!;
@@ -554,6 +554,7 @@ export function StatusWorkspace({ initial, uploadHint = false, timeZone, tenantN
                   {r.markets && <span>· {r.markets}</span>}
                   {r.gates && <span>· gates: {r.gates}</span>}
                   {r.modules && <span>· channels: {r.modules}</span>}
+                  {r.raid && <span>· {r.raid}</span>}
                   {r.attached && <span>· report attached</span>}
                   {r.problems?.map((x) => (
                     <span key={x} className="text-[var(--ds-bad-text)]">

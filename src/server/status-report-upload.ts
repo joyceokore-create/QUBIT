@@ -6,6 +6,8 @@ import { audit } from "@/lib/audit";
 import { canWriteProject } from "@/lib/access";
 import { can } from "@/lib/rbac";
 import { withTenant, type TenantContext } from "@/lib/tenant";
+import { createBlocker } from "@/server/blockers";
+import { createRisk } from "@/server/risks";
 import { isoWeekId, isoWeekMonday, isValidIsoWeek } from "@/lib/iso-week";
 import { PM_SELECT, pmIdsOf, runsProjectWhere } from "@/lib/ownership";
 import { emitDomainEvent } from "@/server/events";
@@ -283,6 +285,8 @@ export const ApplyInput = z.object({
         lines: z.array(z.number().int().min(0)).max(200).optional(),
         /** Phase 2: lines a colleague sent to this project that the PM used for this row. */
         routedRowIds: z.array(z.string().uuid()).max(20).optional(),
+        /** Risks and issues the file listed that the PM chose to record (never automatic). */
+        raid: z.array(z.object({ kind: z.enum(["risk", "blocker"]), text: z.string().trim().min(3).max(200) })).max(20).optional(),
       }),
     )
     .min(1)
@@ -307,6 +311,8 @@ export interface ApplyRow {
   gates?: string | null;
   /** What the row did to module states ("9 of 42 states updated"). */
   modules?: string | null;
+  /** Risks and blockers raised from the file's lines ("1 risk and 1 blocker raised"). */
+  raid?: string | null;
   /** Changes that failed, one line each (the row still counts as applied). */
   problems?: string[];
 }
@@ -624,9 +630,16 @@ export async function applyStatusReport(ctx: TenantContext, raw: ApplyInputT, re
         modules = m.summary;
         problems.push(...m.problems);
       }
+      // ── risks and blockers the PM picked from the file's lines ──
+      let raid: string | null = null;
+      if (row.raid?.length) {
+        const r = await applyRaid(ctx, row.projectId, row.raid, week);
+        raid = r.summary;
+        problems.push(...r.problems);
+      }
       // ── the file, once per project, when something was applied ──
       let attached = false;
-      const applied = outcome === "drafted" || outcome === "resent" || outcome === "sent" || markets || gates || modules;
+      const applied = outcome === "drafted" || outcome === "resent" || outcome === "sent" || markets || gates || modules || raid;
       if (upload && input.attach && applied) {
         // One copy of the file: the document points at the upload rather than holding it.
         await createDocument(
@@ -642,13 +655,54 @@ export async function applyStatusReport(ctx: TenantContext, raw: ApplyInputT, re
         const took = await acceptRoutedLines(ctx, row.projectId, row.routedRowIds, isoWeek, week, realNow);
         if (took.attached) attached = true;
       }
-      out.push({ projectId: row.projectId, code, outcome, message, attached, markets, gates, modules, problems });
+      out.push({ projectId: row.projectId, code, outcome, message, attached, markets, gates, modules, raid, problems });
     } catch (e) {
       out.push({ projectId: row.projectId, code, outcome: "error", message: e instanceof Error ? e.message : "Could not apply.", attached: false });
     }
   }
   if (upload) await settleUpload(ctx, upload.id, realNow);
   return out;
+}
+
+/**
+ * Record the file's risk and issue lines the PM chose: a risk (probability and impact 3 of 5,
+ * for the PM to rate on the RAID log) or a blocker (Medium). An open risk with the same title,
+ * or an open blocker with the same description, on the project is not raised twice — re-saving
+ * a card never duplicates. Each record is audited by createRisk / createBlocker.
+ */
+async function applyRaid(ctx: TenantContext, projectId: string, items: { kind: "risk" | "blocker"; text: string }[], week: string): Promise<{ summary: string | null; problems: string[] }> {
+  const fold = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+  const open = await withTenant(ctx, async (tx) => ({
+    risks: new Set((await tx.risk.findMany({ where: { projectId, status: { notIn: ["Closed"] } }, select: { title: true } })).map((r) => fold(r.title))),
+    blockers: new Set((await tx.blocker.findMany({ where: { projectId, status: { notIn: ["Resolved"] } }, select: { description: true } })).map((b) => fold(b.description))),
+  }));
+  let risks = 0;
+  let blockers = 0;
+  let known = 0;
+  const problems: string[] = [];
+  for (const item of items) {
+    const text = item.text.replace(/\s+/g, " ").trim().slice(0, 200);
+    const seen = item.kind === "risk" ? open.risks : open.blockers;
+    if (seen.has(fold(text))) {
+      known++;
+      continue;
+    }
+    try {
+      if (item.kind === "risk") {
+        await createRisk(ctx, { projectId, title: text, probability: 3, impact: 3, category: null, mitigation: `Raised from the week ${week} status report — rate it on the RAID log.` });
+        risks++;
+      } else {
+        await createBlocker(ctx, projectId, { description: text, severity: "Medium" });
+        blockers++;
+      }
+      seen.add(fold(text));
+    } catch (e) {
+      problems.push(`${item.kind === "risk" ? "Risk" : "Blocker"} "${text.slice(0, 40)}" not raised: ${e instanceof Error ? e.message : "could not save"}`);
+    }
+  }
+  const parts = [risks ? `${risks} risk${risks === 1 ? "" : "s"}` : "", blockers ? `${blockers} blocker${blockers === 1 ? "" : "s"}` : ""].filter(Boolean);
+  const summary = parts.length ? `${parts.join(" and ")} raised${known ? ` (${known} already open)` : ""}` : known ? `${known} already open` : null;
+  return { summary, problems };
 }
 
 /** The upload's lines a row came from become "applied_by_uploader", linked to the week's check-in.

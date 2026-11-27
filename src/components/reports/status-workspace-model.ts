@@ -76,6 +76,7 @@ export interface ApplyRow {
   markets?: string | null;
   gates?: string | null;
   modules?: string | null;
+  raid?: string | null;
   problems?: string[];
 }
 
@@ -92,6 +93,8 @@ export interface Card {
   modules: Record<string, { state: InstanceState; note: string | null }>;
   markets: Record<string, { rag: Rag | null; narrative: string }>;
   sources: { title: string; lines: string[] }[];
+  /** Risk / issue lines from the file the PM chose to record: line text → as a risk or a blocker. */
+  raid: Record<string, "risk" | "blocker">;
   /** Keys the file changed, to show where a value came from. */
   fromFile: Record<string, string>;
   /** The PM's answer to "which gate is this stage?" (undefined = QUBIT's reading, null = none). */
@@ -134,9 +137,16 @@ export function baseCard(p: WorkspaceProject): Card {
     modules,
     markets: Object.fromEntries(p.markets.map((m) => [m.orgUnitId, { rag: m.rag, narrative: m.narrative }])),
     sources: [],
+    raid: {},
     fromFile: {},
     stageSet: [],
   };
+}
+
+/** The file's risk and issue lines (Risks & issues, Issues, Blockers …), each once. */
+export function raidLines(c: Pick<Card, "sources">): string[] {
+  const lines = c.sources.filter((s) => /risk|issue|blocker/i.test(s.title)).flatMap((s) => s.lines);
+  return [...new Set(lines.map((l) => l.replace(/\s+/g, " ").trim()).filter((l) => l.length >= 3 && !/\[(date|name)\]/i.test(l)))].slice(0, 20);
 }
 
 /** Re-read a card's stage line into gates on the product scope: undo what the last reading
@@ -166,6 +176,7 @@ export interface Diff {
   gates: { orgUnitId: string | null; checkpointId: string; name: string; from: CheckpointState; to: CheckpointState }[];
   modules: { moduleId: string; orgUnitId: string | null; name: string; code: string | null; from: InstanceState; to: InstanceState; note: string | null }[];
   markets: { orgUnitId: string; code: string; rag: Rag; narrative: string }[];
+  raid: { kind: "risk" | "blocker"; text: string }[];
   count: number;
 }
 export function diffCard(p: WorkspaceProject, c: Card, base: Card): Diff {
@@ -192,7 +203,8 @@ export function diffCard(p: WorkspaceProject, c: Card, base: Card): Diff {
     const b = base.markets[orgUnitId]!;
     if (v.rag && v.narrative.trim() && (v.rag !== b.rag || v.narrative.trim() !== b.narrative.trim())) markets.push({ orgUnitId, code: p.catalog.markets.find((m) => m.orgUnitId === orgUnitId)?.code ?? "?", rag: v.rag, narrative: v.narrative.trim() });
   }
-  return { product, stage, gates, modules, markets, count: (product ? 1 : 0) + (stage ? 1 : 0) + gates.length + modules.length + markets.length };
+  const raid = Object.entries(c.raid).map(([text, kind]) => ({ kind, text: text.slice(0, 200) }));
+  return { product, stage, gates, modules, markets, raid, count: (product ? 1 : 0) + (stage ? 1 : 0) + gates.length + modules.length + markets.length + raid.length };
 }
 
 /** The apply payload for one card. `forceLine` sends the line even when it is unchanged
@@ -218,5 +230,6 @@ export function applyRowFor(p: WorkspaceProject, c: Card, d: Diff, forceLine = f
     gates: d.gates.map((g) => ({ checkpointId: g.checkpointId, state: g.to, orgUnitId: g.orgUnitId })),
     modules: d.modules.map((m) => ({ moduleId: m.moduleId, orgUnitId: m.orgUnitId, state: m.to, note: m.note })),
     markets: d.markets.map((m) => ({ orgUnitId: m.orgUnitId, rag: m.rag, narrative: m.narrative })),
+    ...(d.raid.length ? { raid: d.raid } : {}),
   };
 }

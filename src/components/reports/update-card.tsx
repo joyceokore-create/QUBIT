@@ -15,7 +15,7 @@ import { GATE_STATE_LABEL, MODULE_STATE_LABEL, type CatalogMarket } from "@/lib/
 import type { CheckpointState } from "@/server/checkpoints";
 import { cascadePlan } from "@/lib/gate-approval";
 import type { InstanceState } from "@/server/project-instances";
-import { GATE_STATES, MODULE_STATES, NARRATIVE_MAX, RAG_TONE, RAG_WORD, RAGS, mkey, progressOf, readStage, type Card, type Diff, type WorkspaceProject, needsRatingReason, RATING_REASON_MIN } from "@/components/reports/status-workspace-model";
+import { GATE_STATES, MODULE_STATES, NARRATIVE_MAX, RAG_TONE, RAG_WORD, RAGS, mkey, progressOf, raidLines, readStage, type Card, type Diff, type WorkspaceProject, needsRatingReason, RATING_REASON_MIN } from "@/components/reports/status-workspace-model";
 
 /**
  * Reports › Weekly Update — one project's card (design spec v2, `.mp` + `.gaterow` + `.kv`
@@ -263,6 +263,35 @@ export function UpdateCard({
             {c.narrative.length}/{NARRATIVE_MAX}
           </span>
         </div>
+        {raidLines(c).length > 0 && (
+          <div className="flex flex-col gap-1.5 rounded-[var(--ds-radius-kv)] border border-[var(--ds-line)] p-2.5">
+            <span className="text-[11.5px] font-semibold text-[var(--ds-ink3)]">Risks &amp; issues in the file · record any on the RAID log when you save</span>
+            <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+              {raidLines(c).map((line) => (
+                <li key={line} className="flex items-start justify-between gap-3">
+                  <span className="min-w-0 text-[12.5px] text-[var(--ds-ink)]">{line}</span>
+                  <select
+                    aria-label={`Record "${line.slice(0, 40)}"`}
+                    value={c.raid[line] ?? ""}
+                    onChange={(e) =>
+                      onPatch((x) => {
+                        const raid = { ...x.raid };
+                        if (e.target.value === "risk" || e.target.value === "blocker") raid[line] = e.target.value;
+                        else delete raid[line];
+                        return { ...x, raid };
+                      })
+                    }
+                    className={cn(FIELD_INPUT, "w-auto flex-none py-1 text-[12px]")}
+                  >
+                    <option value="">Don&apos;t record</option>
+                    <option value="risk">Raise as risk</option>
+                    <option value="blocker">Raise as blocker</option>
+                  </select>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {p.product.alreadySent && (
           <label className="flex items-center gap-2 text-[12.5px] font-semibold text-[var(--ds-ink)]">
             <input type="checkbox" checked={c.resend} onChange={(e) => onPatch((x) => ({ ...x, resend: e.target.checked }))} className="size-3.5 accent-[var(--ds-brand)]" />
