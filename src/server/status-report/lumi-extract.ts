@@ -10,10 +10,10 @@ import { NARRATIVE_MAX, NO_SLIDE, normaliseStatus, STAGE_MAX, type ParsedReport,
  * with Lumi AI's general tasks: upload the file, run one task, read the answer, delete the
  * conversation (its transcript, files and personal-data lookup go with it).
  *
- * Lumi's live API refuses an inline output.schema today and loops on json-without-schema,
- * so the default asks for a text answer holding ONLY JSON and QUBIT validates it here.
- * LUMI_INLINE_SCHEMA=1 switches to output { format: "json", schema } once Lumi accepts it.
- * Either way QUBIT's own zod check decides: a line that doesn't fit is dropped with a reason.
+ * The run asks for output { format: "json", schema: EXTRACT_SCHEMA } (Lumi: object or array at
+ * the root, at most 64 KB, any $ref internal) and reads output.data. LUMI_INLINE_SCHEMA=0 falls
+ * back to a text answer holding ONLY JSON. Either way QUBIT's own zod check decides: a line
+ * that doesn't fit is dropped with a reason.
  * Lumi's lines go to the same review as the rules' — AI never writes to a project.
  */
 
@@ -201,7 +201,7 @@ export async function extractWithLumi(ctx: TenantContext, input: { buf: Buffer; 
   try {
     const file = await uploadLumiFile(connection, input.buf, input.fileName, MEDIA_TYPE[input.format]);
     if (file.status === "rejected") throw new LumiExtractError("Lumi refused the file (it failed Lumi's checks).");
-    const inline = process.env.LUMI_INLINE_SCHEMA === "1";
+    const inline = process.env.LUMI_INLINE_SCHEMA !== "0";
     const run = await createLumiRun(connection, {
       message: EXTRACT_MESSAGE,
       file_ids: [file.file_id],

@@ -59,13 +59,14 @@ const ANSWER = JSON.stringify({
 
 interface Seen {
   paths: string[];
+  runs: Record<string, unknown>[];
   deleted: string[];
   files: number;
 }
 
 /** A stub Lumi. `run` shapes the run answer; every call is recorded (never its secrets). */
 function stubLumi(run: Record<string, unknown> = { status: "done", output: { text: ANSWER, data: null } }): Seen {
-  const seen: Seen = { paths: [], deleted: [], files: 0 };
+  const seen: Seen = { paths: [], runs: [], deleted: [], files: 0 };
   vi.stubGlobal("fetch", async (input: string | URL, init?: RequestInit) => {
     const url = new URL(String(input));
     const path = url.pathname.replace(/^\/api\/v1/, "");
@@ -76,6 +77,7 @@ function stubLumi(run: Record<string, unknown> = { status: "done", output: { tex
       seen.files++;
       return reply({ file_id: "file_1", status: "ready" }, 201);
     }
+    if (path === "/runs") seen.runs.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
     if (path === "/runs") return reply({ run_id: "run_test_1", conversation_id: "conv_test_1", model: "test-model", usage: { input_tokens: 120, output_tokens: 40 }, ...run });
     if (init?.method === "DELETE") {
       seen.deleted.push(path);
@@ -174,6 +176,25 @@ describe("status-report upload — read by Lumi AI", () => {
     expect(up.rows.find((r) => r.projectId === alpha)?.matchConfidence).toBe("exact");
     const logs = await withTenant(pm, (tx) => tx.aiCallLog.findMany({ where: { userId: pm.userId, purpose: EXTRACT_PURPOSE } }));
     expect(logs.at(-1)).toMatchObject({ usedAi: true, model: "test-model", inputTokens: 120, outputTokens: 40 });
+  });
+
+  it("the run sends QUBIT's schema inline and reads output.data; LUMI_INLINE_SCHEMA=0 asks for text", async () => {
+    connect();
+    let seen = stubLumi({ status: "done", output: { text: "", data: JSON.parse(ANSWER) } });
+    const p = await previewStatusReport(pm, PROSE, "schema.docx", null, NOW);
+    expect(p.extractor).toBe("lumi");
+    expect(p.rows.map((r) => r.project)).toEqual(["Lumi Alpha", "Lumi Foreign"]);
+    const out = seen.runs[0]!.output as { format: string; schema?: { type: string } };
+    expect(out.format).toBe("json");
+    expect(out.schema?.type).toBe("object");
+    expect(JSON.stringify(out.schema).length).toBeLessThan(64 * 1024);
+
+    vi.unstubAllGlobals();
+    vi.stubEnv("LUMI_INLINE_SCHEMA", "0");
+    seen = stubLumi();
+    const q = await previewStatusReport(pm, PROSE, "text.docx", null, NOW);
+    expect(q.extractor).toBe("lumi");
+    expect(seen.runs[0]!.output).toEqual({ format: "text" });
   });
 
   it("a table the rules read: Lumi is not asked unless the PM ticks it", async () => {
