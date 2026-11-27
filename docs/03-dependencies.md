@@ -43,6 +43,7 @@ pnpm add bcryptjs                # password hashing (Milestone 2) — this doc m
 | otplib, qrcode | latest | TOTP MFA enrolment |
 | pdfjs-dist | 6.x | text extraction for the PDF variant of the weekly status-report upload (`src/server/status-report/parse.ts`); Word/Excel are read with a stdlib ZIP reader, no library |
 | playwright-core | 1.61.1 (exact, = @playwright/test's) | drives the Chromium in the production image for server-side PDF export (`src/server/pdf/render.ts`, Milestone D / M9-B); no browser download — Alpine's `chromium` package in the image, the ms-playwright cache locally |
+| pptxgenjs | 4.0.1 (exact) | the roll-up as a PowerPoint deck (`src/server/pptx/digest-deck.ts`, `/api/reports/export?template=digest&format=pptx`); MIT, maintained, pure JS (jszip). Pulls in the npm `https@1.0.0` placeholder package — empty, Node's built-in `https` is what runs |
 
 ## UI component library (shadcn/ui)
 

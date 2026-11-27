@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/list/page-header";
+import { teamsConnected } from "@/server/integrations/teams";
 import { PastUpdates } from "@/components/reports/past-updates";
 import { listMyPastUpdates } from "@/server/past-updates";
 import { redirect } from "next/navigation";
@@ -206,7 +207,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
                     emailedAt: data.rollup.emailedAt?.toISOString() ?? null,
                     emailedCount: data.rollup.emailedCount,
                   }}
-                  exports={{ recipients, canEditRecipients: isHead, emailEnabled: emailEnabled(), pdfAvailable: canPdf }}
+                  exports={{ recipients, canEditRecipients: isHead, emailEnabled: emailEnabled(), pdfAvailable: canPdf, teamsConnected: isHead && (await teamsConnected(ctx)) }}
                 />
                 <RecentRollups rows={await listRollups(ctx, 6)} isoWeek={week} hrefForWeek={(w) => href({ week: w, tab: "week" })} archiveHref={href({ tab: "rollups" })} />
               </aside>

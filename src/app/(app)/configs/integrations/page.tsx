@@ -6,6 +6,8 @@ import { ConfigsHeader } from "../configs-header";
 import { YoutrackPanel, type MappingViewJson } from "./youtrack-panel";
 import { getLumiStatus } from "@/server/integrations/lumi";
 import { LumiPanel } from "./lumi-panel";
+import { getTeamsStatus } from "@/server/integrations/teams";
+import { TeamsPanel } from "./teams-panel";
 
 // Configs › Integrations — the tenant-level YouTrack integration: one instance + one token,
 // projects mapped by picking from what the token can read. Gate: integrations:manage
@@ -16,7 +18,7 @@ export default async function ConfigsIntegrationsPage() {
   const ctx = { tenantId: session.user.tenantId, userId: session.user.id, roles: session.user.roles, permissions: session.user.permissions };
   if (!can(ctx, "integrations:manage")) return <Forbidden />;
 
-  const [view, lumi] = await Promise.all([listYoutrackMappings(ctx), getLumiStatus(ctx)]);
+  const [view, lumi, teams] = await Promise.all([listYoutrackMappings(ctx), getLumiStatus(ctx), getTeamsStatus(ctx)]);
   const initial: MappingViewJson = {
     ...view,
     status: { ...view.status, lastCheckedAt: view.status.lastCheckedAt?.toISOString() ?? null },
@@ -30,6 +32,7 @@ export default async function ConfigsIntegrationsPage() {
       <ConfigsHeader subtitle={subtitle} />
       <YoutrackPanel initial={initial} />
       <LumiPanel initial={lumi} />
+      <TeamsPanel initial={teams} />
     </main>
   );
 }

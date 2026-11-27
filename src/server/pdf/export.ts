@@ -8,6 +8,7 @@ import { CustomReportError, DATASET_PERMISSION } from "@/server/custom-reports";
 import { getDigestReport, getProjectReport, getTableReport } from "@/server/pdf/report-data";
 import { renderDigest, renderProjectReport, renderTable, type RenderedReport } from "@/server/pdf/templates";
 import { getTenantTimeZone } from "@/server/preferences";
+import { buildDigestDeck, digestDeckFileName } from "@/server/pptx/digest-deck";
 
 /**
  * Milestone D — one door for "give me this report as a document": the export route, the
@@ -42,6 +43,20 @@ export class ExportError extends Error {
     super(message);
     this.name = "ExportError";
   }
+}
+
+/**
+ * The digest as a PowerPoint deck — the same permission and visibility rules as the digest
+ * PDF (reports:read; getRollupWeek's Approved-only view for non-Heads).
+ */
+export async function buildDigestDeckExport(ctx: TenantContext, input: ExportRequestInput, now = new Date()): Promise<{ deck: Buffer; fileName: string }> {
+  if (input.template !== "digest") throw new ExportError("Only the roll-up downloads as PowerPoint.", "BAD_REQUEST");
+  if (!can(ctx, "reports:read")) throw new ExportError("The roll-up is for report readers.", "FORBIDDEN");
+  const isoWeek = resolveWeek(input.week, now);
+  const data = await getDigestReport(ctx, isoWeek, { portfolioId: input.portfolio, now });
+  if (!data) throw new ExportError("No roll-up for that week.", "NOT_FOUND");
+  const deck = await buildDigestDeck(data, { timeZone: await getTenantTimeZone(ctx) });
+  return { deck, fileName: digestDeckFileName(data) };
 }
 
 export interface ExportResult extends RenderedReport {

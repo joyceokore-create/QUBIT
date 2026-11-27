@@ -6,7 +6,7 @@ import { readApiError } from "@/lib/form-errors";
 import { FieldError } from "@/components/ui/drawer";
 import { useFieldErrors } from "@/components/forms/use-field-errors";
 import { useRouter } from "next/navigation";
-import { Check, Download, FileText, Loader2, Sparkles } from "lucide-react";
+import { Check, Download, FileText, Loader2, Presentation, Send, Sparkles } from "lucide-react";
 import { LocalTime } from "@/components/reports/local-time";
 import { ReportEmailButton } from "@/components/reports/report-email-button";
 import { RecipientsDialog, type RecipientJson } from "@/components/reports/recipients-dialog";
@@ -37,6 +37,8 @@ export interface RailExportProps {
   canEditRecipients: boolean;
   emailEnabled: boolean;
   pdfAvailable: boolean;
+  /** A Teams channel is connected and the viewer is the Head: approval posts there, and they can post again. */
+  teamsConnected?: boolean;
 }
 
 export function RollupRail({
@@ -58,6 +60,17 @@ export function RollupRail({
   const [narrative, setNarrative] = useState(rollup.narrative ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [teamsNote, setTeamsNote] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
+  const [posting, setPosting] = useState(false);
+
+  const postToTeams = async () => {
+    setPosting(true);
+    setTeamsNote(null);
+    const res = await fetch("/api/rollup/teams", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ week: isoWeek }) });
+    const payload = await res.json().catch(() => null);
+    setPosting(false);
+    setTeamsNote(res.ok ? { tone: "ok", text: "Posted to Teams." } : { tone: "bad", text: payload?.data?.error ?? payload?.error?.message ?? "Couldn't post to Teams." });
+  };
   const [needsAck, setNeedsAck] = useState(false);
   // Plan Phase 4: the drafted summary pre-fills the line; the previous text stays undoable.
   const [drafting, setDrafting] = useState(false);
@@ -82,6 +95,8 @@ export function RollupRail({
     setBusy(false);
     if (res.ok) {
       setNeedsAck(false);
+      const done = (await res.json().catch(() => null)) as { teams?: { posted: boolean; error: string | null } | null } | null;
+      if (done?.teams) setTeamsNote(done.teams.posted ? { tone: "ok", text: "Posted to Teams." } : { tone: "bad", text: `Approved, but not posted to Teams: ${done.teams.error ?? "unknown error"}` });
       router.refresh();
       return;
     }
@@ -213,6 +228,14 @@ export function RollupRail({
 
         {approved ? (
           <div className="flex flex-col gap-2.5">
+            {exports.teamsConnected && (
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" onClick={() => void postToTeams()} disabled={posting} className={`${SECONDARY} gap-2`}>
+                  {posting ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Send className="size-3.5" aria-hidden />} Post to Teams
+                </button>
+                {teamsNote && <span className={`text-[12px] ${teamsNote.tone === "ok" ? "text-[var(--ds-ok-text)]" : "text-[var(--ds-bad-text)]"}`}>{teamsNote.text}</span>}
+              </div>
+            )}
             {exports.canEditRecipients && (
               <ReportEmailButton
                 request={{ template: "digest", week: isoWeek }}
@@ -234,6 +257,9 @@ export function RollupRail({
                   <FileText className="size-3.5" aria-hidden /> Print view
                 </a>
               )}
+              <a href={`/api/reports/export?template=digest&week=${isoWeek}&format=pptx`} download className={`${SECONDARY} gap-2`} title="The roll-up as a PowerPoint deck">
+                <Presentation className="size-3.5" aria-hidden /> PowerPoint
+              </a>
               <a href={`/api/rollup/export?week=${isoWeek}`} download className={`${SECONDARY} gap-2`}>
                 <Download className="size-3.5" aria-hidden /> CSV
               </a>
@@ -270,6 +296,9 @@ export function RollupRail({
             <div className="flex flex-wrap gap-2">
               <a href={`/api/reports/export?template=digest&week=${isoWeek}${exports.pdfAvailable ? "" : "&format=html"}`} {...(exports.pdfAvailable ? { download: true } : { target: "_blank", rel: "noreferrer" })} className={`${SECONDARY} flex-1 justify-center gap-2`}>
                 <FileText className="size-3.5" aria-hidden /> {exports.pdfAvailable ? "Download PDF" : "Print view"}
+              </a>
+              <a href={`/api/reports/export?template=digest&week=${isoWeek}&format=pptx`} download className={`${SECONDARY} gap-2`} title="The roll-up as a PowerPoint deck">
+                <Presentation className="size-3.5" aria-hidden /> PowerPoint
               </a>
               <a href={`/api/rollup/export?week=${isoWeek}`} download className={`${SECONDARY} gap-2`}>
                 <Download className="size-3.5" aria-hidden /> CSV

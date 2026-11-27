@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-guard";
-import { buildExport, ExportError, ExportRequest } from "@/server/pdf/export";
+import { buildDigestDeckExport, buildExport, ExportError, ExportRequest } from "@/server/pdf/export";
 import { pdfAvailable, renderPdf } from "@/server/pdf/render";
 
 /**
  * Milestone D — GET /api/reports/export?template=auto|build|market|dual|digest|table&project=
- *   &week=&portfolio=&dataset=&columns=&format=pdf|html
+ *   &week=&portfolio=&dataset=&columns=&format=pdf|html|pptx
  * `format=html` returns the print document inline (the custom-reports preview iframe, and
- * the fallback people get when no Chromium is available); `format=pdf` renders it. The
+ * the fallback people get when no Chromium is available); `format=pdf` renders it
+ * (`format=pptx`, the digest only: the roll-up as a PowerPoint deck). The
  * permission rules live in buildExport. Playwright needs Node — never the edge runtime.
  */
 export const dynamic = "force-dynamic";
@@ -40,9 +41,20 @@ export async function GET(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: { code: "VALIDATION", message: "Invalid export query." } }, { status: 400 });
   }
-  const format = sp.get("format") === "html" ? "html" : "pdf";
+  const format = sp.get("format") === "html" ? "html" : sp.get("format") === "pptx" ? "pptx" : "pdf";
 
   try {
+    if (format === "pptx") {
+      const { deck, fileName } = await buildDigestDeckExport(guard.ctx, parsed.data);
+      return new NextResponse(new Uint8Array(deck), {
+        headers: {
+          "Content-Type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+          "Content-Disposition": `attachment; filename="${fileName}"`,
+          "Content-Length": String(deck.byteLength),
+          "Cache-Control": "no-store",
+        },
+      });
+    }
     const report = await buildExport(guard.ctx, parsed.data);
     if (format === "html") return new NextResponse(report.html, { headers: HTML_HEADERS });
     if (!(await pdfAvailable())) {
